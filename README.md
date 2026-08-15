@@ -62,7 +62,7 @@ API key chỉ nằm ở backend qua biến môi trường `GEMINI_API_KEY`. Fron
 Mặc định server dùng model:
 
 ```text
-gemini-2.5-flash-lite
+gemini-3.1-flash-lite
 ```
 
 Có thể đổi bằng:
@@ -77,7 +77,7 @@ npm start
 ```text
 GEMINI_CHUNK_SIZE=4000
 GEMINI_TRANSLATE_CONCURRENCY=1
-GEMINI_FALLBACK_MODELS=gemini-3.1-flash-lite,gemini-2.5-flash,gemini-3.5-flash-lite
+GEMINI_FALLBACK_MODELS=gemini-3.5-flash-lite,gemini-3.6-flash
 ```
 
 Tăng `GEMINI_TRANSLATE_CONCURRENCY` có thể nhanh hơn nhưng dễ gặp rate limit hoặc high demand hơn. Nếu model chính quá tải, server sẽ tự thử model trong `GEMINI_FALLBACK_MODELS`.
@@ -113,8 +113,8 @@ Environment Variables trên Vercel:
 
 ```text
 GEMINI_API_KEY=your_key
-GEMINI_MODEL=gemini-2.5-flash-lite
-GEMINI_FALLBACK_MODELS=gemini-2.0-flash-lite,gemini-2.5-flash
+GEMINI_MODEL=gemini-3.1-flash-lite
+GEMINI_FALLBACK_MODELS=gemini-3.5-flash-lite,gemini-3.6-flash
 GEMINI_CHUNK_SIZE=4000
 GEMINI_TRANSLATE_CONCURRENCY=1
 ```

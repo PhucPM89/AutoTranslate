@@ -1,6 +1,6 @@
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
 const GEMINI_FALLBACK_MODELS = parseCsv(
-  process.env.GEMINI_FALLBACK_MODELS || "gemini-3.1-flash-lite,gemini-2.5-flash,gemini-3.5-flash-lite"
+  process.env.GEMINI_FALLBACK_MODELS || "gemini-3.5-flash-lite,gemini-3.6-flash"
 );
 const GEMINI_CHUNK_SIZE = Number(process.env.GEMINI_CHUNK_SIZE || 4000);
 const GEMINI_TRANSLATE_CONCURRENCY = Number(process.env.GEMINI_TRANSLATE_CONCURRENCY || 1);
@@ -65,7 +65,7 @@ async function translateChunk(apiKey, text, index, total) {
       return await translateChunkWithModel(apiKey, model, prompt);
     } catch (error) {
       lastError = error;
-      if (!isRetryableGeminiError(error)) break;
+      if (!shouldTryNextModel(error)) break;
     }
   }
 
@@ -129,8 +129,17 @@ async function translateChunkWithModel(apiKey, model, prompt) {
   throw error;
 }
 
-function isRetryableGeminiError(error) {
-  return error?.status === 429 || error?.status >= 500;
+function shouldTryNextModel(error) {
+  if (error?.status === 429 || error?.status >= 500) return true;
+
+  const message = String(error?.message || "").toLowerCase();
+  return (
+    message.includes("model") &&
+    (message.includes("no longer available") ||
+      message.includes("not found") ||
+      message.includes("not supported") ||
+      message.includes("unavailable"))
+  );
 }
 
 function splitTextIntoChunks(text, maxLength) {
