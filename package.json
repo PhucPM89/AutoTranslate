@@ -1,0 +1,17 @@
+{
+  "name": "epub-translator",
+  "version": "1.0.0",
+  "description": "Personal EPUB reader and Chinese to Vietnamese translator using Gemini API.",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "syntax": "node --check server/server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "jszip": "^3.10.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

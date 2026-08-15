@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>EPUB Translator</title>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1 id="bookTitle">EPUB Translator</h1>
+        <p id="bookMeta">Upload EPUB tiếng Trung để đọc và dịch sang tiếng Việt.</p>
+      </div>
+      <div class="topbar-actions">
+        <label class="file-button">
+          Upload EPUB
+          <input id="fileInput" type="file" accept=".epub,application/epub+zip">
+        </label>
+        <button id="themeToggle" type="button">Dark mode</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="sidebar" aria-label="Danh sách chương">
+        <div class="sidebar-header">
+          <strong>Chương</strong>
+          <select id="chapterSelect" disabled></select>
+        </div>
+        <nav id="chapterList" class="chapter-list"></nav>
+      </aside>
+
+      <section class="reader">
+        <div class="reader-toolbar">
+          <button id="prevChapter" type="button" disabled>← Chương trước</button>
+          <span id="chapterCounter">Chưa có EPUB</span>
+          <button id="nextChapter" type="button" disabled>Chương sau →</button>
+        </div>
+
+        <div class="settings">
+          <label>
+            Cỡ chữ
+            <input id="fontSize" type="range" min="16" max="28" value="20">
+          </label>
+          <label>
+            Độ rộng
+            <input id="readerWidth" type="range" min="620" max="980" value="760">
+          </label>
+        </div>
+
+        <article class="chapter">
+          <h2>中文原文</h2>
+          <div id="sourceText" class="chapter-text empty">Chưa upload EPUB.</div>
+        </article>
+
+        <hr>
+
+        <article class="chapter translation-section">
+          <div class="translation-heading">
+            <h2>BẢN DỊCH</h2>
+            <div>
+              <button id="translateButton" type="button" disabled>Dịch chương</button>
+              <button id="retranslateButton" type="button" hidden>Dịch lại</button>
+            </div>
+          </div>
+          <div id="translationText" class="chapter-text empty">Chưa dịch.</div>
+        </article>
+      </section>
+    </main>
+
+    <script src="/vendor/jszip.min.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>
