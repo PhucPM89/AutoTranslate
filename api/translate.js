@@ -26,7 +26,8 @@ module.exports = async function handler(req, res) {
     res.status(200).json(result);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "Không thể dịch chương lúc này." });
+    const status = error.status && error.status >= 400 && error.status < 600 ? error.status : 500;
+    res.status(status).json({ error: formatPublicError(error) });
   }
 };
 
@@ -48,4 +49,10 @@ function readJsonBody(req) {
 
     req.on("error", reject);
   });
+}
+
+function formatPublicError(error) {
+  const modelNote = error.model ? ` (${error.model})` : "";
+  const message = error.message || "Không rõ lỗi.";
+  return `Không thể dịch chương lúc này${modelNote}: ${message}`;
 }

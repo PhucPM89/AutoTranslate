@@ -77,7 +77,7 @@ npm start
 ```text
 GEMINI_CHUNK_SIZE=4000
 GEMINI_TRANSLATE_CONCURRENCY=1
-GEMINI_FALLBACK_MODELS=gemini-2.0-flash-lite,gemini-2.5-flash
+GEMINI_FALLBACK_MODELS=gemini-3.1-flash-lite,gemini-2.5-flash,gemini-3.5-flash-lite
 ```
 
 Tăng `GEMINI_TRANSLATE_CONCURRENCY` có thể nhanh hơn nhưng dễ gặp rate limit hoặc high demand hơn. Nếu model chính quá tải, server sẽ tự thử model trong `GEMINI_FALLBACK_MODELS`.

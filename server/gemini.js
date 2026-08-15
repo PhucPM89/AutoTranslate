@@ -1,6 +1,6 @@
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
 const GEMINI_FALLBACK_MODELS = parseCsv(
-  process.env.GEMINI_FALLBACK_MODELS || "gemini-2.0-flash-lite,gemini-2.5-flash"
+  process.env.GEMINI_FALLBACK_MODELS || "gemini-3.1-flash-lite,gemini-2.5-flash,gemini-3.5-flash-lite"
 );
 const GEMINI_CHUNK_SIZE = Number(process.env.GEMINI_CHUNK_SIZE || 4000);
 const GEMINI_TRANSLATE_CONCURRENCY = Number(process.env.GEMINI_TRANSLATE_CONCURRENCY || 1);
@@ -108,6 +108,7 @@ async function translateChunkWithModel(apiKey, model, prompt) {
         const message = data?.error?.message || "Gemini API trả về lỗi.";
         const error = new Error(message);
         error.status = geminiResponse.status;
+        error.model = model;
         throw error;
       }
 
@@ -123,7 +124,9 @@ async function translateChunkWithModel(apiKey, model, prompt) {
     }
   }
 
-  throw new Error("Gemini API trả về lỗi.");
+  const error = new Error("Gemini API trả về lỗi.");
+  error.model = model;
+  throw error;
 }
 
 function isRetryableGeminiError(error) {
