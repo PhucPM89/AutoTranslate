@@ -95,3 +95,26 @@ Build step không cần. Start command:
 ```bash
 npm start
 ```
+
+## Deploy Vercel
+
+Project đã có `api/translate.js` để chạy trên Vercel Serverless Functions.
+
+Vercel settings:
+
+```text
+Framework Preset: Other
+Build Command: npm run build
+Output Directory: public
+Install Command: npm install
+```
+
+Environment Variables trên Vercel:
+
+```text
+GEMINI_API_KEY=your_key
+GEMINI_MODEL=gemini-2.5-flash-lite
+GEMINI_FALLBACK_MODELS=gemini-2.0-flash-lite,gemini-2.5-flash
+GEMINI_CHUNK_SIZE=4000
+GEMINI_TRANSLATE_CONCURRENCY=1
+```

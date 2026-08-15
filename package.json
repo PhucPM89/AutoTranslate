@@ -4,8 +4,10 @@
   "description": "Personal EPUB reader and Chinese to Vietnamese translator using Gemini API.",
   "main": "server/server.js",
   "scripts": {
+    "build": "node scripts/copy-jszip.js",
+    "postinstall": "node scripts/copy-jszip.js",
     "start": "node server/server.js",
-    "syntax": "node --check server/server.js"
+    "syntax": "node --check server/server.js && node --check server/gemini.js && node --check api/translate.js && node --check public/app.js"
   },
   "dependencies": {
     "express": "^4.19.2",
