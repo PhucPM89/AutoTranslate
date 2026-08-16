@@ -48,12 +48,7 @@
           </label>
         </div>
 
-        <article class="chapter">
-          <h2>中文原文</h2>
-          <div id="sourceText" class="chapter-text empty">Chưa upload EPUB.</div>
-        </article>
-
-        <hr>
+        <div id="sourceText" hidden></div>
 
         <article class="chapter translation-section">
           <div class="translation-heading">
@@ -65,6 +60,12 @@
           </div>
           <div id="translationText" class="chapter-text empty">Chưa dịch.</div>
         </article>
+
+        <div class="reader-toolbar reader-toolbar-bottom">
+          <button id="bottomPrevChapter" type="button" disabled>← Chương trước</button>
+          <span id="bottomChapterCounter">Chưa có EPUB</span>
+          <button id="bottomNextChapter" type="button" disabled>Chương sau →</button>
+        </div>
       </section>
     </main>
 

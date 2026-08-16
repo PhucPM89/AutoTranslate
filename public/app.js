@@ -16,7 +16,10 @@ const els = {
   chapterList: document.getElementById("chapterList"),
   prevChapter: document.getElementById("prevChapter"),
   nextChapter: document.getElementById("nextChapter"),
+  bottomPrevChapter: document.getElementById("bottomPrevChapter"),
+  bottomNextChapter: document.getElementById("bottomNextChapter"),
   chapterCounter: document.getElementById("chapterCounter"),
+  bottomChapterCounter: document.getElementById("bottomChapterCounter"),
   sourceText: document.getElementById("sourceText"),
   translationText: document.getElementById("translationText"),
   translateButton: document.getElementById("translateButton"),
@@ -35,6 +38,8 @@ function bindEvents() {
   els.fileInput.addEventListener("change", handleFile);
   els.prevChapter.addEventListener("click", () => goToChapter(state.currentIndex - 1));
   els.nextChapter.addEventListener("click", () => goToChapter(state.currentIndex + 1));
+  els.bottomPrevChapter.addEventListener("click", () => goToChapter(state.currentIndex - 1));
+  els.bottomNextChapter.addEventListener("click", () => goToChapter(state.currentIndex + 1));
   els.chapterSelect.addEventListener("change", () => goToChapter(Number(els.chapterSelect.value)));
   els.translateButton.addEventListener("click", () => translateCurrentChapter(false));
   els.retranslateButton.addEventListener("click", () => translateCurrentChapter(true));
@@ -222,12 +227,17 @@ function goToChapter(index) {
 
   const chapter = state.chapters[state.currentIndex];
   els.sourceText.textContent = chapter.text;
-  els.sourceText.classList.remove("empty");
-  els.chapterCounter.textContent = `${chapter.title} · ${state.currentIndex + 1} / ${state.chapters.length}`;
+  const chapterLabel = `${chapter.title} · ${state.currentIndex + 1} / ${state.chapters.length}`;
+  els.chapterCounter.textContent = chapterLabel;
+  els.bottomChapterCounter.textContent = chapterLabel;
   els.chapterSelect.value = String(state.currentIndex);
 
-  els.prevChapter.disabled = state.currentIndex === 0;
-  els.nextChapter.disabled = state.currentIndex === state.chapters.length - 1;
+  const isFirstChapter = state.currentIndex === 0;
+  const isLastChapter = state.currentIndex === state.chapters.length - 1;
+  els.prevChapter.disabled = isFirstChapter;
+  els.bottomPrevChapter.disabled = isFirstChapter;
+  els.nextChapter.disabled = isLastChapter;
+  els.bottomNextChapter.disabled = isLastChapter;
   els.translateButton.disabled = false;
 
   Array.from(els.chapterList.children).forEach((button, i) => {
@@ -323,11 +333,14 @@ function resetReader(message) {
   els.sourceText.textContent = message;
   els.sourceText.classList.add("empty", "status-error");
   els.chapterCounter.textContent = "Chưa có EPUB";
+  els.bottomChapterCounter.textContent = "Chưa có EPUB";
   els.chapterSelect.innerHTML = "";
   els.chapterSelect.disabled = true;
   els.chapterList.innerHTML = "";
   els.prevChapter.disabled = true;
+  els.bottomPrevChapter.disabled = true;
   els.nextChapter.disabled = true;
+  els.bottomNextChapter.disabled = true;
   els.translateButton.disabled = true;
 }
 

@@ -183,9 +183,14 @@ button:disabled {
   margin-bottom: 1rem;
 }
 
-#chapterCounter {
+#chapterCounter,
+#bottomChapterCounter {
   color: var(--muted);
   font-weight: 700;
+}
+
+.reader-toolbar-bottom {
+  margin: 1.25rem 0 0;
 }
 
 .settings {
@@ -228,12 +233,6 @@ button:disabled {
 
 .chapter-text.empty {
   color: var(--muted);
-}
-
-hr {
-  border: 0;
-  border-top: 1px solid var(--border);
-  margin: 1.3rem 0;
 }
 
 .status-error {
