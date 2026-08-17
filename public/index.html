@@ -3,18 +3,18 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>EPUB Translator</title>
+    <title>Document Workspace</title>
     <link rel="stylesheet" href="/style.css">
   </head>
   <body>
     <header class="topbar">
       <div>
-        <h1 id="bookTitle">EPUB Translator</h1>
-        <p id="bookMeta">Upload EPUB tiếng Trung để đọc và dịch sang tiếng Việt.</p>
+        <h1 id="bookTitle">Document Workspace</h1>
+        <p id="bookMeta">Chọn tài liệu để bắt đầu phiên xử lý.</p>
       </div>
       <div class="topbar-actions">
         <label class="file-button">
-          Upload EPUB
+          Nhập tài liệu
           <input id="fileInput" type="file" accept=".epub,application/epub+zip">
         </label>
         <button id="themeToggle" type="button">Dark mode</button>
@@ -22,9 +22,9 @@
     </header>
 
     <main class="layout">
-      <aside class="sidebar" aria-label="Danh sách chương">
+      <aside class="sidebar" aria-label="Danh sách mục">
         <div class="sidebar-header">
-          <strong>Chương</strong>
+          <strong>Danh mục</strong>
           <select id="chapterSelect" disabled></select>
         </div>
         <nav id="chapterList" class="chapter-list"></nav>
@@ -32,18 +32,18 @@
 
       <section class="reader">
         <div class="reader-toolbar">
-          <button id="prevChapter" type="button" disabled>← Chương trước</button>
-          <span id="chapterCounter">Chưa có EPUB</span>
-          <button id="nextChapter" type="button" disabled>Chương sau →</button>
+          <button id="prevChapter" type="button" disabled>← Mục trước</button>
+          <span id="chapterCounter">Chưa có tài liệu</span>
+          <button id="nextChapter" type="button" disabled>Mục sau →</button>
         </div>
 
         <div class="settings">
           <label>
-            Cỡ chữ
+            Cỡ hiển thị
             <input id="fontSize" type="range" min="16" max="28" value="20">
           </label>
           <label>
-            Độ rộng
+            Khung đọc
             <input id="readerWidth" type="range" min="620" max="980" value="760">
           </label>
         </div>
@@ -52,19 +52,19 @@
 
         <article class="chapter translation-section">
           <div class="translation-heading">
-            <h2>BẢN DỊCH</h2>
+            <h2>NỘI DUNG</h2>
             <div>
-              <button id="translateButton" type="button" disabled>Dịch chương</button>
-              <button id="retranslateButton" type="button" hidden>Dịch lại</button>
+              <button id="translateButton" type="button" disabled>Xử lý mục</button>
+              <button id="retranslateButton" type="button" hidden>Chạy lại</button>
             </div>
           </div>
-          <div id="translationText" class="chapter-text empty">Chưa dịch.</div>
+          <div id="translationText" class="chapter-text empty">Chưa có nội dung xử lý.</div>
         </article>
 
         <div class="reader-toolbar reader-toolbar-bottom">
-          <button id="bottomPrevChapter" type="button" disabled>← Chương trước</button>
-          <span id="bottomChapterCounter">Chưa có EPUB</span>
-          <button id="bottomNextChapter" type="button" disabled>Chương sau →</button>
+          <button id="bottomPrevChapter" type="button" disabled>← Mục trước</button>
+          <span id="bottomChapterCounter">Chưa có tài liệu</span>
+          <button id="bottomNextChapter" type="button" disabled>Mục sau →</button>
         </div>
       </section>
     </main>

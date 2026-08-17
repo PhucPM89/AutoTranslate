@@ -75,7 +75,7 @@ async function handleFile(event) {
   const file = event.target.files?.[0];
   if (!file) return;
 
-  setBusy(`Đang đọc ${file.name}...`);
+  setBusy(`Đang tải ${file.name}...`);
 
   try {
     const arrayBuffer = await file.arrayBuffer();
@@ -86,17 +86,17 @@ async function handleFile(event) {
     state.chapters = book.chapters;
 
     if (!state.chapters.length) {
-      throw new Error("Không tìm thấy chương có nội dung trong EPUB.");
+      throw new Error("Không tìm thấy mục có nội dung trong tài liệu.");
     }
 
-    els.bookTitle.textContent = state.title;
-    els.bookMeta.textContent = `${file.name} · ${state.chapters.length} chương`;
+    els.bookTitle.textContent = "Document Workspace";
+    els.bookMeta.textContent = `Tài liệu hiện tại · ${state.chapters.length} mục`;
     renderChapterControls();
 
     const savedIndex = Number(localStorage.getItem(currentChapterKey()) || "0");
     goToChapter(Number.isInteger(savedIndex) ? savedIndex : 0);
   } catch (error) {
-    resetReader(`Không đọc được EPUB: ${error.message}`);
+    resetReader(`Không mở được tài liệu: ${error.message}`);
   }
 }
 
@@ -132,7 +132,7 @@ async function parseEpub(arrayBuffer, fileName) {
     if (!text) continue;
 
     chapters.push({
-      title: navTitles.get(stripFragment(item.href)) || guessChapterTitle(html) || `Chương ${chapters.length + 1}`,
+      title: navTitles.get(stripFragment(item.href)) || guessChapterTitle(html) || `Mục ${chapters.length + 1}`,
       text
     });
   }
@@ -206,13 +206,13 @@ function renderChapterControls() {
   state.chapters.forEach((chapter, index) => {
     const option = document.createElement("option");
     option.value = String(index);
-    option.textContent = chapter.title;
+    option.textContent = displayChapterTitle(index);
     els.chapterSelect.appendChild(option);
 
     const button = document.createElement("button");
     button.type = "button";
     button.className = "chapter-link";
-    button.textContent = chapter.title;
+    button.textContent = displayChapterTitle(index);
     button.addEventListener("click", () => goToChapter(index));
     els.chapterList.appendChild(button);
   });
@@ -227,7 +227,7 @@ function goToChapter(index) {
 
   const chapter = state.chapters[state.currentIndex];
   els.sourceText.textContent = chapter.text;
-  const chapterLabel = `${chapter.title} · ${state.currentIndex + 1} / ${state.chapters.length}`;
+  const chapterLabel = `${displayChapterTitle(state.currentIndex)} · ${state.currentIndex + 1} / ${state.chapters.length}`;
   els.chapterCounter.textContent = chapterLabel;
   els.bottomChapterCounter.textContent = chapterLabel;
   els.chapterSelect.value = String(state.currentIndex);
@@ -255,7 +255,7 @@ function loadCachedTranslation() {
     els.translateButton.hidden = true;
     els.retranslateButton.hidden = false;
   } else {
-    els.translationText.textContent = "Chưa dịch.";
+    els.translationText.textContent = "Chưa có nội dung xử lý.";
     els.translationText.classList.add("empty");
     els.translationText.classList.remove("status-error");
     els.translateButton.hidden = false;
@@ -275,7 +275,7 @@ async function translateCurrentChapter(force) {
     }
   }
 
-  setTranslationStatus("Đang dịch chương... Server sẽ tự chia chương dài thành nhiều phần để dịch nhanh hơn.");
+  setTranslationStatus("Đang xử lý nội dung... Tác vụ dài sẽ được chia nhỏ để hoàn tất ổn định hơn.");
   els.translateButton.disabled = true;
   els.retranslateButton.disabled = true;
 
@@ -286,7 +286,7 @@ async function translateCurrentChapter(force) {
       body: JSON.stringify({ text: chapter.text })
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Không dịch được chương.");
+    if (!response.ok) throw new Error(data.error || "Không xử lý được mục này.");
 
     localStorage.setItem(translationKey(), data.translation);
     els.translationText.textContent = data.translation;
@@ -295,7 +295,7 @@ async function translateCurrentChapter(force) {
     els.retranslateButton.hidden = false;
     if (data.elapsedMs) {
       const modelNote = Array.isArray(data.modelsUsed) && data.modelsUsed.length ? ` · ${data.modelsUsed.join(", ")}` : "";
-      els.bookMeta.textContent = `${state.fileName} · ${state.chapters.length} chương · dịch ${data.chunkCount || 1} phần trong ${formatSeconds(
+      els.bookMeta.textContent = `Tài liệu hiện tại · ${state.chapters.length} mục · xử lý ${data.chunkCount || 1} phần trong ${formatSeconds(
         data.elapsedMs
       )}${modelNote}`;
     }
@@ -320,7 +320,7 @@ function setTranslationStatus(message, isError = false) {
 function setBusy(message) {
   els.sourceText.textContent = message;
   els.sourceText.classList.add("empty");
-  els.translationText.textContent = "Chưa dịch.";
+  els.translationText.textContent = "Chưa có nội dung xử lý.";
   els.translationText.classList.add("empty");
 }
 
@@ -328,12 +328,12 @@ function resetReader(message) {
   state.bookId = "";
   state.chapters = [];
   state.currentIndex = 0;
-  els.bookTitle.textContent = "EPUB Translator";
+  els.bookTitle.textContent = "Document Workspace";
   els.bookMeta.textContent = message;
   els.sourceText.textContent = message;
   els.sourceText.classList.add("empty", "status-error");
-  els.chapterCounter.textContent = "Chưa có EPUB";
-  els.bottomChapterCounter.textContent = "Chưa có EPUB";
+  els.chapterCounter.textContent = "Chưa có tài liệu";
+  els.bottomChapterCounter.textContent = "Chưa có tài liệu";
   els.chapterSelect.innerHTML = "";
   els.chapterSelect.disabled = true;
   els.chapterList.innerHTML = "";
@@ -354,6 +354,10 @@ function translationKey() {
 
 function makeBookId(file) {
   return `${file.name}:${file.size}:${file.lastModified}`;
+}
+
+function displayChapterTitle(index) {
+  return `Mục ${index + 1}`;
 }
 
 function isDocumentType(mediaType, href) {
