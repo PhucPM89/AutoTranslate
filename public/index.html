@@ -3,71 +3,122 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Document Workspace</title>
+    <title>Operations Review</title>
+    <link rel="icon" href="data:,">
     <link rel="stylesheet" href="/style.css">
   </head>
   <body>
-    <header class="topbar">
-      <div>
-        <h1 id="bookTitle">Document Workspace</h1>
-        <p id="bookMeta">Chọn tài liệu để bắt đầu phiên xử lý.</p>
-      </div>
-      <div class="topbar-actions">
-        <label class="file-button">
-          Nhập tài liệu
-          <input id="fileInput" type="file" accept=".epub,application/epub+zip">
-        </label>
-        <button id="themeToggle" type="button">Dark mode</button>
-      </div>
-    </header>
-
-    <main class="layout">
-      <aside class="sidebar" aria-label="Danh sách mục">
-        <div class="sidebar-header">
-          <strong>Danh mục</strong>
-          <select id="chapterSelect" disabled></select>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-block">
+          <div class="brand-mark" aria-hidden="true">DW</div>
+          <div>
+            <h1 id="bookTitle">Document Workspace</h1>
+            <p id="bookMeta">Workspace ready · No collection loaded</p>
+          </div>
         </div>
-        <nav id="chapterList" class="chapter-list"></nav>
-      </aside>
-
-      <section class="reader">
-        <div class="reader-toolbar">
-          <button id="prevChapter" type="button" disabled>← Mục trước</button>
-          <span id="chapterCounter">Chưa có tài liệu</span>
-          <button id="nextChapter" type="button" disabled>Mục sau →</button>
+        <div class="command-search">
+          <span aria-hidden="true">⌕</span>
+          <input id="globalSearch" type="search" placeholder="Search documents..." autocomplete="off">
         </div>
-
-        <div class="settings">
-          <label>
-            Cỡ hiển thị
-            <input id="fontSize" type="range" min="16" max="28" value="20">
+        <div class="topbar-actions">
+          <label class="file-button">
+            Import
+            <input id="fileInput" type="file" accept=".epub,application/epub+zip">
           </label>
-          <label>
-            Khung đọc
-            <input id="readerWidth" type="range" min="620" max="980" value="760">
-          </label>
+          <button id="themeToggle" class="icon-button" type="button" aria-label="Toggle theme">☼</button>
+          <button class="icon-button" type="button" aria-label="Settings">⚙</button>
+          <div class="avatar" aria-hidden="true">P</div>
         </div>
+      </header>
 
-        <div id="sourceText" hidden></div>
+      <main class="layout">
+        <aside class="sidebar" aria-label="Document library">
+          <div class="sidebar-section workspace-links">
+            <p class="section-label">Workspace</p>
+            <button class="workspace-link active" type="button"><span aria-hidden="true">▦</span> All Documents</button>
+            <button class="workspace-link" type="button"><span aria-hidden="true">◷</span> Recently Opened</button>
+            <button class="workspace-link" type="button"><span aria-hidden="true">☆</span> Bookmarks</button>
+          </div>
 
-        <article class="chapter translation-section">
-          <div class="translation-heading">
-            <h2>NỘI DUNG</h2>
+          <div class="sidebar-section">
+            <div class="section-heading">
+              <p class="section-label">Documents</p>
+              <span id="documentCount">0</span>
+            </div>
+            <select id="chapterSelect" disabled aria-label="Select document"></select>
+          </div>
+
+          <nav id="chapterList" class="chapter-list"></nav>
+        </aside>
+
+        <section class="workspace-main">
+          <div class="document-header">
             <div>
-              <button id="translateButton" type="button" disabled>Xử lý mục</button>
-              <button id="retranslateButton" type="button" hidden>Chạy lại</button>
+              <p class="eyebrow">Active Document</p>
+              <h2 id="documentTitle">No document selected</h2>
+              <div class="metadata-row">
+                <span id="chapterCounter">No collection</span>
+                <span id="documentStatus">Idle</span>
+                <span id="progressLabel">0%</span>
+              </div>
+            </div>
+            <div class="document-header-actions">
+              <button id="prevChapter" class="ghost-button" type="button" disabled>‹ Previous</button>
+              <button id="nextChapter" class="ghost-button" type="button" disabled>Next ›</button>
             </div>
           </div>
-          <div id="translationText" class="chapter-text empty">Chưa có nội dung xử lý.</div>
-        </article>
 
-        <div class="reader-toolbar reader-toolbar-bottom">
-          <button id="bottomPrevChapter" type="button" disabled>← Mục trước</button>
-          <span id="bottomChapterCounter">Chưa có tài liệu</span>
-          <button id="bottomNextChapter" type="button" disabled>Mục sau →</button>
-        </div>
-      </section>
-    </main>
+          <div class="document-toolbar" aria-label="Document controls">
+            <div class="toolbar-group">
+              <button id="fontDecrease" class="tool-button" type="button" aria-label="Decrease text size">A-</button>
+              <span id="fontSizeLabel">15px</span>
+              <button id="fontIncrease" class="tool-button" type="button" aria-label="Increase text size">A+</button>
+            </div>
+            <div class="toolbar-group">
+              <span>Aa</span>
+              <select id="widthPreset" aria-label="Content width">
+                <option value="comfortable">Comfortable</option>
+                <option value="compact">Compact</option>
+                <option value="wide">Wide</option>
+              </select>
+            </div>
+            <div class="toolbar-spacer"></div>
+            <button id="translateButton" class="primary-action" type="button" disabled>Run Analysis</button>
+            <button id="retranslateButton" class="secondary-action" type="button" hidden>Refresh Output</button>
+          </div>
+
+          <div id="sourceText" hidden></div>
+
+          <section class="document-canvas">
+            <article class="document-paper translation-section">
+              <div class="paper-header">
+                <div>
+                  <p class="eyebrow">Document Content</p>
+                  <h3 id="paperTitle">Output Preview</h3>
+                </div>
+                <span class="status-pill" id="outputStatus">Pending</span>
+              </div>
+              <div id="translationText" class="document-text empty">No output yet.</div>
+            </article>
+          </section>
+
+          <div class="footer-nav">
+            <button id="bottomPrevChapter" class="ghost-button" type="button" disabled>‹ Previous document</button>
+            <span id="bottomChapterCounter">No collection</span>
+            <button id="bottomNextChapter" class="ghost-button" type="button" disabled>Next document ›</button>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <template id="emptyStateTemplate">
+      <div class="empty-state">
+        <div class="empty-icon" aria-hidden="true">□</div>
+        <p>No document output is available.</p>
+        <span>Import a collection, choose a document, then run processing.</span>
+      </div>
+    </template>
 
     <script src="/vendor/jszip.min.js"></script>
     <script src="/app.js"></script>

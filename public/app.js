@@ -12,8 +12,15 @@ const els = {
   fileInput: document.getElementById("fileInput"),
   bookTitle: document.getElementById("bookTitle"),
   bookMeta: document.getElementById("bookMeta"),
+  globalSearch: document.getElementById("globalSearch"),
   chapterSelect: document.getElementById("chapterSelect"),
   chapterList: document.getElementById("chapterList"),
+  documentCount: document.getElementById("documentCount"),
+  documentTitle: document.getElementById("documentTitle"),
+  documentStatus: document.getElementById("documentStatus"),
+  progressLabel: document.getElementById("progressLabel"),
+  paperTitle: document.getElementById("paperTitle"),
+  outputStatus: document.getElementById("outputStatus"),
   prevChapter: document.getElementById("prevChapter"),
   nextChapter: document.getElementById("nextChapter"),
   bottomPrevChapter: document.getElementById("bottomPrevChapter"),
@@ -25,8 +32,10 @@ const els = {
   translateButton: document.getElementById("translateButton"),
   retranslateButton: document.getElementById("retranslateButton"),
   themeToggle: document.getElementById("themeToggle"),
-  fontSize: document.getElementById("fontSize"),
-  readerWidth: document.getElementById("readerWidth")
+  fontDecrease: document.getElementById("fontDecrease"),
+  fontIncrease: document.getElementById("fontIncrease"),
+  fontSizeLabel: document.getElementById("fontSizeLabel"),
+  widthPreset: document.getElementById("widthPreset")
 };
 
 const parser = new DOMParser();
@@ -41,41 +50,60 @@ function bindEvents() {
   els.bottomPrevChapter.addEventListener("click", () => goToChapter(state.currentIndex - 1));
   els.bottomNextChapter.addEventListener("click", () => goToChapter(state.currentIndex + 1));
   els.chapterSelect.addEventListener("change", () => goToChapter(Number(els.chapterSelect.value)));
+  els.globalSearch.addEventListener("input", renderChapterControls);
   els.translateButton.addEventListener("click", () => translateCurrentChapter(false));
   els.retranslateButton.addEventListener("click", () => translateCurrentChapter(true));
   els.themeToggle.addEventListener("click", toggleTheme);
-  els.fontSize.addEventListener("input", updateReaderSettings);
-  els.readerWidth.addEventListener("input", updateReaderSettings);
+  els.fontDecrease.addEventListener("click", () => changeFontSize(-1));
+  els.fontIncrease.addEventListener("click", () => changeFontSize(1));
+  els.widthPreset.addEventListener("change", updateReaderSettings);
 }
 
 function initPreferences() {
-  const theme = localStorage.getItem("epubTranslator.theme") || "light";
+  const theme = localStorage.getItem("epubTranslator.theme") || "dark";
   document.body.classList.toggle("dark", theme === "dark");
-  els.themeToggle.textContent = theme === "dark" ? "Light mode" : "Dark mode";
+  els.themeToggle.textContent = theme === "dark" ? "Light" : "Dark";
 
-  els.fontSize.value = localStorage.getItem("epubTranslator.fontSize") || "20";
-  els.readerWidth.value = localStorage.getItem("epubTranslator.readerWidth") || "760";
+  localStorage.setItem(
+    "epubTranslator.fontSize",
+    localStorage.getItem("epubTranslator.fontSize") || "20"
+  );
+  els.widthPreset.value = localStorage.getItem("epubTranslator.widthPreset") || "comfortable";
   updateReaderSettings();
 }
 
 function updateReaderSettings() {
-  document.documentElement.style.setProperty("--reader-font-size", `${els.fontSize.value}px`);
-  document.documentElement.style.setProperty("--reader-width", `${els.readerWidth.value}px`);
-  localStorage.setItem("epubTranslator.fontSize", els.fontSize.value);
-  localStorage.setItem("epubTranslator.readerWidth", els.readerWidth.value);
+  const fontSize = Number(localStorage.getItem("epubTranslator.fontSize") || "20");
+  const widthMap = {
+    compact: "680px",
+    comfortable: "820px",
+    wide: "1020px"
+  };
+
+  document.documentElement.style.setProperty("--content-font-size", `${fontSize}px`);
+  document.documentElement.style.setProperty("--document-width", widthMap[els.widthPreset.value] || widthMap.comfortable);
+  els.fontSizeLabel.textContent = `${fontSize}px`;
+  localStorage.setItem("epubTranslator.widthPreset", els.widthPreset.value);
+}
+
+function changeFontSize(delta) {
+  const current = Number(localStorage.getItem("epubTranslator.fontSize") || "20");
+  const next = Math.min(28, Math.max(16, current + delta));
+  localStorage.setItem("epubTranslator.fontSize", String(next));
+  updateReaderSettings();
 }
 
 function toggleTheme() {
   const isDark = document.body.classList.toggle("dark");
   localStorage.setItem("epubTranslator.theme", isDark ? "dark" : "light");
-  els.themeToggle.textContent = isDark ? "Light mode" : "Dark mode";
+  els.themeToggle.textContent = isDark ? "Light" : "Dark";
 }
 
 async function handleFile(event) {
   const file = event.target.files?.[0];
   if (!file) return;
 
-  setBusy(`Đang tải ${file.name}...`);
+  setBusy("Loading dataset...");
 
   try {
     const arrayBuffer = await file.arrayBuffer();
@@ -86,17 +114,17 @@ async function handleFile(event) {
     state.chapters = book.chapters;
 
     if (!state.chapters.length) {
-      throw new Error("Không tìm thấy mục có nội dung trong tài liệu.");
+      throw new Error("No readable records found.");
     }
 
     els.bookTitle.textContent = "Document Workspace";
-    els.bookMeta.textContent = `Tài liệu hiện tại · ${state.chapters.length} mục`;
+    els.bookMeta.textContent = `Collection loaded · ${state.chapters.length} documents`;
     renderChapterControls();
 
     const savedIndex = Number(localStorage.getItem(currentChapterKey()) || "0");
     goToChapter(Number.isInteger(savedIndex) ? savedIndex : 0);
   } catch (error) {
-    resetReader(`Không mở được tài liệu: ${error.message}`);
+    resetReader(`Unable to load dataset: ${error.message}`);
   }
 }
 
@@ -132,7 +160,7 @@ async function parseEpub(arrayBuffer, fileName) {
     if (!text) continue;
 
     chapters.push({
-      title: navTitles.get(stripFragment(item.href)) || guessChapterTitle(html) || `Mục ${chapters.length + 1}`,
+      title: navTitles.get(stripFragment(item.href)) || guessChapterTitle(html) || displayChapterTitle(chapters.length),
       text
     });
   }
@@ -202,22 +230,40 @@ function guessChapterTitle(html) {
 function renderChapterControls() {
   els.chapterSelect.innerHTML = "";
   els.chapterList.innerHTML = "";
+  const query = els.globalSearch.value.trim().toLowerCase();
+  let visibleCount = 0;
 
   state.chapters.forEach((chapter, index) => {
+    const title = displayChapterTitle(index);
+    const searchTarget = `${title} ${chapter.title}`.toLowerCase();
+    if (query && !searchTarget.includes(query)) return;
+
     const option = document.createElement("option");
     option.value = String(index);
-    option.textContent = displayChapterTitle(index);
+    option.textContent = title;
     els.chapterSelect.appendChild(option);
 
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "chapter-link";
-    button.textContent = displayChapterTitle(index);
+    button.className = "document-item";
+    button.dataset.index = String(index);
+    button.classList.toggle("active", index === state.currentIndex);
+    button.innerHTML = `<span class="document-icon" aria-hidden="true"></span><span>${title}</span><small>${estimateDocumentSize(
+      chapter.text
+    )}</small>`;
     button.addEventListener("click", () => goToChapter(index));
     els.chapterList.appendChild(button);
+    visibleCount += 1;
   });
 
+  els.documentCount.textContent = String(state.chapters.length);
   els.chapterSelect.disabled = false;
+  if (state.chapters.length && !els.chapterSelect.querySelector(`[value="${state.currentIndex}"]`)) {
+    els.chapterSelect.value = String(state.currentIndex);
+  }
+  if (!visibleCount) {
+    els.chapterList.innerHTML = `<div class="empty-list">No matching documents</div>`;
+  }
 }
 
 function goToChapter(index) {
@@ -227,7 +273,13 @@ function goToChapter(index) {
 
   const chapter = state.chapters[state.currentIndex];
   els.sourceText.textContent = chapter.text;
-  const chapterLabel = `${displayChapterTitle(state.currentIndex)} · ${state.currentIndex + 1} / ${state.chapters.length}`;
+  const documentLabel = displayChapterTitle(state.currentIndex);
+  const chapterLabel = `${documentLabel} · ${state.currentIndex + 1} / ${state.chapters.length}`;
+  const progress = Math.round(((state.currentIndex + 1) / state.chapters.length) * 100);
+  els.documentTitle.textContent = documentLabel;
+  els.paperTitle.textContent = documentLabel;
+  els.progressLabel.textContent = `${progress}%`;
+  els.documentStatus.textContent = "Open";
   els.chapterCounter.textContent = chapterLabel;
   els.bottomChapterCounter.textContent = chapterLabel;
   els.chapterSelect.value = String(state.currentIndex);
@@ -240,8 +292,8 @@ function goToChapter(index) {
   els.bottomNextChapter.disabled = isLastChapter;
   els.translateButton.disabled = false;
 
-  Array.from(els.chapterList.children).forEach((button, i) => {
-    button.classList.toggle("active", i === state.currentIndex);
+  Array.from(els.chapterList.children).forEach((button) => {
+    button.classList.toggle("active", Number(button.dataset.index) === state.currentIndex);
   });
 
   loadCachedTranslation();
@@ -251,13 +303,15 @@ function loadCachedTranslation() {
   const cached = localStorage.getItem(translationKey());
   if (cached) {
     els.translationText.textContent = cached;
-    els.translationText.classList.remove("empty", "status-error");
+    els.translationText.classList.remove("empty", "status-error", "is-loading");
+    els.outputStatus.textContent = "Cached";
     els.translateButton.hidden = true;
     els.retranslateButton.hidden = false;
   } else {
-    els.translationText.textContent = "Chưa có nội dung xử lý.";
+    els.translationText.textContent = "No output yet.";
     els.translationText.classList.add("empty");
-    els.translationText.classList.remove("status-error");
+    els.translationText.classList.remove("status-error", "is-loading");
+    els.outputStatus.textContent = "Pending";
     els.translateButton.hidden = false;
     els.retranslateButton.hidden = true;
   }
@@ -275,7 +329,8 @@ async function translateCurrentChapter(force) {
     }
   }
 
-  setTranslationStatus("Đang xử lý nội dung... Tác vụ dài sẽ được chia nhỏ để hoàn tất ổn định hơn.");
+  setTranslationStatus("Processing... Large records are split automatically.");
+  els.outputStatus.textContent = "Running";
   els.translateButton.disabled = true;
   els.retranslateButton.disabled = true;
 
@@ -286,16 +341,17 @@ async function translateCurrentChapter(force) {
       body: JSON.stringify({ text: chapter.text })
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Không xử lý được mục này.");
+    if (!response.ok) throw new Error(data.error || "Unable to process this record.");
 
     localStorage.setItem(translationKey(), data.translation);
     els.translationText.textContent = data.translation;
-    els.translationText.classList.remove("empty", "status-error");
+    els.translationText.classList.remove("empty", "status-error", "is-loading");
+    els.outputStatus.textContent = "Complete";
     els.translateButton.hidden = true;
     els.retranslateButton.hidden = false;
     if (data.elapsedMs) {
       const modelNote = Array.isArray(data.modelsUsed) && data.modelsUsed.length ? ` · ${data.modelsUsed.join(", ")}` : "";
-      els.bookMeta.textContent = `Tài liệu hiện tại · ${state.chapters.length} mục · xử lý ${data.chunkCount || 1} phần trong ${formatSeconds(
+      els.bookMeta.textContent = `Collection loaded · ${state.chapters.length} documents · ${data.chunkCount || 1} tasks in ${formatSeconds(
         data.elapsedMs
       )}${modelNote}`;
     }
@@ -315,13 +371,16 @@ function setTranslationStatus(message, isError = false) {
   els.translationText.textContent = message;
   els.translationText.classList.toggle("status-error", isError);
   els.translationText.classList.toggle("empty", !isError);
+  els.translationText.classList.toggle("is-loading", !isError);
+  if (isError) els.outputStatus.textContent = "Error";
 }
 
 function setBusy(message) {
   els.sourceText.textContent = message;
-  els.sourceText.classList.add("empty");
-  els.translationText.textContent = "Chưa có nội dung xử lý.";
+  els.translationText.textContent = "No output yet.";
   els.translationText.classList.add("empty");
+  els.translationText.classList.remove("is-loading", "status-error");
+  els.outputStatus.textContent = "Loading";
 }
 
 function resetReader(message) {
@@ -331,9 +390,14 @@ function resetReader(message) {
   els.bookTitle.textContent = "Document Workspace";
   els.bookMeta.textContent = message;
   els.sourceText.textContent = message;
-  els.sourceText.classList.add("empty", "status-error");
-  els.chapterCounter.textContent = "Chưa có tài liệu";
-  els.bottomChapterCounter.textContent = "Chưa có tài liệu";
+  els.chapterCounter.textContent = "No collection";
+  els.bottomChapterCounter.textContent = "No collection";
+  els.documentTitle.textContent = "No document selected";
+  els.paperTitle.textContent = "Output Preview";
+  els.documentStatus.textContent = "Idle";
+  els.outputStatus.textContent = "Pending";
+  els.progressLabel.textContent = "0%";
+  els.documentCount.textContent = "0";
   els.chapterSelect.innerHTML = "";
   els.chapterSelect.disabled = true;
   els.chapterList.innerHTML = "";
@@ -357,7 +421,13 @@ function makeBookId(file) {
 }
 
 function displayChapterTitle(index) {
-  return `Mục ${index + 1}`;
+  return `Document ${String(index + 1).padStart(2, "0")}`;
+}
+
+function estimateDocumentSize(text) {
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  if (words >= 1000) return `${Math.round(words / 100) / 10}k words`;
+  return `${words} words`;
 }
 
 function isDocumentType(mediaType, href) {
