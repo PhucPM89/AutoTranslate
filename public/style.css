@@ -81,11 +81,10 @@ button:disabled {
 }
 
 .app-shell {
-  height: 100vh;
-  height: 100dvh;
+  min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  overflow: hidden;
+  grid-template-rows: auto 1fr;
 }
 
 .topbar {
@@ -212,13 +211,18 @@ button:disabled {
 .layout {
   display: grid;
   grid-template-columns: 292px minmax(0, 1fr);
-  min-height: 0;
-  overflow: hidden;
+  align-items: start;
+  min-height: calc(100vh - 70px);
+  min-height: calc(100dvh - 70px);
 }
 
 .sidebar {
+  position: sticky;
+  top: 70px;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
+  height: calc(100vh - 70px);
+  height: calc(100dvh - 70px);
   min-height: 0;
   overflow: hidden;
   border-right: 1px solid var(--border);
@@ -344,9 +348,8 @@ button:disabled {
 
 .workspace-main {
   min-width: 0;
-  min-height: 0;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto auto;
   gap: 1rem;
   padding: 1rem;
 }
@@ -545,22 +548,22 @@ button:disabled {
   .layout {
     grid-template-columns: 220px minmax(0, 1fr);
   }
+
+  .sidebar {
+    top: 118px;
+    height: calc(100vh - 118px);
+    height: calc(100dvh - 118px);
+  }
 }
 
 @media (max-width: 760px) {
-  .app-shell {
-    height: auto;
-    min-height: 100vh;
-    min-height: 100dvh;
-    overflow: visible;
-  }
-
   .layout {
     display: block;
-    overflow: visible;
   }
 
   .sidebar {
+    position: static;
+    height: auto;
     max-height: 300px;
     border-right: 0;
     border-bottom: 1px solid var(--border);
