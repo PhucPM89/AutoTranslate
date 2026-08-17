@@ -5,8 +5,14 @@ const state = {
   fileName: "",
   title: "",
   chapters: [],
-  currentIndex: 0
+  currentIndex: 0,
+  translations: {}
 };
+
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const CACHE_DB_NAME = "epubTranslator.cache";
+const CACHE_DB_VERSION = 1;
+const CACHE_STORE = "books";
 
 const els = {
   fileInput: document.getElementById("fileInput"),
@@ -42,6 +48,7 @@ const parser = new DOMParser();
 
 initPreferences();
 bindEvents();
+restoreCachedBook();
 
 function bindEvents() {
   els.fileInput.addEventListener("change", handleFile);
@@ -106,23 +113,27 @@ async function handleFile(event) {
   setBusy("Loading dataset...");
 
   try {
+    const bookId = makeBookId(file);
+    const existingCache = await readCachedBook(bookId);
     const arrayBuffer = await file.arrayBuffer();
     const book = await parseEpub(arrayBuffer, file.name);
-    state.bookId = makeBookId(file);
+    state.bookId = bookId;
     state.fileName = file.name;
     state.title = book.title || file.name.replace(/\.epub$/i, "");
     state.chapters = book.chapters;
+    state.translations = existingCache?.translations || {};
 
     if (!state.chapters.length) {
       throw new Error("No readable records found.");
     }
 
     els.bookTitle.textContent = "Document Workspace";
-    els.bookMeta.textContent = `Collection loaded · ${state.chapters.length} documents`;
+    els.bookMeta.textContent = `Collection loaded · ${state.chapters.length} documents · Saved on this device for 7 days`;
     renderChapterControls();
 
-    const savedIndex = Number(localStorage.getItem(currentChapterKey()) || "0");
+    const savedIndex = Number(existingCache?.currentIndex ?? localStorage.getItem(currentChapterKey()) ?? "0");
     goToChapter(Number.isInteger(savedIndex) ? savedIndex : 0);
+    await saveCurrentBookCache();
   } catch (error) {
     resetReader(`Unable to load dataset: ${error.message}`);
   }
@@ -296,11 +307,12 @@ function goToChapter(index) {
     button.classList.toggle("active", Number(button.dataset.index) === state.currentIndex);
   });
 
+  saveCurrentBookCache();
   loadCachedTranslation();
 }
 
 function loadCachedTranslation() {
-  const cached = localStorage.getItem(translationKey());
+  const cached = state.translations[state.currentIndex] || localStorage.getItem(translationKey());
   if (cached) {
     els.translationText.textContent = cached;
     els.translationText.classList.remove("empty", "status-error", "is-loading");
@@ -322,7 +334,7 @@ async function translateCurrentChapter(force) {
   if (!chapter) return;
 
   if (!force) {
-    const cached = localStorage.getItem(translationKey());
+    const cached = state.translations[state.currentIndex] || localStorage.getItem(translationKey());
     if (cached) {
       loadCachedTranslation();
       return;
@@ -343,7 +355,13 @@ async function translateCurrentChapter(force) {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Unable to process this record.");
 
-    localStorage.setItem(translationKey(), data.translation);
+    state.translations[state.currentIndex] = data.translation;
+    try {
+      localStorage.setItem(translationKey(), data.translation);
+    } catch (error) {
+      console.warn("LocalStorage quota reached; IndexedDB cache still keeps this translation.", error);
+    }
+    await saveCurrentBookCache();
     els.translationText.textContent = data.translation;
     els.translationText.classList.remove("empty", "status-error", "is-loading");
     els.outputStatus.textContent = "Complete";
@@ -385,8 +403,11 @@ function setBusy(message) {
 
 function resetReader(message) {
   state.bookId = "";
+  state.fileName = "";
+  state.title = "";
   state.chapters = [];
   state.currentIndex = 0;
+  state.translations = {};
   els.bookTitle.textContent = "Document Workspace";
   els.bookMeta.textContent = message;
   els.sourceText.textContent = message;
@@ -406,6 +427,147 @@ function resetReader(message) {
   els.nextChapter.disabled = true;
   els.bottomNextChapter.disabled = true;
   els.translateButton.disabled = true;
+}
+
+async function restoreCachedBook() {
+  try {
+    await deleteExpiredCachedBooks();
+    const cachedBook = await readMostRecentCachedBook();
+    if (!cachedBook) return;
+
+    applyCachedBook(cachedBook);
+    renderChapterControls();
+    goToChapter(cachedBook.currentIndex || 0);
+    els.bookMeta.textContent = `Restored from this device · ${state.chapters.length} documents · Expires ${formatDate(
+      cachedBook.expiresAt
+    )}`;
+  } catch (error) {
+    console.warn("Unable to restore local EPUB cache.", error);
+  }
+}
+
+function applyCachedBook(cachedBook) {
+  state.bookId = cachedBook.id;
+  state.fileName = cachedBook.fileName || "";
+  state.title = cachedBook.title || cachedBook.fileName || "Cached EPUB";
+  state.chapters = Array.isArray(cachedBook.chapters) ? cachedBook.chapters : [];
+  state.currentIndex = Number(cachedBook.currentIndex) || 0;
+  state.translations = cachedBook.translations || {};
+  els.bookTitle.textContent = "Document Workspace";
+}
+
+async function saveCurrentBookCache() {
+  if (!state.bookId || !state.chapters.length) return;
+
+  const now = Date.now();
+  const cachedBook = {
+    id: state.bookId,
+    fileName: state.fileName,
+    title: state.title,
+    chapters: state.chapters,
+    currentIndex: state.currentIndex,
+    translations: state.translations,
+    createdAt: now,
+    lastOpenedAt: now,
+    expiresAt: now + CACHE_TTL_MS
+  };
+
+  try {
+    await putCachedBook(cachedBook);
+  } catch (error) {
+    console.warn("Unable to save EPUB cache on this device.", error);
+    els.bookMeta.textContent = `Collection loaded · ${state.chapters.length} documents · Local cache unavailable`;
+  }
+}
+
+function openCacheDb() {
+  return new Promise((resolve, reject) => {
+    if (!("indexedDB" in window)) {
+      reject(new Error("IndexedDB is not available."));
+      return;
+    }
+
+    const request = indexedDB.open(CACHE_DB_NAME, CACHE_DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(CACHE_STORE)) {
+        const store = db.createObjectStore(CACHE_STORE, { keyPath: "id" });
+        store.createIndex("lastOpenedAt", "lastOpenedAt");
+        store.createIndex("expiresAt", "expiresAt");
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function withCacheStore(mode, callback) {
+  const db = await openCacheDb();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(CACHE_STORE, mode);
+    const store = transaction.objectStore(CACHE_STORE);
+    let callbackResult;
+
+    transaction.oncomplete = () => {
+      db.close();
+      resolve(callbackResult);
+    };
+    transaction.onerror = () => {
+      db.close();
+      reject(transaction.error);
+    };
+
+    callbackResult = callback(store);
+  });
+}
+
+function requestToPromise(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function putCachedBook(cachedBook) {
+  await withCacheStore("readwrite", (store) => {
+    store.put(cachedBook);
+  });
+}
+
+async function readCachedBook(bookId) {
+  const cachedBook = await withCacheStore("readonly", (store) => requestToPromise(store.get(bookId)));
+  if (!cachedBook || cachedBook.expiresAt <= Date.now()) return null;
+  return cachedBook;
+}
+
+async function readMostRecentCachedBook() {
+  const books = await withCacheStore("readonly", (store) => requestToPromise(store.getAll()));
+  const now = Date.now();
+  return books
+    .filter((book) => book.expiresAt > now && Array.isArray(book.chapters) && book.chapters.length)
+    .sort((a, b) => b.lastOpenedAt - a.lastOpenedAt)[0];
+}
+
+async function deleteExpiredCachedBooks() {
+  const books = await withCacheStore("readwrite", (store) => requestToPromise(store.getAll()));
+  const now = Date.now();
+  await Promise.all(
+    books
+      .filter((book) => book.expiresAt <= now)
+      .map((book) =>
+        withCacheStore("readwrite", (store) => {
+          store.delete(book.id);
+        })
+      )
+  );
+}
+
+function formatDate(timestamp) {
+  return new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  }).format(new Date(timestamp));
 }
 
 function currentChapterKey() {
