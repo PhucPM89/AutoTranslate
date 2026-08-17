@@ -40,11 +40,14 @@ function buildTranslationPrompt(text, index, total, isRetry = false) {
     "Yêu cầu:",
     "- Dịch đầy đủ, không tóm tắt.",
     "- Không bỏ đoạn.",
-    "- Giữ nguyên tên nhân vật và địa danh.",
+    "- Bắt buộc chuyển tên người, địa danh, môn phái, chiêu thức và pháp khí sang âm Hán-Việt phù hợp với ngữ cảnh.",
+    "- Tuyệt đối không dùng Pinyin hoặc cách đọc Latin tiếng Trung trong bản dịch.",
+    "- Ví dụ: 陈清 phải dịch là Trần Thanh, không phải Chen Qing; 张伟 phải dịch là Trương Vĩ, không phải Zhang Wei.",
+    "- Giữ nhất quán cách gọi tên riêng trong toàn bộ phần dịch.",
     "- Giữ nguyên cấu trúc đoạn văn.",
     "- Không giải thích thêm.",
     "- Chỉ trả về bản dịch tiếng Việt.",
-    "- Phiên âm tên riêng sang chữ Latin; không chép lại nguyên văn tiếng Trung.",
+    "- Không chép lại nguyên văn chữ Trung, trừ trường hợp thật sự không thể chuyển nghĩa.",
     isRetry
       ? "Lần trả lời trước đã bị hệ thống từ chối vì còn quá nhiều chữ Trung. Hãy dịch lại toàn bộ phần này sang tiếng Việt."
       : "",
