@@ -7,6 +7,7 @@
     "build": "node scripts/copy-jszip.js",
     "postinstall": "node scripts/copy-jszip.js",
     "start": "node server/server.js",
+    "test": "node --test server/gemini.test.js",
     "syntax": "node --check server/server.js && node --check server/gemini.js && node --check api/translate.js && node --check public/app.js"
   },
   "dependencies": {

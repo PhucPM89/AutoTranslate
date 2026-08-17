@@ -26,7 +26,7 @@ async function translateText(text, apiKey) {
   };
 }
 
-function buildTranslationPrompt(text, index, total) {
+function buildTranslationPrompt(text, index, total, isRetry = false) {
   const chunkNote =
     total > 1
       ? `Đây là phần ${index + 1}/${total} của cùng một chương. Hãy chỉ dịch phần này, không thêm tiêu đề phần.`
@@ -44,6 +44,10 @@ function buildTranslationPrompt(text, index, total) {
     "- Giữ nguyên cấu trúc đoạn văn.",
     "- Không giải thích thêm.",
     "- Chỉ trả về bản dịch tiếng Việt.",
+    "- Phiên âm tên riêng sang chữ Latin; không chép lại nguyên văn tiếng Trung.",
+    isRetry
+      ? "Lần trả lời trước đã bị hệ thống từ chối vì còn quá nhiều chữ Trung. Hãy dịch lại toàn bộ phần này sang tiếng Việt."
+      : "",
     chunkNote,
     "",
     "Nội dung cần dịch:",
@@ -54,15 +58,25 @@ function buildTranslationPrompt(text, index, total) {
 }
 
 async function translateChunk(apiKey, text, index, total) {
-  const prompt = buildTranslationPrompt(text, index, total);
   const models = [GEMINI_MODEL, ...GEMINI_FALLBACK_MODELS].filter(
     (model, modelIndex, list) => model && list.indexOf(model) === modelIndex
   );
 
   let lastError = null;
-  for (const model of models) {
+  for (let modelIndex = 0; modelIndex < models.length; modelIndex += 1) {
+    const model = models[modelIndex];
+    const prompt = buildTranslationPrompt(text, index, total, modelIndex > 0);
+
     try {
-      return await translateChunkWithModel(apiKey, model, prompt);
+      const result = await translateChunkWithModel(apiKey, model, prompt);
+      const quality = assessTranslation(text, result.text);
+      if (quality.acceptable) return result;
+
+      const error = new Error(`Gemini trả về nội dung chưa được dịch (${quality.reason}).`);
+      error.status = 502;
+      error.model = model;
+      lastError = error;
+      continue;
     } catch (error) {
       lastError = error;
       if (!shouldTryNextModel(error)) break;
@@ -70,6 +84,50 @@ async function translateChunk(apiKey, text, index, total) {
   }
 
   throw lastError || new Error("Gemini API trả về lỗi.");
+}
+
+function assessTranslation(source, translation) {
+  const output = String(translation || "").trim();
+  if (!output) return { acceptable: false, reason: "kết quả rỗng" };
+
+  const compactSource = normalizeForComparison(source);
+  const compactOutput = normalizeForComparison(output);
+  if (compactSource && compactSource === compactOutput) {
+    return { acceptable: false, reason: "kết quả trùng nguyên văn" };
+  }
+
+  const sourceStats = getScriptStats(source);
+  const outputStats = getScriptStats(output);
+  const sourceIsChinese = sourceStats.han >= 20 && sourceStats.hanRatio >= 0.3;
+  if (!sourceIsChinese) return { acceptable: true };
+
+  if (outputStats.han >= 12 && outputStats.hanRatio >= 0.25) {
+    return { acceptable: false, reason: "còn quá nhiều chữ Trung" };
+  }
+
+  if (compactOutput.length < Math.max(20, compactSource.length * 0.2)) {
+    return { acceptable: false, reason: "bản dịch bị thiếu nội dung" };
+  }
+
+  return { acceptable: true };
+}
+
+function getScriptStats(value) {
+  const text = String(value || "");
+  const han = (text.match(/\p{Script=Han}/gu) || []).length;
+  const latin = (text.match(/\p{Script=Latin}/gu) || []).length;
+  return {
+    han,
+    latin,
+    hanRatio: han / Math.max(1, han + latin)
+  };
+}
+
+function normalizeForComparison(value) {
+  return String(value || "")
+    .normalize("NFC")
+    .replace(/[\p{P}\p{S}\s]/gu, "")
+    .toLowerCase();
 }
 
 async function translateChunkWithModel(apiKey, model, prompt) {
@@ -176,17 +234,28 @@ function splitLongParagraph(paragraph, maxLength) {
   let current = "";
 
   for (const sentence of sentences) {
-    const next = current ? current + sentence : sentence;
-    if (next.length > maxLength && current) {
-      chunks.push(current.trim());
-      current = sentence;
-    } else {
-      current = next;
+    const pieces = splitByLength(sentence, maxLength);
+    for (const piece of pieces) {
+      const next = current ? current + piece : piece;
+      if (next.length > maxLength && current) {
+        chunks.push(current.trim());
+        current = piece;
+      } else {
+        current = next;
+      }
     }
   }
 
   if (current) chunks.push(current.trim());
   return chunks;
+}
+
+function splitByLength(text, maxLength) {
+  const pieces = [];
+  for (let start = 0; start < text.length; start += maxLength) {
+    pieces.push(text.slice(start, start + maxLength));
+  }
+  return pieces.length ? pieces : [text];
 }
 
 async function mapWithConcurrency(items, concurrency, mapper) {
@@ -217,4 +286,4 @@ function parseCsv(value) {
     .filter(Boolean);
 }
 
-module.exports = { translateText };
+module.exports = { translateText, assessTranslation, splitTextIntoChunks };

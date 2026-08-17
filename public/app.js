@@ -312,7 +312,15 @@ function goToChapter(index) {
 }
 
 function loadCachedTranslation() {
-  const cached = state.translations[state.currentIndex] || localStorage.getItem(translationKey());
+  let cached = state.translations[state.currentIndex] || localStorage.getItem(translationKey());
+  const chapter = state.chapters[state.currentIndex];
+  if (cached && chapter && !isUsableTranslation(chapter.text, cached)) {
+    delete state.translations[state.currentIndex];
+    localStorage.removeItem(translationKey());
+    saveCurrentBookCache();
+    cached = "";
+  }
+
   if (cached) {
     els.translationText.textContent = cached;
     els.translationText.classList.remove("empty", "status-error", "is-loading");
@@ -354,6 +362,9 @@ async function translateCurrentChapter(force) {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Unable to process this record.");
+    if (!isUsableTranslation(chapter.text, data.translation)) {
+      throw new Error("Gemini vẫn trả lại nội dung tiếng Trung. Kết quả này chưa được lưu; hãy thử dịch lại.");
+    }
 
     state.translations[state.currentIndex] = data.translation;
     try {
@@ -608,6 +619,25 @@ function normalizeSpace(value) {
     .replace(/\n\s+/g, "\n")
     .trim()
     .normalize("NFC");
+}
+
+function isUsableTranslation(source, translation) {
+  const sourceStats = getScriptStats(source);
+  if (sourceStats.han < 20 || sourceStats.hanRatio < 0.3) return Boolean(translation?.trim());
+
+  const outputStats = getScriptStats(translation);
+  return Boolean(translation?.trim()) && !(outputStats.han >= 12 && outputStats.hanRatio >= 0.25);
+}
+
+function getScriptStats(value) {
+  const text = String(value || "");
+  const han = (text.match(/\p{Script=Han}/gu) || []).length;
+  const latin = (text.match(/\p{Script=Latin}/gu) || []).length;
+  return {
+    han,
+    latin,
+    hanRatio: han / Math.max(1, han + latin)
+  };
 }
 
 function normalizeZipPath(path) {
