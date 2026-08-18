@@ -39,6 +39,7 @@ const els = {
   translateButton: document.getElementById("translateButton"),
   retranslateButton: document.getElementById("retranslateButton"),
   themeToggle: document.getElementById("themeToggle"),
+  themeLabel: document.getElementById("themeLabel"),
   fontDecrease: document.getElementById("fontDecrease"),
   fontIncrease: document.getElementById("fontIncrease"),
   fontSizeLabel: document.getElementById("fontSizeLabel"),
@@ -70,7 +71,7 @@ function bindEvents() {
 function initPreferences() {
   const theme = localStorage.getItem("epubTranslator.theme") || "dark";
   document.body.classList.toggle("dark", theme === "dark");
-  els.themeToggle.textContent = theme === "dark" ? "Light" : "Dark";
+  els.themeLabel.textContent = theme === "dark" ? "Light" : "Dark";
 
   localStorage.setItem(
     "epubTranslator.fontSize",
@@ -104,7 +105,7 @@ function changeFontSize(delta) {
 function toggleTheme() {
   const isDark = document.body.classList.toggle("dark");
   localStorage.setItem("epubTranslator.theme", isDark ? "dark" : "light");
-  els.themeToggle.textContent = isDark ? "Light" : "Dark";
+  els.themeLabel.textContent = isDark ? "Light" : "Dark";
 }
 
 async function handleFile(event) {

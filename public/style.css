@@ -104,6 +104,18 @@ button:disabled {
   transform: none;
 }
 
+.icon {
+  display: block;
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .app-shell {
   min-height: 100vh;
   min-height: 100dvh;
@@ -192,24 +204,9 @@ button:disabled {
 }
 
 .search-icon {
-  position: relative;
   flex: 0 0 15px;
   width: 15px;
   height: 15px;
-  border: 1.5px solid currentColor;
-  border-radius: 50%;
-}
-
-.search-icon::after {
-  content: "";
-  position: absolute;
-  right: -4px;
-  bottom: -2px;
-  width: 6px;
-  height: 1.5px;
-  border-radius: 1px;
-  background: currentColor;
-  transform: rotate(45deg);
 }
 
 .command-search input {
@@ -246,6 +243,11 @@ button:disabled {
   white-space: nowrap;
 }
 
+.secondary-action,
+.theme-button {
+  gap: 0.45rem;
+}
+
 .file-button,
 .primary-action {
   gap: 0.45rem;
@@ -267,6 +269,18 @@ button:disabled {
 .theme-button {
   min-width: 62px;
   color: var(--muted);
+}
+
+.theme-moon {
+  display: none;
+}
+
+body:not(.dark) .theme-sun {
+  display: none;
+}
+
+body:not(.dark) .theme-moon {
+  display: block;
 }
 
 .layout {
@@ -533,7 +547,11 @@ button:disabled {
   width: 40px;
   height: 40px;
   padding: 0;
-  font-size: 1.15rem;
+}
+
+.nav-button .icon {
+  width: 18px;
+  height: 18px;
 }
 
 .document-toolbar {
@@ -718,6 +736,9 @@ button:disabled {
 }
 
 .text-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   min-height: 38px;
   padding: 0 0.8rem;
   border-color: transparent;
