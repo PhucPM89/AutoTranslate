@@ -25,6 +25,7 @@ const els = {
   documentTitle: document.getElementById("documentTitle"),
   documentStatus: document.getElementById("documentStatus"),
   progressLabel: document.getElementById("progressLabel"),
+  progressBar: document.getElementById("progressBar"),
   paperTitle: document.getElementById("paperTitle"),
   outputStatus: document.getElementById("outputStatus"),
   prevChapter: document.getElementById("prevChapter"),
@@ -110,7 +111,7 @@ async function handleFile(event) {
   const file = event.target.files?.[0];
   if (!file) return;
 
-  setBusy("Loading dataset...");
+  setBusy("Loading collection...");
 
   try {
     const bookId = makeBookId(file);
@@ -124,18 +125,18 @@ async function handleFile(event) {
     state.translations = existingCache?.translations || {};
 
     if (!state.chapters.length) {
-      throw new Error("No readable records found.");
+      throw new Error("No readable documents found.");
     }
 
     els.bookTitle.textContent = "Document Workspace";
-    els.bookMeta.textContent = `Collection loaded · ${state.chapters.length} documents · Saved on this device for 7 days`;
+    els.bookMeta.textContent = `${state.chapters.length} documents · Saved locally for 7 days`;
     renderChapterControls();
 
     const savedIndex = Number(existingCache?.currentIndex ?? localStorage.getItem(currentChapterKey()) ?? "0");
     goToChapter(Number.isInteger(savedIndex) ? savedIndex : 0);
     await saveCurrentBookCache();
   } catch (error) {
-    resetReader(`Unable to load dataset: ${error.message}`);
+    resetReader(`Unable to load collection: ${error.message}`);
   }
 }
 
@@ -286,10 +287,11 @@ function goToChapter(index) {
   els.sourceText.textContent = chapter.text;
   const documentLabel = displayChapterTitle(state.currentIndex);
   const chapterLabel = `${documentLabel} · ${state.currentIndex + 1} / ${state.chapters.length}`;
-  const progress = Math.round(((state.currentIndex + 1) / state.chapters.length) * 100);
+  const progress = Math.ceil(((state.currentIndex + 1) / state.chapters.length) * 100);
   els.documentTitle.textContent = documentLabel;
   els.paperTitle.textContent = documentLabel;
   els.progressLabel.textContent = `${progress}%`;
+  els.progressBar.style.width = `${progress}%`;
   els.documentStatus.textContent = "Open";
   els.chapterCounter.textContent = chapterLabel;
   els.bottomChapterCounter.textContent = chapterLabel;
@@ -328,7 +330,7 @@ function loadCachedTranslation() {
     els.translateButton.hidden = true;
     els.retranslateButton.hidden = false;
   } else {
-    els.translationText.textContent = "No output yet.";
+    els.translationText.textContent = "No output available.";
     els.translationText.classList.add("empty");
     els.translationText.classList.remove("status-error", "is-loading");
     els.outputStatus.textContent = "Pending";
@@ -349,7 +351,7 @@ async function translateCurrentChapter(force) {
     }
   }
 
-  setTranslationStatus("Processing... Large records are split automatically.");
+  setTranslationStatus("Processing document...");
   els.outputStatus.textContent = "Running";
   els.translateButton.disabled = true;
   els.retranslateButton.disabled = true;
@@ -361,7 +363,7 @@ async function translateCurrentChapter(force) {
       body: JSON.stringify({ text: chapter.text })
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Unable to process this record.");
+    if (!response.ok) throw new Error(data.error || "Unable to process this document.");
     if (!isUsableTranslation(chapter.text, data.translation)) {
       throw new Error("Gemini vẫn trả lại nội dung tiếng Trung. Kết quả này chưa được lưu; hãy thử dịch lại.");
     }
@@ -380,7 +382,7 @@ async function translateCurrentChapter(force) {
     els.retranslateButton.hidden = false;
     if (data.elapsedMs) {
       const modelNote = Array.isArray(data.modelsUsed) && data.modelsUsed.length ? ` · ${data.modelsUsed.join(", ")}` : "";
-      els.bookMeta.textContent = `Collection loaded · ${state.chapters.length} documents · ${data.chunkCount || 1} tasks in ${formatSeconds(
+      els.bookMeta.textContent = `${state.chapters.length} documents · ${data.chunkCount || 1} tasks in ${formatSeconds(
         data.elapsedMs
       )}${modelNote}`;
     }
@@ -406,7 +408,7 @@ function setTranslationStatus(message, isError = false) {
 
 function setBusy(message) {
   els.sourceText.textContent = message;
-  els.translationText.textContent = "No output yet.";
+  els.translationText.textContent = "No output available.";
   els.translationText.classList.add("empty");
   els.translationText.classList.remove("is-loading", "status-error");
   els.outputStatus.textContent = "Loading";
@@ -429,6 +431,7 @@ function resetReader(message) {
   els.documentStatus.textContent = "Idle";
   els.outputStatus.textContent = "Pending";
   els.progressLabel.textContent = "0%";
+  els.progressBar.style.width = "0%";
   els.documentCount.textContent = "0";
   els.chapterSelect.innerHTML = "";
   els.chapterSelect.disabled = true;
@@ -449,7 +452,7 @@ async function restoreCachedBook() {
     applyCachedBook(cachedBook);
     renderChapterControls();
     goToChapter(cachedBook.currentIndex || 0);
-    els.bookMeta.textContent = `Restored from this device · ${state.chapters.length} documents · Expires ${formatDate(
+    els.bookMeta.textContent = `Restored locally · ${state.chapters.length} documents · Expires ${formatDate(
       cachedBook.expiresAt
     )}`;
   } catch (error) {
@@ -487,7 +490,7 @@ async function saveCurrentBookCache() {
     await putCachedBook(cachedBook);
   } catch (error) {
     console.warn("Unable to save EPUB cache on this device.", error);
-    els.bookMeta.textContent = `Collection loaded · ${state.chapters.length} documents · Local cache unavailable`;
+    els.bookMeta.textContent = `${state.chapters.length} documents · Local cache unavailable`;
   }
 }
 

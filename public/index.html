@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Operations Review</title>
+    <title>Document Workspace</title>
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="/style.css">
   </head>
@@ -12,79 +12,90 @@
       <header class="topbar">
         <div class="brand-block">
           <div class="brand-mark" aria-hidden="true">DW</div>
-          <div>
+          <div class="brand-copy">
             <h1 id="bookTitle">Document Workspace</h1>
-            <p id="bookMeta">Workspace ready · No collection loaded</p>
+            <p id="bookMeta">Workspace ready</p>
           </div>
         </div>
-        <div class="command-search">
-          <span aria-hidden="true">⌕</span>
+
+        <label class="command-search">
+          <span class="search-icon" aria-hidden="true"></span>
           <input id="globalSearch" type="search" placeholder="Search documents..." autocomplete="off">
-        </div>
+        </label>
+
         <div class="topbar-actions">
+          <button id="themeToggle" class="theme-button" type="button" aria-label="Đổi giao diện" title="Đổi giao diện">Sáng</button>
           <label class="file-button">
-            Import
+            <span aria-hidden="true">＋</span>
+            <span>Import</span>
             <input id="fileInput" type="file" accept=".epub,application/epub+zip">
           </label>
-          <button id="themeToggle" class="icon-button" type="button" aria-label="Toggle theme">☼</button>
-          <button class="icon-button" type="button" aria-label="Settings">⚙</button>
-          <div class="avatar" aria-hidden="true">P</div>
         </div>
       </header>
 
       <main class="layout">
-        <aside class="sidebar" aria-label="Document library">
-          <div class="sidebar-section workspace-links">
-            <p class="section-label">Workspace</p>
-            <button class="workspace-link active" type="button"><span aria-hidden="true">▦</span> All Documents</button>
-            <button class="workspace-link" type="button"><span aria-hidden="true">◷</span> Recently Opened</button>
-            <button class="workspace-link" type="button"><span aria-hidden="true">☆</span> Bookmarks</button>
+        <aside class="sidebar" aria-label="Thư viện chương">
+          <div class="library-header">
+            <div>
+              <p class="eyebrow">Workspace</p>
+              <h2>Documents</h2>
+            </div>
+            <span id="documentCount" class="count-badge">0</span>
           </div>
 
-          <div class="sidebar-section">
-            <div class="section-heading">
-              <p class="section-label">Documents</p>
-              <span id="documentCount">0</span>
-            </div>
+          <div class="chapter-picker">
+            <label for="chapterSelect">Jump to</label>
             <select id="chapterSelect" disabled aria-label="Select document"></select>
           </div>
 
-          <nav id="chapterList" class="chapter-list"></nav>
+          <nav id="chapterList" class="chapter-list" aria-label="Danh sách chương"></nav>
         </aside>
 
         <section class="workspace-main">
-          <div class="document-header">
-            <div>
-              <p class="eyebrow">Active Document</p>
+          <header class="document-header">
+            <div class="document-heading">
+              <p class="eyebrow">Active document</p>
               <h2 id="documentTitle">No document selected</h2>
               <div class="metadata-row">
                 <span id="chapterCounter">No collection</span>
-                <span id="documentStatus">Idle</span>
-                <span id="progressLabel">0%</span>
+                <span id="documentStatus" class="status-dot">Idle</span>
               </div>
             </div>
-            <div class="document-header-actions">
-              <button id="prevChapter" class="ghost-button" type="button" disabled>‹ Previous</button>
-              <button id="nextChapter" class="ghost-button" type="button" disabled>Next ›</button>
-            </div>
-          </div>
 
-          <div class="document-toolbar" aria-label="Document controls">
-            <div class="toolbar-group">
-              <button id="fontDecrease" class="tool-button" type="button" aria-label="Decrease text size">A-</button>
-              <span id="fontSizeLabel">15px</span>
-              <button id="fontIncrease" class="tool-button" type="button" aria-label="Increase text size">A+</button>
+            <div class="reading-progress" aria-label="Tiến độ đọc">
+              <div class="progress-copy">
+                <span>Progress</span>
+                <strong id="progressLabel">0%</strong>
+              </div>
+              <div class="progress-track" aria-hidden="true"><span id="progressBar"></span></div>
             </div>
-            <div class="toolbar-group">
-              <span>Aa</span>
-              <select id="widthPreset" aria-label="Content width">
-                <option value="comfortable">Comfortable</option>
+
+            <div class="document-header-actions">
+              <button id="prevChapter" class="nav-button" type="button" disabled aria-label="Chương trước" title="Chương trước">←</button>
+              <button id="nextChapter" class="nav-button" type="button" disabled aria-label="Chương sau" title="Chương sau">→</button>
+            </div>
+          </header>
+
+          <div class="document-toolbar" aria-label="Tùy chỉnh trình đọc">
+            <div class="toolbar-group font-controls" aria-label="Cỡ chữ">
+              <button id="fontDecrease" class="tool-button" type="button" aria-label="Giảm cỡ chữ" title="Giảm cỡ chữ">A−</button>
+              <span id="fontSizeLabel">20px</span>
+              <button id="fontIncrease" class="tool-button" type="button" aria-label="Tăng cỡ chữ" title="Tăng cỡ chữ">A＋</button>
+            </div>
+
+            <label class="toolbar-group width-control">
+              <span>Width</span>
+              <select id="widthPreset" aria-label="Độ rộng nội dung">
+                <option value="comfortable">Standard</option>
                 <option value="compact">Compact</option>
                 <option value="wide">Wide</option>
               </select>
-            </div>
+            </label>
+
             <div class="toolbar-spacer"></div>
-            <button id="translateButton" class="primary-action" type="button" disabled>Run Analysis</button>
+            <button id="translateButton" class="primary-action" type="button" disabled>
+              Run Analysis
+            </button>
             <button id="retranslateButton" class="secondary-action" type="button" hidden>Refresh Output</button>
           </div>
 
@@ -94,31 +105,23 @@
             <article class="document-paper translation-section">
               <div class="paper-header">
                 <div>
-                  <p class="eyebrow">Document Content</p>
+                  <p class="eyebrow">Document output</p>
                   <h3 id="paperTitle">Output Preview</h3>
                 </div>
                 <span class="status-pill" id="outputStatus">Pending</span>
               </div>
-              <div id="translationText" class="document-text empty">No output yet.</div>
+              <div id="translationText" class="document-text empty">No output available.</div>
             </article>
           </section>
 
-          <div class="footer-nav">
-            <button id="bottomPrevChapter" class="ghost-button" type="button" disabled>‹ Previous document</button>
+          <footer class="footer-nav">
+            <button id="bottomPrevChapter" class="text-nav" type="button" disabled>← Previous document</button>
             <span id="bottomChapterCounter">No collection</span>
-            <button id="bottomNextChapter" class="ghost-button" type="button" disabled>Next document ›</button>
-          </div>
+            <button id="bottomNextChapter" class="text-nav" type="button" disabled>Next document →</button>
+          </footer>
         </section>
       </main>
     </div>
-
-    <template id="emptyStateTemplate">
-      <div class="empty-state">
-        <div class="empty-icon" aria-hidden="true">□</div>
-        <p>No document output is available.</p>
-        <span>Import a collection, choose a document, then run processing.</span>
-      </div>
-    </template>
 
     <script src="/vendor/jszip.min.js"></script>
     <script src="/app.js"></script>
