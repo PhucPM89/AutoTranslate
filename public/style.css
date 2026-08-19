@@ -363,6 +363,31 @@ body {
   margin-top: 1.2rem;
 }
 
+.admin-record-actions {
+  display: flex;
+  gap: 0.65rem;
+}
+
+.danger-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 40px;
+  padding: 0 0.9rem;
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  color: var(--danger);
+  background: transparent;
+  font-size: 0.86rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.danger-action:hover {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
 .admin-progress {
   height: 4px;
   margin-top: 1.2rem;
@@ -2164,7 +2189,11 @@ body:not(.dark) .theme-moon {
   .admin-field-wide { grid-column: auto; }
 
   .admin-form-actions .primary-action,
-  .admin-form-actions .secondary-action { min-width: 0; }
+  .admin-form-actions .secondary-action,
+  .admin-form-actions .danger-action { min-width: 0; }
+
+  .admin-form-actions,
+  .admin-record-actions { flex-wrap: wrap; }
 
   .library-topbar {
     min-height: 62px;

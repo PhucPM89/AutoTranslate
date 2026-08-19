@@ -1,7 +1,7 @@
 "use strict";
 
 const { del, head } = require("@vercel/blob");
-const { isCrawlerRequest } = require("../../server/crawler-store");
+const { isCrawlerRequest, readCrawlerConfig } = require("../../server/crawler-store");
 const { readCatalog, writeCatalog } = require("../../server/library-catalog");
 const { readJsonBody, methodNotAllowed, noStore } = require("../../server/http");
 
@@ -18,6 +18,11 @@ module.exports = async function handler(req, res) {
       validateBlob(book.epub, "library/books/", ["application/epub+zip", "application/octet-stream"]),
       book.cover ? validateBlob(book.cover, "library/covers/", ["image/jpeg", "image/png", "image/webp"]) : null
     ]);
+    const config = await readCrawlerConfig();
+    if (config.excludedSourceIds.includes(book.sourceId)) {
+      await Promise.allSettled([book.epub, book.cover].filter(Boolean).map((url) => del(url)));
+      return res.status(409).json({ error: "Truyện này đã bị quản trị viên loại khỏi crawler." });
+    }
 
     const catalog = await readCatalog();
     const existingIndex = catalog.books.findIndex((item) => item.source === "fanqie" && item.sourceId === book.sourceId);

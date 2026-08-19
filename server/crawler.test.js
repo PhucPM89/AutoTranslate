@@ -11,12 +11,14 @@ test("sanitizes crawler configuration and removes unknown categories", () => {
     enabled: true,
     categories: ["xianxia", "unknown", "xianxia", "horror"],
     maxNewBooksPerRun: 99,
-    updateExisting: false
+    updateExisting: false,
+    excludedSourceIds: ["1234567890123", "bad", "1234567890123"]
   }), {
     enabled: true,
     categories: ["xianxia", "horror"],
     maxNewBooksPerRun: 3,
-    updateExisting: false
+    updateExisting: false,
+    excludedSourceIds: ["1234567890123"]
   });
 });
 

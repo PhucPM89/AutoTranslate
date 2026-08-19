@@ -32,9 +32,10 @@ async function main() {
     await waitForTomato();
     await configureTomato();
     const candidates = await discoverCandidates(config, categories);
-    const existingBooks = (catalog.books || []).filter((book) => book.source === "fanqie" && book.sourceId);
+    const excludedIds = new Set(config.excludedSourceIds || []);
+    const existingBooks = (catalog.books || []).filter((book) => book.source === "fanqie" && book.sourceId && !excludedIds.has(String(book.sourceId)));
     const existingIds = new Set(existingBooks.map((book) => String(book.sourceId)));
-    const newBooks = candidates.filter((item) => !existingIds.has(item.sourceId)).slice(0, config.maxNewBooksPerRun);
+    const newBooks = candidates.filter((item) => !existingIds.has(item.sourceId) && !excludedIds.has(item.sourceId)).slice(0, config.maxNewBooksPerRun);
     const jobs = selectWorkItems(newBooks, existingBooks, config.updateExisting);
     status.discovered = jobs.filter((item) => !item.isUpdate).length;
 

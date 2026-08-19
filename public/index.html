@@ -6,7 +6,7 @@
     <meta name="description" content="Thư viện truyện dịch cá nhân, đọc EPUB, dịch chương và nghe audio tiếng Việt.">
     <title>Tàng Thư</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="/style.css?v=20260819-9">
+    <link rel="stylesheet" href="/style.css?v=20260819-10">
   </head>
   <body class="dark">
     <section id="libraryView" class="library-view">
@@ -126,7 +126,13 @@
           <label class="admin-check admin-field-wide"><input name="featured" type="checkbox"><span>Đặt truyện nổi bật</span></label>
         </div>
         <div class="admin-progress" hidden><span id="adminProgressBar"></span></div>
-        <div class="admin-form-actions"><button id="adminLogout" class="secondary-action" type="button">Đăng xuất</button><button id="adminSubmit" class="primary-action" type="submit">Upload truyện</button></div>
+        <div class="admin-form-actions">
+          <button id="adminLogout" class="secondary-action" type="button">Đăng xuất</button>
+          <div class="admin-record-actions">
+            <button id="adminDelete" class="danger-action" type="button" hidden><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 15H6L5 6M10 11v6M14 11v6"></path></svg>Xóa truyện</button>
+            <button id="adminSubmit" class="primary-action" type="submit">Upload truyện</button>
+          </div>
+        </div>
       </form>
 
       <form id="adminCrawlerForm" class="admin-crawler-form" hidden>
@@ -209,6 +215,6 @@
 
     <script src="/vendor/jszip.min.js"></script>
     <script src="/app.js?v=20260819-8"></script>
-    <script src="/admin-upload.js?v=20260819-9"></script>
+    <script src="/admin-upload.js?v=20260819-10"></script>
   </body>
 </html>

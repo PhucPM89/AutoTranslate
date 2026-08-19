@@ -18,7 +18,8 @@ module.exports = async function handler(req, res) {
     if (req.method === "GET") return res.status(200).json(await responsePayload());
     if (req.method === "POST") {
       const body = await readJsonBody(req, 16 * 1024);
-      await writeCrawlerConfig(body);
+      const current = await readCrawlerConfig();
+      await writeCrawlerConfig({ ...body, excludedSourceIds: current.excludedSourceIds });
       return res.status(200).json(await responsePayload());
     }
     return methodNotAllowed(res, "GET, POST");

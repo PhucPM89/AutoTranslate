@@ -26,6 +26,7 @@ const els = {
   coverLabel: document.getElementById("adminCoverLabel"),
   existingFiles: document.getElementById("adminExistingFiles"),
   logout: document.getElementById("adminLogout"),
+  deleteBook: document.getElementById("adminDelete"),
   submit: document.getElementById("adminSubmit"),
   status: document.getElementById("adminStatus"),
   progress: document.querySelector(".admin-progress"),
@@ -48,6 +49,7 @@ els.crawlerTab?.addEventListener("click", () => selectAdminTab("crawler"));
 els.crawlerRefresh?.addEventListener("click", loadCrawlerConfig);
 els.bookSelect?.addEventListener("change", selectBook);
 els.logout?.addEventListener("click", logout);
+els.deleteBook?.addEventListener("click", deleteSelectedBook);
 
 async function openAdmin() {
   els.dialog.showModal();
@@ -182,6 +184,36 @@ async function submitBook(event) {
   }
 }
 
+async function deleteSelectedBook() {
+  const book = getSelectedBook();
+  if (!book) return setStatus("Hãy chọn truyện cần xóa.", true);
+  const confirmed = window.confirm(`Xóa “${book.title}”? EPUB và ảnh bìa của truyện cũng sẽ bị xóa khỏi kho lưu trữ.`);
+  if (!confirmed) return;
+
+  setBusy(true);
+  setStatus(`Đang xóa ${book.title}...`);
+  try {
+    const result = await requestJson("/api/admin/catalog", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: book.id })
+    });
+    adminCatalog = result.catalog;
+    renderBookOptions();
+    startNewBook();
+    setStatus(
+      result.cleanupFailed ? "Đã gỡ truyện khỏi thư viện, nhưng có file Blob chưa xóa được." : `Đã xóa ${result.deleted.title} khỏi thư viện.`,
+      Boolean(result.cleanupFailed)
+    );
+    window.dispatchEvent(new CustomEvent("library:refresh", { detail: result.catalog }));
+  } catch (error) {
+    if (/hết hạn|quyền/.test(error.message)) showAuthenticated(false);
+    setStatus(error.message, true);
+  } finally {
+    setBusy(false);
+  }
+}
+
 async function loadAdminCatalog() {
   adminCatalog = await requestJson(`/api/library?admin=${Date.now()}`);
   renderBookOptions();
@@ -281,6 +313,7 @@ function startNewBook() {
   els.epubLabel.innerHTML = "File EPUB <small>Tối đa 200 MB</small>";
   els.coverLabel.innerHTML = "Ảnh bìa <small>JPG, PNG hoặc WebP; tối đa 5 MB</small>";
   els.existingFiles.hidden = true;
+  els.deleteBook.hidden = true;
   els.submit.textContent = "Upload truyện";
 }
 
@@ -299,6 +332,7 @@ function populateBookForm(book) {
   els.coverLabel.innerHTML = "Thay ảnh bìa <small>Không chọn để giữ ảnh hiện tại</small>";
   els.existingFiles.textContent = `Đang chỉnh sửa: ${book.title}. EPUB hiện tại được giữ nguyên nếu bạn không chọn file mới.`;
   els.existingFiles.hidden = false;
+  els.deleteBook.hidden = false;
   els.submit.textContent = "Lưu thay đổi";
 }
 

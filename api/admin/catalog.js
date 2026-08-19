@@ -1,16 +1,18 @@
 const { del, head } = require("@vercel/blob");
 const { isAdmin, isSameOrigin } = require("../../server/admin-auth");
+const { readCrawlerConfig, writeCrawlerConfig } = require("../../server/crawler-store");
 const { readCatalog, writeCatalog } = require("../../server/library-catalog");
 const { readJsonBody, methodNotAllowed, noStore } = require("../../server/http");
 
 module.exports = async function handler(req, res) {
   noStore(res);
-  if (req.method !== "POST") return methodNotAllowed(res, "POST");
+  if (!["POST", "DELETE"].includes(req.method)) return methodNotAllowed(res, "POST, DELETE");
   if (!isSameOrigin(req) || !isAdmin(req)) return res.status(401).json({ error: "Phiên quản trị đã hết hạn." });
   if (!process.env.BLOB_READ_WRITE_TOKEN) return res.status(503).json({ error: "Vercel Blob chưa được kết nối." });
 
   try {
     const raw = await readJsonBody(req, 32 * 1024);
+    if (req.method === "DELETE") return await deleteBook(raw, res);
     const book = sanitizeBook(raw);
     await Promise.all([
       validateBlob(book.epub, "library/books/", ["application/epub+zip", "application/octet-stream"]),
@@ -40,6 +42,38 @@ module.exports = async function handler(req, res) {
     return res.status(error.status || 400).json({ error: error.publicMessage || "Không thể cập nhật thư viện." });
   }
 };
+
+async function deleteBook(value, res) {
+  const id = clean(value?.id, 100);
+  if (!/^[a-z0-9-]{1,100}$/.test(id)) fail("ID truyện không hợp lệ.");
+  let catalog = await readCatalog();
+  const book = catalog.books.find((item) => item.id === id);
+  if (!book) fail("Không tìm thấy truyện cần xóa.");
+
+  if (book.source === "fanqie" && /^\d{10,30}$/.test(String(book.sourceId || ""))) {
+    const config = await readCrawlerConfig();
+    await writeCrawlerConfig({
+      ...config,
+      excludedSourceIds: [...config.excludedSourceIds, String(book.sourceId)]
+    });
+  }
+
+  catalog.books = catalog.books.filter((item) => item.id !== id);
+  catalog = await writeCatalog(catalog);
+  const files = [book.epub, book.cover].filter(isBlobUrl);
+  const cleanup = await Promise.allSettled(files.map((url) => del(url)));
+  const cleanupFailed = cleanup.some((result) => result.status === "rejected");
+  return res.status(200).json({ deleted: { id: book.id, title: book.title }, catalog, cleanupFailed });
+}
+
+function isBlobUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname.endsWith(".public.blob.vercel-storage.com");
+  } catch {
+    return false;
+  }
+}
 
 async function cleanupReplacedFiles(previous, current) {
   if (!previous) return;
