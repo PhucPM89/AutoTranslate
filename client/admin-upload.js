@@ -232,7 +232,7 @@ function renderCrawlerStatus(status = {}) {
   els.crawlerStateBadge.dataset.state = status.state || "idle";
   els.crawlerStateMessage.textContent = status.message || "Crawler chưa chạy.";
   const finished = status.finishedAt ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(new Date(status.finishedAt)) : "Chưa có lượt chạy";
-  els.crawlerStateMeta.textContent = `${finished} · Đã thêm ${status.published || 0} · Lỗi ${status.failed || 0}`;
+  els.crawlerStateMeta.textContent = `${finished} · Đã thêm ${status.published || 0} · Lỗi ${status.failed || 0} · Lịch mỗi giờ`;
 }
 
 function selectAdminTab(tab) {
