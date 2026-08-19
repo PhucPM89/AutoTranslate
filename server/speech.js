@@ -1,7 +1,7 @@
 const { EdgeTTS, Constants: EdgeConstants } = require("@andresaya/edge-tts");
 
 const GEMINI_TTS_MODEL = process.env.GEMINI_TTS_MODEL || "gemini-3.1-flash-tts-preview";
-const GEMINI_TTS_TIMEOUT_MS = Number(process.env.GEMINI_TTS_TIMEOUT_MS || 60000);
+const GEMINI_TTS_TIMEOUT_MS = Number(process.env.GEMINI_TTS_TIMEOUT_MS || 8000);
 const MAX_SPEECH_TEXT_LENGTH = 1200;
 const ALLOWED_VOICES = new Set(["Kore", "Aoede", "Leda", "Puck", "Charon"]);
 const ALLOWED_RATES = new Set(["0.8", "1", "1.2", "1.5"]);
@@ -38,7 +38,7 @@ async function generateSpeech(text, apiKey, options = {}) {
   try {
     return await generateGeminiSpeech(text, apiKey, options);
   } catch (error) {
-    if (error.code !== "quota_exceeded") throw error;
+    if (error.code !== "quota_exceeded" && error.status !== 504) throw error;
     geminiQuotaBlockedUntil = Date.now() + 10 * 60 * 1000;
 
     try {
@@ -131,7 +131,7 @@ async function generateGeminiSpeech(text, apiKey, options = {}) {
       } else {
         lastError = error;
       }
-      if (attempt === 0 && (!error.status || error.status >= 500)) {
+      if (attempt === 0 && error.name !== "AbortError" && (!error.status || error.status >= 500)) {
         await wait(700);
         continue;
       }
@@ -154,18 +154,28 @@ async function generateEdgeSpeech(text, options = {}) {
   const genre = GENRE_DIRECTIONS[options.genre] ? options.genre : "fantasy";
   const rate = ALLOWED_RATES.has(String(options.rate)) ? String(options.rate) : "1";
   const voice = EDGE_VOICES[genre];
-  const tts = options.edgeTtsFactory ? options.edgeTtsFactory() : new EdgeTTS();
-
-  await withTimeout(
-    tts.synthesize(cleanText, voice, {
-      rate: EDGE_RATES[rate],
-      pitch: EDGE_PITCHES[genre],
-      volume: "+0%",
-      outputFormat: EdgeConstants.OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3
-    }),
-    45000,
-    "Edge TTS phan hoi qua cham."
-  );
+  let tts;
+  let lastError;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    tts = options.edgeTtsFactory ? options.edgeTtsFactory() : new EdgeTTS();
+    try {
+      await withTimeout(
+        tts.synthesize(cleanText, voice, {
+          rate: EDGE_RATES[rate],
+          pitch: EDGE_PITCHES[genre],
+          volume: "+0%",
+          outputFormat: EdgeConstants.OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3
+        }),
+        12000,
+        "Edge TTS phan hoi qua cham."
+      );
+      lastError = null;
+      break;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (lastError) throw lastError;
 
   return {
     audio: tts.toBase64(),

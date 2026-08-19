@@ -18,6 +18,7 @@ const SPEECH_RATE_KEY = "epubTranslator.speechRate";
 const SPEECH_GENRE_KEY = "epubTranslator.speechGenre";
 const SPEECH_CACHE_NAME = "epubTranslator.speech.v1";
 const SPEECH_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const SPEECH_EDGE_FALLBACK_UNTIL_KEY = "epubTranslator.edgeFallbackUntil";
 const SPEECH_GENRE_PRESETS = {
   fantasy: { voice: "Puck", rate: "1" },
   horror: { voice: "Charon", rate: "0.8" },
@@ -216,7 +217,7 @@ async function toggleSpeech() {
     voice: els.speechVoice.value,
     rate: els.speechRate.value
   });
-  speechState.provider = "auto";
+  speechState.provider = getPreferredSpeechProvider();
   speechState.index = 0;
   if (!speechState.chunks.length) return;
 
@@ -281,7 +282,7 @@ function prepareSpeechChunk(index, session) {
       speechState.audioUrls.set(index, cachedUrl);
       speechState.audioProviders.set(index, cachedAudio.provider);
       speechState.audioVoices.set(index, cachedAudio.voice);
-      if (cachedAudio.provider === "edge") speechState.provider = "edge";
+      if (cachedAudio.provider === "edge") rememberEdgeFallback();
       return cachedUrl;
     }
 
@@ -319,7 +320,8 @@ function prepareSpeechChunk(index, session) {
       speechState.audioUrls.set(index, audioUrl);
       speechState.audioProviders.set(index, data.provider);
       speechState.audioVoices.set(index, data.voice);
-      if (data.provider === "edge") speechState.provider = "edge";
+      if (data.provider === "edge") rememberEdgeFallback();
+      if (data.provider === "gemini") localStorage.removeItem(SPEECH_EDGE_FALLBACK_UNTIL_KEY);
       return audioUrl;
     })()
     .finally(() => {
@@ -468,6 +470,15 @@ function formatSpeechVoice(voice) {
   if (voice === "vi-VN-NamMinhNeural") return "Nam Minh";
   if (voice === "vi-VN-HoaiMyNeural") return "Hoài My";
   return voice || "Edge Neural";
+}
+
+function rememberEdgeFallback() {
+  speechState.provider = "edge";
+  localStorage.setItem(SPEECH_EDGE_FALLBACK_UNTIL_KEY, String(Date.now() + 10 * 60 * 1000));
+}
+
+function getPreferredSpeechProvider() {
+  return Number(localStorage.getItem(SPEECH_EDGE_FALLBACK_UNTIL_KEY) || 0) > Date.now() ? "edge" : "auto";
 }
 
 function setSpeechMode(mode, statusMessage) {

@@ -166,3 +166,21 @@ test("uses Edge directly when the client already selected fallback mode", async 
     global.fetch = originalFetch;
   }
 });
+
+test("retries Edge with a fresh client after a connection failure", async () => {
+  let attempts = 0;
+  const result = await generateEdgeSpeech("Day la ban dich tieng Viet.", {
+    edgeTtsFactory: () => {
+      attempts += 1;
+      return {
+        synthesize: async () => {
+          if (attempts === 1) throw new Error("WebSocket connection failed");
+        },
+        toBase64: () => "SUQz"
+      };
+    }
+  });
+
+  assert.equal(attempts, 2);
+  assert.equal(result.audio, "SUQz");
+});
