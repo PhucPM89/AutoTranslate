@@ -6,7 +6,7 @@ const { updateWithRetry } = require("./blob-concurrency");
 
 const CATALOG_PATH = "library/catalog.json";
 const DEFAULT_SITE = {
-  name: "Tàng Thư",
+  name: "Trạm Chữ",
   tagline: "Một góc đọc truyện Trung được tuyển chọn, dịch và nghe ngay trong cùng một không gian.",
   contactEmail: "minhphuc2308031@gmail.com"
 };
@@ -73,7 +73,7 @@ function readSourceCatalog() {
 
 function normalizeCatalog(value) {
   return {
-    site: value?.site && typeof value.site === "object" ? { ...DEFAULT_SITE, ...value.site } : { ...DEFAULT_SITE },
+    site: value?.site && typeof value.site === "object" ? { ...DEFAULT_SITE, ...value.site, name: DEFAULT_SITE.name } : { ...DEFAULT_SITE },
     books: Array.isArray(value?.books) ? value.books.filter((book) => book && typeof book === "object").slice(0, 500) : []
   };
 }

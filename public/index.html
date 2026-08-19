@@ -4,21 +4,22 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Thư viện truyện dịch cá nhân, đọc EPUB, dịch chương và nghe audio tiếng Việt.">
-    <title>Tàng Thư</title>
-    <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="/style.css?v=20260819-13">
+    <title>Trạm Chữ</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/style.css?v=20260819-15">
   </head>
   <body class="dark">
     <section id="libraryView" class="library-view">
       <header class="library-topbar">
         <button id="libraryBrand" class="library-brand" type="button" aria-label="Về đầu thư viện">
-          <span class="brand-seal" aria-hidden="true">T</span>
-          <span><strong id="libraryName">Tàng Thư</strong><small>Thư viện truyện dịch</small></span>
+          <span class="brand-seal" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 5.5A3.5 3.5 0 0 1 6.5 2H11a3 3 0 0 1 3 3v15a3 3 0 0 0-3-3H3Z"></path><path d="M21 5.5A3.5 3.5 0 0 0 17.5 2H14v18a3 3 0 0 1 3-3h4Z"></path><path class="brand-bookmark" d="M17 2v7l2-1.5L21 9V5.5A3.5 3.5 0 0 0 17.5 2Z"></path></svg></span>
+          <span><strong id="libraryName">Trạm Chữ</strong><small>Truyện dịch mỗi ngày</small></span>
         </button>
 
         <nav class="library-nav" aria-label="Điều hướng thư viện">
           <a href="#catalog">Thư viện</a>
           <a href="#request">Yêu cầu truyện</a>
+          <a href="#support">Ủng hộ</a>
         </nav>
 
         <div class="library-actions">
@@ -44,7 +45,7 @@
           <div class="featured-overlay" aria-hidden="true"></div>
           <div class="intro-copy">
             <p class="eyebrow">Thư viện truyện dịch chọn lọc</p>
-            <h1 id="libraryHeading">Tàng Thư</h1>
+            <h1 id="libraryHeading">Trạm Chữ</h1>
             <p id="libraryTagline">Một góc đọc truyện Trung được tuyển chọn, dịch và nghe ngay trong cùng một không gian.</p>
             <div id="featuredStory" class="featured-story">
               <div class="featured-labels"><span id="featuredGenre">Đề cử hôm nay</span><span id="featuredStatus">Có sẵn</span></div>
@@ -101,10 +102,32 @@
             <svg class="icon contact-arrow" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg>
           </a>
         </section>
+
+        <section id="support" class="support-band" aria-labelledby="supportTitle">
+          <div class="support-copy">
+            <p class="eyebrow">Giữ Trạm Chữ sáng đèn</p>
+            <h2 id="supportTitle">Một tách cà phê,<br>thêm một chương truyện.</h2>
+            <p>Nếu những phút đọc ở đây làm ngày của bạn vui hơn, một lời ủng hộ nhỏ sẽ giúp Trạm Chữ tiếp tục duy trì, dịch và mang thêm nhiều câu chuyện mới đến mọi người.</p>
+            <div class="support-note"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z"></path></svg><span>Mọi nội dung vẫn miễn phí. Sự hiện diện của bạn đã là một niềm vui.</span></div>
+          </div>
+          <figure class="support-qr">
+            <button id="supportQrOpen" class="support-qr-button" type="button" aria-label="Phóng to mã QR ủng hộ" title="Phóng to mã QR">
+              <img src="/assets/support-techcombank.jpg" alt="Mã QR Techcombank ủng hộ Phạm Minh Phúc" loading="lazy">
+              <span><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3M11 8v6M8 11h6"></path></svg>Phóng to để quét</span>
+            </button>
+            <figcaption><strong>Techcombank · PHAM MINH PHUC</strong><small>Quét bằng ứng dụng ngân hàng</small></figcaption>
+          </figure>
+        </section>
       </main>
 
-      <footer class="library-footer"><span>Tàng Thư · Thư viện cá nhân</span><span>EPUB được lưu trên kho riêng, tiến độ được lưu trên thiết bị.</span></footer>
+      <footer class="library-footer"><span>Trạm Chữ · Truyện dịch mỗi ngày</span><span>EPUB được lưu trên kho riêng, tiến độ được lưu trên thiết bị.</span></footer>
     </section>
+
+    <dialog id="supportDialog" class="support-dialog" aria-labelledby="supportDialogTitle">
+      <div class="support-dialog-header"><div><p class="eyebrow">Ủng hộ Trạm Chữ</p><h2 id="supportDialogTitle">Quét mã chuyển khoản</h2></div><button id="supportQrClose" class="icon-button" type="button" aria-label="Đóng" title="Đóng"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
+      <div class="support-dialog-qr"><img src="/assets/support-techcombank.jpg" alt="Mã QR Techcombank ủng hộ Phạm Minh Phúc"></div>
+      <p>Một lời ủng hộ nhỏ, một động lực thật lớn. Cảm ơn bạn đã đồng hành cùng Trạm Chữ.</p>
+    </dialog>
 
     <dialog id="adminDialog" class="admin-dialog" aria-labelledby="adminTitle">
       <div class="admin-dialog-header">
@@ -179,7 +202,7 @@
         <div class="brand-block">
           <button id="backToLibrary" class="back-button" type="button" aria-label="Quay lại thư viện" title="Quay lại thư viện"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"></path></svg></button>
           <img id="readerBookCover" class="reader-book-cover" src="/library/covers/misty-pagoda.jpg" alt="" aria-hidden="true">
-          <div class="brand-copy"><h1 id="bookTitle">Tàng Thư</h1><p id="bookMeta">Chọn một truyện để bắt đầu đọc</p></div>
+          <div class="brand-copy"><h1 id="bookTitle">Trạm Chữ</h1><p id="bookMeta">Chọn một truyện để bắt đầu đọc</p></div>
         </div>
         <label class="command-search"><svg class="icon search-icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><input id="globalSearch" type="search" placeholder="Tìm trong mục lục..." autocomplete="off"></label>
         <div class="topbar-actions">
@@ -226,7 +249,7 @@
     </div>
 
     <script src="/vendor/jszip.min.js"></script>
-    <script src="/app.js?v=20260819-9"></script>
+    <script src="/app.js?v=20260819-13"></script>
     <script src="/admin-upload.js?v=20260819-10"></script>
   </body>
 </html>

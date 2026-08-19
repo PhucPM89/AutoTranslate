@@ -19,6 +19,7 @@ const libraryState = {
 };
 
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const BRAND_NAME = "Trạm Chữ";
 const CATALOG_PAGE_SIZE = 10;
 const CACHE_DB_NAME = "epubTranslator.cache";
 const CACHE_DB_VERSION = 1;
@@ -71,6 +72,9 @@ const els = {
   featuredAuthor: document.getElementById("featuredAuthor"),
   featuredChapters: document.getElementById("featuredChapters"),
   featuredRead: document.getElementById("featuredRead"),
+  supportQrOpen: document.getElementById("supportQrOpen"),
+  supportQrClose: document.getElementById("supportQrClose"),
+  supportDialog: document.getElementById("supportDialog"),
   librarySearch: document.getElementById("librarySearch"),
   libraryGenre: document.getElementById("libraryGenre"),
   catalogGrid: document.getElementById("catalogGrid"),
@@ -138,11 +142,18 @@ initSpeech();
 initializeLibrary();
 
 function bindEvents() {
+  window.addEventListener("hashchange", alignHashedSection);
+  window.addEventListener("load", () => setTimeout(alignHashedSection, 400));
   els.fileInput.addEventListener("change", handleFile);
   els.libraryBrand.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
   els.librarySearch.addEventListener("input", resetCatalogPage);
   els.libraryGenre.addEventListener("change", resetCatalogPage);
   els.featuredRead.addEventListener("click", openFeaturedBook);
+  els.supportQrOpen.addEventListener("click", () => els.supportDialog.showModal());
+  els.supportQrClose.addEventListener("click", () => els.supportDialog.close());
+  els.supportDialog.addEventListener("click", (event) => {
+    if (event.target === els.supportDialog) els.supportDialog.close();
+  });
   els.catalogPrevPage.addEventListener("click", () => changeCatalogPage(libraryState.catalogPage - 1));
   els.catalogNextPage.addEventListener("click", () => changeCatalogPage(libraryState.catalogPage + 1));
   els.continueReading.addEventListener("click", resumeCachedBook);
@@ -236,6 +247,16 @@ function applyLibraryManifest(manifest) {
   renderFeaturedBook();
   renderGenreOptions();
   renderCatalog();
+  alignHashedSection();
+}
+
+function alignHashedSection() {
+  if (!["#catalog", "#request", "#support"].includes(window.location.hash)) return;
+  const align = () => {
+    document.querySelector(window.location.hash)?.scrollIntoView({ block: "start" });
+  };
+  requestAnimationFrame(() => requestAnimationFrame(align));
+  setTimeout(align, 300);
 }
 
 function renderFeaturedBook() {
@@ -274,7 +295,7 @@ function isValidLibraryBook(book) {
 }
 
 function applyLibrarySiteSettings() {
-  const name = libraryState.site.name || "Tàng Thư";
+  const name = BRAND_NAME;
   const tagline = libraryState.site.tagline || "Thư viện truyện dịch cá nhân";
   const email = libraryState.site.contactEmail || "minhphuc2308031@gmail.com";
   els.libraryName.textContent = name;
@@ -456,7 +477,7 @@ function showLibrary() {
   updateContinueReading();
   els.readerView.hidden = true;
   els.libraryView.hidden = false;
-  document.title = `${libraryState.site.name || "Tàng Thư"}`;
+  document.title = BRAND_NAME;
   window.scrollTo({ top: 0 });
 }
 
@@ -518,9 +539,9 @@ async function applyLoadedEpub(arrayBuffer, options) {
   if (!state.chapters.length) throw new Error("Không tìm thấy chương có thể đọc.");
 
   els.bookTitle.textContent = state.title;
-  els.bookMeta.textContent = `Tàng Thư · ${state.chapters.length} chương · Lưu tiến độ 7 ngày`;
+  els.bookMeta.textContent = `${BRAND_NAME} · ${state.chapters.length} chương · Lưu tiến độ 7 ngày`;
   els.readerBookCover.src = state.cover;
-  document.title = `${state.title} | Tàng Thư`;
+  document.title = `${state.title} | ${BRAND_NAME}`;
   renderChapterControls();
   const savedIndex = Number(existingCache?.currentIndex ?? localStorage.getItem(currentChapterKey()) ?? "0");
   goToChapter(Number.isInteger(savedIndex) ? savedIndex : 0);
@@ -1270,7 +1291,7 @@ function resetReader(message) {
   state.chapters = [];
   state.currentIndex = 0;
   state.translations = {};
-  els.bookTitle.textContent = "Tàng Thư";
+  els.bookTitle.textContent = BRAND_NAME;
   els.bookMeta.textContent = message;
   els.readerBookCover.src = FALLBACK_BOOK_COVERS[1];
   els.sourceText.textContent = message;
@@ -1321,9 +1342,9 @@ function applyCachedBook(cachedBook) {
   state.currentIndex = Number(cachedBook.currentIndex) || 0;
   state.translations = cachedBook.translations || {};
   els.bookTitle.textContent = state.title;
-  els.bookMeta.textContent = `Tàng Thư · ${state.chapters.length} chương · Đã lưu trên thiết bị`;
+  els.bookMeta.textContent = `${BRAND_NAME} · ${state.chapters.length} chương · Đã lưu trên thiết bị`;
   els.readerBookCover.src = state.cover;
-  document.title = `${state.title} | Tàng Thư`;
+  document.title = `${state.title} | ${BRAND_NAME}`;
 }
 
 async function saveCurrentBookCache() {
