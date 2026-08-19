@@ -2,6 +2,7 @@ const {
   verifyPassword,
   issueSessionToken,
   setSessionCookie,
+  isAdmin,
   isSameOrigin,
   canAttemptLogin,
   recordLoginFailure,
@@ -11,6 +12,7 @@ const { readJsonBody, methodNotAllowed, noStore } = require("../../server/http")
 
 module.exports = async function handler(req, res) {
   noStore(res);
+  if (req.method === "GET") return res.status(200).json({ authenticated: isAdmin(req), storageReady: Boolean(process.env.BLOB_READ_WRITE_TOKEN) });
   if (req.method !== "POST") return methodNotAllowed(res, "POST");
   if (!isSameOrigin(req)) return res.status(403).json({ error: "Yêu cầu không hợp lệ." });
 

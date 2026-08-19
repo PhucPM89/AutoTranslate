@@ -3,6 +3,9 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build",
   "outputDirectory": "public",
+  "rewrites": [
+    { "source": "/api/admin/session", "destination": "/api/admin/login" }
+  ],
   "functions": {
     "api/translate.js": {
       "maxDuration": 60

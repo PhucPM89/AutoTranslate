@@ -1,6 +1,13 @@
 name: Fanqie crawler
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/fanqie-crawler.yml"
+      - "scripts/crawler-worker.js"
+      - "server/crawler-store.js"
+      - "api/crawler/**"
   schedule:
     - cron: "17 */6 * * *"
   workflow_dispatch:

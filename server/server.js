@@ -20,7 +20,7 @@ app.use((_req, res, next) => {
 
 app.all("/api/library", require("../api/library"));
 app.all("/api/admin/login", require("../api/admin/login"));
-app.all("/api/admin/session", require("../api/admin/session"));
+app.all("/api/admin/session", require("../api/admin/login"));
 app.all("/api/admin/logout", require("../api/admin/logout"));
 app.all("/api/admin/upload", require("../api/admin/upload"));
 app.all("/api/admin/catalog", require("../api/admin/catalog"));
