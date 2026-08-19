@@ -1,7 +1,7 @@
 const { del, head } = require("@vercel/blob");
 const { isAdmin, isSameOrigin } = require("../../server/admin-auth");
-const { readCrawlerConfig, writeCrawlerConfig } = require("../../server/crawler-store");
-const { readCatalog, writeCatalog } = require("../../server/library-catalog");
+const { updateCrawlerConfig } = require("../../server/crawler-store");
+const { readCatalog, updateCatalog } = require("../../server/library-catalog");
 const { readJsonBody, methodNotAllowed, noStore } = require("../../server/http");
 
 module.exports = async function handler(req, res) {
@@ -19,22 +19,23 @@ module.exports = async function handler(req, res) {
       book.cover ? validateBlob(book.cover, "library/covers/", ["image/jpeg", "image/png", "image/webp"]) : null
     ]);
 
-    let catalog = await readCatalog();
-    const existingIndex = catalog.books.findIndex((item) => item.id === book.id);
-    const existingBook = existingIndex >= 0 ? catalog.books[existingIndex] : null;
-    if (existingBook?.source === "fanqie") {
-      book.source = existingBook.source;
-      book.sourceId = existingBook.sourceId;
-      book.sourceUrl = existingBook.sourceUrl;
-      book.lastCrawledAt = existingBook.lastCrawledAt;
-      book.metadataLanguage = existingBook.metadataLanguage;
-      book.metadataVersion = existingBook.metadataVersion;
-    }
-    if (existingIndex >= 0) catalog.books[existingIndex] = book;
-    else catalog.books.unshift(book);
-    catalog.books = catalog.books.slice(0, 500);
-
-    catalog = await writeCatalog(catalog);
+    let existingBook = null;
+    const catalog = await updateCatalog((current) => {
+      const existingIndex = current.books.findIndex((item) => item.id === book.id);
+      existingBook = existingIndex >= 0 ? current.books[existingIndex] : null;
+      if (existingBook?.source === "fanqie") {
+        book.source = existingBook.source;
+        book.sourceId = existingBook.sourceId;
+        book.sourceUrl = existingBook.sourceUrl;
+        book.lastCrawledAt = existingBook.lastCrawledAt;
+        book.metadataLanguage = existingBook.metadataLanguage;
+        book.metadataVersion = existingBook.metadataVersion;
+      }
+      if (existingIndex >= 0) current.books[existingIndex] = book;
+      else current.books.unshift(book);
+      current.books = current.books.slice(0, 500);
+      return current;
+    });
     await cleanupReplacedFiles(existingBook, book);
     return res.status(200).json({ book, catalog });
   } catch (error) {
@@ -46,20 +47,21 @@ module.exports = async function handler(req, res) {
 async function deleteBook(value, res) {
   const id = clean(value?.id, 100);
   if (!/^[a-z0-9-]{1,100}$/.test(id)) fail("ID truyện không hợp lệ.");
-  let catalog = await readCatalog();
-  const book = catalog.books.find((item) => item.id === id);
+  const initialCatalog = await readCatalog();
+  const book = initialCatalog.books.find((item) => item.id === id);
   if (!book) fail("Không tìm thấy truyện cần xóa.");
 
   if (book.source === "fanqie" && /^\d{10,30}$/.test(String(book.sourceId || ""))) {
-    const config = await readCrawlerConfig();
-    await writeCrawlerConfig({
+    await updateCrawlerConfig((config) => ({
       ...config,
       excludedSourceIds: [...config.excludedSourceIds, String(book.sourceId)]
-    });
+    }));
   }
 
-  catalog.books = catalog.books.filter((item) => item.id !== id);
-  catalog = await writeCatalog(catalog);
+  const catalog = await updateCatalog((current) => {
+    current.books = current.books.filter((item) => item.id !== id);
+    return current;
+  });
   const files = [book.epub, book.cover].filter(isBlobUrl);
   const cleanup = await Promise.allSettled(files.map((url) => del(url)));
   const cleanupFailed = cleanup.some((result) => result.status === "rejected");

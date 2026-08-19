@@ -1,6 +1,7 @@
 "use strict";
 
 const crypto = require("crypto");
+const { updateWithRetry } = require("./blob-concurrency");
 
 const CONFIG_PATH = "library/crawler-config.json";
 const STATUS_PATH = "library/crawler-status.json";
@@ -37,6 +38,18 @@ async function writeCrawlerConfig(value) {
   const config = sanitizeCrawlerConfig(value);
   await writeBlobJson(CONFIG_PATH, config);
   return config;
+}
+
+async function updateCrawlerConfig(mutator, maxAttempts = 6) {
+  return updateWithRetry({
+    maxAttempts,
+    read: () => readBlobJsonSnapshot(CONFIG_PATH, DEFAULT_CONFIG),
+    mutate: async (value) => sanitizeCrawlerConfig(await mutator(sanitizeCrawlerConfig(value))),
+    write: async (config, etag) => {
+      await writeBlobJson(CONFIG_PATH, config, { etag, createOnly: !etag });
+      return config;
+    }
+  });
 }
 
 async function readCrawlerStatus() {
@@ -125,26 +138,31 @@ async function getGitHubKeys() {
 async function readBlobJson(pathname, fallback) {
   if (!process.env.BLOB_READ_WRITE_TOKEN) return structuredClone(fallback);
   try {
-    const { list } = require("@vercel/blob");
-    const result = await list({ prefix: pathname, limit: 10 });
-    const blob = result.blobs.find((item) => item.pathname === pathname);
-    if (!blob) return structuredClone(fallback);
-    const response = await fetch(`${blob.url}?v=${Date.now()}`, { cache: "no-store" });
-    if (!response.ok) return structuredClone(fallback);
-    return await response.json();
+    return (await readBlobJsonSnapshot(pathname, fallback)).value;
   } catch (error) {
     console.error(`Unable to read ${pathname}:`, error.message);
     return structuredClone(fallback);
   }
 }
 
-async function writeBlobJson(pathname, value) {
+async function readBlobJsonSnapshot(pathname, fallback) {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) return { value: structuredClone(fallback), etag: "" };
+  const { list } = require("@vercel/blob");
+  const result = await list({ prefix: pathname, limit: 10 });
+  const blob = result.blobs.find((item) => item.pathname === pathname);
+  if (!blob) return { value: structuredClone(fallback), etag: "" };
+  const response = await fetch(`${blob.url}?v=${Date.now()}`, { cache: "no-store" });
+  if (!response.ok) throw new Error(`${pathname} trả HTTP ${response.status}.`);
+  return { value: await response.json(), etag: blob.etag };
+}
+
+async function writeBlobJson(pathname, value, { etag, createOnly = false } = {}) {
   if (!process.env.BLOB_READ_WRITE_TOKEN) throw new Error("Vercel Blob chưa được kết nối.");
   const { put } = require("@vercel/blob");
   await put(pathname, JSON.stringify(value, null, 2), {
     access: "public",
     contentType: "application/json; charset=utf-8",
-    allowOverwrite: true,
+    ...(etag ? { ifMatch: etag } : { allowOverwrite: !createOnly }),
     cacheControlMaxAge: 30
   });
 }
@@ -173,6 +191,7 @@ module.exports = {
   DEFAULT_STATUS,
   readCrawlerConfig,
   writeCrawlerConfig,
+  updateCrawlerConfig,
   readCrawlerStatus,
   writeCrawlerStatus,
   sanitizeCrawlerConfig,

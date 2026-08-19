@@ -4,7 +4,7 @@ const { isAdmin, isSameOrigin } = require("../../server/admin-auth");
 const {
   CATEGORY_DEFINITIONS,
   readCrawlerConfig,
-  writeCrawlerConfig,
+  updateCrawlerConfig,
   readCrawlerStatus
 } = require("../../server/crawler-store");
 const { readJsonBody, methodNotAllowed, noStore } = require("../../server/http");
@@ -18,8 +18,7 @@ module.exports = async function handler(req, res) {
     if (req.method === "GET") return res.status(200).json(await responsePayload());
     if (req.method === "POST") {
       const body = await readJsonBody(req, 16 * 1024);
-      const current = await readCrawlerConfig();
-      await writeCrawlerConfig({ ...body, excludedSourceIds: current.excludedSourceIds });
+      await updateCrawlerConfig((current) => ({ ...body, excludedSourceIds: current.excludedSourceIds }));
       return res.status(200).json(await responsePayload());
     }
     return methodNotAllowed(res, "GET, POST");
