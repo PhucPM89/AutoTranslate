@@ -19,6 +19,8 @@ const SPEECH_GENRE_KEY = "epubTranslator.speechGenre";
 const SPEECH_CACHE_NAME = "epubTranslator.speech.v2";
 const LEGACY_SPEECH_CACHE_NAME = "epubTranslator.speech.v1";
 const SPEECH_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const SPEECH_DAILY_USAGE_KEY = "epubTranslator.speechDailyUsage";
+const SPEECH_DAILY_REQUEST_BUDGET = 90;
 const SPEECH_GENRE_PRESETS = {
   fantasy: { voice: "Puck", rate: "1" },
   horror: { voice: "Charon", rate: "0.8" },
@@ -210,6 +212,14 @@ async function toggleSpeech() {
   });
   speechState.index = 0;
   if (!speechState.chunks.length) return;
+  const remainingRequests = getRemainingSpeechRequests();
+  if (speechState.chunks.length > remainingRequests) {
+    const required = speechState.chunks.length;
+    speechState.chunks = [];
+    speechState.settings = null;
+    setSpeechMode("idle", `Chương này cần ${required} lượt TTS, hôm nay còn ${remainingRequests}/${SPEECH_DAILY_REQUEST_BUDGET}.`);
+    return;
+  }
 
   speechState.session += 1;
   await playCurrentSpeechChunk(speechState.session);
@@ -275,6 +285,10 @@ function prepareSpeechChunk(index, session) {
 
     controller = new AbortController();
     speechState.abortControllers.add(controller);
+    if (getRemainingSpeechRequests() <= 0) {
+      throw new Error(`Đã dùng hết ngân sách ${SPEECH_DAILY_REQUEST_BUDGET} lượt TTS hôm nay.`);
+    }
+    recordSpeechRequest();
     const response = await fetch("/api/speech", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -469,7 +483,7 @@ function updateSpeechAvailability() {
     const renderedOutput =
       !els.translationText.classList.contains("empty") && Boolean(els.translationText.textContent.trim());
     els.speechStatus.textContent = available
-      ? "Ready · Vietnamese AI voice"
+      ? `Ready · Gemini AI · ${getRemainingSpeechRequests()}/${SPEECH_DAILY_REQUEST_BUDGET} left today`
       : renderedOutput
         ? "Output is not Vietnamese"
         : "No output available";
@@ -498,7 +512,7 @@ function speechProgressLabel(action) {
   return `${action} ${speechState.index + 1} / ${speechState.chunks.length}`;
 }
 
-function splitSpeechText(text, maxLength = 900) {
+function splitSpeechText(text, maxLength = 5000) {
   const sentences = String(text || "")
     .split(/\n{2,}/)
     .flatMap((paragraph) => paragraph.match(/[^.!?…]+[.!?…]+|[^.!?…]+$/g) || [paragraph])
@@ -535,6 +549,32 @@ function base64ToBlob(base64, mimeType) {
     bytes[index] = binary.charCodeAt(index);
   }
   return new Blob([bytes], { type: mimeType });
+}
+
+function getSpeechUsage() {
+  const today = localDateKey();
+  try {
+    const usage = JSON.parse(localStorage.getItem(SPEECH_DAILY_USAGE_KEY) || "null");
+    if (usage?.date === today && Number.isInteger(usage.count)) return usage;
+  } catch (_error) {
+    // Reset malformed local usage data below.
+  }
+  return { date: today, count: 0 };
+}
+
+function getRemainingSpeechRequests() {
+  return Math.max(0, SPEECH_DAILY_REQUEST_BUDGET - getSpeechUsage().count);
+}
+
+function recordSpeechRequest() {
+  const usage = getSpeechUsage();
+  usage.count += 1;
+  localStorage.setItem(SPEECH_DAILY_USAGE_KEY, JSON.stringify(usage));
+}
+
+function localDateKey() {
+  const date = new Date();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
 async function handleFile(event) {

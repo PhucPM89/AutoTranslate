@@ -1,6 +1,8 @@
+const { pcmToMp3Base64 } = require("./mp3");
+
 const GEMINI_TTS_MODEL = process.env.GEMINI_TTS_MODEL || "gemini-3.1-flash-tts-preview";
-const GEMINI_TTS_TIMEOUT_MS = Number(process.env.GEMINI_TTS_TIMEOUT_MS || 50000);
-const MAX_SPEECH_TEXT_LENGTH = 1200;
+const GEMINI_TTS_TIMEOUT_MS = Number(process.env.GEMINI_TTS_TIMEOUT_MS || 35000);
+const MAX_SPEECH_TEXT_LENGTH = 6000;
 const ALLOWED_VOICES = new Set(["Kore", "Aoede", "Leda", "Puck", "Charon"]);
 const ALLOWED_RATES = new Set(["0.8", "1", "1.2", "1.5"]);
 const GENRE_DIRECTIONS = {
@@ -35,7 +37,7 @@ async function generateSpeech(text, apiKey, options = {}) {
   )}:generateContent`;
 
   let lastError;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < 1; attempt += 1) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), GEMINI_TTS_TIMEOUT_MS);
 
@@ -69,23 +71,18 @@ async function generateSpeech(text, apiKey, options = {}) {
           error.code = "quota_exceeded";
         }
         lastError = error;
-        if (!error.code && (response.status === 429 || response.status >= 500) && attempt === 0) {
-          await wait(700);
-          continue;
-        }
         throw error;
       }
 
       const audioPart = data?.candidates?.[0]?.content?.parts?.find((part) => part.inlineData?.data);
       if (!audioPart?.inlineData?.data) {
         lastError = publicError("Gemini TTS khong tra ve du lieu am thanh.", 502);
-        if (attempt === 0) continue;
         throw lastError;
       }
 
       return {
-        audio: pcmToWavBase64(audioPart.inlineData.data),
-        mimeType: "audio/wav",
+        audio: pcmToMp3Base64(audioPart.inlineData.data),
+        mimeType: "audio/mpeg",
         model: GEMINI_TTS_MODEL,
         voice,
         genre,
@@ -96,10 +93,6 @@ async function generateSpeech(text, apiKey, options = {}) {
         lastError = publicError("Gemini TTS phan hoi qua cham.", 504);
       } else {
         lastError = error;
-      }
-      if (attempt === 0 && error.name !== "AbortError" && (!error.status || error.status >= 500)) {
-        await wait(700);
-        continue;
       }
       throw lastError;
     } finally {
@@ -145,42 +138,14 @@ function isQuotaExhausted(message) {
   return value.includes("exceeded your current quota") || value.includes("billing details");
 }
 
-function pcmToWavBase64(pcmBase64, sampleRate = 24000, channels = 1, bitsPerSample = 16) {
-  const pcm = Buffer.from(pcmBase64, "base64");
-  const header = Buffer.alloc(44);
-  const byteRate = sampleRate * channels * (bitsPerSample / 8);
-  const blockAlign = channels * (bitsPerSample / 8);
-
-  header.write("RIFF", 0);
-  header.writeUInt32LE(36 + pcm.length, 4);
-  header.write("WAVE", 8);
-  header.write("fmt ", 12);
-  header.writeUInt32LE(16, 16);
-  header.writeUInt16LE(1, 20);
-  header.writeUInt16LE(channels, 22);
-  header.writeUInt32LE(sampleRate, 24);
-  header.writeUInt32LE(byteRate, 28);
-  header.writeUInt16LE(blockAlign, 32);
-  header.writeUInt16LE(bitsPerSample, 34);
-  header.write("data", 36);
-  header.writeUInt32LE(pcm.length, 40);
-
-  return Buffer.concat([header, pcm]).toString("base64");
-}
-
 function publicError(message, status) {
   const error = new Error(message);
   error.status = status;
   return error;
 }
 
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 module.exports = {
   generateSpeech,
   buildSpeechPrompt,
-  pcmToWavBase64,
   MAX_SPEECH_TEXT_LENGTH
 };

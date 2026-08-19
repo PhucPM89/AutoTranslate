@@ -2,9 +2,9 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   generateSpeech,
-  buildSpeechPrompt,
-  pcmToWavBase64
+  buildSpeechPrompt
 } = require("./speech");
+const { pcmToMp3Base64 } = require("./mp3");
 
 test("builds a Vietnamese-only reading prompt from translated text", () => {
   const prompt = buildSpeechPrompt("Tran Thanh nhin ve phia truoc.", "1.2", "detective", "Charon", 2, 6);
@@ -18,15 +18,15 @@ test("builds a Vietnamese-only reading prompt from translated text", () => {
   assert.match(prompt, /Tran Thanh nhin ve phia truoc/);
 });
 
-test("wraps Gemini PCM data in a playable WAV container", () => {
-  const wav = Buffer.from(pcmToWavBase64(Buffer.from([0, 1, 2, 3]).toString("base64")), "base64");
-  assert.equal(wav.subarray(0, 4).toString(), "RIFF");
-  assert.equal(wav.subarray(8, 12).toString(), "WAVE");
-  assert.equal(wav.readUInt32LE(24), 24000);
-  assert.equal(wav.readUInt32LE(40), 4);
+test("compresses Gemini PCM data into MP3", () => {
+  const pcm = Buffer.alloc(24000 * 2);
+  const mp3 = Buffer.from(pcmToMp3Base64(pcm.toString("base64")), "base64");
+  assert.equal(mp3[0], 0xff);
+  assert.equal(mp3[1] & 0xe0, 0xe0);
+  assert.ok(mp3.length < pcm.length / 4);
 });
 
-test("requests Gemini TTS with the selected voice and returns WAV audio", async () => {
+test("requests Gemini TTS with the selected voice and returns MP3 audio", async () => {
   const originalFetch = global.fetch;
   const calls = [];
   global.fetch = async (url, options) => {
@@ -64,8 +64,10 @@ test("requests Gemini TTS with the selected voice and returns WAV audio", async 
     assert.match(calls[0].body.contents[0].parts[0].text, /tao khoang lang/);
     assert.match(calls[0].body.contents[0].parts[0].text, /doan 2\/4/);
     assert.equal(result.genre, "horror");
-    assert.equal(Buffer.from(result.audio, "base64").subarray(0, 4).toString(), "RIFF");
-    assert.equal(result.mimeType, "audio/wav");
+    const mp3 = Buffer.from(result.audio, "base64");
+    assert.equal(mp3[0], 0xff);
+    assert.equal(mp3[1] & 0xe0, 0xe0);
+    assert.equal(result.mimeType, "audio/mpeg");
   } finally {
     global.fetch = originalFetch;
   }
