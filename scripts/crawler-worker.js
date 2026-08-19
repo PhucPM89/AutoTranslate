@@ -8,11 +8,22 @@ const { upload } = require("@vercel/blob/client");
 const SITE_URL = String(process.env.SITE_URL || "https://auto-translate-xi.vercel.app").replace(/\/$/, "");
 const CRAWLER_SECRET = process.env.CRAWLER_SECRET || "";
 let crawlerAuthToken = CRAWLER_SECRET;
+let crawlerTokenExpiresAt = CRAWLER_SECRET ? Number.POSITIVE_INFINITY : 0;
 const TOMATO_URL = String(process.env.TOMATO_URL || "http://127.0.0.1:18423").replace(/\/$/, "");
 const TOMATO_PASSWORD = process.env.TOMATO_PASSWORD || CRAWLER_SECRET;
 const TOMATO_DATA_DIR = path.resolve(process.env.TOMATO_DATA_DIR || ".crawler-data");
-const JOB_TIMEOUT_MS = clampNumber(process.env.CRAWLER_JOB_TIMEOUT_MINUTES, 15, 300, 180) * 60 * 1000;
+const JOB_TIMEOUT_MS = clampNumber(process.env.CRAWLER_JOB_TIMEOUT_MINUTES, 15, 320, 300) * 60 * 1000;
+// The workflow allows 330 minutes. Stopping a little before that leaves room to
+// upload, publish and save the Tomato cache instead of being killed mid-write.
+const RUN_BUDGET_MS = clampNumber(process.env.CRAWLER_RUN_BUDGET_MINUTES, 10, 320, 300) * 60 * 1000;
+// A fresh download is only worth starting if there is time to make real progress.
+const MIN_BUDGET_FOR_NEW_JOB_MS = 20 * 60 * 1000;
+const RUN_STARTED_AT = Date.now();
 const POLL_INTERVAL_MS = 10 * 1000;
+
+function remainingBudgetMs() {
+  return RUN_BUDGET_MS - (Date.now() - RUN_STARTED_AT);
+}
 const RANK_PAGE_SIZE = 10;
 const DEFAULT_RANK_PAGE_COUNT = 1;
 // The established-novel boards are already sorted so that roughly a third of the
@@ -22,42 +33,57 @@ const LONG_NOVEL_RANK_PAGE_COUNT = 5;
 const FANQIE_REQUEST_SPACING_MS = 400;
 const FANQIE_RETRY_BACKOFF_MS = 2500;
 const THROTTLE_ABORT_STREAK = 6;
+const TOKEN_REFRESH_MARGIN_MS = 60 * 1000;
 const AVERAGE_CHARS_PER_CHAPTER = 2200;
 // Probing /page/ is only a fallback now, so it gets a tight budget.
 const MAX_DETAIL_PROBES = 12;
 
 async function main() {
   requireEnvironment();
-  crawlerAuthToken = crawlerAuthToken || await requestGitHubOidcToken();
+  await getCrawlerToken();
   const control = await siteRequest("/api/crawler/control");
-  const { config, categories, catalog } = control;
+  const { config, categories, catalog, status: previousStatus } = control;
   if (!config.enabled) {
     await updateStatus({ state: "disabled", message: "Crawler đang tắt trong trang quản trị.", finishedAt: new Date().toISOString() });
     return;
   }
 
   const startedAt = new Date().toISOString();
-  const status = { state: "running", message: "Đang quét bảng xếp hạng Fanqie...", startedAt, finishedAt: "", currentBookId: "", discovered: 0, published: 0, failed: 0 };
+  const resumeJob = selectResumeJob(previousStatus, catalog);
+  const status = {
+    state: "running",
+    message: "Đang chuẩn bị...",
+    startedAt,
+    finishedAt: "",
+    currentBookId: resumeJob?.sourceId || "",
+    resumeAttempts: resumeJob ? resumeJob.attempts : 0,
+    discovered: 0,
+    published: 0,
+    failed: 0
+  };
   await updateStatus(status);
 
   try {
     await waitForTomato();
     await configureTomato();
-    const candidates = await discoverBooks(config, categories, status);
-    const excludedIds = new Set(config.excludedSourceIds || []);
-    const existingBooks = (catalog.books || []).filter((book) => book.source === "fanqie" && book.sourceId && !excludedIds.has(String(book.sourceId)));
-    const existingIds = new Set(existingBooks.map((book) => String(book.sourceId)));
-    const updateJobs = selectWorkItems([], existingBooks, config.updateExisting);
-    const newCandidates = candidates.filter((item) => !existingIds.has(item.sourceId) && !excludedIds.has(item.sourceId));
 
     const runJobs = async (jobs) => {
       for (const candidate of jobs) {
+        // A resume job continues work already banked in the cache, so it is worth
+        // starting even late in the run; a brand new download is not.
+        if (!candidate.isResume && remainingBudgetMs() < MIN_BUDGET_FOR_NEW_JOB_MS) {
+          status.message = `Còn ${Math.round(remainingBudgetMs() / 60000)} phút, để dành book ${candidate.sourceId} cho lượt sau.`;
+          await updateStatus(status);
+          break;
+        }
         status.currentBookId = candidate.sourceId;
         status.message = `Đang tải Fanqie book ${candidate.sourceId}...`;
         await updateStatus(status);
         try {
-          const published = await downloadAndPublish(candidate, status, config.minChapterCount);
+          const published = await downloadAndPublish(candidate, status, config.wordCountBucket);
           status.published += 1;
+          status.currentBookId = "";
+          status.resumeAttempts = 0;
           status.message = candidate.isUpdate
             ? `Đã cập nhật ${published.title}.`
             : `Đã thêm ${published.title} vào thư viện.`;
@@ -70,24 +96,50 @@ async function main() {
       }
     };
 
+    // Tomato keeps partially downloaded chapters in the Actions cache, so a book
+    // an earlier run left unfinished is retried first rather than being dropped
+    // in favour of a different novel.
+    if (resumeJob) {
+      status.message = `Đang tải tiếp Fanqie book ${resumeJob.sourceId} (lần thử ${resumeJob.attempts}).`;
+      await updateStatus(status);
+      await runJobs([resumeJob]);
+    }
+
+    const excludedIds = new Set(config.excludedSourceIds || []);
+    const existingBooks = (catalog.books || []).filter((book) => book.source === "fanqie" && book.sourceId && !excludedIds.has(String(book.sourceId)));
+    const existingIds = new Set(existingBooks.map((book) => String(book.sourceId)));
+    if (resumeJob) existingIds.add(resumeJob.sourceId);
+
     // A refresh job whose download keeps failing never advances lastCrawledAt, so
     // it used to be re-picked forever and no new novel was ever discovered again.
-    // Discovery now runs whenever the refresh pass added nothing.
-    await runJobs(updateJobs);
+    // Discovery now runs whenever the refresh pass added nothing. The resumed book
+    // is excluded so one run never attempts the same download twice.
+    const refreshable = existingBooks.filter((book) => String(book.sourceId) !== resumeJob?.sourceId);
+    await runJobs(selectWorkItems([], refreshable, config.updateExisting));
 
     let discovery = null;
-    if (!status.published) {
-      if (config.minChapterCount > 0) {
-        status.message = `Đang tìm truyện từ ${config.minChapterCount} chương trở lên...`;
+    let newCandidateCount = 0;
+    // Minutes are free on a public repo, so the run keeps working until its time
+    // budget is nearly spent rather than stopping after a single book and waiting
+    // for the next scheduled run.
+    if (remainingBudgetMs() >= MIN_BUDGET_FOR_NEW_JOB_MS) {
+      const candidates = await discoverBooks(config, categories, status);
+      const newCandidates = candidates.filter((item) => !existingIds.has(item.sourceId) && !excludedIds.has(item.sourceId));
+      newCandidateCount = newCandidates.length;
+      // The bucket is the length control; this floor only matters on the rank-page
+      // fallback, where no server-side word filter is available.
+      const chapterFloor = bucketChapterFloor(config.wordCountBucket);
+      if (chapterFloor > 0) {
+        status.message = `Đang tìm truyện từ ${chapterFloor} chương trở lên...`;
         await updateStatus(status);
       }
       discovery = await selectNewBookCandidates(
         newCandidates,
-        config.minChapterCount,
+        chapterFloor,
         config.maxNewBooksPerRun,
         fetchText,
         async ({ scanned, scanLimit, selected, bestChapterCount }) => {
-          status.message = `Đang lọc truyện từ ${config.minChapterCount} chương: đã kiểm ${scanned}/${scanLimit}, chọn ${selected}, dài nhất ${bestChapterCount} chương.`;
+          status.message = `Đang lọc truyện dài: đã kiểm ${scanned}/${scanLimit}, chọn ${selected}, dài nhất ${bestChapterCount} chương.`;
           await updateStatus(status);
         }
       );
@@ -97,8 +149,9 @@ async function main() {
 
     if (!status.published && !status.failed) {
       status.state = "success";
-      status.message = describeEmptyRun(config, newCandidates.length, discovery);
+      status.message = describeEmptyRun(config, newCandidateCount, discovery);
       status.currentBookId = "";
+      status.resumeAttempts = 0;
       status.finishedAt = new Date().toISOString();
       await updateStatus(status);
       return;
@@ -107,15 +160,16 @@ async function main() {
     status.state = status.published ? "success" : "error";
     status.message = status.published
       ? `Hoàn tất: thêm ${status.published} truyện, lỗi ${status.failed}.`
-      : `Không thể thêm truyện; ${status.failed} tác vụ thất bại.${discovery ? ` ${describeEmptyRun(config, newCandidates.length, discovery)}` : ""}`;
-    status.currentBookId = "";
+      : `Không thể thêm truyện; ${status.failed} tác vụ thất bại.${discovery ? ` ${describeEmptyRun(config, newCandidateCount, discovery)}` : ""}`;
+    // currentBookId is left in place when a download failed, so the next run picks
+    // that book up again instead of discarding the chapters already cached.
     status.finishedAt = new Date().toISOString();
     await updateStatus(status);
     if (!status.published) process.exitCode = 1;
   } catch (error) {
     status.state = "error";
     status.message = error.message;
-    status.currentBookId = "";
+    // Keep currentBookId: a crash mid-download is exactly when resuming matters.
     status.finishedAt = new Date().toISOString();
     await updateStatus(status).catch(() => {});
     throw error;
@@ -147,22 +201,47 @@ async function discoverBooks(config, categories, status) {
   });
 }
 
-// Says *why* a run came up empty, so a misconfigured chapter minimum can be told
-// apart from Fanqie refusing the scan.
+// Says *why* a run came up empty, so a length filter that is too aggressive can
+// be told apart from Fanqie refusing the scan.
 function describeEmptyRun(config, candidateCount, discovery) {
-  if (!candidateCount) return "Bảng xếp hạng Fanqie không trả về truyện mới nào.";
-  if (!discovery) return "Không có truyện mới phù hợp trong bảng xếp hạng.";
-  if (!config.minChapterCount) return "Không có truyện mới phù hợp trong bảng xếp hạng.";
+  if (!discovery) return "Hết thời gian của lượt chạy trước khi kịp tìm truyện mới.";
+  if (!candidateCount) return "Fanqie không trả về truyện mới nào.";
 
+  const chapterFloor = bucketChapterFloor(config.wordCountBucket);
   const { scanned, fromRankMetadata = 0, detailProbes = 0, networkErrors, unreadable, bestChapterCount, throttled } = discovery;
   const failed = networkErrors + unreadable;
   if (throttled || (detailProbes && failed >= Math.max(5, detailProbes * 0.5))) {
     return `Fanqie đang chặn tốc độ: ${failed}/${detailProbes} lượt kiểm tra chi tiết không đọc được. Crawler sẽ thử lại ở lượt sau.`;
   }
+  if (!chapterFloor) return "Không có truyện mới phù hợp.";
   if (!bestChapterCount && !detailProbes) {
-    return `Đã lấy ${scanned} truyện từ thư viện Fanqie nhưng tất cả đều đã có trong thư viện hoặc bị loại trừ.`;
+    return `Đã lấy ${scanned} truyện đạt độ dài từ Fanqie nhưng tất cả đều đã có trong thư viện hoặc bị loại trừ.`;
   }
-  return `Đã đọc ${scanned} truyện (${fromRankMetadata} biết trước số chương, ${detailProbes} lượt kiểm tra chi tiết), dài nhất ${bestChapterCount} chương, chưa đạt mức tối thiểu ${config.minChapterCount}.`;
+  return `Đã đọc ${scanned} truyện (${fromRankMetadata} biết trước số chương, ${detailProbes} lượt kiểm tra chi tiết), dài nhất ${bestChapterCount} chương, chưa đạt sàn ${chapterFloor} chương của bộ lọc độ dài.`;
+}
+
+// Picks up a book an earlier run was still downloading when it died. Capped so a
+// novel that can never finish stops blocking everything else.
+function selectResumeJob(previousStatus, catalog, maxAttempts = 3) {
+  const sourceId = String(previousStatus?.currentBookId || "");
+  if (!/^\d{10,30}$/.test(sourceId)) return null;
+  if (!["running", "error"].includes(previousStatus?.state)) return null;
+
+  const attempts = Number(previousStatus?.resumeAttempts) || 0;
+  if (attempts >= maxAttempts) return null;
+
+  const known = (catalog?.books || []).find((book) => String(book.sourceId) === sourceId);
+  // Already published means the previous run actually finished; nothing to resume.
+  if (known && previousStatus.state !== "error") return null;
+
+  return {
+    sourceId,
+    genre: known?.genre || "Fanqie",
+    category: "resume",
+    isUpdate: Boolean(known),
+    isResume: true,
+    attempts: attempts + 1
+  };
 }
 
 function selectWorkItems(newBooks, existingBooks, updateExisting, now = Date.now()) {
@@ -271,12 +350,12 @@ function uniqueBySourceId(books) {
 }
 
 async function discoverCandidates(config, categories, loadPage = fetchText, onProgress = null) {
-  const wantsLongNovels = config.minChapterCount > 0;
+  const wantsLongNovels = bucketChapterFloor(config.wordCountBucket) > 0;
   const rankPageCount = wantsLongNovels ? LONG_NOVEL_RANK_PAGE_COUNT : DEFAULT_RANK_PAGE_COUNT;
   const groups = await Promise.all(config.categories.map(async (key) => {
     const definition = categories[key];
     if (!definition) return [];
-    // The new-book boards cap out near 200 chapters, so a chapter minimum has to
+    // The new-book boards cap out near 200 chapters, so a length filter has to
     // read the established-novel boards instead.
     const ranks = (wantsLongNovels && definition.longRanks?.length ? definition.longRanks : definition.ranks) || [];
     const ids = [];
@@ -524,7 +603,7 @@ function parseFanqieChapterCount(html) {
   return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
-async function downloadAndPublish(candidate, status, minChapterCount = 0) {
+async function downloadAndPublish(candidate, status, wordCountBucket = -1) {
   const before = new Map(findFiles(TOMATO_DATA_DIR, ".epub").map((file) => [file, fs.statSync(file).mtimeMs]));
   const startedAt = Date.now();
   const job = await tomatoRequest("/api/jobs", {
@@ -538,8 +617,14 @@ async function downloadAndPublish(candidate, status, minChapterCount = 0) {
 
   const epubBuffer = fs.readFileSync(epubPath);
   const metadata = await readEpubMetadata(epubBuffer);
-  if (!candidate.isUpdate && minChapterCount > 0 && metadata.chapterCount < minChapterCount) {
-    throw new Error(`EPUB chỉ có ${metadata.chapterCount} chương, thấp hơn mức tối thiểu ${minChapterCount}.`);
+  // Fanqie already guaranteed the word count, so this only has to catch a Tomato
+  // download that stopped early. Chars per chapter varies wildly between novels
+  // (roughly 1.8k to 24k), so the guard is deliberately loose.
+  const truncationFloor = Math.max(10, Math.round(bucketChapterFloor(wordCountBucket) * 0.25));
+  if (!candidate.isUpdate && metadata.chapterCount < truncationFloor) {
+    throw new Error(
+      `EPUB chỉ có ${metadata.chapterCount} chương, nghi bị tải dở (cần tối thiểu ${truncationFloor}).`
+    );
   }
   status.message = `Đang dịch thông tin Fanqie book ${candidate.sourceId}...`;
   await updateStatus(status);
@@ -557,7 +642,7 @@ async function downloadAndPublish(candidate, status, minChapterCount = 0) {
     access: "public",
     contentType: "application/epub+zip",
     handleUploadUrl: `${SITE_URL}/api/crawler/upload`,
-    headers: { Authorization: `Bearer ${crawlerAuthToken}` },
+    headers: { Authorization: `Bearer ${await getCrawlerToken()}` },
     clientPayload: JSON.stringify({ kind: "epub" }),
     multipart: true
   });
@@ -569,7 +654,7 @@ async function downloadAndPublish(candidate, status, minChapterCount = 0) {
       access: "public",
       contentType: metadata.cover.contentType,
       handleUploadUrl: `${SITE_URL}/api/crawler/upload`,
-      headers: { Authorization: `Bearer ${crawlerAuthToken}` },
+      headers: { Authorization: `Bearer ${await getCrawlerToken()}` },
       clientPayload: JSON.stringify({ kind: "cover" })
     });
     coverUrl = coverBlob.url;
@@ -594,7 +679,9 @@ async function downloadAndPublish(candidate, status, minChapterCount = 0) {
 }
 
 async function waitForJob(jobId, status) {
-  const deadline = Date.now() + JOB_TIMEOUT_MS;
+  // Bounded by whichever runs out first: the per-job limit or the run's budget.
+  // Ending on our own terms lets the cache save so the next run resumes.
+  const deadline = Date.now() + Math.max(0, Math.min(JOB_TIMEOUT_MS, remainingBudgetMs()));
   let lastStatusUpdate = 0;
   while (Date.now() < deadline) {
     const data = await tomatoRequest(`/api/jobs?id=${encodeURIComponent(jobId)}&all=true`);
@@ -783,10 +870,20 @@ class ThrottleError extends Error {
 }
 
 async function siteRequest(pathname, options = {}) {
-  return jsonRequest(`${SITE_URL}${pathname}`, {
-    ...options,
-    headers: { Authorization: `Bearer ${crawlerAuthToken}`, ...(options.headers || {}) }
-  });
+  const send = async () =>
+    jsonRequest(`${SITE_URL}${pathname}`, {
+      ...options,
+      headers: { Authorization: `Bearer ${await getCrawlerToken()}`, ...(options.headers || {}) }
+    });
+
+  try {
+    return await send();
+  } catch (error) {
+    // A 401 mid-run means the token aged out between checks; force one refresh.
+    if (!/HTTP 401/.test(String(error.message)) || CRAWLER_SECRET) throw error;
+    crawlerTokenExpiresAt = 0;
+    return send();
+  }
 }
 
 async function tomatoRequest(pathname, options = {}) {
@@ -810,6 +907,28 @@ async function updateStatus(status) {
 function requireEnvironment() {
   if (!CRAWLER_SECRET && (!process.env.ACTIONS_ID_TOKEN_REQUEST_URL || !process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN)) {
     throw new Error("Worker cần GitHub OIDC hoặc CRAWLER_SECRET khi chạy local.");
+  }
+}
+
+// GitHub's OIDC id tokens live about five minutes, and the site verifies `exp`.
+// Fetching one at startup and reusing it killed every long download at ~5 minutes,
+// so the token is now refreshed on demand for the whole run.
+async function getCrawlerToken() {
+  if (CRAWLER_SECRET) return CRAWLER_SECRET;
+  if (crawlerAuthToken && Date.now() < crawlerTokenExpiresAt - TOKEN_REFRESH_MARGIN_MS) return crawlerAuthToken;
+
+  crawlerAuthToken = await requestGitHubOidcToken();
+  crawlerTokenExpiresAt = jwtExpiresAt(crawlerAuthToken) || Date.now() + 4 * 60 * 1000;
+  return crawlerAuthToken;
+}
+
+function jwtExpiresAt(token) {
+  try {
+    const payload = JSON.parse(Buffer.from(String(token).split(".")[1], "base64url").toString("utf8"));
+    const seconds = Number(payload.exp);
+    return Number.isFinite(seconds) ? seconds * 1000 : 0;
+  } catch {
+    return 0;
   }
 }
 
@@ -857,6 +976,8 @@ module.exports = {
   roundRobin,
   readEpubMetadata,
   selectWorkItems,
+  selectResumeJob,
+  jwtExpiresAt,
   selectNewBookCandidates,
   describeEmptyRun,
   fetchText

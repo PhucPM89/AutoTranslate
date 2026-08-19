@@ -13,6 +13,12 @@
     "api/speech.js": {
       "maxDuration": 60
     },
+    "api/analytics.js": {
+      "maxDuration": 15
+    },
+    "api/admin/analytics.js": {
+      "maxDuration": 15
+    },
     "api/admin/upload.js": {
       "maxDuration": 30
     },

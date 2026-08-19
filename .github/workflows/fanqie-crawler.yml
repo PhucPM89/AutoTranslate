@@ -41,8 +41,11 @@ jobs:
       - name: Install worker dependencies
         run: npm ci --ignore-scripts
 
+      # actions/cache only saves on success, so a run that died mid-download threw
+      # away every chapter it had fetched. Restore and save are split so the
+      # partial state survives a failed or timed-out run and the next one resumes.
       - name: Restore Tomato state
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: .crawler-data
           key: tomato-data-${{ github.run_id }}
@@ -70,3 +73,10 @@ jobs:
       - name: Make state cache readable
         if: always()
         run: sudo chown -R "$USER:$USER" .crawler-data || true
+
+      - name: Save Tomato state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .crawler-data
+          key: tomato-data-${{ github.run_id }}

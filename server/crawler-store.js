@@ -37,7 +37,6 @@ const DEFAULT_CONFIG = {
   enabled: false,
   categories: Object.keys(CATEGORY_DEFINITIONS),
   maxNewBooksPerRun: 1,
-  minChapterCount: 0,
   wordCountBucket: 4,
   creationStatus: -1,
   updateExisting: true,
@@ -49,6 +48,7 @@ const DEFAULT_STATUS = {
   startedAt: "",
   finishedAt: "",
   currentBookId: "",
+  resumeAttempts: 0,
   discovered: 0,
   published: 0,
   failed: 0
@@ -94,7 +94,8 @@ function sanitizeCrawlerConfig(value) {
     enabled: Boolean(value?.enabled),
     categories: categories.length ? categories : [...DEFAULT_CONFIG.categories],
     maxNewBooksPerRun: clampInteger(value?.maxNewBooksPerRun, 1, 3, DEFAULT_CONFIG.maxNewBooksPerRun),
-    minChapterCount: clampInteger(value?.minChapterCount, 0, 10000, DEFAULT_CONFIG.minChapterCount),
+    // The word-count bucket is the single length control; Fanqie applies it
+    // server-side, so a separate chapter minimum is redundant.
     wordCountBucket: allowedChoice(value?.wordCountBucket, WORD_COUNT_BUCKETS, DEFAULT_CONFIG.wordCountBucket),
     creationStatus: allowedChoice(value?.creationStatus, CREATION_STATUSES, DEFAULT_CONFIG.creationStatus),
     updateExisting: value?.updateExisting !== false,
@@ -111,6 +112,9 @@ function sanitizeCrawlerStatus(value) {
     startedAt: cleanDate(value?.startedAt),
     finishedAt: cleanDate(value?.finishedAt),
     currentBookId: clean(value?.currentBookId, 30).replace(/\D/g, ""),
+    // How many runs have already tried to finish `currentBookId`, so a book that
+    // can never download cannot block discovery forever.
+    resumeAttempts: clampInteger(value?.resumeAttempts, 0, 10, 0),
     discovered: clampInteger(value?.discovered, 0, 1000, 0),
     published: clampInteger(value?.published, 0, 1000, 0),
     failed: clampInteger(value?.failed, 0, 1000, 0)

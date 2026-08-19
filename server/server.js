@@ -19,6 +19,8 @@ app.use((_req, res, next) => {
 });
 
 app.all("/api/library", require("../api/library"));
+app.all("/api/analytics", require("../api/analytics"));
+app.all("/api/admin/analytics", require("../api/admin/analytics"));
 app.all("/api/admin/login", require("../api/admin/login"));
 app.all("/api/admin/session", require("../api/admin/login"));
 app.all("/api/admin/logout", require("../api/admin/logout"));

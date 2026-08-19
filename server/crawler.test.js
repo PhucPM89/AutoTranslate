@@ -4,7 +4,12 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const JSZip = require("jszip");
 const { sanitizeCrawlerConfig, sanitizeCrawlerStatus, isCrawlerRequest } = require("./crawler-store");
-const { discoverCandidates, discoverFromLibrary, fetchLibraryPage, bucketChapterFloor, parseRankBookIds, parseRankBooks, estimateChapterCount, parseFanqieChapterCount, roundRobin, readEpubMetadata, selectWorkItems, selectNewBookCandidates, describeEmptyRun, fetchText } = require("../scripts/crawler-worker");
+const { discoverCandidates, discoverFromLibrary, fetchLibraryPage, bucketChapterFloor, parseRankBookIds, parseRankBooks, estimateChapterCount, parseFanqieChapterCount, roundRobin, readEpubMetadata, selectWorkItems, selectResumeJob, jwtExpiresAt, selectNewBookCandidates, describeEmptyRun, fetchText } = require("../scripts/crawler-worker");
+
+function jwt(payload) {
+  const encode = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  return `${encode({ alg: "RS256" })}.${encode(payload)}.signature`;
+}
 
 // Mirrors the real /api/author/library/book_list/v0/ envelope. word_count comes
 // back masked as "." from Fanqie, so the bucket floor is the only size signal.
@@ -55,7 +60,6 @@ test("sanitizes crawler configuration and removes unknown categories", () => {
     enabled: true,
     categories: ["xianxia", "unknown", "xianxia", "horror"],
     maxNewBooksPerRun: 99,
-    minChapterCount: 20000,
     wordCountBucket: 3,
     creationStatus: 0,
     updateExisting: false,
@@ -64,7 +68,6 @@ test("sanitizes crawler configuration and removes unknown categories", () => {
     enabled: true,
     categories: ["xianxia", "horror"],
     maxNewBooksPerRun: 3,
-    minChapterCount: 10000,
     wordCountBucket: 3,
     creationStatus: 0,
     updateExisting: false,
@@ -157,16 +160,16 @@ test("stops scanning early when Fanqie starts returning unusable pages", async (
   assert.equal(calls, 6, "must not burn the whole budget against a throttled host");
 });
 
-test("names throttling instead of blaming the chapter minimum", () => {
+test("names throttling instead of blaming the length filter", () => {
   const throttledMessage = describeEmptyRun(
-    { minChapterCount: 1000 },
+    { wordCountBucket: 4 },
     50,
     { scanned: 6, networkErrors: 0, unreadable: 6, bestChapterCount: 0, throttled: true }
   );
   assert.match(throttledMessage, /chặn tốc độ/);
 
   const shortMessage = describeEmptyRun(
-    { minChapterCount: 1000 },
+    { wordCountBucket: 4 },
     50,
     { scanned: 40, networkErrors: 0, unreadable: 0, bestChapterCount: 228, throttled: false }
   );
@@ -194,10 +197,10 @@ test("finds a long novel buried deep in the candidate list at no request cost", 
   assert.equal(detailProbes, 0);
 });
 
-test("pages deeper into a rank board when a chapter minimum is set", async () => {
+test("pages deeper into a rank board when a length filter is set", async () => {
   const urls = [];
   const candidates = await discoverCandidates(
-    { categories: ["fantasy"], minChapterCount: 1000 },
+    { categories: ["fantasy"], wordCountBucket: 4 },
     { fantasy: { label: "Huyền huyễn", ranks: ["rank-new"], longRanks: ["rank-a"] } },
     async (url) => {
       urls.push(url);
@@ -222,7 +225,7 @@ test("carries rank-page chapter counts through discovery into selection", async 
   let rankRequests = 0;
 
   const candidates = await discoverCandidates(
-    { categories: ["fantasy"], minChapterCount: 1000 },
+    { categories: ["fantasy"], wordCountBucket: 4 },
     { fantasy: { label: "Huyền huyễn", ranks: ["new"], longRanks: ["long"] } },
     async (url) => {
       rankRequests += 1;
@@ -249,7 +252,7 @@ test("carries rank-page chapter counts through discovery into selection", async 
 
 test("falls back to plain link scraping when the rank payload is absent", async () => {
   const candidates = await discoverCandidates(
-    { categories: ["fantasy"], minChapterCount: 1000 },
+    { categories: ["fantasy"], wordCountBucket: 4 },
     { fantasy: { label: "Huyền huyễn", ranks: ["new"], longRanks: ["long"] } },
     async () => `<a href="/page/${"9".repeat(19)}">book</a>`
   );
@@ -258,10 +261,10 @@ test("falls back to plain link scraping when the rank payload is absent", async 
   assert.equal(candidates[0].listedChapterCount, null);
 });
 
-test("reads a single page of the new-book board when there is no minimum", async () => {
+test("reads a single page of the new-book board when the length filter is off", async () => {
   const urls = [];
   await discoverCandidates(
-    { categories: ["fantasy"], minChapterCount: 0 },
+    { categories: ["fantasy"], wordCountBucket: -1 },
     { fantasy: { label: "Huyền huyễn", ranks: ["rank-new"], longRanks: ["rank-a"] } },
     async (url) => {
       urls.push(url);
@@ -431,7 +434,7 @@ test("treats an empty HTTP 200 body as throttling rather than a valid page", asy
   }
 });
 
-test("reads the established-novel boards when a chapter minimum is set", async () => {
+test("reads the established-novel boards when a length filter is set", async () => {
   const definitions = { fantasy: { label: "Huyền huyễn", ranks: ["1_1_258"], longRanks: ["1_2_258"] } };
   const load = (collected) => async (url) => {
     collected.push(url);
@@ -439,12 +442,12 @@ test("reads the established-novel boards when a chapter minimum is set", async (
   };
 
   const longUrls = [];
-  await discoverCandidates({ categories: ["fantasy"], minChapterCount: 1000 }, definitions, load(longUrls));
-  assert.ok(longUrls.every((url) => url.includes("/rank/1_2_258")), "chapter minimum must use the _2_ board");
+  await discoverCandidates({ categories: ["fantasy"], wordCountBucket: 4 }, definitions, load(longUrls));
+  assert.ok(longUrls.every((url) => url.includes("/rank/1_2_258")), "length filter must use the _2_ board");
 
   const newUrls = [];
-  await discoverCandidates({ categories: ["fantasy"], minChapterCount: 0 }, definitions, load(newUrls));
-  assert.ok(newUrls.every((url) => url.includes("/rank/1_1_258")), "no minimum keeps the new-book board");
+  await discoverCandidates({ categories: ["fantasy"], wordCountBucket: -1 }, definitions, load(newUrls));
+  assert.ok(newUrls.every((url) => url.includes("/rank/1_1_258")), "no filter keeps the new-book board");
 });
 
 test("every crawler category has an established-novel board", () => {
@@ -454,6 +457,46 @@ test("every crawler category has an established-novel board", () => {
     assert.equal(definition.longRanks.length, definition.ranks.length, `${key} lệch số bảng xếp hạng`);
     definition.longRanks.forEach((rank) => assert.match(rank, /^\d+_2_\d+$/, `${key} longRanks phải là bảng _2_`));
   }
+});
+
+test("reads the expiry out of a GitHub OIDC token", () => {
+  const exp = Math.floor(Date.parse("2026-08-20T12:00:00Z") / 1000);
+  assert.equal(jwtExpiresAt(jwt({ exp })), exp * 1000);
+  assert.equal(jwtExpiresAt("not-a-jwt"), 0, "a malformed token forces a refresh");
+  assert.equal(jwtExpiresAt(jwt({})), 0, "a token with no exp forces a refresh");
+});
+
+test("resumes the book an interrupted run was downloading", () => {
+  // A run that died mid-download leaves state: "error" with the book still set.
+  const job = selectResumeJob(
+    { state: "error", currentBookId: "7143038691944959011", resumeAttempts: 0 },
+    { books: [] }
+  );
+  assert.equal(job.sourceId, "7143038691944959011");
+  assert.equal(job.isResume, true);
+  assert.equal(job.attempts, 1, "attempt counter advances across runs");
+});
+
+test("gives up resuming a book that never finishes", () => {
+  const status = { state: "error", currentBookId: "7143038691944959011" };
+  assert.equal(selectResumeJob({ ...status, resumeAttempts: 2 }, { books: [] }).attempts, 3);
+  assert.equal(selectResumeJob({ ...status, resumeAttempts: 3 }, { books: [] }), null, "capped at three tries");
+});
+
+test("does not resume when the previous run finished cleanly", () => {
+  assert.equal(selectResumeJob({ state: "success", currentBookId: "7143038691944959011" }, { books: [] }), null);
+  assert.equal(selectResumeJob({ state: "error", currentBookId: "" }, { books: [] }), null);
+  assert.equal(selectResumeJob({ state: "error", currentBookId: "not-numeric" }, { books: [] }), null);
+  assert.equal(selectResumeJob(undefined, { books: [] }), null);
+});
+
+test("treats a resumed book already in the catalog as a refresh", () => {
+  const job = selectResumeJob(
+    { state: "error", currentBookId: "7143038691944959011", resumeAttempts: 1 },
+    { books: [{ source: "fanqie", sourceId: "7143038691944959011", genre: "Tiên hiệp" }] }
+  );
+  assert.equal(job.isUpdate, true);
+  assert.equal(job.genre, "Tiên hiệp");
 });
 
 test("refreshes the oldest stale book before discovering a new one", () => {

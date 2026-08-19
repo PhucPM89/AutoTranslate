@@ -184,4 +184,25 @@ page_count      tối đa 100 truyện mỗi request
 
 Chọn `Trên 2 triệu chữ` trong tab `Crawler` nghĩa là mọi truyện trả về đã có khoảng 900+ chương, nên một lượt chạy chỉ tốn khoảng 20 request cho cả 5 thể loại. Trước đây worker mở trang chi tiết của 220-360 truyện mỗi lượt và bị Fanqie chặn tốc độ (trả HTTP 200 kèm body rỗng).
 
-`Số chương tối thiểu` vẫn được kiểm tra lại từ file EPUB sau khi tải, nên nó là mức chặn cuối cùng chứ không dùng để lọc lúc tìm kiếm. Nếu API thư viện lỗi, worker tự chuyển sang quét bảng xếp hạng `1_2_*` (bảng truyện đã hoàn chỉnh) và đọc số chương từ `window.__INITIAL_STATE__` của trang xếp hạng.
+`Độ dài truyện` là bộ điều khiển độ dài duy nhất; không còn ô `Số chương tối thiểu` vì Fanqie đã lọc sẵn theo số chữ. Sau khi tải xong, worker vẫn kiểm tra file EPUB và loại những file nghi bị tải dở.
+
+Nếu API thư viện lỗi, worker tự chuyển sang quét bảng xếp hạng `1_2_*` (bảng truyện đã hoàn chỉnh) và đọc số chương từ `window.__INITIAL_STATE__` của trang xếp hạng.
+
+### Tải truyện dài không bị ngắt giữa
+
+Truyện vài nghìn chương cần nhiều giờ để tải, nên worker được thiết kế để chạy dài:
+
+- **Token OIDC được làm mới trong lúc chạy.** Token của GitHub chỉ sống khoảng 5 phút; trước đây worker lấy một lần lúc khởi động rồi dùng lại cho mọi lần gọi `updateStatus`, nên mọi lượt tải dài đều chết ở phút thứ 5. Giờ token tự làm mới trước khi hết hạn và thử lại một lần nếu gặp 401.
+- **Cache của Tomato luôn được lưu.** `actions/cache` chỉ lưu khi job thành công, tức là đúng những lượt tải dở lại bị mất sạch. Workflow tách thành `cache/restore` và `cache/save` với `if: always()`.
+- **Lượt sau tải tiếp đúng truyện đó.** Nếu một lượt chết giữa lúc tải, `currentBookId` được giữ lại trong trạng thái và lượt kế tiếp tải tiếp truyện đó trước, tối đa 3 lần rồi mới bỏ qua.
+- **Ngân sách thời gian.** Mặc định mỗi lượt làm việc tối đa 300 phút (`CRAWLER_RUN_BUDGET_MINUTES`), trong khi job cho phép 330 phút. Worker dừng chủ động khi gần hết ngân sách để còn kịp upload, publish và lưu cache; nó cũng không bắt đầu một truyện mới khi còn dưới 20 phút.
+
+Repo đang là public nên GitHub Actions không giới hạn số phút. Lịch 15 phút vẫn giữ nguyên: nhờ `concurrency` group, lượt mới sẽ chờ lượt đang chạy kết thúc rồi khởi động gần như ngay lập tức, nên không còn khoảng trống 15 phút giữa các lần tải.
+
+## Số liệu người đọc
+
+Tab `Số liệu` trong khu quản trị hiển thị lượt truy cập và lượt mở truyện theo hôm nay / 7 ngày / 30 ngày / tổng cộng, kèm danh sách truyện được mở nhiều nhất.
+
+Cách đếm được thiết kế cho hạn mức miễn phí: trình duyệt chỉ gửi beacon tới `/api/analytics` **một lần mỗi phiên** và **một lần cho mỗi truyện được mở**, chứ không phải mỗi lần đổi trang. Một người đọc vì vậy chỉ tốn một hai lần gọi function.
+
+Số liệu nằm trong `library/analytics.json` trên Vercel Blob, giữ 60 ngày gần nhất. Không lưu IP, cookie hay bất kỳ danh tính nào, nên con số là **số phiên truy cập** chứ không phải số người chính xác.

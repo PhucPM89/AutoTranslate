@@ -30,6 +30,8 @@ const LEGACY_MIGRATION_KEY = "epubTranslator.cacheMigratedV2";
 const CHAPTER_DECODE_CONCURRENCY = 6;
 const SEARCH_DEBOUNCE_MS = 160;
 const CACHE_WRITE_DEBOUNCE_MS = 800;
+const ANALYTICS_VISIT_KEY = "epubTranslator.visitCounted";
+const ANALYTICS_READ_KEY = "epubTranslator.readCounted";
 const JSZIP_URL = __ASSET_JSZIP__;
 const ADMIN_MODULE_URL = __ASSET_ADMIN__;
 const FALLBACK_BOOK_COVERS = [
@@ -240,6 +242,55 @@ function bootstrapAdminPanel() {
     });
 }
 
+// Anonymous counters for the admin panel. Deliberately once per browser session
+// (and once per book) rather than per pageview, so a visitor costs one or two
+// function invocations instead of one per navigation.
+function countVisit() {
+  if (readSessionFlag(ANALYTICS_VISIT_KEY)) return;
+  writeSessionFlag(ANALYTICS_VISIT_KEY, "1");
+  sendBeacon({ type: "visit" });
+}
+
+function countBookOpened(bookId) {
+  if (!bookId) return;
+  const counted = new Set(String(readSessionFlag(ANALYTICS_READ_KEY) || "").split("|").filter(Boolean));
+  if (counted.has(bookId)) return;
+  counted.add(bookId);
+  writeSessionFlag(ANALYTICS_READ_KEY, [...counted].slice(-40).join("|"));
+  sendBeacon({ type: "read", bookId });
+}
+
+function sendBeacon(payload) {
+  const body = JSON.stringify(payload);
+  try {
+    if (navigator.sendBeacon?.(("/api/analytics"), new Blob([body], { type: "application/json" }))) return;
+  } catch (_error) {
+    // Fall through to fetch below.
+  }
+  fetch("/api/analytics", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+    keepalive: true
+  }).catch(() => {});
+}
+
+function readSessionFlag(key) {
+  try {
+    return sessionStorage.getItem(key);
+  } catch (_error) {
+    return null;
+  }
+}
+
+function writeSessionFlag(key, value) {
+  try {
+    sessionStorage.setItem(key, value);
+  } catch (_error) {
+    // Private-mode storage failures must not break the reader.
+  }
+}
+
 function debounce(callback, delay) {
   let timeoutId = 0;
   return (...args) => {
@@ -289,6 +340,7 @@ function toggleTheme() {
 }
 
 async function initializeLibrary() {
+  countVisit();
   await Promise.all([loadLibraryManifest(), loadRecentProgress()]);
   updateContinueReading();
   // Housekeeping never blocks the landing page.
@@ -606,6 +658,7 @@ async function loadCatalogBook(book, assignedFallbackCover = fallbackCoverForBoo
 
   const bookId = `library:${book.id}:${book.updatedAt || "current"}`;
   const cover = book.cover || assignedFallbackCover;
+  countBookOpened(book.id);
 
   try {
     // A parsed copy on the device means no EPUB download and no re-parse at all.

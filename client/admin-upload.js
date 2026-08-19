@@ -15,13 +15,19 @@ const els = {
   crawlerCreationStatus: document.getElementById("crawlerCreationStatus"),
   crawlerReach: document.getElementById("crawlerReach"),
   crawlerMaxBooks: document.getElementById("crawlerMaxBooks"),
-  crawlerMinChapters: document.getElementById("crawlerMinChapters"),
   crawlerUpdateExisting: document.getElementById("crawlerUpdateExisting"),
   crawlerStateBadge: document.getElementById("crawlerStateBadge"),
   crawlerStateMessage: document.getElementById("crawlerStateMessage"),
   crawlerStateMeta: document.getElementById("crawlerStateMeta"),
   crawlerWorkerWarning: document.getElementById("crawlerWorkerWarning"),
   crawlerRefresh: document.getElementById("crawlerRefresh"),
+  statsTab: document.getElementById("adminStatsTab"),
+  statsPanel: document.getElementById("adminStatsPanel"),
+  statsGrid: document.getElementById("adminStatsGrid"),
+  statsBooks: document.getElementById("adminStatsBooks"),
+  statsBooksEmpty: document.getElementById("adminStatsBooksEmpty"),
+  statsNote: document.getElementById("adminStatsNote"),
+  statsRefresh: document.getElementById("adminStatsRefresh"),
   bookSelect: document.getElementById("adminBookSelect"),
   password: document.getElementById("adminPassword"),
   epub: document.getElementById("adminEpub"),
@@ -56,6 +62,8 @@ export function mountAdmin() {
     els.crawlerForm?.addEventListener("submit", saveCrawlerConfig);
     els.libraryTab?.addEventListener("click", () => selectAdminTab("library"));
     els.crawlerTab?.addEventListener("click", () => selectAdminTab("crawler"));
+    els.statsTab?.addEventListener("click", () => selectAdminTab("stats"));
+    els.statsRefresh?.addEventListener("click", loadAnalytics);
     els.crawlerRefresh?.addEventListener("click", loadCrawlerConfig);
     els.crawlerWordCount?.addEventListener("change", describeCrawlerReach);
     els.crawlerForm?.querySelectorAll('[name="crawlerCategory"]').forEach((input) => {
@@ -243,7 +251,6 @@ async function loadCrawlerConfig() {
   fillChoices(els.crawlerCreationStatus, result.creationStatuses, result.config.creationStatus);
   els.crawlerEnabled.checked = Boolean(result.config.enabled);
   els.crawlerMaxBooks.value = String(result.config.maxNewBooksPerRun || 1);
-  els.crawlerMinChapters.value = String(result.config.minChapterCount || 0);
   els.crawlerUpdateExisting.checked = result.config.updateExisting !== false;
   const selected = new Set(result.config.categories || []);
   els.crawlerForm.querySelectorAll('[name="crawlerCategory"]').forEach((input) => { input.checked = selected.has(input.value); });
@@ -283,6 +290,64 @@ function describeCrawlerReach() {
   els.crawlerReach.textContent = `${genres} thể loại · mỗi truyện có tối thiểu ~${minWords.toLocaleString("vi-VN")} chữ (khoảng ${floor}+ chương). Fanqie lọc sẵn nên không cần quét từng truyện.`;
 }
 
+async function loadAnalytics() {
+  setStatus("Đang tải số liệu truy cập...");
+  try {
+    renderAnalytics(await requestJson("/api/admin/analytics"));
+    setStatus("");
+  } catch (error) {
+    setStatus(error.message, true);
+  }
+}
+
+function renderAnalytics(summary) {
+  const tiles = [
+    { label: "Hôm nay", data: summary.today },
+    { label: "7 ngày qua", data: summary.last7Days },
+    { label: "30 ngày qua", data: summary.last30Days },
+    { label: "Tổng cộng", data: summary.allTime }
+  ];
+
+  const grid = document.createDocumentFragment();
+  tiles.forEach((tile) => {
+    const card = document.createElement("div");
+    card.className = "stats-card";
+    appendText(card, "span", "stats-card-label", tile.label);
+    appendText(card, "strong", "stats-card-value", formatCount(tile.data?.visits));
+    appendText(card, "small", "stats-card-meta", `${formatCount(tile.data?.reads)} lượt mở truyện`);
+    grid.appendChild(card);
+  });
+  els.statsGrid.replaceChildren(grid);
+
+  const books = Array.isArray(summary.topBooks) ? summary.topBooks : [];
+  const list = document.createDocumentFragment();
+  books.forEach((book) => {
+    const item = document.createElement("li");
+    appendText(item, "span", "stats-book-title", book.title || book.bookId);
+    appendText(item, "span", "stats-book-count", `${formatCount(book.reads)} lượt`);
+    list.appendChild(item);
+  });
+  els.statsBooks.replaceChildren(list);
+  els.statsBooksEmpty.hidden = books.length > 0;
+
+  const range = summary.firstDay ? `từ ${summary.firstDay}` : "chưa có dữ liệu";
+  els.statsNote.textContent = summary.storageReady
+    ? `Đếm theo phiên truy cập của trình duyệt (${range}, giữ 60 ngày gần nhất). Không lưu IP, cookie hay danh tính người đọc, nên con số là số phiên chứ không phải số người chính xác.`
+    : "Vercel Blob chưa được kết nối nên số liệu chưa được lưu.";
+}
+
+function formatCount(value) {
+  return Number(value || 0).toLocaleString("vi-VN");
+}
+
+function appendText(parent, tagName, className, value) {
+  const element = document.createElement(tagName);
+  if (className) element.className = className;
+  element.textContent = value;
+  parent.appendChild(element);
+  return element;
+}
+
 async function saveCrawlerConfig(event) {
   event.preventDefault();
   const categories = Array.from(els.crawlerForm.querySelectorAll('[name="crawlerCategory"]:checked'), (input) => input.value);
@@ -299,7 +364,6 @@ async function saveCrawlerConfig(event) {
         wordCountBucket: els.crawlerWordCount.value,
         creationStatus: els.crawlerCreationStatus.value,
         maxNewBooksPerRun: els.crawlerMaxBooks.value,
-        minChapterCount: els.crawlerMinChapters.value,
         updateExisting: els.crawlerUpdateExisting.checked
       })
     });
@@ -322,16 +386,22 @@ function renderCrawlerStatus(status = {}) {
   els.crawlerStateMeta.textContent = `${finished} · Đã thêm ${status.published || 0} · Lỗi ${status.failed || 0} · Lịch 15 phút`;
 }
 
+const ADMIN_TABS = [
+  { key: "library", tab: "libraryTab", panel: "uploadForm" },
+  { key: "crawler", tab: "crawlerTab", panel: "crawlerForm" },
+  { key: "stats", tab: "statsTab", panel: "statsPanel" }
+];
+
 function selectAdminTab(tab) {
-  activeAdminTab = tab === "crawler" ? "crawler" : "library";
-  const crawlerActive = activeAdminTab === "crawler";
-  els.libraryTab.classList.toggle("active", !crawlerActive);
-  els.libraryTab.setAttribute("aria-selected", String(!crawlerActive));
-  els.crawlerTab.classList.toggle("active", crawlerActive);
-  els.crawlerTab.setAttribute("aria-selected", String(crawlerActive));
-  els.uploadForm.hidden = crawlerActive;
-  els.crawlerForm.hidden = !crawlerActive;
+  activeAdminTab = ADMIN_TABS.some((entry) => entry.key === tab) ? tab : "library";
+  ADMIN_TABS.forEach(({ key, tab: tabId, panel }) => {
+    const active = key === activeAdminTab;
+    els[tabId]?.classList.toggle("active", active);
+    els[tabId]?.setAttribute("aria-selected", String(active));
+    if (els[panel]) els[panel].hidden = !active;
+  });
   setStatus("");
+  if (activeAdminTab === "stats") loadAnalytics();
 }
 
 function renderBookOptions(selectedId = "") {
@@ -405,8 +475,9 @@ async function requestJson(url, options = {}) {
 function showAuthenticated(authenticated) {
   els.loginForm.hidden = authenticated;
   els.tabs.hidden = !authenticated;
-  els.uploadForm.hidden = !authenticated || activeAdminTab !== "library";
-  els.crawlerForm.hidden = !authenticated || activeAdminTab !== "crawler";
+  ADMIN_TABS.forEach(({ key, panel }) => {
+    if (els[panel]) els[panel].hidden = !authenticated || activeAdminTab !== key;
+  });
   if (!authenticated) requestAnimationFrame(() => els.password.focus());
 }
 
