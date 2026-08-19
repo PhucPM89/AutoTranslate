@@ -6,7 +6,7 @@
     <meta name="description" content="Thư viện truyện dịch cá nhân, đọc EPUB, dịch chương và nghe audio tiếng Việt.">
     <title>Tàng Thư</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="/style.css?v=20260819-10">
+    <link rel="stylesheet" href="/style.css?v=20260819-13">
   </head>
   <body class="dark">
     <section id="libraryView" class="library-view">
@@ -40,10 +40,22 @@
 
       <main class="library-main">
         <section class="library-intro" aria-labelledby="libraryHeading">
+          <img id="featuredBackdrop" class="featured-backdrop" src="/library/covers/misty-pagoda.jpg" alt="" aria-hidden="true">
+          <div class="featured-overlay" aria-hidden="true"></div>
           <div class="intro-copy">
-            <p class="eyebrow">Thư viện truyện · Dịch theo chương · Nghe tiếng Việt</p>
+            <p class="eyebrow">Thư viện truyện dịch chọn lọc</p>
             <h1 id="libraryHeading">Tàng Thư</h1>
             <p id="libraryTagline">Một góc đọc truyện Trung được tuyển chọn, dịch và nghe ngay trong cùng một không gian.</p>
+            <div id="featuredStory" class="featured-story">
+              <div class="featured-labels"><span id="featuredGenre">Đề cử hôm nay</span><span id="featuredStatus">Có sẵn</span></div>
+              <h2 id="featuredTitle">Đang mở kệ sách...</h2>
+              <p id="featuredDescription">Những câu chuyện mới đang được chuẩn bị.</p>
+              <div class="featured-meta"><span id="featuredAuthor">Tác giả đang cập nhật</span><span id="featuredChapters">EPUB</span></div>
+              <div class="featured-actions">
+                <button id="featuredRead" class="featured-read" type="button"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m5 3 14 9-14 9V3Z"></path></svg>Đọc ngay</button>
+                <a class="featured-browse" href="#catalog">Xem toàn bộ thư viện<svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg></a>
+              </div>
+            </div>
           </div>
           <div class="library-stats" aria-label="Thống kê thư viện">
             <div><strong id="bookCount">0</strong><span>đầu truyện</span></div>
@@ -59,7 +71,7 @@
 
         <section id="catalog" class="catalog-section">
           <header class="catalog-header">
-            <div><p class="eyebrow">Danh mục</p><h2>Truyện trong thư viện</h2></div>
+            <div><p class="eyebrow">Khám phá kho truyện</p><h2>Truyện trong thư viện</h2><p class="catalog-subtitle">Từ tiên hiệp, huyền huyễn đến linh dị và trinh thám.</p></div>
             <div class="catalog-controls">
               <label class="catalog-search"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><input id="librarySearch" type="search" placeholder="Tìm tên truyện, tác giả..." autocomplete="off"></label>
               <label class="genre-filter"><span class="sr-only">Lọc thể loại</span><select id="libraryGenre"><option value="">Tất cả thể loại</option></select></label>
@@ -214,7 +226,7 @@
     </div>
 
     <script src="/vendor/jszip.min.js"></script>
-    <script src="/app.js?v=20260819-8"></script>
+    <script src="/app.js?v=20260819-9"></script>
     <script src="/admin-upload.js?v=20260819-10"></script>
   </body>
 </html>

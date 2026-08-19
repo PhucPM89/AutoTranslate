@@ -14,6 +14,7 @@ const libraryState = {
   site: {},
   books: [],
   cachedBook: null,
+  featuredBook: null,
   catalogPage: 1
 };
 
@@ -61,6 +62,15 @@ const els = {
   libraryBrand: document.getElementById("libraryBrand"),
   libraryName: document.getElementById("libraryName"),
   libraryTagline: document.getElementById("libraryTagline"),
+  featuredBackdrop: document.getElementById("featuredBackdrop"),
+  featuredStory: document.getElementById("featuredStory"),
+  featuredGenre: document.getElementById("featuredGenre"),
+  featuredStatus: document.getElementById("featuredStatus"),
+  featuredTitle: document.getElementById("featuredTitle"),
+  featuredDescription: document.getElementById("featuredDescription"),
+  featuredAuthor: document.getElementById("featuredAuthor"),
+  featuredChapters: document.getElementById("featuredChapters"),
+  featuredRead: document.getElementById("featuredRead"),
   librarySearch: document.getElementById("librarySearch"),
   libraryGenre: document.getElementById("libraryGenre"),
   catalogGrid: document.getElementById("catalogGrid"),
@@ -132,6 +142,7 @@ function bindEvents() {
   els.libraryBrand.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
   els.librarySearch.addEventListener("input", resetCatalogPage);
   els.libraryGenre.addEventListener("change", resetCatalogPage);
+  els.featuredRead.addEventListener("click", openFeaturedBook);
   els.catalogPrevPage.addEventListener("click", () => changeCatalogPage(libraryState.catalogPage - 1));
   els.catalogNextPage.addEventListener("click", () => changeCatalogPage(libraryState.catalogPage + 1));
   els.continueReading.addEventListener("click", resumeCachedBook);
@@ -222,8 +233,35 @@ function applyLibraryManifest(manifest) {
   libraryState.site = manifest?.site && typeof manifest.site === "object" ? manifest.site : {};
   libraryState.books = Array.isArray(manifest?.books) ? manifest.books.filter(isValidLibraryBook) : [];
   applyLibrarySiteSettings();
+  renderFeaturedBook();
   renderGenreOptions();
   renderCatalog();
+}
+
+function renderFeaturedBook() {
+  const sorted = [...libraryState.books].sort((a, b) =>
+    Number(Boolean(b.featured)) - Number(Boolean(a.featured)) || String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""))
+  );
+  const book = sorted.find((item) => item.cover) || sorted[0] || null;
+  libraryState.featuredBook = book;
+  els.featuredStory.hidden = !book;
+  els.featuredRead.disabled = !book;
+  if (!book) return;
+
+  const fallbackCover = fallbackCoverForBook(book);
+  els.featuredBackdrop.src = book.cover || fallbackCover;
+  els.featuredBackdrop.addEventListener("error", () => { els.featuredBackdrop.src = fallbackCover; }, { once: true });
+  els.featuredGenre.textContent = book.genre || "Đề cử hôm nay";
+  els.featuredStatus.textContent = book.status || "Có sẵn";
+  els.featuredTitle.textContent = book.title;
+  els.featuredDescription.textContent = book.description || "Mở truyện để xem mục lục và bắt đầu dịch theo chương.";
+  els.featuredAuthor.textContent = book.author ? `Tác giả ${book.author}` : "Tác giả đang cập nhật";
+  els.featuredChapters.textContent = book.chapterCount ? `${book.chapterCount} chương` : "Định dạng EPUB";
+}
+
+function openFeaturedBook() {
+  const book = libraryState.featuredBook;
+  if (book) loadCatalogBook(book, fallbackCoverForBook(book));
 }
 
 window.addEventListener("library:refresh", (event) => {
@@ -272,7 +310,7 @@ function renderCatalog() {
   const visibleBooks = books.slice(start, start + CATALOG_PAGE_SIZE);
 
   els.catalogGrid.innerHTML = "";
-  visibleBooks.forEach((book) => els.catalogGrid.appendChild(createBookCard(book)));
+  visibleBooks.forEach((book, index) => els.catalogGrid.appendChild(createBookCard(book, start + index)));
   els.catalogEmpty.hidden = books.length > 0;
   renderCatalogPagination(books.length, totalPages, start, visibleBooks.length);
 }
@@ -341,7 +379,7 @@ function paginationItems(totalPages, currentPage) {
   return items;
 }
 
-function createBookCard(book) {
+function createBookCard(book, index = 0) {
   const article = document.createElement("article");
   article.className = "book-card";
 
@@ -358,6 +396,12 @@ function createBookCard(book) {
     image.src = fallbackCover;
   }, { once: true });
   coverButton.appendChild(image);
+  appendTextElement(coverButton, "span", "book-order", String(index + 1).padStart(2, "0"));
+  const coverAction = document.createElement("span");
+  coverAction.className = "book-cover-action";
+  coverAction.setAttribute("aria-hidden", "true");
+  coverAction.innerHTML = '<svg class="icon" viewBox="0 0 24 24"><path d="m5 3 14 9-14 9V3Z"></path></svg>';
+  coverButton.appendChild(coverAction);
   coverButton.addEventListener("click", () => loadCatalogBook(book, fallbackCover));
 
   const body = document.createElement("div");
