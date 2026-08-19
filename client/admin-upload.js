@@ -12,6 +12,7 @@ const els = {
   crawlerForm: document.getElementById("adminCrawlerForm"),
   crawlerEnabled: document.getElementById("crawlerEnabled"),
   crawlerMaxBooks: document.getElementById("crawlerMaxBooks"),
+  crawlerMinChapters: document.getElementById("crawlerMinChapters"),
   crawlerUpdateExisting: document.getElementById("crawlerUpdateExisting"),
   crawlerStateBadge: document.getElementById("crawlerStateBadge"),
   crawlerStateMessage: document.getElementById("crawlerStateMessage"),
@@ -224,6 +225,7 @@ async function loadCrawlerConfig() {
   const result = await requestJson("/api/admin/crawler");
   els.crawlerEnabled.checked = Boolean(result.config.enabled);
   els.crawlerMaxBooks.value = String(result.config.maxNewBooksPerRun || 1);
+  els.crawlerMinChapters.value = String(result.config.minChapterCount || 0);
   els.crawlerUpdateExisting.checked = result.config.updateExisting !== false;
   const selected = new Set(result.config.categories || []);
   els.crawlerForm.querySelectorAll('[name="crawlerCategory"]').forEach((input) => { input.checked = selected.has(input.value); });
@@ -245,6 +247,7 @@ async function saveCrawlerConfig(event) {
         enabled: els.crawlerEnabled.checked,
         categories,
         maxNewBooksPerRun: els.crawlerMaxBooks.value,
+        minChapterCount: els.crawlerMinChapters.value,
         updateExisting: els.crawlerUpdateExisting.checked
       })
     });

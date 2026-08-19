@@ -526,11 +526,16 @@ body {
 .crawler-settings {
   align-items: end;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 1rem;
   margin-top: 1rem;
 }
 
 .crawler-settings .admin-field { flex: 1; }
+.crawler-settings .admin-field small {
+  color: var(--muted);
+  font-size: 0.66rem;
+}
 .crawler-update-check { min-height: 42px; }
 .crawler-warning { margin: 0.8rem 0 0; color: var(--danger); font-size: 0.72rem; }
 

@@ -35,13 +35,23 @@ async function main() {
     const excludedIds = new Set(config.excludedSourceIds || []);
     const existingBooks = (catalog.books || []).filter((book) => book.source === "fanqie" && book.sourceId && !excludedIds.has(String(book.sourceId)));
     const existingIds = new Set(existingBooks.map((book) => String(book.sourceId)));
-    const newBooks = candidates.filter((item) => !existingIds.has(item.sourceId) && !excludedIds.has(item.sourceId)).slice(0, config.maxNewBooksPerRun);
-    const jobs = selectWorkItems(newBooks, existingBooks, config.updateExisting);
+    const updateJobs = selectWorkItems([], existingBooks, config.updateExisting);
+    const newCandidates = candidates.filter((item) => !existingIds.has(item.sourceId) && !excludedIds.has(item.sourceId));
+    if (!updateJobs.length && config.minChapterCount > 0) {
+      status.message = `Đang tìm truyện từ ${config.minChapterCount} chương trở lên...`;
+      await updateStatus(status);
+    }
+    const newBooks = updateJobs.length
+      ? []
+      : await selectNewBookCandidates(newCandidates, config.minChapterCount, config.maxNewBooksPerRun);
+    const jobs = updateJobs.length ? updateJobs : newBooks;
     status.discovered = jobs.filter((item) => !item.isUpdate).length;
 
     if (!jobs.length) {
       status.state = "success";
-      status.message = "Không có truyện mới phù hợp trong bảng xếp hạng.";
+      status.message = config.minChapterCount > 0
+        ? `Không tìm thấy truyện mới từ ${config.minChapterCount} chương trở lên trong bảng xếp hạng.`
+        : "Không có truyện mới phù hợp trong bảng xếp hạng.";
       status.finishedAt = new Date().toISOString();
       await updateStatus(status);
       return;
@@ -52,7 +62,7 @@ async function main() {
       status.message = `Đang tải Fanqie book ${candidate.sourceId}...`;
       await updateStatus(status);
       try {
-        const published = await downloadAndPublish(candidate, status);
+        const published = await downloadAndPublish(candidate, status, config.minChapterCount);
         status.published += 1;
         status.message = candidate.isUpdate
           ? `Đã cập nhật ${published.title}.`
@@ -131,7 +141,35 @@ function roundRobin(groups) {
   return output;
 }
 
-async function downloadAndPublish(candidate, status) {
+async function selectNewBookCandidates(candidates, minChapterCount, limit, loadPage = fetchText) {
+  const minimum = Math.max(0, Number.parseInt(minChapterCount, 10) || 0);
+  const maximum = Math.max(1, Number.parseInt(limit, 10) || 1);
+  if (!minimum) return candidates.slice(0, maximum);
+
+  const selected = [];
+  const scanLimit = Math.min(candidates.length, Math.max(10, maximum * 10));
+  for (const candidate of candidates.slice(0, scanLimit)) {
+    try {
+      const html = await loadPage(`https://fanqienovel.com/page/${candidate.sourceId}`);
+      const chapterCount = parseFanqieChapterCount(html);
+      if (chapterCount !== null && chapterCount >= minimum) selected.push({ ...candidate, listedChapterCount: chapterCount });
+    } catch (error) {
+      console.warn(`Không kiểm tra được số chương Fanqie ${candidate.sourceId}: ${error.message}`);
+    }
+    if (selected.length >= maximum) break;
+  }
+  return selected;
+}
+
+function parseFanqieChapterCount(html) {
+  const source = String(html || "");
+  const preferred = source.match(/["']chapterTotal["']\s*:\s*(\d+)\s*,\s*["']followStatus["']/);
+  const fallback = source.match(/["']chapterTotal["']\s*:\s*(\d+)/);
+  const value = Number.parseInt((preferred || fallback)?.[1], 10);
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+async function downloadAndPublish(candidate, status, minChapterCount = 0) {
   const before = new Map(findFiles(TOMATO_DATA_DIR, ".epub").map((file) => [file, fs.statSync(file).mtimeMs]));
   const startedAt = Date.now();
   const job = await tomatoRequest("/api/jobs", {
@@ -145,6 +183,9 @@ async function downloadAndPublish(candidate, status) {
 
   const epubBuffer = fs.readFileSync(epubPath);
   const metadata = await readEpubMetadata(epubBuffer);
+  if (!candidate.isUpdate && minChapterCount > 0 && metadata.chapterCount < minChapterCount) {
+    throw new Error(`EPUB chỉ có ${metadata.chapterCount} chương, thấp hơn mức tối thiểu ${minChapterCount}.`);
+  }
   status.message = `Đang dịch thông tin Fanqie book ${candidate.sourceId}...`;
   await updateStatus(status);
   const translatedMetadata = await siteRequest("/api/crawler/control", {
@@ -347,7 +388,7 @@ function findFiles(root, extension) {
 }
 
 async function fetchText(url) {
-  const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; TangThuCrawler/1.0)", "Accept-Language": "zh-CN,zh;q=0.9" }, signal: AbortSignal.timeout(30000) });
+  const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; TramChuCrawler/1.0)", "Accept-Language": "zh-CN,zh;q=0.9" }, signal: AbortSignal.timeout(30000) });
   if (!response.ok) throw new Error(`Fanqie trả HTTP ${response.status}.`);
   return response.text();
 }
@@ -415,4 +456,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { parseRankBookIds, roundRobin, readEpubMetadata, selectWorkItems };
+module.exports = { parseRankBookIds, parseFanqieChapterCount, roundRobin, readEpubMetadata, selectWorkItems, selectNewBookCandidates };

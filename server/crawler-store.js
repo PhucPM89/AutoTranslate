@@ -16,6 +16,7 @@ const DEFAULT_CONFIG = {
   enabled: false,
   categories: Object.keys(CATEGORY_DEFINITIONS),
   maxNewBooksPerRun: 1,
+  minChapterCount: 0,
   updateExisting: true,
   excludedSourceIds: []
 };
@@ -70,6 +71,7 @@ function sanitizeCrawlerConfig(value) {
     enabled: Boolean(value?.enabled),
     categories: categories.length ? categories : [...DEFAULT_CONFIG.categories],
     maxNewBooksPerRun: clampInteger(value?.maxNewBooksPerRun, 1, 3, DEFAULT_CONFIG.maxNewBooksPerRun),
+    minChapterCount: clampInteger(value?.minChapterCount, 0, 10000, DEFAULT_CONFIG.minChapterCount),
     updateExisting: value?.updateExisting !== false,
     excludedSourceIds: Array.isArray(value?.excludedSourceIds)
       ? Array.from(new Set(value.excludedSourceIds.map(String).filter((id) => /^\d{10,30}$/.test(id)))).slice(0, 500)

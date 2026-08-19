@@ -4,19 +4,21 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const JSZip = require("jszip");
 const { sanitizeCrawlerConfig, sanitizeCrawlerStatus, isCrawlerRequest } = require("./crawler-store");
-const { parseRankBookIds, roundRobin, readEpubMetadata, selectWorkItems } = require("../scripts/crawler-worker");
+const { parseRankBookIds, parseFanqieChapterCount, roundRobin, readEpubMetadata, selectWorkItems, selectNewBookCandidates } = require("../scripts/crawler-worker");
 
 test("sanitizes crawler configuration and removes unknown categories", () => {
   assert.deepEqual(sanitizeCrawlerConfig({
     enabled: true,
     categories: ["xianxia", "unknown", "xianxia", "horror"],
     maxNewBooksPerRun: 99,
+    minChapterCount: 20000,
     updateExisting: false,
     excludedSourceIds: ["1234567890123", "bad", "1234567890123"]
   }), {
     enabled: true,
     categories: ["xianxia", "horror"],
     maxNewBooksPerRun: 3,
+    minChapterCount: 10000,
     updateExisting: false,
     excludedSourceIds: ["1234567890123"]
   });
@@ -47,6 +49,21 @@ test("extracts unique Fanqie book IDs and interleaves genres", () => {
   const html = '<a href="/page/7077516958534470656">A</a><a href="/page/7077516958534470656">A</a><a href="/page/7637464494632881214">B</a>';
   assert.deepEqual(parseRankBookIds(html), ["7077516958534470656", "7637464494632881214"]);
   assert.deepEqual(roundRobin([["a1", "a2", "a3"], ["b1", "b2"], ["c1"]]), ["a1", "b1", "c1", "a2", "b2", "a3"]);
+});
+
+test("reads Fanqie chapter totals and keeps only books above the configured minimum", async () => {
+  assert.equal(parseFanqieChapterCount('<script>{"chapterTotal":321,"followStatus":0}</script>'), 321);
+  assert.equal(parseFanqieChapterCount("<html>missing</html>"), null);
+  const candidates = ["1", "2", "3"].map((sourceId) => ({ sourceId, genre: "Tiên hiệp" }));
+  const totals = { 1: 80, 2: 220, 3: 450 };
+  const selected = await selectNewBookCandidates(candidates, 200, 2, async (url) => {
+    const sourceId = url.split("/").pop();
+    return `{"chapterTotal":${totals[sourceId]},"followStatus":0}`;
+  });
+  assert.deepEqual(selected, [
+    { sourceId: "2", genre: "Tiên hiệp", listedChapterCount: 220 },
+    { sourceId: "3", genre: "Tiên hiệp", listedChapterCount: 450 }
+  ]);
 });
 
 test("refreshes the oldest stale book before discovering a new one", () => {

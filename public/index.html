@@ -189,6 +189,7 @@
         </fieldset>
         <div class="crawler-settings">
           <label class="admin-field"><span>Truyện mới mỗi lượt</span><select id="crawlerMaxBooks"><option value="1">1 truyện</option><option value="2">2 truyện</option><option value="3">3 truyện</option></select></label>
+          <label class="admin-field"><span>Số chương tối thiểu</span><input id="crawlerMinChapters" type="number" min="0" max="10000" step="10" inputmode="numeric" value="0" aria-describedby="crawlerMinChaptersHint"><small id="crawlerMinChaptersHint">Nhập 0 để không giới hạn</small></label>
           <label class="admin-check crawler-update-check"><input id="crawlerUpdateExisting" type="checkbox"><span>Theo dõi truyện đã thêm</span></label>
         </div>
         <p id="crawlerWorkerWarning" class="crawler-warning" hidden>Worker chưa được cấp secret trên Vercel.</p>
@@ -250,6 +251,6 @@
 
     <script src="/vendor/jszip.min.js"></script>
     <script src="/app.js?v=20260819-13"></script>
-    <script src="/admin-upload.js?v=20260819-10"></script>
+    <script src="/admin-upload.js?v=20260819-11"></script>
   </body>
 </html>
