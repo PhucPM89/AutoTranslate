@@ -1,8 +1,8 @@
 const { pcmToMp3Base64 } = require("./mp3");
 
 const GEMINI_TTS_MODEL = process.env.GEMINI_TTS_MODEL || "gemini-3.1-flash-tts-preview";
-const GEMINI_TTS_TIMEOUT_MS = Number(process.env.GEMINI_TTS_TIMEOUT_MS || 35000);
-const MAX_SPEECH_TEXT_LENGTH = 6000;
+const GEMINI_TTS_TIMEOUT_MS = Number(process.env.GEMINI_TTS_TIMEOUT_MS || 50000);
+const MAX_SPEECH_TEXT_LENGTH = 5000;
 const ALLOWED_VOICES = new Set(["Kore", "Aoede", "Leda", "Puck", "Charon"]);
 const ALLOWED_RATES = new Set(["0.8", "1", "1.2", "1.5"]);
 const GENRE_DIRECTIONS = {

@@ -512,7 +512,7 @@ function speechProgressLabel(action) {
   return `${action} ${speechState.index + 1} / ${speechState.chunks.length}`;
 }
 
-function splitSpeechText(text, maxLength = 6000) {
+function splitSpeechText(text, maxLength = 5000) {
   const sentences = String(text || "")
     .split(/\n{2,}/)
     .flatMap((paragraph) => paragraph.match(/[^.!?…]+[.!?…]+|[^.!?…]+$/g) || [paragraph])
