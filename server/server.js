@@ -10,6 +10,24 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json({ limit: "8mb" }));
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  next();
+});
+
+app.all("/api/library", require("../api/library"));
+app.all("/api/admin/login", require("../api/admin/login"));
+app.all("/api/admin/session", require("../api/admin/session"));
+app.all("/api/admin/logout", require("../api/admin/logout"));
+app.all("/api/admin/upload", require("../api/admin/upload"));
+app.all("/api/admin/catalog", require("../api/admin/catalog"));
+app.all("/api/admin/crawler", require("../api/admin/crawler"));
+app.all("/api/crawler/control", require("../api/crawler/control"));
+app.all("/api/crawler/status", require("../api/crawler/status"));
+app.all("/api/crawler/publish", require("../api/crawler/publish"));
 
 const publicDir = path.join(__dirname, "..", "public");
 const jszipPath = path.join(__dirname, "..", "node_modules", "jszip", "dist", "jszip.min.js");

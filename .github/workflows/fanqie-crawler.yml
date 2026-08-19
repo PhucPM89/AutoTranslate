@@ -1,0 +1,66 @@
+name: Fanqie crawler
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: fanqie-crawler
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      SITE_URL: https://auto-translate-xi.vercel.app
+      CRAWLER_SECRET: ${{ secrets.CRAWLER_SECRET }}
+      BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+      TOMATO_PASSWORD: ${{ secrets.CRAWLER_SECRET }}
+      TOMATO_DATA_DIR: ${{ github.workspace }}/.crawler-data
+    steps:
+      - name: Checkout website
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install worker dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Restore Tomato state
+        uses: actions/cache@v4
+        with:
+          path: .crawler-data
+          key: tomato-data-${{ github.run_id }}
+          restore-keys: |
+            tomato-data-
+
+      - name: Start Tomato downloader
+        run: |
+          mkdir -p .crawler-data/library
+          docker run -d --name tomato-crawler \
+            -p 18423:18423 \
+            -v "${{ github.workspace }}/.crawler-data:/data" \
+            -e TOMATO_WEB_ADDR=0.0.0.0:18423 \
+            -e TOMATO_WEB_PASSWORD="$TOMATO_PASSWORD" \
+            -e TOMATO_DATA_DIR=/data \
+            zhongbai233/tomato-novel-downloader-webui:latest
+
+      - name: Discover and publish novels
+        run: node scripts/crawler-worker.js
+
+      - name: Show Tomato logs on failure
+        if: failure()
+        run: docker logs --tail 300 tomato-crawler || true
+
+      - name: Make state cache readable
+        if: always()
+        run: sudo chown -R "$USER:$USER" .crawler-data || true

@@ -4,15 +4,29 @@ const state = {
   bookId: "",
   fileName: "",
   title: "",
+  cover: "",
   chapters: [],
   currentIndex: 0,
   translations: {}
 };
 
+const libraryState = {
+  site: {},
+  books: [],
+  cachedBook: null,
+  catalogPage: 1
+};
+
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const CATALOG_PAGE_SIZE = 10;
 const CACHE_DB_NAME = "epubTranslator.cache";
 const CACHE_DB_VERSION = 1;
 const CACHE_STORE = "books";
+const FALLBACK_BOOK_COVERS = [
+  "/library/covers/night-temple.jpg",
+  "/library/covers/misty-pagoda.jpg",
+  "/library/covers/lantern-temple.jpg"
+];
 const SPEECH_VOICE_KEY = "epubTranslator.speechVoice";
 const SPEECH_RATE_KEY = "epubTranslator.speechRate";
 const SPEECH_GENRE_KEY = "epubTranslator.speechGenre";
@@ -42,9 +56,35 @@ const speechState = {
 };
 
 const els = {
+  libraryView: document.getElementById("libraryView"),
+  readerView: document.getElementById("readerView"),
+  libraryBrand: document.getElementById("libraryBrand"),
+  libraryName: document.getElementById("libraryName"),
+  libraryTagline: document.getElementById("libraryTagline"),
+  librarySearch: document.getElementById("librarySearch"),
+  libraryGenre: document.getElementById("libraryGenre"),
+  catalogGrid: document.getElementById("catalogGrid"),
+  catalogEmpty: document.getElementById("catalogEmpty"),
+  catalogPagination: document.getElementById("catalogPagination"),
+  catalogPaginationSummary: document.getElementById("catalogPaginationSummary"),
+  catalogPageNumbers: document.getElementById("catalogPageNumbers"),
+  catalogPrevPage: document.getElementById("catalogPrevPage"),
+  catalogNextPage: document.getElementById("catalogNextPage"),
+  bookCount: document.getElementById("bookCount"),
+  genreCount: document.getElementById("genreCount"),
+  contactLink: document.getElementById("contactLink"),
+  contactEmail: document.getElementById("contactEmail"),
+  continueSection: document.getElementById("continueSection"),
+  continueTitle: document.getElementById("continueTitle"),
+  continueMeta: document.getElementById("continueMeta"),
+  continueReading: document.getElementById("continueReading"),
+  backToLibrary: document.getElementById("backToLibrary"),
+  readerThemeToggle: document.getElementById("readerThemeToggle"),
+  readerImportButton: document.getElementById("readerImportButton"),
   fileInput: document.getElementById("fileInput"),
   bookTitle: document.getElementById("bookTitle"),
   bookMeta: document.getElementById("bookMeta"),
+  readerBookCover: document.getElementById("readerBookCover"),
   globalSearch: document.getElementById("globalSearch"),
   chapterSelect: document.getElementById("chapterSelect"),
   chapterList: document.getElementById("chapterList"),
@@ -85,10 +125,19 @@ const parser = new DOMParser();
 initPreferences();
 bindEvents();
 initSpeech();
-restoreCachedBook();
+initializeLibrary();
 
 function bindEvents() {
   els.fileInput.addEventListener("change", handleFile);
+  els.libraryBrand.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+  els.librarySearch.addEventListener("input", resetCatalogPage);
+  els.libraryGenre.addEventListener("change", resetCatalogPage);
+  els.catalogPrevPage.addEventListener("click", () => changeCatalogPage(libraryState.catalogPage - 1));
+  els.catalogNextPage.addEventListener("click", () => changeCatalogPage(libraryState.catalogPage + 1));
+  els.continueReading.addEventListener("click", resumeCachedBook);
+  els.backToLibrary.addEventListener("click", showLibrary);
+  els.readerImportButton.addEventListener("click", () => els.fileInput.click());
+  els.readerThemeToggle.addEventListener("click", toggleTheme);
   els.prevChapter.addEventListener("click", () => goToChapter(state.currentIndex - 1));
   els.nextChapter.addEventListener("click", () => goToChapter(state.currentIndex + 1));
   els.bottomPrevChapter.addEventListener("click", () => goToChapter(state.currentIndex - 1));
@@ -150,6 +199,291 @@ function toggleTheme() {
   els.themeLabel.textContent = isDark ? "Light" : "Dark";
 }
 
+async function initializeLibrary() {
+  await Promise.all([loadLibraryManifest(), restoreCachedBook()]);
+  updateContinueReading();
+}
+
+async function loadLibraryManifest() {
+  try {
+    let response = await fetch("/api/library", { cache: "no-store" });
+    if (!response.ok) response = await fetch("/library.json", { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    applyLibraryManifest(await response.json());
+  } catch (error) {
+    console.warn("Unable to load the source library.", error);
+    els.catalogGrid.innerHTML = "";
+    els.catalogEmpty.hidden = false;
+    els.catalogPagination.hidden = true;
+  }
+}
+
+function applyLibraryManifest(manifest) {
+  libraryState.site = manifest?.site && typeof manifest.site === "object" ? manifest.site : {};
+  libraryState.books = Array.isArray(manifest?.books) ? manifest.books.filter(isValidLibraryBook) : [];
+  applyLibrarySiteSettings();
+  renderGenreOptions();
+  renderCatalog();
+}
+
+window.addEventListener("library:refresh", (event) => {
+  if (event.detail?.books) applyLibraryManifest(event.detail);
+  else loadLibraryManifest();
+});
+
+function isValidLibraryBook(book) {
+  return Boolean(book && typeof book.id === "string" && typeof book.title === "string" && typeof book.epub === "string");
+}
+
+function applyLibrarySiteSettings() {
+  const name = libraryState.site.name || "Tàng Thư";
+  const tagline = libraryState.site.tagline || "Thư viện truyện dịch cá nhân";
+  const email = libraryState.site.contactEmail || "minhphuc2308031@gmail.com";
+  els.libraryName.textContent = name;
+  els.libraryTagline.textContent = tagline;
+  els.contactEmail.textContent = email;
+  els.contactLink.href = `mailto:${email}?subject=${encodeURIComponent("Yêu cầu thêm truyện vào thư viện")}`;
+  els.bookCount.textContent = String(libraryState.books.length);
+  els.genreCount.textContent = String(new Set(libraryState.books.map((book) => book.genre).filter(Boolean)).size);
+}
+
+function renderGenreOptions() {
+  const selected = els.libraryGenre.value;
+  const genres = Array.from(new Set(libraryState.books.map((book) => book.genre).filter(Boolean))).sort((a, b) =>
+    a.localeCompare(b, "vi")
+  );
+  els.libraryGenre.innerHTML = '<option value="">Tất cả thể loại</option>';
+  genres.forEach((genre) => {
+    const option = document.createElement("option");
+    option.value = genre;
+    option.textContent = genre;
+    els.libraryGenre.appendChild(option);
+  });
+  els.libraryGenre.value = genres.includes(selected) ? selected : "";
+}
+
+function renderCatalog() {
+  const books = getFilteredCatalogBooks()
+    .sort((a, b) => Number(Boolean(b.featured)) - Number(Boolean(a.featured)) || String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+
+  const totalPages = Math.max(1, Math.ceil(books.length / CATALOG_PAGE_SIZE));
+  libraryState.catalogPage = Math.min(Math.max(1, libraryState.catalogPage), totalPages);
+  const start = (libraryState.catalogPage - 1) * CATALOG_PAGE_SIZE;
+  const visibleBooks = books.slice(start, start + CATALOG_PAGE_SIZE);
+
+  els.catalogGrid.innerHTML = "";
+  visibleBooks.forEach((book) => els.catalogGrid.appendChild(createBookCard(book)));
+  els.catalogEmpty.hidden = books.length > 0;
+  renderCatalogPagination(books.length, totalPages, start, visibleBooks.length);
+}
+
+function resetCatalogPage() {
+  libraryState.catalogPage = 1;
+  renderCatalog();
+}
+
+function changeCatalogPage(page) {
+  const totalPages = Math.max(1, Math.ceil(getFilteredCatalogBooks().length / CATALOG_PAGE_SIZE));
+  const nextPage = Math.min(Math.max(1, page), totalPages);
+  if (nextPage === libraryState.catalogPage) return;
+  libraryState.catalogPage = nextPage;
+  renderCatalog();
+  document.getElementById("catalog").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function getFilteredCatalogBooks() {
+  const query = normalizeSearch(els.librarySearch.value);
+  const genre = els.libraryGenre.value;
+  return libraryState.books
+    .filter((book) => !genre || book.genre === genre)
+    .filter((book) => !query || normalizeSearch(`${book.title} ${book.author || ""} ${book.genre || ""}`).includes(query));
+}
+
+function renderCatalogPagination(totalBooks, totalPages, start, visibleCount) {
+  els.catalogPagination.hidden = totalBooks === 0;
+  if (!totalBooks) return;
+
+  els.catalogPaginationSummary.textContent = `${start + 1}–${start + visibleCount} / ${totalBooks} truyện`;
+  els.catalogPrevPage.disabled = libraryState.catalogPage === 1;
+  els.catalogNextPage.disabled = libraryState.catalogPage === totalPages;
+  els.catalogPageNumbers.innerHTML = "";
+
+  paginationItems(totalPages, libraryState.catalogPage).forEach((item) => {
+    if (item === "ellipsis") {
+      appendTextElement(els.catalogPageNumbers, "span", "pagination-ellipsis", "…");
+      return;
+    }
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "pagination-page";
+    button.textContent = String(item);
+    button.setAttribute("aria-label", `Trang ${item}`);
+    if (item === libraryState.catalogPage) {
+      button.classList.add("active");
+      button.setAttribute("aria-current", "page");
+    }
+    button.addEventListener("click", () => changeCatalogPage(item));
+    els.catalogPageNumbers.appendChild(button);
+  });
+}
+
+function paginationItems(totalPages, currentPage) {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1);
+  const pages = Array.from(new Set([1, totalPages, currentPage - 1, currentPage, currentPage + 1]))
+    .filter((page) => page >= 1 && page <= totalPages)
+    .sort((a, b) => a - b);
+  const items = [];
+  pages.forEach((page, index) => {
+    if (index && page - pages[index - 1] > 1) items.push("ellipsis");
+    items.push(page);
+  });
+  return items;
+}
+
+function createBookCard(book) {
+  const article = document.createElement("article");
+  article.className = "book-card";
+
+  const coverButton = document.createElement("button");
+  coverButton.type = "button";
+  coverButton.className = "book-cover";
+  coverButton.setAttribute("aria-label", `Đọc ${book.title}`);
+  const image = document.createElement("img");
+  const fallbackCover = fallbackCoverForBook(book);
+  image.src = book.cover || fallbackCover;
+  image.alt = `Bìa truyện ${book.title}`;
+  image.loading = "lazy";
+  image.addEventListener("error", () => {
+    image.src = fallbackCover;
+  }, { once: true });
+  coverButton.appendChild(image);
+  coverButton.addEventListener("click", () => loadCatalogBook(book, fallbackCover));
+
+  const body = document.createElement("div");
+  body.className = "book-card-body";
+  const meta = document.createElement("div");
+  meta.className = "book-card-meta";
+  appendTextElement(meta, "span", "genre-tag", book.genre || "Chưa phân loại");
+  appendTextElement(meta, "span", "book-status", book.status || "Có sẵn");
+  const title = appendTextElement(body, "h3", "", book.title);
+  const author = appendTextElement(body, "p", "book-author", book.author ? `Tác giả: ${book.author}` : "Tác giả chưa cập nhật");
+  const description = appendTextElement(body, "p", "book-description", book.description || "Mở truyện để xem mục lục và bắt đầu dịch theo chương.");
+  const footer = document.createElement("div");
+  footer.className = "book-card-footer";
+  appendTextElement(footer, "span", "", book.chapterCount ? `${book.chapterCount} chương` : "EPUB");
+  const readButton = document.createElement("button");
+  readButton.type = "button";
+  readButton.className = "book-read-button";
+  readButton.innerHTML = '<svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2Z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7Z"></path></svg><span>Đọc ngay</span>';
+  readButton.addEventListener("click", () => loadCatalogBook(book, fallbackCover));
+  footer.appendChild(readButton);
+  body.append(meta, title, author, description, footer);
+  article.append(coverButton, body);
+  return article;
+}
+
+function fallbackCoverForBook(book) {
+  const seed = String(book.id || book.title || "tang-thu");
+  const hash = Array.from(seed).reduce((value, character) => ((value * 31) + character.charCodeAt(0)) >>> 0, 0);
+  return FALLBACK_BOOK_COVERS[hash % FALLBACK_BOOK_COVERS.length];
+}
+
+function appendTextElement(parent, tagName, className, value) {
+  const element = document.createElement(tagName);
+  if (className) element.className = className;
+  element.textContent = value;
+  parent.appendChild(element);
+  return element;
+}
+
+function normalizeSearch(value) {
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+}
+
+function showReader() {
+  els.libraryView.hidden = true;
+  els.readerView.hidden = false;
+  window.scrollTo({ top: 0 });
+}
+
+function showLibrary() {
+  stopSpeech();
+  updateContinueReading();
+  els.readerView.hidden = true;
+  els.libraryView.hidden = false;
+  document.title = `${libraryState.site.name || "Tàng Thư"}`;
+  window.scrollTo({ top: 0 });
+}
+
+function resumeCachedBook() {
+  if (!state.chapters.length && libraryState.cachedBook) {
+    applyCachedBook(libraryState.cachedBook);
+    renderChapterControls();
+    goToChapter(libraryState.cachedBook.currentIndex || 0);
+  }
+  if (state.chapters.length) showReader();
+}
+
+function updateContinueReading() {
+  const cachedBook = libraryState.cachedBook;
+  if (!cachedBook || !Array.isArray(cachedBook.chapters) || !cachedBook.chapters.length) {
+    els.continueSection.hidden = true;
+    return;
+  }
+  const index = Math.min(Number(cachedBook.currentIndex) || 0, cachedBook.chapters.length - 1);
+  els.continueTitle.textContent = cachedBook.title || cachedBook.fileName || "EPUB gần đây";
+  els.continueMeta.textContent = `${displayCachedChapterTitle(cachedBook, index)} · ${index + 1}/${cachedBook.chapters.length}`;
+  els.continueSection.hidden = false;
+}
+
+function displayCachedChapterTitle(book, index) {
+  return book.chapters[index]?.title || `Chương ${index + 1}`;
+}
+
+async function loadCatalogBook(book, assignedFallbackCover = fallbackCoverForBook(book)) {
+  showReader();
+  setBusy(`Đang tải ${book.title}...`);
+  els.bookTitle.textContent = book.title;
+  els.bookMeta.textContent = "Đang chuẩn bị mục lục...";
+  els.readerBookCover.src = book.cover || assignedFallbackCover;
+  try {
+    const response = await fetch(book.epub);
+    if (!response.ok) throw new Error(`Không tải được EPUB (HTTP ${response.status}).`);
+    const arrayBuffer = await response.arrayBuffer();
+    await applyLoadedEpub(arrayBuffer, {
+      bookId: `library:${book.id}:${book.updatedAt || "current"}`,
+      fileName: book.epub.split("/").pop() || `${book.id}.epub`,
+      displayTitle: book.title,
+      cover: book.cover || assignedFallbackCover
+    });
+  } catch (error) {
+    resetReader(`Không thể mở truyện: ${error.message}`);
+  }
+}
+
+async function applyLoadedEpub(arrayBuffer, options) {
+  const existingCache = await readCachedBook(options.bookId);
+  const book = await parseEpub(arrayBuffer, options.fileName);
+  state.bookId = options.bookId;
+  state.fileName = options.fileName;
+  state.title = options.displayTitle || book.title || options.fileName.replace(/\.epub$/i, "");
+  state.cover = options.cover || fallbackCoverForBook({ id: state.bookId, title: state.title });
+  state.chapters = book.chapters;
+  state.translations = existingCache?.translations || {};
+  if (!state.chapters.length) throw new Error("Không tìm thấy chương có thể đọc.");
+
+  els.bookTitle.textContent = state.title;
+  els.bookMeta.textContent = `Tàng Thư · ${state.chapters.length} chương · Lưu tiến độ 7 ngày`;
+  els.readerBookCover.src = state.cover;
+  document.title = `${state.title} | Tàng Thư`;
+  renderChapterControls();
+  const savedIndex = Number(existingCache?.currentIndex ?? localStorage.getItem(currentChapterKey()) ?? "0");
+  goToChapter(Number.isInteger(savedIndex) ? savedIndex : 0);
+  await saveCurrentBookCache();
+  libraryState.cachedBook = await readCachedBook(state.bookId);
+}
+
 function initSpeech() {
   const savedGenre = localStorage.getItem(SPEECH_GENRE_KEY) || "fantasy";
   els.speechGenre.value = SPEECH_GENRE_PRESETS[savedGenre] ? savedGenre : "fantasy";
@@ -185,7 +519,7 @@ function applySpeechGenrePreset() {
 function pauseSpeechWhenHidden() {
   if (!document.hidden || speechState.mode !== "speaking") return;
   speechState.audio.pause();
-  setSpeechMode("paused", "Paused while tab is hidden");
+  setSpeechMode("paused", "Đã tạm dừng khi chuyển tab");
 }
 
 async function toggleSpeech() {
@@ -193,13 +527,13 @@ async function toggleSpeech() {
 
   if (speechState.mode === "speaking") {
     speechState.audio.pause();
-    setSpeechMode("paused", "Paused");
+    setSpeechMode("paused", "Đã tạm dừng");
     return;
   }
 
   if (speechState.mode === "paused") {
     await speechState.audio.play();
-    setSpeechMode("speaking", speechProgressLabel("Playing"));
+    setSpeechMode("speaking", speechProgressLabel("Đang phát"));
     return;
   }
 
@@ -255,11 +589,11 @@ async function playCurrentSpeechChunk(session) {
     };
 
     await speechState.audio.play();
-    setSpeechMode("speaking", speechProgressLabel("Playing"));
+    setSpeechMode("speaking", speechProgressLabel("Đang phát"));
     prefetchNextSpeechChunk(session);
   } catch (error) {
     if (error.name !== "AbortError" && session === speechState.session) {
-      stopSpeech(error.message || "Unable to generate audio");
+      stopSpeech(error.message || "Không thể tạo giọng đọc");
     }
   }
 }
@@ -417,7 +751,7 @@ function finishSpeech() {
   speechState.chunks = [];
   speechState.settings = null;
   speechState.index = 0;
-  setSpeechMode("idle", "Playback complete");
+  setSpeechMode("idle", "Đã đọc xong chương");
 }
 
 function stopSpeech(statusMessage = "") {
@@ -437,7 +771,7 @@ function stopSpeech(statusMessage = "") {
     speechState.audio.load();
   }
   releaseAllSpeechUrls();
-  setSpeechMode("idle", statusMessage || (hasSpeakableOutput() ? "Ready" : "No output available"));
+  setSpeechMode("idle", statusMessage || (hasSpeakableOutput() ? "Sẵn sàng" : "Chưa có bản dịch"));
 }
 
 function releaseSpeechUrl(index) {
@@ -457,10 +791,10 @@ function setSpeechMode(mode, statusMessage) {
   els.speechPlay.classList.toggle("is-speaking", mode === "speaking");
   els.speechPlay.classList.toggle("is-paused", mode === "paused");
   els.speechPlayLabel.textContent =
-    mode === "generating" ? "Generating" : mode === "speaking" ? "Pause" : mode === "paused" ? "Resume" : "Listen";
+    mode === "generating" ? "Đang tạo" : mode === "speaking" ? "Tạm dừng" : mode === "paused" ? "Tiếp tục" : "Nghe";
   els.speechPlay.setAttribute(
     "aria-label",
-    mode === "speaking" ? "Pause audio" : mode === "paused" ? "Resume audio" : "Listen to output"
+    mode === "speaking" ? "Tạm dừng audio" : mode === "paused" ? "Tiếp tục audio" : "Nghe bản dịch"
   );
   els.speechPlay.title = els.speechPlay.getAttribute("aria-label");
   els.speechStop.disabled = mode === "idle";
@@ -483,10 +817,10 @@ function updateSpeechAvailability() {
     const renderedOutput =
       !els.translationText.classList.contains("empty") && Boolean(els.translationText.textContent.trim());
     els.speechStatus.textContent = available
-      ? `Ready · Gemini AI · ${getRemainingSpeechRequests()}/${SPEECH_DAILY_REQUEST_BUDGET} left today`
+      ? `Sẵn sàng · Gemini AI · còn ${getRemainingSpeechRequests()}/${SPEECH_DAILY_REQUEST_BUDGET} lượt hôm nay`
       : renderedOutput
         ? "Output is not Vietnamese"
-        : "No output available";
+        : "Chưa có bản dịch";
   }
 }
 
@@ -581,32 +915,19 @@ async function handleFile(event) {
   const file = event.target.files?.[0];
   if (!file) return;
 
-  setBusy("Loading collection...");
+  showReader();
+  setBusy("Đang mở EPUB từ thiết bị...");
 
   try {
-    const bookId = makeBookId(file);
-    const existingCache = await readCachedBook(bookId);
     const arrayBuffer = await file.arrayBuffer();
-    const book = await parseEpub(arrayBuffer, file.name);
-    state.bookId = bookId;
-    state.fileName = file.name;
-    state.title = book.title || file.name.replace(/\.epub$/i, "");
-    state.chapters = book.chapters;
-    state.translations = existingCache?.translations || {};
-
-    if (!state.chapters.length) {
-      throw new Error("No readable documents found.");
-    }
-
-    els.bookTitle.textContent = "Document Workspace";
-    els.bookMeta.textContent = `${state.chapters.length} documents · Saved locally for 7 days`;
-    renderChapterControls();
-
-    const savedIndex = Number(existingCache?.currentIndex ?? localStorage.getItem(currentChapterKey()) ?? "0");
-    goToChapter(Number.isInteger(savedIndex) ? savedIndex : 0);
-    await saveCurrentBookCache();
+    await applyLoadedEpub(arrayBuffer, {
+      bookId: makeBookId(file),
+      fileName: file.name
+    });
   } catch (error) {
-    resetReader(`Unable to load collection: ${error.message}`);
+    resetReader(`Không thể mở EPUB: ${error.message}`);
+  } finally {
+    event.target.value = "";
   }
 }
 
@@ -730,9 +1051,12 @@ function renderChapterControls() {
     button.className = "document-item";
     button.dataset.index = String(index);
     button.classList.toggle("active", index === state.currentIndex);
-    button.innerHTML = `<span class="document-icon" aria-hidden="true"></span><span>${title}</span><small>${estimateDocumentSize(
-      chapter.text
-    )}</small>`;
+    const chapterIcon = document.createElement("span");
+    chapterIcon.className = "document-icon";
+    chapterIcon.setAttribute("aria-hidden", "true");
+    appendTextElement(button, "span", "", title);
+    appendTextElement(button, "small", "", estimateDocumentSize(chapter.text));
+    button.prepend(chapterIcon);
     button.addEventListener("click", () => goToChapter(index));
     els.chapterList.appendChild(button);
     visibleCount += 1;
@@ -744,7 +1068,7 @@ function renderChapterControls() {
     els.chapterSelect.value = String(state.currentIndex);
   }
   if (!visibleCount) {
-    els.chapterList.innerHTML = `<div class="empty-list">No matching documents</div>`;
+    els.chapterList.innerHTML = `<div class="empty-list">Không tìm thấy chương phù hợp</div>`;
   }
 }
 
@@ -763,7 +1087,7 @@ function goToChapter(index) {
   els.paperTitle.textContent = documentLabel;
   els.progressLabel.textContent = `${progress}%`;
   els.progressBar.style.width = `${progress}%`;
-  els.documentStatus.textContent = "Open";
+  els.documentStatus.textContent = "Đang mở";
   els.chapterCounter.textContent = chapterLabel;
   els.bottomChapterCounter.textContent = chapterLabel;
   els.chapterSelect.value = String(state.currentIndex);
@@ -798,14 +1122,14 @@ function loadCachedTranslation() {
     state.translations[state.currentIndex] = cached;
     els.translationText.textContent = cached;
     els.translationText.classList.remove("empty", "status-error", "is-loading");
-    els.outputStatus.textContent = "Cached";
+    els.outputStatus.textContent = "Đã lưu";
     els.translateButton.hidden = true;
     els.retranslateButton.hidden = false;
   } else {
-    els.translationText.textContent = "No output available.";
+    els.translationText.textContent = "Chưa có bản dịch.";
     els.translationText.classList.add("empty");
     els.translationText.classList.remove("status-error", "is-loading");
-    els.outputStatus.textContent = "Pending";
+    els.outputStatus.textContent = "Chờ dịch";
     els.translateButton.hidden = false;
     els.retranslateButton.hidden = true;
   }
@@ -826,7 +1150,7 @@ async function translateCurrentChapter(force) {
 
   stopSpeech();
   setTranslationStatus("Processing document...");
-  els.outputStatus.textContent = "Running";
+  els.outputStatus.textContent = "Đang dịch";
   els.translateButton.disabled = true;
   els.retranslateButton.disabled = true;
 
@@ -837,7 +1161,7 @@ async function translateCurrentChapter(force) {
       body: JSON.stringify({ text: chapter.text })
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Unable to process this document.");
+    if (!response.ok) throw new Error(data.error || "Không thể dịch chương này.");
     if (!isUsableTranslation(chapter.text, data.translation)) {
       throw new Error("Gemini vẫn trả lại nội dung tiếng Trung. Kết quả này chưa được lưu; hãy thử dịch lại.");
     }
@@ -852,12 +1176,12 @@ async function translateCurrentChapter(force) {
     els.translationText.textContent = data.translation;
     els.translationText.classList.remove("empty", "status-error", "is-loading");
     updateSpeechAvailability();
-    els.outputStatus.textContent = "Complete";
+    els.outputStatus.textContent = "Hoàn tất";
     els.translateButton.hidden = true;
     els.retranslateButton.hidden = false;
     if (data.elapsedMs) {
       const modelNote = Array.isArray(data.modelsUsed) && data.modelsUsed.length ? ` · ${data.modelsUsed.join(", ")}` : "";
-      els.bookMeta.textContent = `${state.chapters.length} documents · ${data.chunkCount || 1} tasks in ${formatSeconds(
+      els.bookMeta.textContent = `${state.chapters.length} chương · ${data.chunkCount || 1} phần trong ${formatSeconds(
         data.elapsedMs
       )}${modelNote}`;
     }
@@ -879,17 +1203,17 @@ function setTranslationStatus(message, isError = false) {
   els.translationText.classList.toggle("status-error", isError);
   els.translationText.classList.toggle("empty", !isError);
   els.translationText.classList.toggle("is-loading", !isError);
-  if (isError) els.outputStatus.textContent = "Error";
+  if (isError) els.outputStatus.textContent = "Lỗi";
   updateSpeechAvailability();
 }
 
 function setBusy(message) {
   stopSpeech();
   els.sourceText.textContent = message;
-  els.translationText.textContent = "No output available.";
+  els.translationText.textContent = "Chưa có bản dịch.";
   els.translationText.classList.add("empty");
   els.translationText.classList.remove("is-loading", "status-error");
-  els.outputStatus.textContent = "Loading";
+  els.outputStatus.textContent = "Đang tải";
   updateSpeechAvailability();
 }
 
@@ -898,18 +1222,20 @@ function resetReader(message) {
   state.bookId = "";
   state.fileName = "";
   state.title = "";
+  state.cover = "";
   state.chapters = [];
   state.currentIndex = 0;
   state.translations = {};
-  els.bookTitle.textContent = "Document Workspace";
+  els.bookTitle.textContent = "Tàng Thư";
   els.bookMeta.textContent = message;
+  els.readerBookCover.src = FALLBACK_BOOK_COVERS[1];
   els.sourceText.textContent = message;
-  els.chapterCounter.textContent = "No collection";
-  els.bottomChapterCounter.textContent = "No collection";
-  els.documentTitle.textContent = "No document selected";
-  els.paperTitle.textContent = "Output Preview";
-  els.documentStatus.textContent = "Idle";
-  els.outputStatus.textContent = "Pending";
+  els.chapterCounter.textContent = "Chưa có mục lục";
+  els.bottomChapterCounter.textContent = "Chưa có mục lục";
+  els.documentTitle.textContent = "Chưa chọn chương";
+  els.paperTitle.textContent = "Nội dung chương";
+  els.documentStatus.textContent = "Chờ";
+  els.outputStatus.textContent = "Chờ dịch";
   els.progressLabel.textContent = "0%";
   els.progressBar.style.width = "0%";
   els.documentCount.textContent = "0";
@@ -930,10 +1256,11 @@ async function restoreCachedBook() {
     const cachedBook = await readMostRecentCachedBook();
     if (!cachedBook) return;
 
+    libraryState.cachedBook = cachedBook;
     applyCachedBook(cachedBook);
     renderChapterControls();
     goToChapter(cachedBook.currentIndex || 0);
-    els.bookMeta.textContent = `Restored locally · ${state.chapters.length} documents · Expires ${formatDate(
+    els.bookMeta.textContent = `Khôi phục trên thiết bị · ${state.chapters.length} chương · Hết hạn ${formatDate(
       cachedBook.expiresAt
     )}`;
   } catch (error) {
@@ -944,11 +1271,15 @@ async function restoreCachedBook() {
 function applyCachedBook(cachedBook) {
   state.bookId = cachedBook.id;
   state.fileName = cachedBook.fileName || "";
-  state.title = cachedBook.title || cachedBook.fileName || "Cached EPUB";
+  state.title = cachedBook.title || cachedBook.fileName || "Truyện đã lưu";
+  state.cover = cachedBook.cover || fallbackCoverForBook({ id: state.bookId, title: state.title });
   state.chapters = Array.isArray(cachedBook.chapters) ? cachedBook.chapters : [];
   state.currentIndex = Number(cachedBook.currentIndex) || 0;
   state.translations = cachedBook.translations || {};
-  els.bookTitle.textContent = "Document Workspace";
+  els.bookTitle.textContent = state.title;
+  els.bookMeta.textContent = `Tàng Thư · ${state.chapters.length} chương · Đã lưu trên thiết bị`;
+  els.readerBookCover.src = state.cover;
+  document.title = `${state.title} | Tàng Thư`;
 }
 
 async function saveCurrentBookCache() {
@@ -959,6 +1290,7 @@ async function saveCurrentBookCache() {
     id: state.bookId,
     fileName: state.fileName,
     title: state.title,
+    cover: state.cover,
     chapters: state.chapters,
     currentIndex: state.currentIndex,
     translations: state.translations,
@@ -969,9 +1301,10 @@ async function saveCurrentBookCache() {
 
   try {
     await putCachedBook(cachedBook);
+    libraryState.cachedBook = cachedBook;
   } catch (error) {
     console.warn("Unable to save EPUB cache on this device.", error);
-    els.bookMeta.textContent = `${state.chapters.length} documents · Local cache unavailable`;
+    els.bookMeta.textContent = `${state.chapters.length} chương · Không thể lưu cache trên thiết bị`;
   }
 }
 
@@ -1078,13 +1411,13 @@ function makeBookId(file) {
 }
 
 function displayChapterTitle(index) {
-  return `Document ${String(index + 1).padStart(2, "0")}`;
+  return state.chapters[index]?.title || `Chương ${index + 1}`;
 }
 
 function estimateDocumentSize(text) {
   const words = text.trim().split(/\s+/).filter(Boolean).length;
-  if (words >= 1000) return `${Math.round(words / 100) / 10}k words`;
-  return `${words} words`;
+  if (words >= 1000) return `${Math.round(words / 100) / 10}k từ`;
+  return `${words} từ`;
 }
 
 function isDocumentType(mediaType, href) {

@@ -3,3 +3,9 @@ node_modules/
 .DS_Store
 npm-debug.log*
 .playwright-cli/
+public/admin-upload.js
+
+.vercel
+.env*
+.crawler-data/
+output/
