@@ -3,6 +3,8 @@
 const { isAdmin, isSameOrigin } = require("../../server/admin-auth");
 const {
   CATEGORY_DEFINITIONS,
+  WORD_COUNT_BUCKETS,
+  CREATION_STATUSES,
   readCrawlerConfig,
   updateCrawlerConfig,
   readCrawlerStatus
@@ -34,6 +36,10 @@ async function responsePayload() {
     config,
     status,
     categories: CATEGORY_DEFINITIONS,
+    // Option vocabularies come from the server so the admin form and the worker
+    // can never disagree about which Fanqie filter values are valid.
+    wordCountBuckets: WORD_COUNT_BUCKETS,
+    creationStatuses: CREATION_STATUSES,
     workerReady: Boolean(process.env.CRAWLER_SECRET)
   };
 }

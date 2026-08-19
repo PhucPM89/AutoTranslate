@@ -11,6 +11,9 @@ const els = {
   crawlerTab: document.getElementById("adminCrawlerTab"),
   crawlerForm: document.getElementById("adminCrawlerForm"),
   crawlerEnabled: document.getElementById("crawlerEnabled"),
+  crawlerWordCount: document.getElementById("crawlerWordCount"),
+  crawlerCreationStatus: document.getElementById("crawlerCreationStatus"),
+  crawlerReach: document.getElementById("crawlerReach"),
   crawlerMaxBooks: document.getElementById("crawlerMaxBooks"),
   crawlerMinChapters: document.getElementById("crawlerMinChapters"),
   crawlerUpdateExisting: document.getElementById("crawlerUpdateExisting"),
@@ -36,21 +39,34 @@ const els = {
 
 let adminCatalog = { books: [] };
 let activeAdminTab = "library";
+let mounted = false;
 
-els.open?.addEventListener("click", openAdmin);
-els.close?.addEventListener("click", () => els.dialog.close());
-els.dialog?.addEventListener("click", (event) => {
-  if (event.target === els.dialog) els.dialog.close();
-});
-els.loginForm?.addEventListener("submit", login);
-els.uploadForm?.addEventListener("submit", submitBook);
-els.crawlerForm?.addEventListener("submit", saveCrawlerConfig);
-els.libraryTab?.addEventListener("click", () => selectAdminTab("library"));
-els.crawlerTab?.addEventListener("click", () => selectAdminTab("crawler"));
-els.crawlerRefresh?.addEventListener("click", loadCrawlerConfig);
-els.bookSelect?.addEventListener("change", selectBook);
-els.logout?.addEventListener("click", logout);
-els.deleteBook?.addEventListener("click", deleteSelectedBook);
+// app.js imports this module the first time the lock button is pressed, so the
+// Vercel Blob client never lands in a regular reader's bundle.
+export function mountAdmin() {
+  if (!mounted) {
+    mounted = true;
+    els.open?.addEventListener("click", openAdmin);
+    els.close?.addEventListener("click", () => els.dialog.close());
+    els.dialog?.addEventListener("click", (event) => {
+      if (event.target === els.dialog) els.dialog.close();
+    });
+    els.loginForm?.addEventListener("submit", login);
+    els.uploadForm?.addEventListener("submit", submitBook);
+    els.crawlerForm?.addEventListener("submit", saveCrawlerConfig);
+    els.libraryTab?.addEventListener("click", () => selectAdminTab("library"));
+    els.crawlerTab?.addEventListener("click", () => selectAdminTab("crawler"));
+    els.crawlerRefresh?.addEventListener("click", loadCrawlerConfig);
+    els.crawlerWordCount?.addEventListener("change", describeCrawlerReach);
+    els.crawlerForm?.querySelectorAll('[name="crawlerCategory"]').forEach((input) => {
+      input.addEventListener("change", describeCrawlerReach);
+    });
+    els.bookSelect?.addEventListener("change", selectBook);
+    els.logout?.addEventListener("click", logout);
+    els.deleteBook?.addEventListener("click", deleteSelectedBook);
+  }
+  return openAdmin();
+}
 
 async function openAdmin() {
   els.dialog.showModal();
@@ -223,6 +239,8 @@ async function loadAdminCatalog() {
 
 async function loadCrawlerConfig() {
   const result = await requestJson("/api/admin/crawler");
+  fillChoices(els.crawlerWordCount, result.wordCountBuckets, result.config.wordCountBucket);
+  fillChoices(els.crawlerCreationStatus, result.creationStatuses, result.config.creationStatus);
   els.crawlerEnabled.checked = Boolean(result.config.enabled);
   els.crawlerMaxBooks.value = String(result.config.maxNewBooksPerRun || 1);
   els.crawlerMinChapters.value = String(result.config.minChapterCount || 0);
@@ -231,6 +249,38 @@ async function loadCrawlerConfig() {
   els.crawlerForm.querySelectorAll('[name="crawlerCategory"]').forEach((input) => { input.checked = selected.has(input.value); });
   els.crawlerWorkerWarning.hidden = result.workerReady;
   renderCrawlerStatus(result.status);
+  describeCrawlerReach();
+}
+
+function fillChoices(select, choices, current) {
+  if (!select || !Array.isArray(choices)) return;
+  const fragment = document.createDocumentFragment();
+  choices.forEach((choice) => {
+    const option = document.createElement("option");
+    option.value = String(choice.value);
+    option.textContent = choice.label;
+    if (Number.isFinite(choice.minWords)) option.dataset.minWords = String(choice.minWords);
+    fragment.appendChild(option);
+  });
+  select.replaceChildren(fragment);
+  select.value = String(current);
+}
+
+// Shows what the chosen length filter actually guarantees, so the chapter minimum
+// below it can be set to something the filter can really deliver.
+function describeCrawlerReach() {
+  if (!els.crawlerReach) return;
+  const option = els.crawlerWordCount?.selectedOptions?.[0];
+  const minWords = Number(option?.dataset.minWords || 0);
+  const genres = els.crawlerForm.querySelectorAll('[name="crawlerCategory"]:checked').length;
+  if (!minWords) {
+    els.crawlerReach.textContent = genres
+      ? `${genres} thể loại · bộ lọc độ dài đang tắt nên crawler phải tự kiểm tra số chương từng truyện.`
+      : "Hãy chọn ít nhất một thể loại.";
+    return;
+  }
+  const floor = Math.floor(minWords / 2200);
+  els.crawlerReach.textContent = `${genres} thể loại · mỗi truyện có tối thiểu ~${minWords.toLocaleString("vi-VN")} chữ (khoảng ${floor}+ chương). Fanqie lọc sẵn nên không cần quét từng truyện.`;
 }
 
 async function saveCrawlerConfig(event) {
@@ -246,6 +296,8 @@ async function saveCrawlerConfig(event) {
       body: JSON.stringify({
         enabled: els.crawlerEnabled.checked,
         categories,
+        wordCountBucket: els.crawlerWordCount.value,
+        creationStatus: els.crawlerCreationStatus.value,
         maxNewBooksPerRun: els.crawlerMaxBooks.value,
         minChapterCount: els.crawlerMinChapters.value,
         updateExisting: els.crawlerUpdateExisting.checked

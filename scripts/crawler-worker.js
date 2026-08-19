@@ -15,7 +15,16 @@ const JOB_TIMEOUT_MS = clampNumber(process.env.CRAWLER_JOB_TIMEOUT_MINUTES, 15, 
 const POLL_INTERVAL_MS = 10 * 1000;
 const RANK_PAGE_SIZE = 10;
 const DEFAULT_RANK_PAGE_COUNT = 1;
-const LONG_NOVEL_RANK_PAGE_COUNT = 20;
+// The established-novel boards are already sorted so that roughly a third of the
+// first entries clear 1000 chapters, so a handful of pages is enough. Scanning 20
+// pages per rank plus hundreds of book pages is what tripped Fanqie's throttle.
+const LONG_NOVEL_RANK_PAGE_COUNT = 5;
+const FANQIE_REQUEST_SPACING_MS = 400;
+const FANQIE_RETRY_BACKOFF_MS = 2500;
+const THROTTLE_ABORT_STREAK = 6;
+const AVERAGE_CHARS_PER_CHAPTER = 2200;
+// Probing /page/ is only a fallback now, so it gets a tight budget.
+const MAX_DETAIL_PROBES = 12;
 
 async function main() {
   requireEnvironment();
@@ -34,60 +43,71 @@ async function main() {
   try {
     await waitForTomato();
     await configureTomato();
-    const candidates = await discoverCandidates(config, categories, fetchText, async ({ categoryLabel, scannedPages, totalPages, found }) => {
-      status.message = `Đang quét thể loại ${categoryLabel}: ${scannedPages}/${totalPages} trang, tìm thấy ${found} truyện.`;
-      await updateStatus(status);
-    });
+    const candidates = await discoverBooks(config, categories, status);
     const excludedIds = new Set(config.excludedSourceIds || []);
     const existingBooks = (catalog.books || []).filter((book) => book.source === "fanqie" && book.sourceId && !excludedIds.has(String(book.sourceId)));
     const existingIds = new Set(existingBooks.map((book) => String(book.sourceId)));
     const updateJobs = selectWorkItems([], existingBooks, config.updateExisting);
     const newCandidates = candidates.filter((item) => !existingIds.has(item.sourceId) && !excludedIds.has(item.sourceId));
-    if (!updateJobs.length && config.minChapterCount > 0) {
-      status.message = `Đang tìm truyện từ ${config.minChapterCount} chương trở lên...`;
-      await updateStatus(status);
-    }
-    const newBooks = updateJobs.length
-      ? []
-      : await selectNewBookCandidates(newCandidates, config.minChapterCount, config.maxNewBooksPerRun, fetchText, async ({ scanned, scanLimit, selected }) => {
-        status.message = `Đang lọc truyện từ ${config.minChapterCount} chương: đã kiểm ${scanned}/${scanLimit}, chọn ${selected}.`;
-        await updateStatus(status);
-      });
-    const jobs = updateJobs.length ? updateJobs : newBooks;
-    status.discovered = jobs.filter((item) => !item.isUpdate).length;
 
-    if (!jobs.length) {
+    const runJobs = async (jobs) => {
+      for (const candidate of jobs) {
+        status.currentBookId = candidate.sourceId;
+        status.message = `Đang tải Fanqie book ${candidate.sourceId}...`;
+        await updateStatus(status);
+        try {
+          const published = await downloadAndPublish(candidate, status, config.minChapterCount);
+          status.published += 1;
+          status.message = candidate.isUpdate
+            ? `Đã cập nhật ${published.title}.`
+            : `Đã thêm ${published.title} vào thư viện.`;
+        } catch (error) {
+          status.failed += 1;
+          status.message = `Book ${candidate.sourceId} thất bại: ${error.message}`;
+          console.error(status.message);
+        }
+        await updateStatus(status);
+      }
+    };
+
+    // A refresh job whose download keeps failing never advances lastCrawledAt, so
+    // it used to be re-picked forever and no new novel was ever discovered again.
+    // Discovery now runs whenever the refresh pass added nothing.
+    await runJobs(updateJobs);
+
+    let discovery = null;
+    if (!status.published) {
+      if (config.minChapterCount > 0) {
+        status.message = `Đang tìm truyện từ ${config.minChapterCount} chương trở lên...`;
+        await updateStatus(status);
+      }
+      discovery = await selectNewBookCandidates(
+        newCandidates,
+        config.minChapterCount,
+        config.maxNewBooksPerRun,
+        fetchText,
+        async ({ scanned, scanLimit, selected, bestChapterCount }) => {
+          status.message = `Đang lọc truyện từ ${config.minChapterCount} chương: đã kiểm ${scanned}/${scanLimit}, chọn ${selected}, dài nhất ${bestChapterCount} chương.`;
+          await updateStatus(status);
+        }
+      );
+      status.discovered = discovery.selected.length;
+      await runJobs(discovery.selected);
+    }
+
+    if (!status.published && !status.failed) {
       status.state = "success";
-      status.message = config.minChapterCount > 0
-        ? `Không tìm thấy truyện mới từ ${config.minChapterCount} chương trở lên trong bảng xếp hạng.`
-        : "Không có truyện mới phù hợp trong bảng xếp hạng.";
+      status.message = describeEmptyRun(config, newCandidates.length, discovery);
+      status.currentBookId = "";
       status.finishedAt = new Date().toISOString();
       await updateStatus(status);
       return;
     }
 
-    for (const candidate of jobs) {
-      status.currentBookId = candidate.sourceId;
-      status.message = `Đang tải Fanqie book ${candidate.sourceId}...`;
-      await updateStatus(status);
-      try {
-        const published = await downloadAndPublish(candidate, status, config.minChapterCount);
-        status.published += 1;
-        status.message = candidate.isUpdate
-          ? `Đã cập nhật ${published.title}.`
-          : `Đã thêm ${published.title} vào thư viện.`;
-      } catch (error) {
-        status.failed += 1;
-        status.message = `Book ${candidate.sourceId} thất bại: ${error.message}`;
-        console.error(status.message);
-      }
-      await updateStatus(status);
-    }
-
     status.state = status.published ? "success" : "error";
     status.message = status.published
       ? `Hoàn tất: thêm ${status.published} truyện, lỗi ${status.failed}.`
-      : `Không thể thêm truyện; ${status.failed} tác vụ thất bại.`;
+      : `Không thể thêm truyện; ${status.failed} tác vụ thất bại.${discovery ? ` ${describeEmptyRun(config, newCandidates.length, discovery)}` : ""}`;
     status.currentBookId = "";
     status.finishedAt = new Date().toISOString();
     await updateStatus(status);
@@ -100,6 +120,49 @@ async function main() {
     await updateStatus(status).catch(() => {});
     throw error;
   }
+}
+
+// The library API is the cheap path: one request per genre returns 100 novels that
+// already clear the word-count bar. Rank pages stay as a fallback for the case
+// where the API shape changes or the request is refused.
+async function discoverBooks(config, categories, status) {
+  try {
+    status.message = "Đang lọc thư viện Fanqie theo độ dài...";
+    await updateStatus(status);
+    const candidates = await discoverFromLibrary(config, categories, fetchJson, async ({ categoryLabel, found, totalCount }) => {
+      status.message = `Thư viện Fanqie · ${categoryLabel}: ${found} truyện đã lấy trong ${totalCount} truyện đạt độ dài.`;
+      await updateStatus(status);
+    });
+    if (candidates.length) return candidates;
+    console.warn("Library API trả về danh sách rỗng; chuyển sang bảng xếp hạng.");
+  } catch (error) {
+    console.warn(`Library API lỗi (${error.message}); chuyển sang bảng xếp hạng.`);
+  }
+
+  status.message = "Đang quét bảng xếp hạng Fanqie...";
+  await updateStatus(status);
+  return discoverCandidates(config, categories, fetchText, async ({ categoryLabel, scannedPages, totalPages, found }) => {
+    status.message = `Đang quét thể loại ${categoryLabel}: ${scannedPages}/${totalPages} trang, tìm thấy ${found} truyện.`;
+    await updateStatus(status);
+  });
+}
+
+// Says *why* a run came up empty, so a misconfigured chapter minimum can be told
+// apart from Fanqie refusing the scan.
+function describeEmptyRun(config, candidateCount, discovery) {
+  if (!candidateCount) return "Bảng xếp hạng Fanqie không trả về truyện mới nào.";
+  if (!discovery) return "Không có truyện mới phù hợp trong bảng xếp hạng.";
+  if (!config.minChapterCount) return "Không có truyện mới phù hợp trong bảng xếp hạng.";
+
+  const { scanned, fromRankMetadata = 0, detailProbes = 0, networkErrors, unreadable, bestChapterCount, throttled } = discovery;
+  const failed = networkErrors + unreadable;
+  if (throttled || (detailProbes && failed >= Math.max(5, detailProbes * 0.5))) {
+    return `Fanqie đang chặn tốc độ: ${failed}/${detailProbes} lượt kiểm tra chi tiết không đọc được. Crawler sẽ thử lại ở lượt sau.`;
+  }
+  if (!bestChapterCount && !detailProbes) {
+    return `Đã lấy ${scanned} truyện từ thư viện Fanqie nhưng tất cả đều đã có trong thư viện hoặc bị loại trừ.`;
+  }
+  return `Đã đọc ${scanned} truyện (${fromRankMetadata} biết trước số chương, ${detailProbes} lượt kiểm tra chi tiết), dài nhất ${bestChapterCount} chương, chưa đạt mức tối thiểu ${config.minChapterCount}.`;
 }
 
 function selectWorkItems(newBooks, existingBooks, updateExisting, now = Date.now()) {
@@ -121,20 +184,117 @@ function selectWorkItems(newBooks, existingBooks, updateExisting, now = Date.now
   return newBooks;
 }
 
+const LIBRARY_API = "https://fanqienovel.com/api/author/library/book_list/v0/";
+const LIBRARY_PAGE_SIZE = 100;
+const LIBRARY_MAX_PAGES = 3;
+
+// Fanqie's own 字数 filter, mirrored from the site's book library. Filtering
+// server-side means one request returns 100 novels that already clear the size
+// bar, instead of probing each book's detail page (the rate-limited endpoint).
+const WORD_COUNT_FLOORS = { "-1": 0, 0: 0, 1: 300000, 2: 500000, 3: 1000000, 4: 2000000 };
+
+function bucketChapterFloor(bucket) {
+  const words = WORD_COUNT_FLOORS[String(bucket)] || 0;
+  return words ? Math.floor(words / AVERAGE_CHARS_PER_CHAPTER) : 0;
+}
+
+async function fetchLibraryPage({ categoryId, wordCountBucket, creationStatus, pageIndex }, loadJson = fetchJson) {
+  const query = new URLSearchParams({
+    page_count: LIBRARY_PAGE_SIZE,
+    page_index: pageIndex,
+    gender: -1,
+    category_id: categoryId,
+    creation_status: creationStatus,
+    word_count: wordCountBucket,
+    book_type: -1,
+    sort: 0
+  });
+  const body = await loadJson(`${LIBRARY_API}?${query}`);
+  if (body?.code !== 0) throw new Error(`Fanqie library API trả code ${body?.code}: ${body?.message || "không rõ"}.`);
+  const list = Array.isArray(body?.data?.book_list) ? body.data.book_list : [];
+  return {
+    books: list
+      .map((item) => ({
+        sourceId: String(item.book_id || ""),
+        title: String(item.book_name || ""),
+        author: String(item.author || ""),
+        creationStatus: item.creation_status
+      }))
+      .filter((item) => /^\d{10,30}$/.test(item.sourceId)),
+    hasMore: Boolean(body?.data?.has_more),
+    totalCount: Number(body?.data?.total_count) || 0
+  };
+}
+
+// Word counts come back masked as "." in this payload, so the bucket floor is the
+// size guarantee; readEpubMetadata re-checks the real count after download.
+async function discoverFromLibrary(config, categories, loadJson = fetchJson, onProgress = null) {
+  const chapterFloor = bucketChapterFloor(config.wordCountBucket);
+  const groups = await Promise.all((config.categories || []).map(async (key) => {
+    const definition = categories[key];
+    const categoryIds = definition?.categoryIds || [];
+    if (!categoryIds.length) return [];
+
+    const collected = [];
+    for (const categoryId of categoryIds) {
+      for (let pageIndex = 0; pageIndex < LIBRARY_MAX_PAGES; pageIndex += 1) {
+        if (collected.length) await sleep(FANQIE_REQUEST_SPACING_MS);
+        const page = await fetchLibraryPage(
+          { categoryId, wordCountBucket: config.wordCountBucket, creationStatus: config.creationStatus, pageIndex },
+          loadJson
+        );
+        collected.push(...page.books.map((book) => ({
+          ...book,
+          genre: definition.label,
+          category: key,
+          listedChapterCount: chapterFloor || null,
+          chapterCountIsFloor: Boolean(chapterFloor)
+        })));
+        if (onProgress) {
+          await onProgress({ categoryLabel: definition.label, found: collected.length, totalCount: page.totalCount });
+        }
+        if (!page.hasMore || !page.books.length) break;
+      }
+    }
+    return uniqueBySourceId(collected);
+  }));
+  return roundRobin(groups);
+}
+
+function uniqueBySourceId(books) {
+  const seen = new Set();
+  return books.filter((book) => {
+    if (seen.has(book.sourceId)) return false;
+    seen.add(book.sourceId);
+    return true;
+  });
+}
+
 async function discoverCandidates(config, categories, loadPage = fetchText, onProgress = null) {
-  const rankPageCount = config.minChapterCount > 0 ? LONG_NOVEL_RANK_PAGE_COUNT : DEFAULT_RANK_PAGE_COUNT;
+  const wantsLongNovels = config.minChapterCount > 0;
+  const rankPageCount = wantsLongNovels ? LONG_NOVEL_RANK_PAGE_COUNT : DEFAULT_RANK_PAGE_COUNT;
   const groups = await Promise.all(config.categories.map(async (key) => {
     const definition = categories[key];
     if (!definition) return [];
+    // The new-book boards cap out near 200 chapters, so a chapter minimum has to
+    // read the established-novel boards instead.
+    const ranks = (wantsLongNovels && definition.longRanks?.length ? definition.longRanks : definition.ranks) || [];
     const ids = [];
+    const metadata = new Map();
     let scannedPages = 0;
-    const totalPages = (definition.ranks || []).length * rankPageCount;
-    for (const rank of definition.ranks || []) {
+    const totalPages = ranks.length * rankPageCount;
+    for (const rank of ranks) {
       for (let page = 0; page < rankPageCount; page += 1) {
         const offset = page * RANK_PAGE_SIZE;
         const url = offset ? `https://fanqienovel.com/rank/${rank}?offset=${offset}` : `https://fanqienovel.com/rank/${rank}`;
+        if (scannedPages) await sleep(FANQIE_REQUEST_SPACING_MS);
         const html = await loadPage(url);
-        const pageIds = parseRankBookIds(html);
+        // Prefer the embedded metadata; fall back to bare links if it is missing.
+        const pageBooks = parseRankBooks(html);
+        const pageIds = pageBooks.length ? pageBooks.map((book) => book.sourceId) : parseRankBookIds(html);
+        pageBooks.forEach((book) => {
+          if (!metadata.has(book.sourceId)) metadata.set(book.sourceId, book);
+        });
         ids.push(...pageIds);
         scannedPages += 1;
         if (onProgress && (scannedPages % 5 === 0 || scannedPages === totalPages)) {
@@ -143,13 +303,104 @@ async function discoverCandidates(config, categories, loadPage = fetchText, onPr
         if (!pageIds.length) break;
       }
     }
-    return unique(ids).map((sourceId) => ({ sourceId, genre: definition.label, category: key }));
+    return unique(ids).map((sourceId) => ({
+      sourceId,
+      genre: definition.label,
+      category: key,
+      listedChapterCount: metadata.get(sourceId)?.listedChapterCount ?? null,
+      listedTitle: metadata.get(sourceId)?.title || ""
+    }));
   }));
   return roundRobin(groups);
 }
 
 function parseRankBookIds(html) {
   return unique(Array.from(String(html || "").matchAll(/href=["']\/page\/(\d{10,30})["']/g), (match) => match[1]));
+}
+
+// Rank pages embed window.__INITIAL_STATE__ with a full metadata record for every
+// book listed, so one rank request yields ~10 chapter counts. The per-book /page/
+// endpoint is the one Fanqie rate-limits, so reading counts from here instead of
+// probing each book removes almost all of the crawler's request volume.
+function parseRankBooks(html) {
+  const state = extractInitialState(html);
+  if (!state) return [];
+
+  const books = [];
+  const seen = new Set();
+  const walk = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
+    const sourceId = String(node.bookId || "");
+    if (/^\d{10,30}$/.test(sourceId) && node.bookName && !seen.has(sourceId)) {
+      seen.add(sourceId);
+      books.push({
+        sourceId,
+        title: String(node.bookName || ""),
+        author: String(node.author || ""),
+        wordNumber: Number(node.wordNumber) || 0,
+        creationStatus: node.creationStatus,
+        lastChapterTitle: String(node.lastChapterTitle || ""),
+        listedChapterCount: estimateChapterCount(node)
+      });
+    }
+    Object.values(node).forEach(walk);
+  };
+  walk(state);
+  return books;
+}
+
+function extractInitialState(html) {
+  const source = String(html || "");
+  const marker = "window.__INITIAL_STATE__=";
+  const markerIndex = source.indexOf(marker);
+  if (markerIndex < 0) return null;
+
+  let start = markerIndex + marker.length;
+  while (start < source.length && source[start] !== "{") start += 1;
+  if (source[start] !== "{") return null;
+
+  // Brace matching has to ignore braces inside strings; novel blurbs contain them.
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < source.length; index += 1) {
+    const character = source[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') inString = true;
+    else if (character === "{") depth += 1;
+    else if (character === "}") {
+      depth -= 1;
+      if (!depth) {
+        try {
+          return JSON.parse(source.slice(start, index + 1));
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+// The latest chapter title carries its own number, which is the chapter total for
+// a serialised novel. Word count is the fallback when the title is not numbered.
+function estimateChapterCount(book) {
+  const numbered = String(book?.lastChapterTitle || "").match(/第\s*([0-9]{1,6})\s*[章回節节]/);
+  if (numbered) {
+    const value = Number(numbered[1]);
+    if (Number.isFinite(value) && value > 0) return value;
+  }
+  const words = Number(book?.wordNumber) || 0;
+  return words > 0 ? Math.round(words / AVERAGE_CHARS_PER_CHAPTER) : null;
 }
 
 function roundRobin(groups) {
@@ -166,25 +417,103 @@ function roundRobin(groups) {
 async function selectNewBookCandidates(candidates, minChapterCount, limit, loadPage = fetchText, onProgress = null) {
   const minimum = Math.max(0, Number.parseInt(minChapterCount, 10) || 0);
   const maximum = Math.max(1, Number.parseInt(limit, 10) || 1);
-  if (!minimum) return candidates.slice(0, maximum);
+  if (!minimum) {
+    const selected = candidates.slice(0, maximum);
+    return { selected, scanned: selected.length, networkErrors: 0, unreadable: 0, bestChapterCount: 0 };
+  }
 
   const selected = [];
-  const scanLimit = Math.min(candidates.length, Math.max(220, maximum * 120));
+  // Counted so a run that found nothing can say whether the boards were short or
+  // whether Fanqie simply stopped answering; both used to report "not found".
+  let networkErrors = 0;
+  let unreadable = 0;
+  let bestChapterCount = 0;
+  let failureStreak = 0;
+  let throttled = false;
+  let scanned = 0;
+
+  // Three kinds of candidate, none of which needs a detail request:
+  //  - preFiltered: Fanqie's own word-count filter already guaranteed a floor,
+  //    so the exact count is unknown but the size bar is met. downloadAndPublish
+  //    re-checks the real count from the EPUB, which is the authoritative gate.
+  //  - exact: a rank page told us the real chapter number.
+  //  - unknown: neither, so it falls back to a bounded detail probe.
+  const preFiltered = candidates.filter((candidate) => candidate.chapterCountIsFloor && candidate.listedChapterCount > 0);
+  const exact = candidates.filter((candidate) => !candidate.chapterCountIsFloor && Number.isFinite(candidate.listedChapterCount));
+  const unknown = candidates.filter(
+    (candidate) => !candidate.chapterCountIsFloor && !Number.isFinite(candidate.listedChapterCount)
+  );
+  for (const candidate of exact) {
+    bestChapterCount = Math.max(bestChapterCount, candidate.listedChapterCount);
+  }
+
+  // Longest first among the exactly-known ones; pre-filtered keep Fanqie's order.
+  exact
+    .filter((candidate) => candidate.listedChapterCount >= minimum)
+    .sort((a, b) => b.listedChapterCount - a.listedChapterCount)
+    .forEach((candidate) => selected.push(candidate));
+  if (selected.length < maximum) selected.push(...preFiltered);
+  selected.splice(maximum);
+  const known = [...exact, ...preFiltered];
+
+  if (selected.length >= maximum || !unknown.length) {
+    return {
+      selected,
+      scanned: known.length,
+      fromRankMetadata: known.length,
+      detailProbes: 0,
+      networkErrors,
+      unreadable,
+      bestChapterCount,
+      throttled
+    };
+  }
+
+  // Only books the rank payload could not describe fall back to a detail request.
+  const scanLimit = Math.min(unknown.length, MAX_DETAIL_PROBES);
   for (let index = 0; index < scanLimit; index += 1) {
-    const candidate = candidates[index];
+    const candidate = unknown[index];
+    if (index) await sleep(FANQIE_REQUEST_SPACING_MS);
+    scanned += 1;
     try {
       const html = await loadPage(`https://fanqienovel.com/page/${candidate.sourceId}`);
       const chapterCount = parseFanqieChapterCount(html);
-      if (chapterCount !== null && chapterCount >= minimum) selected.push({ ...candidate, listedChapterCount: chapterCount });
+      if (chapterCount === null) {
+        unreadable += 1;
+        failureStreak += 1;
+      } else {
+        failureStreak = 0;
+        bestChapterCount = Math.max(bestChapterCount, chapterCount);
+        if (chapterCount >= minimum) selected.push({ ...candidate, listedChapterCount: chapterCount });
+      }
     } catch (error) {
+      networkErrors += 1;
+      failureStreak += 1;
+      if (error.throttled) throttled = true;
       console.warn(`Không kiểm tra được số chương Fanqie ${candidate.sourceId}: ${error.message}`);
     }
+
     if (onProgress && ((index + 1) % 10 === 0 || selected.length >= maximum || index + 1 === scanLimit)) {
-      await onProgress({ scanned: index + 1, scanLimit, selected: selected.length });
+      await onProgress({ scanned, scanLimit, selected: selected.length, bestChapterCount, networkErrors });
     }
     if (selected.length >= maximum) break;
+    // Burning the rest of the budget against a throttled host only deepens the block.
+    if (failureStreak >= THROTTLE_ABORT_STREAK) {
+      throttled = true;
+      console.warn(`Dừng quét sớm: ${failureStreak} lượt liên tiếp không đọc được (nghi Fanqie chặn tốc độ).`);
+      break;
+    }
   }
-  return selected;
+  return {
+    selected,
+    scanned: known.length + scanned,
+    fromRankMetadata: known.length,
+    detailProbes: scanned,
+    networkErrors,
+    unreadable,
+    bestChapterCount,
+    throttled
+  };
 }
 
 function parseFanqieChapterCount(html) {
@@ -413,10 +742,44 @@ function findFiles(root, extension) {
   return output;
 }
 
-async function fetchText(url) {
-  const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; TramChuCrawler/1.0)", "Accept-Language": "zh-CN,zh;q=0.9" }, signal: AbortSignal.timeout(30000) });
-  if (!response.ok) throw new Error(`Fanqie trả HTTP ${response.status}.`);
-  return response.text();
+// Fanqie throttles by answering HTTP 200 with an empty body instead of 429, so an
+// empty response has to be raised as an error; otherwise every throttled check
+// looks exactly like "this novel is too short".
+async function fetchText(url, attempts = 3) {
+  let lastError = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (attempt) await sleep(FANQIE_RETRY_BACKOFF_MS * attempt);
+    try {
+      const response = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; TramChuCrawler/1.0)", "Accept-Language": "zh-CN,zh;q=0.9" },
+        signal: AbortSignal.timeout(30000)
+      });
+      if (!response.ok) throw new Error(`Fanqie trả HTTP ${response.status}.`);
+      const text = await response.text();
+      if (!text.trim()) throw new ThrottleError(`Fanqie trả nội dung rỗng cho ${url} (nghi bị chặn tốc độ).`);
+      return text;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
+async function fetchJson(url, attempts = 3) {
+  const text = await fetchText(url, attempts);
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new ThrottleError(`Fanqie trả JSON không hợp lệ cho ${url}.`);
+  }
+}
+
+class ThrottleError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ThrottleError";
+    this.throttled = true;
+  }
 }
 
 async function siteRequest(pathname, options = {}) {
@@ -482,4 +845,19 @@ if (require.main === module) {
   });
 }
 
-module.exports = { discoverCandidates, parseRankBookIds, parseFanqieChapterCount, roundRobin, readEpubMetadata, selectWorkItems, selectNewBookCandidates };
+module.exports = {
+  discoverCandidates,
+  discoverFromLibrary,
+  fetchLibraryPage,
+  bucketChapterFloor,
+  parseRankBookIds,
+  parseRankBooks,
+  estimateChapterCount,
+  parseFanqieChapterCount,
+  roundRobin,
+  readEpubMetadata,
+  selectWorkItems,
+  selectNewBookCandidates,
+  describeEmptyRun,
+  fetchText
+};

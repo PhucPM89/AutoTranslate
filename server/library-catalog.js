@@ -12,17 +12,20 @@ const DEFAULT_SITE = {
 };
 
 async function readCatalog() {
-  return (await readCatalogSnapshot({ allowSourceFallback: true })).catalog;
+  // Reads for visitors ride the Blob edge cache; only the read-modify-write path
+  // below needs a body that is guaranteed to match the etag it locks against.
+  return (await readCatalogSnapshot({ allowSourceFallback: true, fresh: false })).catalog;
 }
 
-async function readCatalogSnapshot({ allowSourceFallback = false } = {}) {
+async function readCatalogSnapshot({ allowSourceFallback = false, fresh = true } = {}) {
   if (process.env.BLOB_READ_WRITE_TOKEN) {
     try {
       const { list } = require("@vercel/blob");
       const result = await list({ prefix: CATALOG_PATH, limit: 10 });
       const blob = result.blobs.find((item) => item.pathname === CATALOG_PATH);
       if (blob) {
-        const response = await fetch(`${blob.url}?v=${Date.now()}`, { cache: "no-store" });
+        const url = fresh ? `${blob.url}?v=${Date.now()}` : blob.url;
+        const response = await fetch(url, fresh ? { cache: "no-store" } : undefined);
         if (!response.ok) throw new Error(`Blob catalog trả HTTP ${response.status}.`);
         return { catalog: normalizeCatalog(await response.json()), etag: blob.etag };
       }

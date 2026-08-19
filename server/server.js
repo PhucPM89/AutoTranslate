@@ -30,12 +30,8 @@ app.all("/api/crawler/status", require("../api/crawler/status"));
 app.all("/api/crawler/publish", require("../api/crawler/publish"));
 app.all("/api/crawler/upload", require("../api/crawler/upload"));
 
+// `npm run build` writes the minified client plus vendor/jszip.min.js into public/.
 const publicDir = path.join(__dirname, "..", "public");
-const jszipPath = path.join(__dirname, "..", "node_modules", "jszip", "dist", "jszip.min.js");
-
-app.get("/vendor/jszip.min.js", (_req, res) => {
-  res.sendFile(jszipPath);
-});
 
 app.use(express.static(publicDir));
 

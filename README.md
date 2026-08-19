@@ -43,6 +43,26 @@ Mở:
 http://localhost:3000
 ```
 
+## Cấu trúc frontend
+
+Source của frontend nằm trong `client/`, còn `public/` là thư mục output:
+
+```text
+client/index.html   ->  public/index.html   (chèn URL asset kèm hash)
+client/style.css    ->  public/style.css    (minify)
+client/app.js       ->  public/app.js       (bundle + minify)
+client/admin-upload.js -> public/admin-upload.js (ES module, chỉ tải khi mở quản trị)
+node_modules/jszip  ->  public/vendor/jszip.min.js
+```
+
+Sau khi sửa file trong `client/`, chạy lại:
+
+```bash
+npm run build
+```
+
+Mỗi asset được gắn `?v=<hash nội dung>` nên có thể cache một năm mà vẫn cập nhật ngay khi nội dung đổi. Không sửa trực tiếp file trong `public/` (trừ `library/`, `assets/`, `favicon.svg`) vì build sẽ ghi đè.
+
 ## Cách dùng
 
 1. Bấm `Upload EPUB`.
@@ -149,4 +169,19 @@ Crawler chạy bằng GitHub Actions mỗi 15 phút, 24/7, lấy book ID từ b�
 
 Workflow không cần GitHub secret: nó dùng GitHub OIDC token ngắn hạn, bị giới hạn cho đúng repo `PhucPM89/AutoTranslate`, nhánh `main` và file workflow crawler. Sau khi deploy, đăng nhập khu vực quản trị, mở tab `Crawler`, chọn thể loại và bật tự động. Có thể chạy ngay workflow `Fanqie crawler` bằng nút `Run workflow`; lịch mặc định là phút 07, 22, 37 và 52 mỗi giờ.
 
-Worker ưu tiên cập nhật truyện Fanqie đã quá 24 giờ chưa đồng bộ; những lượt còn lại sẽ thêm truyện mới. File tải tạm chỉ nằm trong cache GitHub Actions, còn thư viện chính nằm trên Vercel Blob.
+Worker ưu tiên cập nhật truyện Fanqie đã quá 24 giờ chưa đồng bộ; nếu lượt cập nhật đó không thêm được gì thì worker vẫn tiếp tục tìm truyện mới trong cùng lượt. File tải tạm chỉ nằm trong cache GitHub Actions, còn thư viện chính nằm trên Vercel Blob.
+
+### Tìm truyện dài
+
+Worker dùng chính bộ lọc số chữ của Fanqie (`/api/author/library/book_list/v0/`) thay vì mở trang từng truyện:
+
+```text
+category_id     mã thể loại của Fanqie (258 玄幻, 1140 仙侠, 751 悬疑, 8 末世, 539 推理...)
+word_count      0 = <30 vạn, 1 = 30-50 vạn, 2 = 50-100 vạn, 3 = 100-200 vạn, 4 = trên 200 vạn
+creation_status -1 tất cả, 0 đã hoàn thành, 1 đang ra chương
+page_count      tối đa 100 truyện mỗi request
+```
+
+Chọn `Trên 2 triệu chữ` trong tab `Crawler` nghĩa là mọi truyện trả về đã có khoảng 900+ chương, nên một lượt chạy chỉ tốn khoảng 20 request cho cả 5 thể loại. Trước đây worker mở trang chi tiết của 220-360 truyện mỗi lượt và bị Fanqie chặn tốc độ (trả HTTP 200 kèm body rỗng).
+
+`Số chương tối thiểu` vẫn được kiểm tra lại từ file EPUB sau khi tải, nên nó là mức chặn cuối cùng chứ không dùng để lọc lúc tìm kiếm. Nếu API thư viện lỗi, worker tự chuyển sang quét bảng xếp hạng `1_2_*` (bảng truyện đã hoàn chỉnh) và đọc số chương từ `window.__INITIAL_STATE__` của trang xếp hạng.

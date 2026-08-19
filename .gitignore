@@ -9,3 +9,7 @@ public/admin-upload.js
 .env*
 .crawler-data/
 output/
+public/app.js
+public/style.css
+public/index.html
+public/vendor/

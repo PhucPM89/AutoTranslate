@@ -5,18 +5,41 @@ const { updateWithRetry } = require("./blob-concurrency");
 
 const CONFIG_PATH = "library/crawler-config.json";
 const STATUS_PATH = "library/crawler-status.json";
+// Fanqie rank ids are `<scope>_<board>_<category>`. The `_1_` boards list new and
+// rising novels, which top out around 200 chapters, so they can never satisfy a
+// minChapterCount in the thousands. The `_2_` boards list established novels and
+// are the only usable source once a chapter minimum is set.
 const CATEGORY_DEFINITIONS = {
-  xianxia: { label: "Tiên hiệp", ranks: ["1_1_1140"] },
-  fantasy: { label: "Huyền huyễn", ranks: ["1_1_258", "1_1_257"] },
-  horror: { label: "Linh dị / Kinh dị", ranks: ["1_1_751"] },
-  apocalypse: { label: "Mạt thế", ranks: ["1_1_8"] },
-  detective: { label: "Trinh thám", ranks: ["1_1_539", "1_1_504"] }
+  xianxia: { label: "Tiên hiệp", categoryIds: [1140], ranks: ["1_1_1140"], longRanks: ["1_2_1140"] },
+  fantasy: { label: "Huyền huyễn", categoryIds: [258, 257], ranks: ["1_1_258", "1_1_257"], longRanks: ["1_2_258", "1_2_257"] },
+  horror: { label: "Linh dị / Kinh dị", categoryIds: [751], ranks: ["1_1_751"], longRanks: ["1_2_751"] },
+  apocalypse: { label: "Mạt thế", categoryIds: [8], ranks: ["1_1_8"], longRanks: ["1_2_8"] },
+  detective: { label: "Trinh thám", categoryIds: [539, 504], ranks: ["1_1_539", "1_1_504"], longRanks: ["1_2_539", "1_2_504"] }
 };
+
+// Fanqie's own 字数 filter, verified against real word counts. Selecting a bucket
+// server-side is what makes long-novel discovery a single request instead of
+// hundreds of per-book probes.
+const WORD_COUNT_BUCKETS = [
+  { value: -1, label: "Tất cả độ dài", minWords: 0 },
+  { value: 0, label: "Dưới 300k chữ", minWords: 0 },
+  { value: 1, label: "300k - 500k chữ", minWords: 300000 },
+  { value: 2, label: "500k - 1 triệu chữ", minWords: 500000 },
+  { value: 3, label: "1 - 2 triệu chữ", minWords: 1000000 },
+  { value: 4, label: "Trên 2 triệu chữ", minWords: 2000000 }
+];
+const CREATION_STATUSES = [
+  { value: -1, label: "Tất cả" },
+  { value: 0, label: "Đã hoàn thành" },
+  { value: 1, label: "Đang ra chương" }
+];
 const DEFAULT_CONFIG = {
   enabled: false,
   categories: Object.keys(CATEGORY_DEFINITIONS),
   maxNewBooksPerRun: 1,
   minChapterCount: 0,
+  wordCountBucket: 4,
+  creationStatus: -1,
   updateExisting: true,
   excludedSourceIds: []
 };
@@ -72,6 +95,8 @@ function sanitizeCrawlerConfig(value) {
     categories: categories.length ? categories : [...DEFAULT_CONFIG.categories],
     maxNewBooksPerRun: clampInteger(value?.maxNewBooksPerRun, 1, 3, DEFAULT_CONFIG.maxNewBooksPerRun),
     minChapterCount: clampInteger(value?.minChapterCount, 0, 10000, DEFAULT_CONFIG.minChapterCount),
+    wordCountBucket: allowedChoice(value?.wordCountBucket, WORD_COUNT_BUCKETS, DEFAULT_CONFIG.wordCountBucket),
+    creationStatus: allowedChoice(value?.creationStatus, CREATION_STATUSES, DEFAULT_CONFIG.creationStatus),
     updateExisting: value?.updateExisting !== false,
     excludedSourceIds: Array.isArray(value?.excludedSourceIds)
       ? Array.from(new Set(value.excludedSourceIds.map(String).filter((id) => /^\d{10,30}$/.test(id)))).slice(0, 500)
@@ -187,8 +212,15 @@ function clampInteger(value, min, max, fallback) {
   return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
 }
 
+function allowedChoice(value, choices, fallback) {
+  const number = Number.parseInt(value, 10);
+  return choices.some((choice) => choice.value === number) ? number : fallback;
+}
+
 module.exports = {
   CATEGORY_DEFINITIONS,
+  WORD_COUNT_BUCKETS,
+  CREATION_STATUSES,
   DEFAULT_CONFIG,
   DEFAULT_STATUS,
   readCrawlerConfig,
