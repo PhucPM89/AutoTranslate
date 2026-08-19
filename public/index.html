@@ -7,8 +7,8 @@
     <title>Trạm Chữ</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="preload" href="/library/covers/misty-pagoda-hero.webp" as="image" fetchpriority="high">
-    <link rel="stylesheet" href="/style.css?v=59c495e19eb5">
-    <script src="/app.js?v=4264c39671fb" defer></script>
+    <link rel="stylesheet" href="/style.css?v=263486595f1c">
+    <script src="/app.js?v=c97cc17facec" defer></script>
   </head>
   <body class="dark">
     <section id="libraryView" class="library-view">
@@ -118,6 +118,50 @@
       </main>
 
       <footer class="library-footer"><span>Trạm Chữ · Truyện dịch mỗi ngày</span><span>EPUB được lưu trên kho riêng, tiến độ được lưu trên thiết bị.</span></footer>
+    </section>
+
+    <section id="bookView" class="book-view" hidden aria-labelledby="bookViewTitle">
+      <header class="book-view-topbar">
+        <button id="bookBackToLibrary" class="back-button" type="button" aria-label="Quay lại thư viện" title="Quay lại thư viện"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"></path></svg></button>
+        <span class="book-view-crumb">Thư viện</span>
+        <button id="bookThemeToggle" class="icon-button" type="button" aria-label="Đổi giao diện" title="Đổi giao diện"><svg class="icon theme-sun" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path></svg><svg class="icon theme-moon" aria-hidden="true" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"></path></svg></button>
+      </header>
+
+      <main class="book-view-main">
+        <img id="bookViewBackdrop" class="book-view-backdrop" src="" alt="" aria-hidden="true" decoding="async">
+        <div class="book-view-overlay" aria-hidden="true"></div>
+
+        <div class="book-view-hero">
+          <img id="bookViewCover" class="book-view-cover" src="" alt="" width="480" height="720" decoding="async">
+          <div class="book-view-summary">
+            <div class="book-view-labels"><span id="bookViewGenre" class="genre-tag"></span><span id="bookViewStatus" class="book-status"></span></div>
+            <h1 id="bookViewTitle"></h1>
+            <p id="bookViewAuthor" class="book-view-author"></p>
+            <dl class="book-view-facts">
+              <div><dt>Số chương</dt><dd id="bookViewChapters">—</dd></div>
+              <div><dt>Cập nhật</dt><dd id="bookViewUpdated">—</dd></div>
+              <div><dt>Tiến độ của bạn</dt><dd id="bookViewProgress">Chưa đọc</dd></div>
+            </dl>
+            <div class="book-view-actions">
+              <button id="bookViewRead" class="primary-action" type="button"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m5 3 14 9-14 9V3Z"></path></svg><span id="bookViewReadLabel">Đọc từ đầu</span></button>
+              <button id="bookViewRestart" class="secondary-action" type="button" hidden><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v6h-6M4 18v-6h6"></path><path d="M18.49 9A7 7 0 0 0 5.64 6.64L4 9M20 15l-1.64 2.36A7 7 0 0 1 5.51 15"></path></svg>Đọc lại từ chương 1</button>
+            </div>
+            <p class="book-view-hint">Bản EPUB chỉ được tải về khi bạn bấm đọc, nên trang này không tốn dung lượng.</p>
+          </div>
+        </div>
+
+        <section class="book-view-body">
+          <article class="book-view-panel">
+            <h2>Giới thiệu truyện</h2>
+            <div id="bookViewDescription" class="book-view-description"></div>
+          </article>
+          <aside class="book-view-panel book-view-aside">
+            <h2>Cùng thể loại</h2>
+            <div id="bookViewRelated" class="book-view-related"></div>
+            <p id="bookViewRelatedEmpty" class="book-view-empty" hidden>Chưa có truyện cùng thể loại.</p>
+          </aside>
+        </section>
+      </main>
     </section>
 
     <dialog id="supportDialog" class="support-dialog" aria-labelledby="supportDialogTitle">

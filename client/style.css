@@ -550,6 +550,260 @@ body {
 }
 .crawler-reach:empty { display: none; }
 
+.book-view {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.book-view-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem clamp(1rem, 4vw, 3rem);
+  border-bottom: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.book-view-crumb {
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.book-view-main {
+  position: relative;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: clamp(1.4rem, 4vw, 3rem) clamp(1rem, 4vw, 3rem) 4rem;
+}
+
+.book-view-backdrop,
+.book-view-overlay {
+  position: absolute;
+  inset: 0 0 auto;
+  width: 100%;
+  height: clamp(240px, 42vw, 420px);
+}
+
+.book-view-backdrop {
+  z-index: -2;
+  object-fit: cover;
+  object-position: center 22%;
+  filter: saturate(0.6) blur(6px);
+}
+
+/* Two scrims: a vertical fade into the page plus a horizontal one behind the
+   text column, because a bright cover made the labels unreadable. */
+.book-view-overlay {
+  z-index: -1;
+  background:
+    linear-gradient(105deg, rgba(6, 10, 8, 0.9) 0%, rgba(6, 10, 8, 0.72) 45%, rgba(6, 10, 8, 0.42) 100%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg) 45%, transparent) 0%, var(--bg) 96%);
+}
+
+.book-view-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
+  gap: clamp(1.2rem, 3vw, 2.4rem);
+  align-items: start;
+}
+
+.book-view-cover {
+  width: 100%;
+  /* The width/height attributes reserve layout space, but they also act as a
+     presentational hint that would beat aspect-ratio, hence height: auto. */
+  height: auto;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 8px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+}
+
+/* The scrim behind the hero is dark in both themes, so this text is pinned light
+   rather than following --text, which would vanish in light mode. */
+.book-view-summary {
+  color: #f4f5f3;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.45);
+}
+
+.book-view-summary .book-view-author,
+.book-view-summary .book-view-facts dt,
+.book-view-summary .book-view-hint {
+  color: rgba(244, 245, 243, 0.74);
+}
+
+.book-view-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 0.7rem;
+}
+
+/* The catalog badges are tuned for a pale card; on the hero scrim they need their
+   own contrast in both themes. */
+.book-view-labels .genre-tag,
+.book-view-labels .book-status {
+  padding: 0.28rem 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 4px;
+  background: rgba(10, 14, 12, 0.55);
+  color: #f4f5f3;
+  font-size: 0.68rem;
+  text-shadow: none;
+}
+
+.book-view-labels .genre-tag { color: color-mix(in srgb, var(--accent) 45%, #f4f5f3); }
+.book-view-labels .book-status { color: color-mix(in srgb, var(--gold) 55%, #f4f5f3); }
+
+.book-view-summary h1 {
+  margin: 0 0 0.35rem;
+  font-size: clamp(1.6rem, 3.4vw, 2.6rem);
+  line-height: 1.15;
+}
+
+.book-view-author {
+  margin: 0 0 1.2rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.book-view-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin: 0 0 1.4rem;
+}
+
+.book-view-facts dt {
+  color: var(--muted);
+  font-size: 0.66rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.book-view-facts dd {
+  margin: 0.2rem 0 0;
+  font-size: 0.92rem;
+  font-weight: 650;
+}
+
+.book-view-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.book-view-hint {
+  margin: 0.9rem 0 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.book-view-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+  gap: clamp(1.2rem, 3vw, 2.2rem);
+  margin-top: clamp(1.8rem, 4vw, 3rem);
+}
+
+.book-view-panel {
+  padding: clamp(1rem, 2.2vw, 1.6rem);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.book-view-panel h2 {
+  margin: 0 0 0.9rem;
+  font-size: 1rem;
+}
+
+.book-view-description p {
+  margin: 0 0 0.85rem;
+  font-size: 0.92rem;
+  line-height: 1.75;
+}
+
+.book-view-description p:last-child { margin-bottom: 0; }
+
+.book-view-related {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.book-view-related-item {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  padding: 0.45rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.book-view-related-item:hover {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.book-view-related-item img {
+  width: 44px;
+  height: auto;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.book-view-related-item span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.12rem;
+}
+
+.book-view-related-item strong {
+  overflow: hidden;
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.book-view-related-item small {
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.book-view-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+@media (max-width: 860px) {
+  .book-view-hero { grid-template-columns: minmax(0, 150px) minmax(0, 1fr); }
+  .book-view-body { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 520px) {
+  .book-view-hero { grid-template-columns: 1fr; }
+  .book-view-cover { width: min(58%, 200px); }
+  .book-view-actions .primary-action,
+  .book-view-actions .secondary-action { flex: 1 1 100%; justify-content: center; }
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));

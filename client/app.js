@@ -14,6 +14,7 @@ const libraryState = {
   site: {},
   books: [],
   recentProgress: null,
+  detailBook: null,
   featuredBook: null,
   catalogPage: 1
 };
@@ -71,6 +72,24 @@ const els = {
   adminOpen: document.getElementById("adminOpen"),
   libraryView: document.getElementById("libraryView"),
   readerView: document.getElementById("readerView"),
+  bookView: document.getElementById("bookView"),
+  bookBackToLibrary: document.getElementById("bookBackToLibrary"),
+  bookThemeToggle: document.getElementById("bookThemeToggle"),
+  bookViewBackdrop: document.getElementById("bookViewBackdrop"),
+  bookViewCover: document.getElementById("bookViewCover"),
+  bookViewGenre: document.getElementById("bookViewGenre"),
+  bookViewStatus: document.getElementById("bookViewStatus"),
+  bookViewTitle: document.getElementById("bookViewTitle"),
+  bookViewAuthor: document.getElementById("bookViewAuthor"),
+  bookViewChapters: document.getElementById("bookViewChapters"),
+  bookViewUpdated: document.getElementById("bookViewUpdated"),
+  bookViewProgress: document.getElementById("bookViewProgress"),
+  bookViewRead: document.getElementById("bookViewRead"),
+  bookViewReadLabel: document.getElementById("bookViewReadLabel"),
+  bookViewRestart: document.getElementById("bookViewRestart"),
+  bookViewDescription: document.getElementById("bookViewDescription"),
+  bookViewRelated: document.getElementById("bookViewRelated"),
+  bookViewRelatedEmpty: document.getElementById("bookViewRelatedEmpty"),
   libraryBrand: document.getElementById("libraryBrand"),
   libraryName: document.getElementById("libraryName"),
   libraryTagline: document.getElementById("libraryTagline"),
@@ -153,7 +172,7 @@ initSpeech();
 initializeLibrary();
 
 function bindEvents() {
-  window.addEventListener("hashchange", alignHashedSection);
+  window.addEventListener("hashchange", handleHashChange);
   window.addEventListener("load", () => setTimeout(alignHashedSection, 400));
   els.fileInput?.addEventListener("change", handleFile);
   els.libraryBrand.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
@@ -170,6 +189,16 @@ function bindEvents() {
   els.catalogNextPage.addEventListener("click", () => changeCatalogPage(libraryState.catalogPage + 1));
   els.continueReading.addEventListener("click", resumeCachedBook);
   els.backToLibrary.addEventListener("click", showLibrary);
+  els.bookBackToLibrary.addEventListener("click", showLibrary);
+  els.bookThemeToggle.addEventListener("click", toggleTheme);
+  els.bookViewRead.addEventListener("click", () => {
+    const book = libraryState.detailBook;
+    if (book) loadCatalogBook(book);
+  });
+  els.bookViewRestart.addEventListener("click", () => {
+    const book = libraryState.detailBook;
+    if (book) loadCatalogBook(book, fallbackCoverForBook(book), { startAtFirstChapter: true });
+  });
   els.readerImportButton?.addEventListener("click", () => els.fileInput?.click());
   els.readerThemeToggle.addEventListener("click", toggleTheme);
   els.prevChapter.addEventListener("click", () => goToChapter(state.currentIndex - 1));
@@ -376,6 +405,13 @@ function applyLibraryManifest(manifest) {
   renderFeaturedBook();
   renderGenreOptions();
   renderCatalog();
+  // A shared #book/<id> link only resolves once the catalog has arrived.
+  if (!openDetailFromHash()) alignHashedSection();
+}
+
+function handleHashChange() {
+  if (openDetailFromHash()) return;
+  if (!els.bookView.hidden) showLibrary();
   alignHashedSection();
 }
 
@@ -537,7 +573,6 @@ function createBookCard(book, index = 0) {
   const coverButton = document.createElement("button");
   coverButton.type = "button";
   coverButton.className = "book-cover";
-  coverButton.setAttribute("aria-label", `Đọc ${book.title}`);
   const image = document.createElement("img");
   const fallbackCover = fallbackCoverForBook(book);
   image.src = book.cover || fallbackCover;
@@ -556,7 +591,9 @@ function createBookCard(book, index = 0) {
   coverAction.setAttribute("aria-hidden", "true");
   coverAction.innerHTML = '<svg class="icon" viewBox="0 0 24 24"><path d="m5 3 14 9-14 9V3Z"></path></svg>';
   coverButton.appendChild(coverAction);
-  coverButton.addEventListener("click", () => loadCatalogBook(book, fallbackCover));
+  coverButton.setAttribute("aria-label", `Xem giới thiệu ${book.title}`);
+  // The cover opens the preview; the explicit button below still reads directly.
+  coverButton.addEventListener("click", () => showBookDetail(book));
 
   const body = document.createElement("div");
   body.className = "book-card-body";
@@ -607,6 +644,7 @@ function normalizeSearch(value) {
 
 function showReader() {
   els.libraryView.hidden = true;
+  els.bookView.hidden = true;
   els.readerView.hidden = false;
   window.scrollTo({ top: 0 });
 }
@@ -615,9 +653,113 @@ function showLibrary() {
   stopSpeech();
   updateContinueReading();
   els.readerView.hidden = true;
+  els.bookView.hidden = true;
   els.libraryView.hidden = false;
   document.title = BRAND_NAME;
+  libraryState.detailBook = null;
+  if (window.location.hash.startsWith("#book/")) {
+    history.replaceState(null, "", `${window.location.pathname}#catalog`);
+  }
   window.scrollTo({ top: 0 });
+}
+
+// A preview step between the catalog and the reader: everything here comes from
+// the catalog manifest, so no EPUB is downloaded until the reader asks for it.
+async function showBookDetail(book, { updateHash = true } = {}) {
+  libraryState.detailBook = book;
+  stopSpeech();
+  els.libraryView.hidden = true;
+  els.readerView.hidden = true;
+  els.bookView.hidden = false;
+  if (updateHash) history.replaceState(null, "", `${window.location.pathname}#book/${encodeURIComponent(book.id)}`);
+  document.title = `${book.title} | ${BRAND_NAME}`;
+  window.scrollTo({ top: 0 });
+
+  const fallbackCover = fallbackCoverForBook(book);
+  const cover = book.cover || fallbackCover;
+  els.bookViewCover.src = cover;
+  els.bookViewCover.alt = `Bìa truyện ${book.title}`;
+  els.bookViewCover.addEventListener("error", () => { els.bookViewCover.src = fallbackCover; }, { once: true });
+  els.bookViewBackdrop.src = book.cover || heroVariant(fallbackCover);
+  els.bookViewGenre.textContent = book.genre || "Chưa phân loại";
+  els.bookViewStatus.textContent = book.status || "Có sẵn";
+  els.bookViewTitle.textContent = book.title;
+  els.bookViewAuthor.textContent = book.author ? `Tác giả: ${book.author}` : "Tác giả chưa cập nhật";
+  els.bookViewChapters.textContent = book.chapterCount ? `${book.chapterCount} chương` : "Định dạng EPUB";
+  els.bookViewUpdated.textContent = book.updatedAt || "Chưa rõ";
+  renderBookDescription(book.description);
+  renderRelatedBooks(book);
+
+  els.bookViewProgress.textContent = "Đang kiểm tra...";
+  els.bookViewReadLabel.textContent = "Đọc từ đầu";
+  els.bookViewRestart.hidden = true;
+
+  const progress = await readProgress(`library:${book.id}:${book.updatedAt || "current"}`).catch(() => null);
+  if (libraryState.detailBook !== book) return;
+  if (progress?.chapterCount) {
+    const index = Math.min(Number(progress.currentIndex) || 0, progress.chapterCount - 1);
+    els.bookViewProgress.textContent = `${progress.chapterTitle || `Chương ${index + 1}`} · ${index + 1}/${progress.chapterCount}`;
+    els.bookViewReadLabel.textContent = `Đọc tiếp chương ${index + 1}`;
+    els.bookViewRestart.hidden = false;
+  } else {
+    els.bookViewProgress.textContent = "Chưa đọc";
+  }
+}
+
+// The catalog description is plain text from Gemini, so paragraphs are rebuilt
+// with textContent rather than innerHTML.
+function renderBookDescription(description) {
+  const paragraphs = String(description || "").split(/\n{2,}|\n/).map((line) => line.trim()).filter(Boolean);
+  if (!paragraphs.length) {
+    els.bookViewDescription.replaceChildren();
+    appendTextElement(els.bookViewDescription, "p", "book-view-empty", "Truyện này chưa có phần giới thiệu.");
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  paragraphs.forEach((line) => appendTextElement(fragment, "p", "", line));
+  els.bookViewDescription.replaceChildren(fragment);
+}
+
+function renderRelatedBooks(book) {
+  const related = libraryState.books
+    .filter((item) => item.id !== book.id && item.genre && item.genre === book.genre)
+    .slice(0, 6);
+
+  const fragment = document.createDocumentFragment();
+  related.forEach((item) => {
+    const fallbackCover = fallbackCoverForBook(item);
+    const entry = document.createElement("button");
+    entry.type = "button";
+    entry.className = "book-view-related-item";
+    const image = document.createElement("img");
+    image.src = item.cover || fallbackCover;
+    image.alt = "";
+    image.loading = "lazy";
+    image.decoding = "async";
+    image.width = 480;
+    image.height = 720;
+    image.addEventListener("error", () => { image.src = fallbackCover; }, { once: true });
+    entry.appendChild(image);
+    const copy = document.createElement("span");
+    appendTextElement(copy, "strong", "", item.title);
+    appendTextElement(copy, "small", "", item.chapterCount ? `${item.chapterCount} chương` : "EPUB");
+    entry.appendChild(copy);
+    entry.addEventListener("click", () => showBookDetail(item));
+    fragment.appendChild(entry);
+  });
+
+  els.bookViewRelated.replaceChildren(fragment);
+  els.bookViewRelatedEmpty.hidden = related.length > 0;
+}
+
+function openDetailFromHash() {
+  const match = window.location.hash.match(/^#book\/(.+)$/);
+  if (!match) return false;
+  const id = decodeURIComponent(match[1]);
+  const book = libraryState.books.find((item) => item.id === id);
+  if (!book) return false;
+  showBookDetail(book, { updateHash: false });
+  return true;
 }
 
 async function resumeCachedBook() {
@@ -649,7 +791,7 @@ function updateContinueReading() {
   els.continueSection.hidden = false;
 }
 
-async function loadCatalogBook(book, assignedFallbackCover = fallbackCoverForBook(book)) {
+async function loadCatalogBook(book, assignedFallbackCover = fallbackCoverForBook(book), { startAtFirstChapter = false } = {}) {
   showReader();
   setBusy(`Đang tải ${book.title}...`);
   els.bookTitle.textContent = book.title;
@@ -664,7 +806,7 @@ async function loadCatalogBook(book, assignedFallbackCover = fallbackCoverForBoo
     // A parsed copy on the device means no EPUB download and no re-parse at all.
     const cachedBook = await readCachedBook(bookId).catch(() => null);
     if (cachedBook?.chapters?.length) {
-      const savedProgress = await readProgress(bookId).catch(() => null);
+      const savedProgress = startAtFirstChapter ? null : await readProgress(bookId).catch(() => null);
       await openCachedBook(cachedBook, Number(savedProgress?.currentIndex) || 0);
       return;
     }
@@ -676,7 +818,8 @@ async function loadCatalogBook(book, assignedFallbackCover = fallbackCoverForBoo
       bookId,
       fileName: book.epub.split("/").pop() || `${book.id}.epub`,
       displayTitle: book.title,
-      cover
+      cover,
+      startAtFirstChapter
     });
   } catch (error) {
     resetReader(`Không thể mở truyện: ${error.message}`);
@@ -687,7 +830,7 @@ async function applyLoadedEpub(arrayBuffer, options) {
   const book = await parseEpub(arrayBuffer, options.fileName);
   if (!book.chapters.length) throw new Error("Không tìm thấy chương có thể đọc.");
 
-  const savedProgress = await readProgress(options.bookId).catch(() => null);
+  const savedProgress = options.startAtFirstChapter ? null : await readProgress(options.bookId).catch(() => null);
   state.bookId = options.bookId;
   state.fileName = options.fileName;
   state.title = options.displayTitle || book.title || options.fileName.replace(/\.epub$/i, "");
@@ -699,7 +842,9 @@ async function applyLoadedEpub(arrayBuffer, options) {
   renderChapterControls();
   // The chapter text is written once per book; navigation only touches progress.
   await putCachedBook(buildBookRecord());
-  const savedIndex = Number(savedProgress?.currentIndex ?? localStorage.getItem(currentChapterKey()) ?? "0");
+  const savedIndex = options.startAtFirstChapter
+    ? 0
+    : Number(savedProgress?.currentIndex ?? localStorage.getItem(currentChapterKey()) ?? "0");
   goToChapter(Number.isInteger(savedIndex) ? savedIndex : 0);
 }
 

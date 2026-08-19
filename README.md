@@ -63,6 +63,16 @@ npm run build
 
 Mỗi asset được gắn `?v=<hash nội dung>` nên có thể cache một năm mà vẫn cập nhật ngay khi nội dung đổi. Không sửa trực tiếp file trong `public/` (trừ `library/`, `assets/`, `favicon.svg`) vì build sẽ ghi đè.
 
+## Ba màn hình
+
+```text
+Thư viện   ->  danh sách truyện, tìm kiếm, lọc thể loại
+Giới thiệu ->  #book/<id> · thông tin truyện, tiến độ đọc, truyện cùng thể loại
+Trình đọc  ->  mục lục, nội dung chương, dịch, giọng đọc
+```
+
+Bấm **bìa truyện** mở trang giới thiệu; nút **`Đọc ngay`** trên thẻ truyện vào thẳng trình đọc. Trang giới thiệu chỉ dùng dữ liệu có trong danh mục nên **không tải file EPUB** — file chỉ được tải khi bấm đọc. Địa chỉ `#book/<id>` chia sẻ được; mở link đó sẽ vào đúng trang giới thiệu của truyện.
+
 ## Cách dùng
 
 1. Bấm `Upload EPUB`.
