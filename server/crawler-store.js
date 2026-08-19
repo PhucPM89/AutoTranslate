@@ -73,14 +73,49 @@ function sanitizeCrawlerStatus(value) {
   };
 }
 
-function isCrawlerRequest(req) {
+async function isCrawlerRequest(req) {
   const secret = process.env.CRAWLER_SECRET || "";
   const authorization = String(req.headers.authorization || "");
   const provided = authorization.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
-  if (!secret || !provided) return false;
-  const expectedBuffer = Buffer.from(secret);
-  const providedBuffer = Buffer.from(provided);
-  return expectedBuffer.length === providedBuffer.length && crypto.timingSafeEqual(expectedBuffer, providedBuffer);
+  if (!provided) return false;
+  if (secret) {
+    const expectedBuffer = Buffer.from(secret);
+    const providedBuffer = Buffer.from(provided);
+    if (expectedBuffer.length === providedBuffer.length && crypto.timingSafeEqual(expectedBuffer, providedBuffer)) return true;
+  }
+  return verifyGitHubOidc(provided);
+}
+
+let githubKeys = null;
+let githubKeysExpiresAt = 0;
+
+async function verifyGitHubOidc(token) {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return false;
+    const header = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8"));
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+    const now = Math.floor(Date.now() / 1000);
+    if (header.alg !== "RS256" || !header.kid) return false;
+    if (payload.iss !== "https://token.actions.githubusercontent.com" || payload.aud !== "https://auto-translate-xi.vercel.app") return false;
+    if (payload.exp < now || payload.nbf > now + 30 || String(payload.repository || "").toLowerCase() !== "phucpm89/autotranslate") return false;
+    if (payload.ref !== "refs/heads/main" || !String(payload.workflow_ref || "").toLowerCase().includes("/.github/workflows/fanqie-crawler.yml@refs/heads/main")) return false;
+    const keys = await getGitHubKeys();
+    const key = keys.find((item) => item.kid === header.kid && item.kty === "RSA");
+    if (!key) return false;
+    return crypto.verify("RSA-SHA256", Buffer.from(`${parts[0]}.${parts[1]}`), crypto.createPublicKey({ key, format: "jwk" }), Buffer.from(parts[2], "base64url"));
+  } catch {
+    return false;
+  }
+}
+
+async function getGitHubKeys() {
+  if (githubKeys && Date.now() < githubKeysExpiresAt) return githubKeys;
+  const response = await fetch("https://token.actions.githubusercontent.com/.well-known/jwks", { signal: AbortSignal.timeout(10000) });
+  if (!response.ok) throw new Error("Không tải được GitHub signing keys.");
+  githubKeys = (await response.json()).keys || [];
+  githubKeysExpiresAt = Date.now() + 60 * 60 * 1000;
+  return githubKeys;
 }
 
 async function readBlobJson(pathname, fallback) {

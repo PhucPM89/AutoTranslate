@@ -11,6 +11,7 @@ concurrency:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   crawl:
@@ -18,9 +19,7 @@ jobs:
     timeout-minutes: 330
     env:
       SITE_URL: https://auto-translate-xi.vercel.app
-      CRAWLER_SECRET: ${{ secrets.CRAWLER_SECRET }}
-      BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
-      TOMATO_PASSWORD: ${{ secrets.CRAWLER_SECRET }}
+      TOMATO_PASSWORD: tomato-local-worker
       TOMATO_DATA_DIR: ${{ github.workspace }}/.crawler-data
     steps:
       - name: Checkout website

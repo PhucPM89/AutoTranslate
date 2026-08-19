@@ -28,6 +28,7 @@ app.all("/api/admin/crawler", require("../api/admin/crawler"));
 app.all("/api/crawler/control", require("../api/crawler/control"));
 app.all("/api/crawler/status", require("../api/crawler/status"));
 app.all("/api/crawler/publish", require("../api/crawler/publish"));
+app.all("/api/crawler/upload", require("../api/crawler/upload"));
 
 const publicDir = path.join(__dirname, "..", "public");
 const jszipPath = path.join(__dirname, "..", "node_modules", "jszip", "dist", "jszip.min.js");

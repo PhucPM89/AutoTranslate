@@ -21,6 +21,9 @@
     },
     "api/crawler/publish.js": {
       "maxDuration": 30
+    },
+    "api/crawler/upload.js": {
+      "maxDuration": 30
     }
   },
   "headers": [

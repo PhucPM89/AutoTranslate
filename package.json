@@ -9,7 +9,7 @@
     "setup:admin": "node scripts/setup-admin-env.js",
     "start": "node server/server.js",
     "test": "node --test server/*.test.js",
-    "syntax": "node --check server/server.js && node --check server/admin-auth.js && node --check server/library-catalog.js && node --check server/crawler-store.js && node --check server/gemini.js && node --check server/mp3.js && node --check server/speech.js && node --check api/translate.js && node --check api/speech.js && node --check api/library.js && node --check api/admin/login.js && node --check api/admin/upload.js && node --check api/admin/catalog.js && node --check api/admin/crawler.js && node --check api/crawler/control.js && node --check api/crawler/status.js && node --check api/crawler/publish.js && node --check scripts/crawler-worker.js && node --check public/app.js"
+    "syntax": "node --check server/server.js && node --check server/admin-auth.js && node --check server/library-catalog.js && node --check server/crawler-store.js && node --check server/gemini.js && node --check server/mp3.js && node --check server/speech.js && node --check api/translate.js && node --check api/speech.js && node --check api/library.js && node --check api/admin/login.js && node --check api/admin/upload.js && node --check api/admin/catalog.js && node --check api/admin/crawler.js && node --check api/crawler/control.js && node --check api/crawler/status.js && node --check api/crawler/publish.js && node --check api/crawler/upload.js && node --check scripts/crawler-worker.js && node --check public/app.js"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",

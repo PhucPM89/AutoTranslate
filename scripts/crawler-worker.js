@@ -3,10 +3,11 @@
 const fs = require("fs");
 const path = require("path");
 const JSZip = require("jszip");
-const { del, put } = require("@vercel/blob");
+const { upload } = require("@vercel/blob/client");
 
 const SITE_URL = String(process.env.SITE_URL || "https://auto-translate-xi.vercel.app").replace(/\/$/, "");
 const CRAWLER_SECRET = process.env.CRAWLER_SECRET || "";
+let crawlerAuthToken = CRAWLER_SECRET;
 const TOMATO_URL = String(process.env.TOMATO_URL || "http://127.0.0.1:18423").replace(/\/$/, "");
 const TOMATO_PASSWORD = process.env.TOMATO_PASSWORD || CRAWLER_SECRET;
 const TOMATO_DATA_DIR = path.resolve(process.env.TOMATO_DATA_DIR || ".crawler-data");
@@ -15,6 +16,7 @@ const POLL_INTERVAL_MS = 10 * 1000;
 
 async function main() {
   requireEnvironment();
+  crawlerAuthToken = crawlerAuthToken || await requestGitHubOidcToken();
   const control = await siteRequest("/api/crawler/control");
   const { config, categories, catalog } = control;
   if (!config.enabled) {
@@ -143,30 +145,29 @@ async function downloadAndPublish(candidate, status) {
   const epubBuffer = fs.readFileSync(epubPath);
   const metadata = await readEpubMetadata(epubBuffer);
   const title = metadata.title || completedJob.title || `Fanqie ${candidate.sourceId}`;
-  const uploaded = [];
-  try {
-    const epubBlob = await put(`library/books/fanqie-${candidate.sourceId}.epub`, epubBuffer, {
+  const epubBlob = await upload(`library/books/fanqie-${candidate.sourceId}.epub`, epubBuffer, {
+    access: "public",
+    contentType: "application/epub+zip",
+    handleUploadUrl: `${SITE_URL}/api/crawler/upload`,
+    headers: { Authorization: `Bearer ${crawlerAuthToken}` },
+    clientPayload: JSON.stringify({ kind: "epub" }),
+    multipart: true
+  });
+
+  let coverUrl = "";
+  if (metadata.cover?.data) {
+    const extension = coverExtension(metadata.cover.contentType);
+    const coverBlob = await upload(`library/covers/fanqie-${candidate.sourceId}${extension}`, metadata.cover.data, {
       access: "public",
-      contentType: "application/epub+zip",
-      addRandomSuffix: true,
-      token: process.env.BLOB_READ_WRITE_TOKEN
+      contentType: metadata.cover.contentType,
+      handleUploadUrl: `${SITE_URL}/api/crawler/upload`,
+      headers: { Authorization: `Bearer ${crawlerAuthToken}` },
+      clientPayload: JSON.stringify({ kind: "cover" })
     });
-    uploaded.push(epubBlob.url);
+    coverUrl = coverBlob.url;
+  }
 
-    let coverUrl = "";
-    if (metadata.cover?.data) {
-      const extension = coverExtension(metadata.cover.contentType);
-      const coverBlob = await put(`library/covers/fanqie-${candidate.sourceId}${extension}`, metadata.cover.data, {
-        access: "public",
-        contentType: metadata.cover.contentType,
-        addRandomSuffix: true,
-        token: process.env.BLOB_READ_WRITE_TOKEN
-      });
-      uploaded.push(coverBlob.url);
-      coverUrl = coverBlob.url;
-    }
-
-    const result = await siteRequest("/api/crawler/publish", {
+  const result = await siteRequest("/api/crawler/publish", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -180,12 +181,8 @@ async function downloadAndPublish(candidate, status) {
         epub: epubBlob.url,
         cover: coverUrl
       })
-    });
-    return result.book;
-  } catch (error) {
-    await Promise.allSettled(uploaded.map((url) => del(url, { token: process.env.BLOB_READ_WRITE_TOKEN })));
-    throw error;
-  }
+  });
+  return result.book;
 }
 
 async function waitForJob(jobId, status) {
@@ -346,7 +343,7 @@ async function fetchText(url) {
 async function siteRequest(pathname, options = {}) {
   return jsonRequest(`${SITE_URL}${pathname}`, {
     ...options,
-    headers: { Authorization: `Bearer ${CRAWLER_SECRET}`, ...(options.headers || {}) }
+    headers: { Authorization: `Bearer ${crawlerAuthToken}`, ...(options.headers || {}) }
   });
 }
 
@@ -369,8 +366,21 @@ async function updateStatus(status) {
 }
 
 function requireEnvironment() {
-  const missing = ["CRAWLER_SECRET", "BLOB_READ_WRITE_TOKEN"].filter((name) => !process.env[name]);
-  if (missing.length) throw new Error(`Thiếu GitHub secret: ${missing.join(", ")}.`);
+  if (!CRAWLER_SECRET && (!process.env.ACTIONS_ID_TOKEN_REQUEST_URL || !process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN)) {
+    throw new Error("Worker cần GitHub OIDC hoặc CRAWLER_SECRET khi chạy local.");
+  }
+}
+
+async function requestGitHubOidcToken() {
+  const url = new URL(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
+  url.searchParams.set("audience", SITE_URL);
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` },
+    signal: AbortSignal.timeout(30000)
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok || !body.value) throw new Error("GitHub không cấp được OIDC token cho crawler.");
+  return body.value;
 }
 
 function unique(values) {

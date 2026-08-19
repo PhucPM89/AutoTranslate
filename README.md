@@ -147,13 +147,6 @@ Mật khẩu không được ghi vào source. Server chỉ giữ hash `scrypt`, 
 
 Crawler chạy bằng GitHub Actions mỗi 6 giờ, lấy book ID từ bảng xếp hạng Fanqie, dùng Tomato Novel Downloader để tạo EPUB, rồi upload EPUB và ảnh bìa vào Vercel Blob. Không cần VPS và không cần nhập link thủ công.
 
-Đặt hai GitHub Actions secrets:
-
-```text
-CRAWLER_SECRET
-BLOB_READ_WRITE_TOKEN
-```
-
-Đặt cùng giá trị `CRAWLER_SECRET` trên Vercel. Sau khi deploy, đăng nhập khu vực quản trị, mở tab `Crawler`, chọn thể loại và bật tự động. Có thể chạy ngay workflow `Fanqie crawler` bằng nút `Run workflow`; lịch mặc định là phút 17 mỗi 6 giờ.
+Workflow không cần GitHub secret: nó dùng GitHub OIDC token ngắn hạn, bị giới hạn cho đúng repo `PhucPM89/AutoTranslate`, nhánh `main` và file workflow crawler. Sau khi deploy, đăng nhập khu vực quản trị, mở tab `Crawler`, chọn thể loại và bật tự động. Có thể chạy ngay workflow `Fanqie crawler` bằng nút `Run workflow`; lịch mặc định là phút 17 mỗi 6 giờ.
 
 Worker ưu tiên cập nhật truyện Fanqie đã quá 24 giờ chưa đồng bộ; những lượt còn lại sẽ thêm truyện mới. File tải tạm chỉ nằm trong cache GitHub Actions, còn thư viện chính nằm trên Vercel Blob.

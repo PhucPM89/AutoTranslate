@@ -20,12 +20,12 @@ test("sanitizes crawler configuration and removes unknown categories", () => {
   });
 });
 
-test("authenticates crawler requests with a timing-safe bearer secret", () => {
+test("authenticates crawler requests with a timing-safe bearer secret", async () => {
   const previous = process.env.CRAWLER_SECRET;
   process.env.CRAWLER_SECRET = "crawler-test-secret";
   try {
-    assert.equal(isCrawlerRequest({ headers: { authorization: "Bearer crawler-test-secret" } }), true);
-    assert.equal(isCrawlerRequest({ headers: { authorization: "Bearer wrong-secret" } }), false);
+    assert.equal(await isCrawlerRequest({ headers: { authorization: "Bearer crawler-test-secret" } }), true);
+    assert.equal(await isCrawlerRequest({ headers: { authorization: "Bearer wrong-secret" } }), false);
   } finally {
     if (previous === undefined) delete process.env.CRAWLER_SECRET;
     else process.env.CRAWLER_SECRET = previous;

@@ -8,7 +8,7 @@ const { readJsonBody, methodNotAllowed, noStore } = require("../../server/http")
 module.exports = async function handler(req, res) {
   noStore(res);
   if (req.method !== "POST") return methodNotAllowed(res, "POST");
-  if (!isCrawlerRequest(req)) return res.status(401).json({ error: "Crawler token không hợp lệ." });
+  if (!(await isCrawlerRequest(req))) return res.status(401).json({ error: "Crawler token không hợp lệ." });
   if (!process.env.BLOB_READ_WRITE_TOKEN) return res.status(503).json({ error: "Vercel Blob chưa được kết nối." });
 
   try {
