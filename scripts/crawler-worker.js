@@ -13,6 +13,9 @@ const TOMATO_PASSWORD = process.env.TOMATO_PASSWORD || CRAWLER_SECRET;
 const TOMATO_DATA_DIR = path.resolve(process.env.TOMATO_DATA_DIR || ".crawler-data");
 const JOB_TIMEOUT_MS = clampNumber(process.env.CRAWLER_JOB_TIMEOUT_MINUTES, 15, 300, 180) * 60 * 1000;
 const POLL_INTERVAL_MS = 10 * 1000;
+const RANK_PAGE_SIZE = 10;
+const DEFAULT_RANK_PAGE_COUNT = 1;
+const LONG_NOVEL_RANK_PAGE_COUNT = 20;
 
 async function main() {
   requireEnvironment();
@@ -31,7 +34,10 @@ async function main() {
   try {
     await waitForTomato();
     await configureTomato();
-    const candidates = await discoverCandidates(config, categories);
+    const candidates = await discoverCandidates(config, categories, fetchText, async ({ categoryLabel, scannedPages, totalPages, found }) => {
+      status.message = `Đang quét thể loại ${categoryLabel}: ${scannedPages}/${totalPages} trang, tìm thấy ${found} truyện.`;
+      await updateStatus(status);
+    });
     const excludedIds = new Set(config.excludedSourceIds || []);
     const existingBooks = (catalog.books || []).filter((book) => book.source === "fanqie" && book.sourceId && !excludedIds.has(String(book.sourceId)));
     const existingIds = new Set(existingBooks.map((book) => String(book.sourceId)));
@@ -43,7 +49,10 @@ async function main() {
     }
     const newBooks = updateJobs.length
       ? []
-      : await selectNewBookCandidates(newCandidates, config.minChapterCount, config.maxNewBooksPerRun);
+      : await selectNewBookCandidates(newCandidates, config.minChapterCount, config.maxNewBooksPerRun, fetchText, async ({ scanned, scanLimit, selected }) => {
+        status.message = `Đang lọc truyện từ ${config.minChapterCount} chương: đã kiểm ${scanned}/${scanLimit}, chọn ${selected}.`;
+        await updateStatus(status);
+      });
     const jobs = updateJobs.length ? updateJobs : newBooks;
     status.discovered = jobs.filter((item) => !item.isUpdate).length;
 
@@ -112,14 +121,27 @@ function selectWorkItems(newBooks, existingBooks, updateExisting, now = Date.now
   return newBooks;
 }
 
-async function discoverCandidates(config, categories) {
+async function discoverCandidates(config, categories, loadPage = fetchText, onProgress = null) {
+  const rankPageCount = config.minChapterCount > 0 ? LONG_NOVEL_RANK_PAGE_COUNT : DEFAULT_RANK_PAGE_COUNT;
   const groups = await Promise.all(config.categories.map(async (key) => {
     const definition = categories[key];
     if (!definition) return [];
     const ids = [];
+    let scannedPages = 0;
+    const totalPages = (definition.ranks || []).length * rankPageCount;
     for (const rank of definition.ranks || []) {
-      const html = await fetchText(`https://fanqienovel.com/rank/${rank}`);
-      ids.push(...parseRankBookIds(html));
+      for (let page = 0; page < rankPageCount; page += 1) {
+        const offset = page * RANK_PAGE_SIZE;
+        const url = offset ? `https://fanqienovel.com/rank/${rank}?offset=${offset}` : `https://fanqienovel.com/rank/${rank}`;
+        const html = await loadPage(url);
+        const pageIds = parseRankBookIds(html);
+        ids.push(...pageIds);
+        scannedPages += 1;
+        if (onProgress && (scannedPages % 5 === 0 || scannedPages === totalPages)) {
+          await onProgress({ categoryLabel: definition.label, scannedPages, totalPages, found: unique(ids).length });
+        }
+        if (!pageIds.length) break;
+      }
     }
     return unique(ids).map((sourceId) => ({ sourceId, genre: definition.label, category: key }));
   }));
@@ -141,20 +163,24 @@ function roundRobin(groups) {
   return output;
 }
 
-async function selectNewBookCandidates(candidates, minChapterCount, limit, loadPage = fetchText) {
+async function selectNewBookCandidates(candidates, minChapterCount, limit, loadPage = fetchText, onProgress = null) {
   const minimum = Math.max(0, Number.parseInt(minChapterCount, 10) || 0);
   const maximum = Math.max(1, Number.parseInt(limit, 10) || 1);
   if (!minimum) return candidates.slice(0, maximum);
 
   const selected = [];
-  const scanLimit = Math.min(candidates.length, Math.max(10, maximum * 10));
-  for (const candidate of candidates.slice(0, scanLimit)) {
+  const scanLimit = Math.min(candidates.length, Math.max(220, maximum * 120));
+  for (let index = 0; index < scanLimit; index += 1) {
+    const candidate = candidates[index];
     try {
       const html = await loadPage(`https://fanqienovel.com/page/${candidate.sourceId}`);
       const chapterCount = parseFanqieChapterCount(html);
       if (chapterCount !== null && chapterCount >= minimum) selected.push({ ...candidate, listedChapterCount: chapterCount });
     } catch (error) {
       console.warn(`Không kiểm tra được số chương Fanqie ${candidate.sourceId}: ${error.message}`);
+    }
+    if (onProgress && ((index + 1) % 10 === 0 || selected.length >= maximum || index + 1 === scanLimit)) {
+      await onProgress({ scanned: index + 1, scanLimit, selected: selected.length });
     }
     if (selected.length >= maximum) break;
   }
@@ -456,4 +482,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { parseRankBookIds, parseFanqieChapterCount, roundRobin, readEpubMetadata, selectWorkItems, selectNewBookCandidates };
+module.exports = { discoverCandidates, parseRankBookIds, parseFanqieChapterCount, roundRobin, readEpubMetadata, selectWorkItems, selectNewBookCandidates };

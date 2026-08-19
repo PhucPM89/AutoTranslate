@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const JSZip = require("jszip");
 const { sanitizeCrawlerConfig, sanitizeCrawlerStatus, isCrawlerRequest } = require("./crawler-store");
-const { parseRankBookIds, parseFanqieChapterCount, roundRobin, readEpubMetadata, selectWorkItems, selectNewBookCandidates } = require("../scripts/crawler-worker");
+const { discoverCandidates, parseRankBookIds, parseFanqieChapterCount, roundRobin, readEpubMetadata, selectWorkItems, selectNewBookCandidates } = require("../scripts/crawler-worker");
 
 test("sanitizes crawler configuration and removes unknown categories", () => {
   assert.deepEqual(sanitizeCrawlerConfig({
@@ -64,6 +64,36 @@ test("reads Fanqie chapter totals and keeps only books above the configured mini
     { sourceId: "2", genre: "Tiên hiệp", listedChapterCount: 220 },
     { sourceId: "3", genre: "Tiên hiệp", listedChapterCount: 450 }
   ]);
+});
+
+test("scans past the first few Fanqie candidates when a high chapter minimum is configured", async () => {
+  const candidates = Array.from({ length: 25 }, (_, index) => ({ sourceId: String(index + 1), genre: "Huyền huyễn" }));
+  const seen = [];
+  const selected = await selectNewBookCandidates(candidates, 1000, 1, async (url) => {
+    const sourceId = Number(url.split("/").pop());
+    seen.push(sourceId);
+    return `{"chapterTotal":${sourceId === 18 ? 1200 : 300},"followStatus":0}`;
+  });
+  assert.equal(selected[0].sourceId, "18");
+  assert.equal(seen.length, 18);
+});
+
+test("discovers long-novel candidates from deeper category rank pages", async () => {
+  const urls = [];
+  const candidates = await discoverCandidates(
+    { categories: ["fantasy"], minChapterCount: 1000 },
+    { fantasy: { label: "Huyền huyễn", ranks: ["rank-a"] } },
+    async (url) => {
+      urls.push(url);
+      const offset = Number(new URL(url).searchParams.get("offset") || 0);
+      return `<a href="/page/${"7".repeat(18)}${String(offset / 10).padStart(2, "0")}">book</a>`;
+    }
+  );
+
+  assert.equal(urls.length, 20);
+  assert.equal(urls[0], "https://fanqienovel.com/rank/rank-a");
+  assert.equal(urls[19], "https://fanqienovel.com/rank/rank-a?offset=190");
+  assert.equal(candidates.length, 20);
 });
 
 test("refreshes the oldest stale book before discovering a new one", () => {
