@@ -118,7 +118,7 @@ async function login(event) {
 async function logout() {
   setBusy(true);
   try {
-    await requestJson("/api/admin/logout", { method: "POST" });
+    await requestJson("/api/admin/session", { method: "DELETE" });
     showAuthenticated(false);
     setStatus("Đã đăng xuất.");
   } catch (error) {
@@ -293,7 +293,7 @@ function describeCrawlerReach() {
 async function loadAnalytics() {
   setStatus("Đang tải số liệu truy cập...");
   try {
-    renderAnalytics(await requestJson("/api/admin/analytics"));
+    renderAnalytics(await requestJson("/api/analytics"));
     setStatus("");
   } catch (error) {
     setStatus(error.message, true);

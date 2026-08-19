@@ -199,6 +199,26 @@ Truyện vài nghìn chương cần nhiều giờ để tải, nên worker đư�
 
 Repo đang là public nên GitHub Actions không giới hạn số phút. Lịch 15 phút vẫn giữ nguyên: nhờ `concurrency` group, lượt mới sẽ chờ lượt đang chạy kết thúc rồi khởi động gần như ngay lập tức, nên không còn khoảng trống 15 phút giữa các lần tải.
 
+## Giới hạn 12 Serverless Function
+
+Vercel Hobby chỉ cho phép **12 serverless function mỗi deployment**, và project đang dùng đúng 12. Thêm một file `.js` mới vào `api/` sẽ làm deploy thất bại với lỗi:
+
+```text
+No more than 12 Serverless Functions can be added to a Deployment on the Hobby plan.
+```
+
+Vì vậy vài endpoint được gộp chung một function, phân nhánh theo HTTP method:
+
+```text
+api/analytics.js        POST   = beacon công khai từ trình duyệt người đọc
+                        GET    = số liệu cho admin (cần phiên quản trị)
+api/admin/login.js      GET    = kiểm tra phiên
+                        POST   = đăng nhập
+                        DELETE = đăng xuất
+```
+
+`vercel.json` giữ rewrite cho các path cũ (`/api/admin/logout`, `/api/admin/analytics`) để trình duyệt còn giữ bundle cũ không bị lỗi. Khi cần thêm endpoint mới, hãy gộp vào function sẵn có thay vì tạo file mới.
+
 ## Số liệu người đọc
 
 Tab `Số liệu` trong khu quản trị hiển thị lượt truy cập và lượt mở truyện theo hôm nay / 7 ngày / 30 ngày / tổng cộng, kèm danh sách truyện được mở nhiều nhất.

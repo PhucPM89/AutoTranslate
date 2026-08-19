@@ -18,12 +18,19 @@ app.use((_req, res, next) => {
   next();
 });
 
+// Mirrors the rewrites in vercel.json so local dev hits the same handlers.
+const analyticsHandler = require("../api/analytics");
+const adminSessionHandler = require("../api/admin/login");
+
 app.all("/api/library", require("../api/library"));
-app.all("/api/analytics", require("../api/analytics"));
-app.all("/api/admin/analytics", require("../api/admin/analytics"));
-app.all("/api/admin/login", require("../api/admin/login"));
-app.all("/api/admin/session", require("../api/admin/login"));
-app.all("/api/admin/logout", require("../api/admin/logout"));
+app.all("/api/analytics", analyticsHandler);
+app.all("/api/admin/analytics", analyticsHandler);
+app.all("/api/admin/login", adminSessionHandler);
+app.all("/api/admin/session", adminSessionHandler);
+app.all("/api/admin/logout", (req, res) => {
+  req.query = { ...(req.query || {}), action: "logout" };
+  return adminSessionHandler(req, res);
+});
 app.all("/api/admin/upload", require("../api/admin/upload"));
 app.all("/api/admin/catalog", require("../api/admin/catalog"));
 app.all("/api/admin/crawler", require("../api/admin/crawler"));
