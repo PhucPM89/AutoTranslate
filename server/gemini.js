@@ -26,6 +26,81 @@ async function translateText(text, apiKey) {
   };
 }
 
+async function translateMetadata(metadata, apiKey) {
+  const source = {
+    title: cleanMetadataField(metadata?.title, 120),
+    author: cleanMetadataField(metadata?.author, 100),
+    description: cleanMetadataField(metadata?.description, 2000)
+  };
+  if (!source.title) throw new Error("Metadata thiếu tên truyện.");
+
+  const prompt = [
+    "Bạn là biên tập viên truyện Trung Quốc cho một thư viện tiếng Việt.",
+    "Hãy dịch metadata sau sang tiếng Việt tự nhiên.",
+    "Yêu cầu bắt buộc:",
+    "- title: dịch thành tên truyện tiếng Việt gọn, tự nhiên, đúng nghĩa.",
+    "- author: chuyển bút danh/tên tác giả sang âm Hán-Việt; không dùng Pinyin.",
+    "- description: dịch đầy đủ phần giới thiệu, không tóm tắt và không thêm bình luận.",
+    "- Không để lại chữ Hán trong bất kỳ trường nào nếu trường nguồn có chữ Hán.",
+    "- Chỉ trả về JSON đúng schema: {\"title\":\"...\",\"author\":\"...\",\"description\":\"...\"}.",
+    "Metadata nguồn:",
+    JSON.stringify(source)
+  ].join("\n");
+  const models = [GEMINI_MODEL, ...GEMINI_FALLBACK_MODELS].filter((model, index, list) => model && list.indexOf(model) === index);
+  let lastError = null;
+
+  for (const model of models) {
+    try {
+      const result = await translateChunkWithModel(apiKey, model, prompt, { responseMimeType: "application/json", temperature: 0.2 });
+      const translated = parseMetadataJson(result.text);
+      validateTranslatedMetadata(source, translated);
+      return {
+        title: cleanMetadataField(translated.title, 120),
+        author: cleanMetadataField(translated.author, 100),
+        description: cleanMetadataField(translated.description, 500),
+        model: result.model
+      };
+    } catch (error) {
+      lastError = error;
+      if (!shouldTryNextModel(error) && error.status !== 502) break;
+    }
+  }
+  throw lastError || new Error("Gemini không dịch được metadata truyện.");
+}
+
+function parseMetadataJson(value) {
+  try {
+    return JSON.parse(String(value || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""));
+  } catch {
+    const error = new Error("Gemini trả metadata không đúng JSON.");
+    error.status = 502;
+    throw error;
+  }
+}
+
+function validateTranslatedMetadata(source, translated) {
+  if (!translated || typeof translated !== "object" || !cleanMetadataField(translated.title, 120)) {
+    const error = new Error("Gemini không trả tên truyện đã dịch.");
+    error.status = 502;
+    throw error;
+  }
+  for (const key of ["title", "author", "description"]) {
+    if (hasHan(source[key]) && hasHan(translated[key])) {
+      const error = new Error(`Metadata ${key} vẫn còn chữ Trung.`);
+      error.status = 502;
+      throw error;
+    }
+  }
+}
+
+function cleanMetadataField(value, maxLength) {
+  return typeof value === "string" ? value.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, maxLength) : "";
+}
+
+function hasHan(value) {
+  return /\p{Script=Han}/u.test(String(value || ""));
+}
+
 function buildTranslationPrompt(text, index, total, isRetry = false) {
   const chunkNote =
     total > 1
@@ -133,7 +208,7 @@ function normalizeForComparison(value) {
     .toLowerCase();
 }
 
-async function translateChunkWithModel(apiKey, model, prompt) {
+async function translateChunkWithModel(apiKey, model, prompt, generationConfig = {}) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     model
   )}:generateContent?key=${encodeURIComponent(apiKey)}`;
@@ -154,7 +229,7 @@ async function translateChunkWithModel(apiKey, model, prompt) {
               parts: [{ text: prompt }]
             }
           ],
-          generationConfig: {}
+          generationConfig
         })
       });
       const data = await geminiResponse.json();
@@ -289,4 +364,4 @@ function parseCsv(value) {
     .filter(Boolean);
 }
 
-module.exports = { translateText, assessTranslation, splitTextIntoChunks };
+module.exports = { translateText, translateMetadata, assessTranslation, splitTextIntoChunks };

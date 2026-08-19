@@ -25,6 +25,7 @@ module.exports = async function handler(req, res) {
       book.sourceId = existingBook.sourceId;
       book.sourceUrl = existingBook.sourceUrl;
       book.lastCrawledAt = existingBook.lastCrawledAt;
+      book.metadataLanguage = existingBook.metadataLanguage;
     }
     if (existingIndex >= 0) catalog.books[existingIndex] = book;
     else catalog.books.unshift(book);

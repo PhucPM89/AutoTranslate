@@ -61,6 +61,18 @@ test("refreshes the oldest stale book before discovering a new one", () => {
   assert.deepEqual(jobs, [{ sourceId: "2222222222222222222", genre: "Trinh thám", category: "existing", isUpdate: true }]);
 });
 
+test("refreshes untranslated crawler metadata immediately", () => {
+  const now = Date.parse("2026-08-19T12:00:00Z");
+  const jobs = selectWorkItems(
+    [{ sourceId: "9999999999999999999", genre: "Tiên hiệp" }],
+    [{ sourceId: "1111111111111111111", genre: "Tiên hiệp", lastCrawledAt: "2026-08-19T11:55:00Z" }],
+    true,
+    now
+  );
+  assert.equal(jobs[0].sourceId, "1111111111111111111");
+  assert.equal(jobs[0].isUpdate, true);
+});
+
 test("reads title, author, chapter count, and cover from an EPUB", async () => {
   const zip = new JSZip();
   zip.file("META-INF/container.xml", '<?xml version="1.0"?><container><rootfiles><rootfile full-path="EPUB/package.opf"/></rootfiles></container>');

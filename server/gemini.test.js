@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { translateText, assessTranslation, splitTextIntoChunks } = require("./gemini");
+const { translateText, translateMetadata, assessTranslation, splitTextIntoChunks } = require("./gemini");
 
 const chineseSource = "这是一个需要翻译成越南语的中文段落。".repeat(20);
 
@@ -46,6 +46,38 @@ test("tries the next model when a model echoes Chinese text", async () => {
     assert.match(firstPrompt, /陈清 phải dịch là Trần Thanh/);
     assert.doesNotMatch(firstPrompt, /Phiên âm tên riêng sang chữ Latin/);
     assert.match(calls[1].body.contents[0].parts[0].text, /đã bị hệ thống từ chối/);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("translates crawler metadata to strict Vietnamese JSON", async () => {
+  const originalFetch = global.fetch;
+  let requestBody;
+  global.fetch = async (_url, options) => {
+    requestBody = JSON.parse(options.body);
+    return {
+      ok: true,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: JSON.stringify({
+          title: "Muội Muội Nhặt Được Tu Tiên Trở Về Cướp Hôn",
+          author: "Ỷ Trúc Thính Phong Ngâm",
+          description: "Đêm Thượng Nguyên, ta tình cờ cứu một cô bé ăn xin."
+        }) }] } }]
+      })
+    };
+  };
+
+  try {
+    const result = await translateMetadata({
+      title: "捡来的妹妹修仙后，回来抢亲了",
+      author: "倚竹听风吟",
+      description: "上元夜，我随手救了一个小乞丐。"
+    }, "test-key");
+    assert.equal(result.title, "Muội Muội Nhặt Được Tu Tiên Trở Về Cướp Hôn");
+    assert.equal(result.author, "Ỷ Trúc Thính Phong Ngâm");
+    assert.equal(requestBody.generationConfig.responseMimeType, "application/json");
+    assert.doesNotMatch(`${result.title}${result.author}${result.description}`, /\p{Script=Han}/u);
   } finally {
     global.fetch = originalFetch;
   }

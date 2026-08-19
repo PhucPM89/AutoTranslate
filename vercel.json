@@ -22,6 +22,9 @@
     "api/admin/crawler.js": {
       "maxDuration": 30
     },
+    "api/crawler/control.js": {
+      "maxDuration": 60
+    },
     "api/crawler/publish.js": {
       "maxDuration": 30
     },

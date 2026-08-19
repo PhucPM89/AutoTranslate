@@ -87,7 +87,7 @@ function selectWorkItems(newBooks, existingBooks, updateExisting, now = Date.now
     const refreshBefore = now - 24 * 60 * 60 * 1000;
     const due = existingBooks
       .map((book) => ({ book, crawledAt: new Date(book.lastCrawledAt || 0).getTime() || 0 }))
-      .filter((item) => item.crawledAt < refreshBefore)
+      .filter((item) => item.book.metadataLanguage !== "vi" || item.crawledAt < refreshBefore)
       .sort((a, b) => a.crawledAt - b.crawledAt)[0]?.book;
     if (due) {
       return [{
@@ -144,7 +144,18 @@ async function downloadAndPublish(candidate, status) {
 
   const epubBuffer = fs.readFileSync(epubPath);
   const metadata = await readEpubMetadata(epubBuffer);
-  const title = metadata.title || completedJob.title || `Fanqie ${candidate.sourceId}`;
+  status.message = `Đang dịch thông tin Fanqie book ${candidate.sourceId}...`;
+  await updateStatus(status);
+  const translatedMetadata = await siteRequest("/api/crawler/control", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      title: metadata.title || completedJob.title || `Fanqie ${candidate.sourceId}`,
+      author: metadata.author || completedJob.author || "",
+      description: metadata.description || ""
+    })
+  });
+  const title = translatedMetadata.title;
   const epubBlob = await upload(`library/books/fanqie-${candidate.sourceId}.epub`, epubBuffer, {
     access: "public",
     contentType: "application/epub+zip",
@@ -173,10 +184,10 @@ async function downloadAndPublish(candidate, status) {
       body: JSON.stringify({
         sourceId: candidate.sourceId,
         title,
-        author: metadata.author || completedJob.author || "",
+        author: translatedMetadata.author,
         genre: candidate.genre,
         status: "Đang cập nhật",
-        description: metadata.description || "",
+        description: translatedMetadata.description,
         chapterCount: metadata.chapterCount,
         epub: epubBlob.url,
         cover: coverUrl

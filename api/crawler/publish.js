@@ -53,6 +53,7 @@ function sanitizeCrawlerBook(value) {
     source: "fanqie",
     sourceId,
     sourceUrl: `https://fanqienovel.com/page/${sourceId}`,
+    metadataLanguage: "vi",
     lastCrawledAt: new Date().toISOString(),
     updatedAt: new Date().toISOString().slice(0, 10)
   };
