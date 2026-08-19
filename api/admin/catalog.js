@@ -26,6 +26,7 @@ module.exports = async function handler(req, res) {
       book.sourceUrl = existingBook.sourceUrl;
       book.lastCrawledAt = existingBook.lastCrawledAt;
       book.metadataLanguage = existingBook.metadataLanguage;
+      book.metadataVersion = existingBook.metadataVersion;
     }
     if (existingIndex >= 0) catalog.books[existingIndex] = book;
     else catalog.books.unshift(book);
@@ -60,7 +61,7 @@ function sanitizeBook(value) {
     author: clean(value?.author, 100),
     genre: clean(value?.genre, 60),
     status: clean(value?.status, 40) || "Có sẵn",
-    description: clean(value?.description, 500),
+    description: clean(value?.description, 3000),
     chapterCount: clampInteger(value?.chapterCount, 0, 100000),
     featured: Boolean(value?.featured),
     cover: cleanUrl(value?.cover),

@@ -30,7 +30,7 @@ async function translateMetadata(metadata, apiKey) {
   const source = {
     title: cleanMetadataField(metadata?.title, 120),
     author: cleanMetadataField(metadata?.author, 100),
-    description: cleanMetadataField(metadata?.description, 2000)
+    description: cleanMetadataField(metadata?.description, 3000)
   };
   if (!source.title) throw new Error("Metadata thiếu tên truyện.");
 
@@ -57,7 +57,7 @@ async function translateMetadata(metadata, apiKey) {
       return {
         title: cleanMetadataField(translated.title, 120),
         author: cleanMetadataField(translated.author, 100),
-        description: cleanMetadataField(translated.description, 500),
+        description: cleanMetadataField(translated.description, 3000),
         model: result.model
       };
     } catch (error) {

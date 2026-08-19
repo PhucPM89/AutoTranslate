@@ -87,7 +87,7 @@ function selectWorkItems(newBooks, existingBooks, updateExisting, now = Date.now
     const refreshBefore = now - 24 * 60 * 60 * 1000;
     const due = existingBooks
       .map((book) => ({ book, crawledAt: new Date(book.lastCrawledAt || 0).getTime() || 0 }))
-      .filter((item) => item.book.metadataLanguage !== "vi" || item.crawledAt < refreshBefore)
+      .filter((item) => item.book.metadataVersion !== 2 || item.crawledAt < refreshBefore)
       .sort((a, b) => a.crawledAt - b.crawledAt)[0]?.book;
     if (due) {
       return [{

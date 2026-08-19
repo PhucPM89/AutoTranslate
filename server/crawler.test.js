@@ -65,7 +65,7 @@ test("refreshes untranslated crawler metadata immediately", () => {
   const now = Date.parse("2026-08-19T12:00:00Z");
   const jobs = selectWorkItems(
     [{ sourceId: "9999999999999999999", genre: "Tiên hiệp" }],
-    [{ sourceId: "1111111111111111111", genre: "Tiên hiệp", lastCrawledAt: "2026-08-19T11:55:00Z" }],
+    [{ sourceId: "1111111111111111111", genre: "Tiên hiệp", metadataVersion: 1, lastCrawledAt: "2026-08-19T11:55:00Z" }],
     true,
     now
   );

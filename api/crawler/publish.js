@@ -45,7 +45,7 @@ function sanitizeCrawlerBook(value) {
     author: clean(value?.author, 100),
     genre: clean(value?.genre, 60),
     status: clean(value?.status, 40) || "Đang cập nhật",
-    description: clean(value?.description, 500),
+    description: clean(value?.description, 3000),
     chapterCount: clampInteger(value?.chapterCount, 0, 100000),
     featured: false,
     cover: cleanUrl(value?.cover),
@@ -54,6 +54,7 @@ function sanitizeCrawlerBook(value) {
     sourceId,
     sourceUrl: `https://fanqienovel.com/page/${sourceId}`,
     metadataLanguage: "vi",
+    metadataVersion: 2,
     lastCrawledAt: new Date().toISOString(),
     updatedAt: new Date().toISOString().slice(0, 10)
   };
