@@ -31,11 +31,6 @@
             <svg class="icon theme-moon" aria-hidden="true" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"></path></svg>
             <span id="themeLabel" class="sr-only">Light</span>
           </button>
-          <label class="file-button library-import" aria-label="Mở EPUB từ máy" title="Mở EPUB từ máy">
-            <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="m17 8-5-5-5 5M12 3v12"></path></svg>
-            <span>Mở EPUB</span>
-            <input id="fileInput" type="file" accept=".epub,application/epub+zip">
-          </label>
         </div>
       </header>
 
@@ -82,7 +77,7 @@
           <div id="catalogGrid" class="catalog-grid" aria-live="polite"></div>
           <div id="catalogEmpty" class="catalog-empty" hidden>
             <img src="/library/covers/misty-pagoda.jpg" alt="" aria-hidden="true">
-            <div><p class="eyebrow">Kệ sách đang chờ</p><h3>Chưa có truyện phù hợp</h3><p>Bạn có thể mở EPUB từ máy hoặc gửi tên truyện cần thêm vào thư viện.</p><a id="emptyContactLink" class="text-link" href="#request">Gửi yêu cầu truyện</a></div>
+            <div><p class="eyebrow">Kệ sách đang chờ</p><h3>Chưa có truyện phù hợp</h3><p>Gửi tên truyện hoặc link Fanqie để truyện được thêm vào thư viện.</p><a id="emptyContactLink" class="text-link" href="#request">Gửi yêu cầu truyện</a></div>
           </div>
           <nav id="catalogPagination" class="catalog-pagination" aria-label="Phân trang thư viện" hidden>
             <span id="catalogPaginationSummary" class="pagination-summary"></span>
@@ -208,7 +203,6 @@
         <label class="command-search"><svg class="icon search-icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><input id="globalSearch" type="search" placeholder="Tìm trong mục lục..." autocomplete="off"></label>
         <div class="topbar-actions">
           <button id="readerThemeToggle" class="icon-button" type="button" aria-label="Đổi giao diện" title="Đổi giao diện"><svg class="icon theme-sun" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path></svg><svg class="icon theme-moon" aria-hidden="true" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"></path></svg></button>
-          <button id="readerImportButton" class="secondary-action" type="button"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="m17 8-5-5-5 5M12 3v12"></path></svg>Mở EPUB</button>
         </div>
       </header>
 
@@ -250,7 +244,7 @@
     </div>
 
     <script src="/vendor/jszip.min.js"></script>
-    <script src="/app.js?v=20260819-13"></script>
-    <script src="/admin-upload.js?v=20260819-11"></script>
+    <script src="/app.js?v=20260819-14"></script>
+    <script src="/admin-upload.js?v=20260819-12"></script>
   </body>
 </html>

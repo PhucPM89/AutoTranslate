@@ -144,7 +144,7 @@ initializeLibrary();
 function bindEvents() {
   window.addEventListener("hashchange", alignHashedSection);
   window.addEventListener("load", () => setTimeout(alignHashedSection, 400));
-  els.fileInput.addEventListener("change", handleFile);
+  els.fileInput?.addEventListener("change", handleFile);
   els.libraryBrand.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
   els.librarySearch.addEventListener("input", resetCatalogPage);
   els.libraryGenre.addEventListener("change", resetCatalogPage);
@@ -158,7 +158,7 @@ function bindEvents() {
   els.catalogNextPage.addEventListener("click", () => changeCatalogPage(libraryState.catalogPage + 1));
   els.continueReading.addEventListener("click", resumeCachedBook);
   els.backToLibrary.addEventListener("click", showLibrary);
-  els.readerImportButton.addEventListener("click", () => els.fileInput.click());
+  els.readerImportButton?.addEventListener("click", () => els.fileInput?.click());
   els.readerThemeToggle.addEventListener("click", toggleTheme);
   els.prevChapter.addEventListener("click", () => goToChapter(state.currentIndex - 1));
   els.nextChapter.addEventListener("click", () => goToChapter(state.currentIndex + 1));
