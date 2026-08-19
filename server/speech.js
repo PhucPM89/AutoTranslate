@@ -1,7 +1,5 @@
-const { EdgeTTS, Constants: EdgeConstants } = require("@andresaya/edge-tts");
-
 const GEMINI_TTS_MODEL = process.env.GEMINI_TTS_MODEL || "gemini-3.1-flash-tts-preview";
-const GEMINI_TTS_TIMEOUT_MS = Number(process.env.GEMINI_TTS_TIMEOUT_MS || 8000);
+const GEMINI_TTS_TIMEOUT_MS = Number(process.env.GEMINI_TTS_TIMEOUT_MS || 50000);
 const MAX_SPEECH_TEXT_LENGTH = 1200;
 const ALLOWED_VOICES = new Set(["Kore", "Aoede", "Leda", "Puck", "Charon"]);
 const ALLOWED_RATES = new Set(["0.8", "1", "1.2", "1.5"]);
@@ -19,39 +17,7 @@ const VOICE_PROFILES = {
   Puck: "Chat giong linh hoat, giau nang luong nhung van la mot nguoi ke truong thanh.",
   Charon: "Chat giong tram, day, diem tinh va cao do on dinh."
 };
-const EDGE_VOICES = {
-  fantasy: "vi-VN-HoaiMyNeural",
-  horror: "vi-VN-NamMinhNeural",
-  apocalypse: "vi-VN-NamMinhNeural",
-  detective: "vi-VN-NamMinhNeural",
-  xianxia: "vi-VN-HoaiMyNeural"
-};
-const EDGE_RATES = { "0.8": "-20%", "1": "+0%", "1.2": "+20%", "1.5": "+50%" };
-const EDGE_PITCHES = { fantasy: "+0Hz", horror: "-8Hz", apocalypse: "-4Hz", detective: "-2Hz", xianxia: "-2Hz" };
-let geminiQuotaBlockedUntil = 0;
-
 async function generateSpeech(text, apiKey, options = {}) {
-  if (!apiKey || options.provider === "edge" || Date.now() < geminiQuotaBlockedUntil) {
-    return generateEdgeSpeech(text, options);
-  }
-
-  try {
-    return await generateGeminiSpeech(text, apiKey, options);
-  } catch (error) {
-    if (error.code !== "quota_exceeded" && error.status !== 504) throw error;
-    geminiQuotaBlockedUntil = Date.now() + 10 * 60 * 1000;
-
-    try {
-      return await generateEdgeSpeech(text, options);
-    } catch (fallbackError) {
-      fallbackError.status = fallbackError.status || 502;
-      fallbackError.code = "fallback_failed";
-      throw fallbackError;
-    }
-  }
-}
-
-async function generateGeminiSpeech(text, apiKey, options = {}) {
   const cleanText = String(text || "").trim();
   if (!cleanText) throw publicError("Thieu noi dung ban dich can doc.", 400);
   if (cleanText.length > MAX_SPEECH_TEXT_LENGTH) {
@@ -144,49 +110,6 @@ async function generateGeminiSpeech(text, apiKey, options = {}) {
   throw lastError || publicError("Khong the tao giong doc.", 502);
 }
 
-async function generateEdgeSpeech(text, options = {}) {
-  const cleanText = String(text || "").trim();
-  if (!cleanText) throw publicError("Thieu noi dung ban dich can doc.", 400);
-  if (cleanText.length > MAX_SPEECH_TEXT_LENGTH) {
-    throw publicError(`Moi doan doc khong duoc vuot qua ${MAX_SPEECH_TEXT_LENGTH} ky tu.`, 400);
-  }
-
-  const genre = GENRE_DIRECTIONS[options.genre] ? options.genre : "fantasy";
-  const rate = ALLOWED_RATES.has(String(options.rate)) ? String(options.rate) : "1";
-  const voice = EDGE_VOICES[genre];
-  let tts;
-  let lastError;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    tts = options.edgeTtsFactory ? options.edgeTtsFactory() : new EdgeTTS();
-    try {
-      await withTimeout(
-        tts.synthesize(cleanText, voice, {
-          rate: EDGE_RATES[rate],
-          pitch: EDGE_PITCHES[genre],
-          volume: "+0%",
-          outputFormat: EdgeConstants.OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3
-        }),
-        12000,
-        "Edge TTS phan hoi qua cham."
-      );
-      lastError = null;
-      break;
-    } catch (error) {
-      lastError = error;
-    }
-  }
-  if (lastError) throw lastError;
-
-  return {
-    audio: tts.toBase64(),
-    mimeType: "audio/mpeg",
-    model: "edge-neural-tts",
-    voice,
-    genre,
-    provider: "edge"
-  };
-}
-
 function buildSpeechPrompt(text, rate, genre = "fantasy", voice = "Kore", segmentIndex = 0, segmentCount = 1) {
   const pace = {
     "0.8": "cham rai, ro tung cau",
@@ -255,20 +178,8 @@ function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function withTimeout(promise, timeoutMs, message) {
-  let timeout;
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => {
-      timeout = setTimeout(() => reject(publicError(message, 504)), timeoutMs);
-    })
-  ]).finally(() => clearTimeout(timeout));
-}
-
 module.exports = {
   generateSpeech,
-  generateGeminiSpeech,
-  generateEdgeSpeech,
   buildSpeechPrompt,
   pcmToWavBase64,
   MAX_SPEECH_TEXT_LENGTH

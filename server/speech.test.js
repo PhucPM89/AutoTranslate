@@ -2,8 +2,6 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   generateSpeech,
-  generateGeminiSpeech,
-  generateEdgeSpeech,
   buildSpeechPrompt,
   pcmToWavBase64
 } = require("./speech");
@@ -89,98 +87,11 @@ test("does not retry when the account quota is exhausted", async () => {
 
   try {
     await assert.rejects(
-      () => generateGeminiSpeech("Day la ban dich tieng Viet.", "test-key"),
+      () => generateSpeech("Day la ban dich tieng Viet.", "test-key"),
       (error) => error.status === 429 && error.code === "quota_exceeded"
     );
     assert.equal(calls, 1);
   } finally {
     global.fetch = originalFetch;
   }
-});
-
-test("uses a Vietnamese Edge neural voice for fallback audio", async () => {
-  const calls = [];
-  const fakeTts = {
-    synthesize: async (...args) => calls.push(args),
-    toBase64: () => "SUQz"
-  };
-  const result = await generateEdgeSpeech("Day la ban dich tieng Viet.", {
-    genre: "horror",
-    rate: "0.8",
-    edgeTtsFactory: () => fakeTts
-  });
-
-  assert.equal(calls[0][1], "vi-VN-NamMinhNeural");
-  assert.equal(calls[0][2].rate, "-20%");
-  assert.equal(result.audio, "SUQz");
-  assert.equal(result.mimeType, "audio/mpeg");
-  assert.equal(result.provider, "edge");
-});
-
-test("falls back to Edge only when Gemini quota is exhausted", async () => {
-  const originalFetch = global.fetch;
-  global.fetch = async () => ({
-    ok: false,
-    status: 429,
-    json: async () => ({
-      error: { message: "You exceeded your current quota, please check your plan and billing details." }
-    })
-  });
-  const fakeTts = {
-    synthesize: async () => {},
-    toBase64: () => "SUQz"
-  };
-
-  try {
-    const result = await generateSpeech("Day la ban dich tieng Viet.", "test-key", {
-      genre: "xianxia",
-      edgeTtsFactory: () => fakeTts
-    });
-    assert.equal(result.provider, "edge");
-    assert.equal(result.voice, "vi-VN-HoaiMyNeural");
-  } finally {
-    global.fetch = originalFetch;
-  }
-});
-
-test("uses Edge directly when the client already selected fallback mode", async () => {
-  const originalFetch = global.fetch;
-  let geminiCalls = 0;
-  global.fetch = async () => {
-    geminiCalls += 1;
-    throw new Error("Gemini should not be called");
-  };
-  const fakeTts = {
-    synthesize: async () => {},
-    toBase64: () => "SUQz"
-  };
-
-  try {
-    const result = await generateSpeech("Day la ban dich tieng Viet.", "test-key", {
-      provider: "edge",
-      edgeTtsFactory: () => fakeTts
-    });
-    assert.equal(result.provider, "edge");
-    assert.equal(geminiCalls, 0);
-  } finally {
-    global.fetch = originalFetch;
-  }
-});
-
-test("retries Edge with a fresh client after a connection failure", async () => {
-  let attempts = 0;
-  const result = await generateEdgeSpeech("Day la ban dich tieng Viet.", {
-    edgeTtsFactory: () => {
-      attempts += 1;
-      return {
-        synthesize: async () => {
-          if (attempts === 1) throw new Error("WebSocket connection failed");
-        },
-        toBase64: () => "SUQz"
-      };
-    }
-  });
-
-  assert.equal(attempts, 2);
-  assert.equal(result.audio, "SUQz");
 });

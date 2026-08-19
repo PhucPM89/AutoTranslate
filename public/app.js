@@ -16,9 +16,9 @@ const CACHE_STORE = "books";
 const SPEECH_VOICE_KEY = "epubTranslator.speechVoice";
 const SPEECH_RATE_KEY = "epubTranslator.speechRate";
 const SPEECH_GENRE_KEY = "epubTranslator.speechGenre";
-const SPEECH_CACHE_NAME = "epubTranslator.speech.v1";
+const SPEECH_CACHE_NAME = "epubTranslator.speech.v2";
+const LEGACY_SPEECH_CACHE_NAME = "epubTranslator.speech.v1";
 const SPEECH_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const SPEECH_EDGE_FALLBACK_UNTIL_KEY = "epubTranslator.edgeFallbackUntil";
 const SPEECH_GENRE_PRESETS = {
   fantasy: { voice: "Puck", rate: "1" },
   horror: { voice: "Charon", rate: "0.8" },
@@ -31,12 +31,9 @@ const speechState = {
   audio: null,
   abortControllers: new Set(),
   audioUrls: new Map(),
-  audioProviders: new Map(),
-  audioVoices: new Map(),
   audioPromises: new Map(),
   chunks: [],
   settings: null,
-  provider: "auto",
   index: 0,
   mode: "idle",
   session: 0
@@ -200,13 +197,7 @@ async function toggleSpeech() {
 
   if (speechState.mode === "paused") {
     await speechState.audio.play();
-    const provider = speechState.audioProviders.get(chunkIndex);
-    const voice = speechState.audioVoices.get(chunkIndex);
-    const status =
-      provider === "edge"
-        ? `${speechProgressLabel("Playing")} · ${formatSpeechVoice(voice)} · Edge fallback`
-        : speechProgressLabel("Playing");
-    setSpeechMode("speaking", status);
+    setSpeechMode("speaking", speechProgressLabel("Playing"));
     return;
   }
 
@@ -217,7 +208,6 @@ async function toggleSpeech() {
     voice: els.speechVoice.value,
     rate: els.speechRate.value
   });
-  speechState.provider = getPreferredSpeechProvider();
   speechState.index = 0;
   if (!speechState.chunks.length) return;
 
@@ -276,13 +266,10 @@ function prepareSpeechChunk(index, session) {
   let promise;
   promise = (async () => {
     const cacheRequest = await createSpeechCacheRequest(speechState.chunks[index], speechState.settings);
-    const cachedAudio = await readSpeechCache(cacheRequest);
-    if (cachedAudio && session === speechState.session) {
-      const cachedUrl = URL.createObjectURL(cachedAudio.blob);
+    const cachedBlob = await readSpeechCache(cacheRequest);
+    if (cachedBlob && session === speechState.session) {
+      const cachedUrl = URL.createObjectURL(cachedBlob);
       speechState.audioUrls.set(index, cachedUrl);
-      speechState.audioProviders.set(index, cachedAudio.provider);
-      speechState.audioVoices.set(index, cachedAudio.voice);
-      if (cachedAudio.provider === "edge") rememberEdgeFallback();
       return cachedUrl;
     }
 
@@ -294,7 +281,6 @@ function prepareSpeechChunk(index, session) {
       signal: controller.signal,
       body: JSON.stringify({
         text: speechState.chunks[index],
-        provider: speechState.provider,
         genre: speechState.settings.genre,
         voice: speechState.settings.voice,
         rate: speechState.settings.rate,
@@ -315,13 +301,9 @@ function prepareSpeechChunk(index, session) {
       if (session !== speechState.session) return "";
 
       const audioBlob = base64ToBlob(data.audio, data.mimeType || "audio/wav");
-      await writeSpeechCache(cacheRequest, audioBlob, data.provider, data.voice);
+      await writeSpeechCache(cacheRequest, audioBlob);
       const audioUrl = URL.createObjectURL(audioBlob);
       speechState.audioUrls.set(index, audioUrl);
-      speechState.audioProviders.set(index, data.provider);
-      speechState.audioVoices.set(index, data.voice);
-      if (data.provider === "edge") rememberEdgeFallback();
-      if (data.provider === "gemini") localStorage.removeItem(SPEECH_EDGE_FALLBACK_UNTIL_KEY);
       return audioUrl;
     })()
     .finally(() => {
@@ -361,18 +343,14 @@ async function readSpeechCache(request) {
       await cache.delete(request);
       return null;
     }
-    return {
-      blob: await response.blob(),
-      provider: response.headers.get("X-Speech-Provider") || "cache",
-      voice: response.headers.get("X-Speech-Voice") || ""
-    };
+    return response.blob();
   } catch (error) {
     console.warn("Unable to read the local audio cache.", error);
     return null;
   }
 }
 
-async function writeSpeechCache(request, audioBlob, provider, voice) {
+async function writeSpeechCache(request, audioBlob) {
   if (!("caches" in window)) return;
   try {
     const cache = await caches.open(SPEECH_CACHE_NAME);
@@ -381,9 +359,7 @@ async function writeSpeechCache(request, audioBlob, provider, voice) {
       new Response(audioBlob, {
         headers: {
           "Content-Type": audioBlob.type || "audio/wav",
-          "X-Speech-Expires": String(Date.now() + SPEECH_CACHE_TTL_MS),
-          "X-Speech-Provider": provider || "unknown",
-          "X-Speech-Voice": voice || ""
+          "X-Speech-Expires": String(Date.now() + SPEECH_CACHE_TTL_MS)
         }
       })
     );
@@ -395,6 +371,8 @@ async function writeSpeechCache(request, audioBlob, provider, voice) {
 async function pruneSpeechCache() {
   if (!("caches" in window)) return;
   try {
+    await caches.delete(LEGACY_SPEECH_CACHE_NAME);
+    localStorage.removeItem("epubTranslator.edgeFallbackUntil");
     const cache = await caches.open(SPEECH_CACHE_NAME);
     const requests = await cache.keys();
     await Promise.all(
@@ -424,7 +402,6 @@ function finishSpeech() {
   releaseAllSpeechUrls();
   speechState.chunks = [];
   speechState.settings = null;
-  speechState.provider = "auto";
   speechState.index = 0;
   setSpeechMode("idle", "Playback complete");
 }
@@ -437,7 +414,6 @@ function stopSpeech(statusMessage = "") {
   speechState.mode = "idle";
   speechState.chunks = [];
   speechState.settings = null;
-  speechState.provider = "auto";
   speechState.index = 0;
   if (speechState.audio) {
     speechState.audio.pause();
@@ -455,30 +431,11 @@ function releaseSpeechUrl(index) {
   if (!audioUrl) return;
   URL.revokeObjectURL(audioUrl);
   speechState.audioUrls.delete(index);
-  speechState.audioProviders.delete(index);
-  speechState.audioVoices.delete(index);
 }
 
 function releaseAllSpeechUrls() {
   for (const audioUrl of speechState.audioUrls.values()) URL.revokeObjectURL(audioUrl);
   speechState.audioUrls.clear();
-  speechState.audioProviders.clear();
-  speechState.audioVoices.clear();
-}
-
-function formatSpeechVoice(voice) {
-  if (voice === "vi-VN-NamMinhNeural") return "Nam Minh";
-  if (voice === "vi-VN-HoaiMyNeural") return "Hoài My";
-  return voice || "Edge Neural";
-}
-
-function rememberEdgeFallback() {
-  speechState.provider = "edge";
-  localStorage.setItem(SPEECH_EDGE_FALLBACK_UNTIL_KEY, String(Date.now() + 10 * 60 * 1000));
-}
-
-function getPreferredSpeechProvider() {
-  return Number(localStorage.getItem(SPEECH_EDGE_FALLBACK_UNTIL_KEY) || 0) > Date.now() ? "edge" : "auto";
 }
 
 function setSpeechMode(mode, statusMessage) {
