@@ -40,34 +40,6 @@ const FALLBACK_BOOK_COVERS = [
   "/library/covers/misty-pagoda.webp",
   "/library/covers/lantern-temple.webp"
 ];
-const SPEECH_VOICE_KEY = "epubTranslator.speechVoice";
-const SPEECH_RATE_KEY = "epubTranslator.speechRate";
-const SPEECH_GENRE_KEY = "epubTranslator.speechGenre";
-const SPEECH_CACHE_NAME = "epubTranslator.speech.v2";
-const LEGACY_SPEECH_CACHE_NAME = "epubTranslator.speech.v1";
-const SPEECH_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const SPEECH_DAILY_USAGE_KEY = "epubTranslator.speechDailyUsage";
-const SPEECH_DAILY_REQUEST_BUDGET = 95;
-const SPEECH_GENRE_PRESETS = {
-  fantasy: { voice: "Puck", rate: "1" },
-  horror: { voice: "Charon", rate: "0.8" },
-  apocalypse: { voice: "Kore", rate: "1" },
-  detective: { voice: "Charon", rate: "1" },
-  xianxia: { voice: "Aoede", rate: "1" }
-};
-
-const speechState = {
-  audio: null,
-  abortControllers: new Set(),
-  audioUrls: new Map(),
-  audioPromises: new Map(),
-  chunks: [],
-  settings: null,
-  index: 0,
-  mode: "idle",
-  session: 0
-};
-
 const els = {
   adminOpen: document.getElementById("adminOpen"),
   libraryView: document.getElementById("libraryView"),
@@ -133,8 +105,6 @@ const els = {
   chapterSelect: document.getElementById("chapterSelect"),
   chapterList: document.getElementById("chapterList"),
   documentCount: document.getElementById("documentCount"),
-  documentTitle: document.getElementById("documentTitle"),
-  documentStatus: document.getElementById("documentStatus"),
   progressLabel: document.getElementById("progressLabel"),
   progressBar: document.getElementById("progressBar"),
   paperTitle: document.getElementById("paperTitle"),
@@ -149,13 +119,6 @@ const els = {
   translationText: document.getElementById("translationText"),
   translateButton: document.getElementById("translateButton"),
   retranslateButton: document.getElementById("retranslateButton"),
-  speechGenre: document.getElementById("speechGenre"),
-  speechVoice: document.getElementById("speechVoice"),
-  speechRate: document.getElementById("speechRate"),
-  speechPlay: document.getElementById("speechPlay"),
-  speechPlayLabel: document.getElementById("speechPlayLabel"),
-  speechStop: document.getElementById("speechStop"),
-  speechStatus: document.getElementById("speechStatus"),
   themeToggle: document.getElementById("themeToggle"),
   themeLabel: document.getElementById("themeLabel"),
   fontDecrease: document.getElementById("fontDecrease"),
@@ -168,7 +131,6 @@ const parser = new DOMParser();
 
 initPreferences();
 bindEvents();
-initSpeech();
 initializeLibrary();
 
 function bindEvents() {
@@ -213,13 +175,6 @@ function bindEvents() {
   els.globalSearch.addEventListener("input", debounce(renderChapterControls, SEARCH_DEBOUNCE_MS));
   els.translateButton.addEventListener("click", () => translateCurrentChapter(false));
   els.retranslateButton.addEventListener("click", () => translateCurrentChapter(true));
-  els.speechGenre.addEventListener("change", applySpeechGenrePreset);
-  els.speechVoice.addEventListener("change", saveSpeechPreferences);
-  els.speechRate.addEventListener("change", saveSpeechPreferences);
-  els.speechPlay.addEventListener("click", toggleSpeech);
-  els.speechStop.addEventListener("click", () => stopSpeech());
-  document.addEventListener("visibilitychange", pauseSpeechWhenHidden);
-  window.addEventListener("beforeunload", () => stopSpeech());
   els.themeToggle.addEventListener("click", toggleTheme);
   els.fontDecrease.addEventListener("click", () => changeFontSize(-1));
   els.fontIncrease.addEventListener("click", () => changeFontSize(1));
@@ -650,7 +605,6 @@ function showReader() {
 }
 
 function showLibrary() {
-  stopSpeech();
   updateContinueReading();
   els.readerView.hidden = true;
   els.bookView.hidden = true;
@@ -667,7 +621,6 @@ function showLibrary() {
 // the catalog manifest, so no EPUB is downloaded until the reader asks for it.
 async function showBookDetail(book, { updateHash = true } = {}) {
   libraryState.detailBook = book;
-  stopSpeech();
   els.libraryView.hidden = true;
   els.readerView.hidden = true;
   els.bookView.hidden = false;
@@ -863,431 +816,6 @@ function applyReaderHeader() {
   document.title = `${state.title} | ${BRAND_NAME}`;
 }
 
-function initSpeech() {
-  const savedGenre = localStorage.getItem(SPEECH_GENRE_KEY) || "fantasy";
-  els.speechGenre.value = SPEECH_GENRE_PRESETS[savedGenre] ? savedGenre : "fantasy";
-  const preset = SPEECH_GENRE_PRESETS[els.speechGenre.value];
-  const savedVoice = localStorage.getItem(SPEECH_VOICE_KEY) || preset.voice;
-  const savedRate = localStorage.getItem(SPEECH_RATE_KEY) || preset.rate;
-  els.speechVoice.value = Array.from(els.speechVoice.options).some((option) => option.value === savedVoice)
-    ? savedVoice
-    : "Kore";
-  els.speechRate.value = Array.from(els.speechRate.options).some((option) => option.value === savedRate)
-    ? savedRate
-    : "1";
-  speechState.audio = new Audio();
-  saveSpeechPreferences();
-  pruneSpeechCache();
-  updateSpeechAvailability();
-}
-
-function saveSpeechPreferences() {
-  localStorage.setItem(SPEECH_GENRE_KEY, els.speechGenre.value);
-  localStorage.setItem(SPEECH_VOICE_KEY, els.speechVoice.value);
-  localStorage.setItem(SPEECH_RATE_KEY, els.speechRate.value);
-}
-
-function applySpeechGenrePreset() {
-  const preset = SPEECH_GENRE_PRESETS[els.speechGenre.value] || SPEECH_GENRE_PRESETS.fantasy;
-  els.speechVoice.value = preset.voice;
-  els.speechRate.value = preset.rate;
-  saveSpeechPreferences();
-  els.speechStatus.textContent = `${els.speechGenre.options[els.speechGenre.selectedIndex].text} · ${preset.voice}`;
-}
-
-function pauseSpeechWhenHidden() {
-  if (!document.hidden || speechState.mode !== "speaking") return;
-  speechState.audio.pause();
-  setSpeechMode("paused", "Đã tạm dừng khi chuyển tab");
-}
-
-async function toggleSpeech() {
-  if (els.speechPlay.disabled) return;
-
-  if (speechState.mode === "speaking") {
-    speechState.audio.pause();
-    setSpeechMode("paused", "Đã tạm dừng");
-    return;
-  }
-
-  if (speechState.mode === "paused") {
-    await speechState.audio.play();
-    setSpeechMode("speaking", speechProgressLabel("Đang phát"));
-    return;
-  }
-
-  const text = getCurrentTranslation();
-  speechState.chunks = splitSpeechText(text);
-  speechState.settings = Object.freeze({
-    genre: els.speechGenre.value,
-    voice: els.speechVoice.value,
-    rate: els.speechRate.value
-  });
-  speechState.index = 0;
-  if (!speechState.chunks.length) return;
-  const remainingRequests = getRemainingSpeechRequests();
-  if (speechState.chunks.length > remainingRequests) {
-    const required = speechState.chunks.length;
-    speechState.chunks = [];
-    speechState.settings = null;
-    setSpeechMode("idle", `Chương này cần ${required} lượt TTS, hôm nay còn ${remainingRequests}/${SPEECH_DAILY_REQUEST_BUDGET}.`);
-    return;
-  }
-
-  speechState.session += 1;
-  await playCurrentSpeechChunk(speechState.session);
-}
-
-async function playCurrentSpeechChunk(session) {
-  if (session !== speechState.session) return;
-  if (speechState.index >= speechState.chunks.length) {
-    finishSpeech();
-    return;
-  }
-
-  const audioWasBuffered = speechState.audioUrls.has(speechState.index);
-  if (!audioWasBuffered) {
-    const action = speechState.index === 0 ? "Generating" : "Buffering";
-    setSpeechMode("generating", speechProgressLabel(action));
-  }
-
-  try {
-    const chunkIndex = speechState.index;
-    const audioUrl = await prepareSpeechChunk(chunkIndex, session);
-    if (!audioUrl || session !== speechState.session) return;
-
-    speechState.audio.src = audioUrl;
-    speechState.audio.onended = () => {
-      if (session !== speechState.session) return;
-      releaseSpeechUrl(chunkIndex);
-      speechState.index += 1;
-      playCurrentSpeechChunk(session);
-    };
-    speechState.audio.onerror = () => {
-      if (session === speechState.session) stopSpeech("Audio playback failed");
-    };
-
-    await speechState.audio.play();
-    setSpeechMode("speaking", speechProgressLabel("Đang phát"));
-    prefetchNextSpeechChunk(session);
-  } catch (error) {
-    if (error.name !== "AbortError" && session === speechState.session) {
-      stopSpeech(error.message || "Không thể tạo giọng đọc");
-    }
-  }
-}
-
-function prepareSpeechChunk(index, session) {
-  if (speechState.audioUrls.has(index)) {
-    return Promise.resolve(speechState.audioUrls.get(index));
-  }
-  if (speechState.audioPromises.has(index)) {
-    return speechState.audioPromises.get(index);
-  }
-
-  let controller = null;
-  let promise;
-  promise = (async () => {
-    const cacheRequest = await createSpeechCacheRequest(speechState.chunks[index], speechState.settings);
-    const cachedBlob = await readSpeechCache(cacheRequest);
-    if (cachedBlob && session === speechState.session) {
-      const cachedUrl = URL.createObjectURL(cachedBlob);
-      speechState.audioUrls.set(index, cachedUrl);
-      return cachedUrl;
-    }
-
-    controller = new AbortController();
-    speechState.abortControllers.add(controller);
-    if (getRemainingSpeechRequests() <= 0) {
-      throw new Error(`Đã dùng hết ngân sách ${SPEECH_DAILY_REQUEST_BUDGET} lượt TTS hôm nay.`);
-    }
-    recordSpeechRequest();
-    const response = await fetch("/api/speech", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      signal: controller.signal,
-      body: JSON.stringify({
-        text: speechState.chunks[index],
-        genre: speechState.settings.genre,
-        voice: speechState.settings.voice,
-        rate: speechState.settings.rate,
-        segmentIndex: index,
-        segmentCount: speechState.chunks.length
-      })
-    });
-      const data = await response.json();
-      if (!response.ok) {
-        const error = new Error(
-          data.code === "quota_exceeded"
-            ? "Đã hết hạn mức giọng đọc AI. Hãy thử lại sau hoặc kiểm tra billing."
-            : data.error || "Không thể tạo giọng đọc."
-        );
-        error.code = data.code;
-        throw error;
-      }
-      if (session !== speechState.session) return "";
-
-      const audioBlob = base64ToBlob(data.audio, data.mimeType || "audio/wav");
-      await writeSpeechCache(cacheRequest, audioBlob);
-      const audioUrl = URL.createObjectURL(audioBlob);
-      speechState.audioUrls.set(index, audioUrl);
-      return audioUrl;
-    })()
-    .finally(() => {
-      if (controller) speechState.abortControllers.delete(controller);
-      if (speechState.audioPromises.get(index) === promise) {
-        speechState.audioPromises.delete(index);
-      }
-    });
-
-  speechState.audioPromises.set(index, promise);
-  return promise;
-}
-
-async function createSpeechCacheRequest(text, settings) {
-  const source = JSON.stringify({ text, ...settings });
-  let key = "";
-  if (window.crypto?.subtle) {
-    const digest = await window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(source));
-    key = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-  } else {
-    let hash = 0;
-    for (let index = 0; index < source.length; index += 1) {
-      hash = (hash * 31 + source.charCodeAt(index)) >>> 0;
-    }
-    key = String(hash);
-  }
-  return new Request(`/__speech-cache/${key}`);
-}
-
-async function readSpeechCache(request) {
-  if (!("caches" in window)) return null;
-  try {
-    const cache = await caches.open(SPEECH_CACHE_NAME);
-    const response = await cache.match(request);
-    if (!response) return null;
-    if (Number(response.headers.get("X-Speech-Expires")) <= Date.now()) {
-      await cache.delete(request);
-      return null;
-    }
-    return response.blob();
-  } catch (error) {
-    console.warn("Unable to read the local audio cache.", error);
-    return null;
-  }
-}
-
-async function writeSpeechCache(request, audioBlob) {
-  if (!("caches" in window)) return;
-  try {
-    const cache = await caches.open(SPEECH_CACHE_NAME);
-    await cache.put(
-      request,
-      new Response(audioBlob, {
-        headers: {
-          "Content-Type": audioBlob.type || "audio/wav",
-          "X-Speech-Expires": String(Date.now() + SPEECH_CACHE_TTL_MS)
-        }
-      })
-    );
-  } catch (error) {
-    console.warn("Unable to save the local audio cache.", error);
-  }
-}
-
-async function pruneSpeechCache() {
-  if (!("caches" in window)) return;
-  try {
-    await caches.delete(LEGACY_SPEECH_CACHE_NAME);
-    localStorage.removeItem("epubTranslator.edgeFallbackUntil");
-    const cache = await caches.open(SPEECH_CACHE_NAME);
-    const requests = await cache.keys();
-    await Promise.all(
-      requests.map(async (request) => {
-        const response = await cache.match(request);
-        if (!response || Number(response.headers.get("X-Speech-Expires")) <= Date.now()) {
-          await cache.delete(request);
-        }
-      })
-    );
-  } catch (error) {
-    console.warn("Unable to prune the local audio cache.", error);
-  }
-}
-
-function prefetchNextSpeechChunk(session) {
-  const nextIndex = speechState.index + 1;
-  if (nextIndex >= speechState.chunks.length) return;
-  prepareSpeechChunk(nextIndex, session).catch((error) => {
-    if (error.name !== "AbortError" && session === speechState.session) {
-      console.warn("Unable to buffer the next audio segment.", error);
-    }
-  });
-}
-
-function finishSpeech() {
-  releaseAllSpeechUrls();
-  speechState.chunks = [];
-  speechState.settings = null;
-  speechState.index = 0;
-  setSpeechMode("idle", "Đã đọc xong chương");
-}
-
-function stopSpeech(statusMessage = "") {
-  speechState.session += 1;
-  for (const controller of speechState.abortControllers) controller.abort();
-  speechState.abortControllers.clear();
-  speechState.audioPromises.clear();
-  speechState.mode = "idle";
-  speechState.chunks = [];
-  speechState.settings = null;
-  speechState.index = 0;
-  if (speechState.audio) {
-    speechState.audio.pause();
-    speechState.audio.onended = null;
-    speechState.audio.onerror = null;
-    speechState.audio.removeAttribute("src");
-    speechState.audio.load();
-  }
-  releaseAllSpeechUrls();
-  setSpeechMode("idle", statusMessage || (hasSpeakableOutput() ? "Sẵn sàng" : "Chưa có bản dịch"));
-}
-
-function releaseSpeechUrl(index) {
-  const audioUrl = speechState.audioUrls.get(index);
-  if (!audioUrl) return;
-  URL.revokeObjectURL(audioUrl);
-  speechState.audioUrls.delete(index);
-}
-
-function releaseAllSpeechUrls() {
-  for (const audioUrl of speechState.audioUrls.values()) URL.revokeObjectURL(audioUrl);
-  speechState.audioUrls.clear();
-}
-
-function setSpeechMode(mode, statusMessage) {
-  speechState.mode = mode;
-  els.speechPlay.classList.toggle("is-speaking", mode === "speaking");
-  els.speechPlay.classList.toggle("is-paused", mode === "paused");
-  els.speechPlayLabel.textContent =
-    mode === "generating" ? "Đang tạo" : mode === "speaking" ? "Tạm dừng" : mode === "paused" ? "Tiếp tục" : "Nghe";
-  els.speechPlay.setAttribute(
-    "aria-label",
-    mode === "speaking" ? "Tạm dừng audio" : mode === "paused" ? "Tiếp tục audio" : "Nghe bản dịch"
-  );
-  els.speechPlay.title = els.speechPlay.getAttribute("aria-label");
-  els.speechStop.disabled = mode === "idle";
-  els.speechPlay.disabled = mode === "generating" || (mode === "idle" && !hasSpeakableOutput());
-  els.speechGenre.disabled = mode !== "idle";
-  els.speechVoice.disabled = mode !== "idle";
-  els.speechRate.disabled = mode !== "idle";
-  if (statusMessage) {
-    els.speechStatus.textContent = statusMessage;
-    els.speechStatus.title = statusMessage;
-  }
-}
-
-function updateSpeechAvailability() {
-  const available = hasSpeakableOutput();
-  els.speechPlay.disabled = !available || speechState.mode === "generating";
-  if (!available && speechState.mode !== "idle") {
-    stopSpeech();
-  } else if (speechState.mode === "idle") {
-    const renderedOutput =
-      !els.translationText.classList.contains("empty") && Boolean(els.translationText.textContent.trim());
-    els.speechStatus.textContent = available
-      ? `Sẵn sàng · Gemini AI · còn ${getRemainingSpeechRequests()}/${SPEECH_DAILY_REQUEST_BUDGET} lượt hôm nay`
-      : renderedOutput
-        ? "Output is not Vietnamese"
-        : "Chưa có bản dịch";
-  }
-}
-
-function hasSpeakableOutput() {
-  const chapter = state.chapters[state.currentIndex];
-  const translation = getCurrentTranslation();
-  return (
-    Boolean(chapter && translation) &&
-    isUsableTranslation(chapter.text, translation) &&
-    !els.translationText.classList.contains("empty") &&
-    !els.translationText.classList.contains("is-loading") &&
-    !els.translationText.classList.contains("status-error")
-  );
-}
-
-function getCurrentTranslation() {
-  return String(state.translations[state.currentIndex] || "").trim();
-}
-
-function speechProgressLabel(action) {
-  return `${action} ${speechState.index + 1} / ${speechState.chunks.length}`;
-}
-
-function splitSpeechText(text, maxLength = 5000) {
-  const sentences = String(text || "")
-    .split(/\n{2,}/)
-    .flatMap((paragraph) => paragraph.match(/[^.!?…]+[.!?…]+|[^.!?…]+$/g) || [paragraph])
-    .map((sentence) => sentence.trim())
-    .filter(Boolean)
-    .flatMap((sentence) => {
-      if (sentence.length <= maxLength) return [sentence];
-      const pieces = [];
-      for (let start = 0; start < sentence.length; start += maxLength) {
-        pieces.push(sentence.slice(start, start + maxLength));
-      }
-      return pieces;
-    });
-
-  const chunks = [];
-  let current = "";
-  for (const sentence of sentences) {
-    const next = current ? `${current} ${sentence}` : sentence;
-    if (next.length > maxLength && current) {
-      chunks.push(current);
-      current = sentence;
-    } else {
-      current = next;
-    }
-  }
-  if (current) chunks.push(current);
-  return chunks;
-}
-
-function base64ToBlob(base64, mimeType) {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-  return new Blob([bytes], { type: mimeType });
-}
-
-function getSpeechUsage() {
-  const today = localDateKey();
-  try {
-    const usage = JSON.parse(localStorage.getItem(SPEECH_DAILY_USAGE_KEY) || "null");
-    if (usage?.date === today && Number.isInteger(usage.count)) return usage;
-  } catch (_error) {
-    // Reset malformed local usage data below.
-  }
-  return { date: today, count: 0 };
-}
-
-function getRemainingSpeechRequests() {
-  return Math.max(0, SPEECH_DAILY_REQUEST_BUDGET - getSpeechUsage().count);
-}
-
-function recordSpeechRequest() {
-  const usage = getSpeechUsage();
-  usage.count += 1;
-  localStorage.setItem(SPEECH_DAILY_USAGE_KEY, JSON.stringify(usage));
-}
-
-function localDateKey() {
-  const date = new Date();
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
 async function handleFile(event) {
   const file = event.target.files?.[0];
   if (!file) return;
@@ -1467,10 +995,8 @@ function renderChapterControls() {
     button.className = "document-item";
     button.dataset.index = String(index);
     if (index === state.currentIndex) button.classList.add("active");
-    const chapterIcon = document.createElement("span");
-    chapterIcon.className = "document-icon";
-    chapterIcon.setAttribute("aria-hidden", "true");
-    button.appendChild(chapterIcon);
+    const chapterIndex = appendTextElement(button, "span", "document-index", String(index + 1));
+    chapterIndex.setAttribute("aria-hidden", "true");
     appendTextElement(button, "span", "", title);
     appendTextElement(button, "small", "", formatWordCount(chapter));
     listFragment.appendChild(button);
@@ -1489,7 +1015,6 @@ function renderChapterControls() {
 
 function goToChapter(index) {
   if (!state.chapters.length) return;
-  stopSpeech();
   state.currentIndex = Math.min(Math.max(index, 0), state.chapters.length - 1);
 
   const chapter = state.chapters[state.currentIndex];
@@ -1497,11 +1022,9 @@ function goToChapter(index) {
   const documentLabel = displayChapterTitle(state.currentIndex);
   const chapterLabel = `${documentLabel} · ${state.currentIndex + 1} / ${state.chapters.length}`;
   const progress = Math.ceil(((state.currentIndex + 1) / state.chapters.length) * 100);
-  els.documentTitle.textContent = documentLabel;
   els.paperTitle.textContent = documentLabel;
   els.progressLabel.textContent = `${progress}%`;
   els.progressBar.style.width = `${progress}%`;
-  els.documentStatus.textContent = "Đang mở";
   els.chapterCounter.textContent = chapterLabel;
   els.bottomChapterCounter.textContent = chapterLabel;
   els.chapterSelect.value = String(state.currentIndex);
@@ -1564,7 +1087,6 @@ function renderTranslation(cached, index) {
     els.translateButton.hidden = false;
     els.retranslateButton.hidden = true;
   }
-  updateSpeechAvailability();
 }
 
 async function translateCurrentChapter(force) {
@@ -1579,8 +1101,6 @@ async function translateCurrentChapter(force) {
       return;
     }
   }
-
-  stopSpeech();
   setTranslationStatus("Processing document...");
   els.outputStatus.textContent = "Đang dịch";
   els.translateButton.disabled = true;
@@ -1602,7 +1122,6 @@ async function translateCurrentChapter(force) {
     await putTranslation(state.bookId, state.currentIndex, data.translation);
     els.translationText.textContent = data.translation;
     els.translationText.classList.remove("empty", "status-error", "is-loading");
-    updateSpeechAvailability();
     els.outputStatus.textContent = "Hoàn tất";
     els.translateButton.hidden = true;
     els.retranslateButton.hidden = false;
@@ -1625,27 +1144,22 @@ function formatSeconds(ms) {
 }
 
 function setTranslationStatus(message, isError = false) {
-  stopSpeech();
   els.translationText.textContent = message;
   els.translationText.classList.toggle("status-error", isError);
   els.translationText.classList.toggle("empty", !isError);
   els.translationText.classList.toggle("is-loading", !isError);
   if (isError) els.outputStatus.textContent = "Lỗi";
-  updateSpeechAvailability();
 }
 
 function setBusy(message) {
-  stopSpeech();
   els.sourceText.textContent = message;
   els.translationText.textContent = "Chưa có bản dịch.";
   els.translationText.classList.add("empty");
   els.translationText.classList.remove("is-loading", "status-error");
   els.outputStatus.textContent = "Đang tải";
-  updateSpeechAvailability();
 }
 
 function resetReader(message) {
-  stopSpeech();
   state.bookId = "";
   state.fileName = "";
   state.title = "";
@@ -1659,9 +1173,7 @@ function resetReader(message) {
   els.sourceText.textContent = message;
   els.chapterCounter.textContent = "Chưa có mục lục";
   els.bottomChapterCounter.textContent = "Chưa có mục lục";
-  els.documentTitle.textContent = "Chưa chọn chương";
   els.paperTitle.textContent = "Nội dung chương";
-  els.documentStatus.textContent = "Chờ";
   els.outputStatus.textContent = "Chờ dịch";
   els.progressLabel.textContent = "0%";
   els.progressBar.style.width = "0%";
@@ -1674,7 +1186,6 @@ function resetReader(message) {
   els.nextChapter.disabled = true;
   els.bottomNextChapter.disabled = true;
   els.translateButton.disabled = true;
-  updateSpeechAvailability();
 }
 
 // Only the small progress record is read at startup; the chapter text of every

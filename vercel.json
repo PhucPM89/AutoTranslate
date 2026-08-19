@@ -12,9 +12,6 @@
     "api/translate.js": {
       "maxDuration": 60
     },
-    "api/speech.js": {
-      "maxDuration": 60
-    },
     "api/analytics.js": {
       "maxDuration": 15
     },
@@ -61,7 +58,7 @@
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.public.blob.vercel-storage.com; connect-src 'self' https://vercel.com https://*.public.blob.vercel-storage.com https://*.blob.vercel-storage.com; media-src 'self' blob: https://*.public.blob.vercel-storage.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self' mailto:" },
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.public.blob.vercel-storage.com; connect-src 'self' https://vercel.com https://*.public.blob.vercel-storage.com https://*.blob.vercel-storage.com; media-src 'none'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self' mailto:" },
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "Referrer-Policy", "value": "no-referrer" },
         { "key": "X-Frame-Options", "value": "DENY" },

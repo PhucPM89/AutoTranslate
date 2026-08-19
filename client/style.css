@@ -1,49 +1,145 @@
+/* ============================================================================
+   Design tokens — "mực và sơn mài"
+   Dark is the primary theme: near-black pine ground, jade accent, seal-red and
+   antique gold as the two warm notes. Light is warm rice paper, never cold grey.
+   Every scale below is a fixed ladder so components stop inventing one-off
+   values; --bg/--app-bg and the older names are kept so existing rules still
+   resolve. Type and space steps use rem so the reader's font control still works.
+   ========================================================================= */
 :root {
   color-scheme: dark;
-  --app-bg: #101412;
-  --topbar: #141816;
-  --sidebar: #121614;
-  --surface: #191e1b;
-  --surface-raised: #202622;
-  --paper: #151a17;
-  --paper-text: #dce4df;
-  --text: #e8ede9;
-  --muted: #8e9992;
-  --border: #303934;
-  --border-soft: #252c28;
-  --accent: #668f81;
-  --accent-strong: #7da395;
-  --accent-ink: #ffffff;
-  --warm: #9b806f;
-  --vermilion: #bc5946;
-  --gold: #b9a071;
+
+  /* Ground and surfaces, darkest to lightest */
+  --bg: #0b0f0d;
+  --app-bg: var(--bg);
+  --bg-sunken: #070a09;
+  --topbar: #101512;
+  --sidebar: #0e1310;
+  --surface: #151b17;
+  --surface-raised: #1c231e;
+  --surface-hover: #222a24;
+
+  /* Reading sheet */
+  --paper: #121714;
+  --paper-text: #e2e9e4;
+
+  /* Ink */
+  --text: #edf2ee;
+  --text-soft: #c3cdc7;
+  --muted: #8d9992;
+  --faint: #6b766f;
+
+  /* Lines */
+  --border: #2b3430;
+  --border-soft: #1e2521;
+  --border-strong: #3b463f;
+
+  /* Accents */
+  --accent: #6fa694;
+  --accent-strong: #8cc1af;
+  --accent-ink: #05100c;
+  --accent-wash: rgba(111, 166, 148, 0.13);
+  --vermilion: #df654f;
+  --warm: #d6a454;
+  --gold: #d7b36d;
   --danger: #ff9489;
-  --shadow: 0 28px 70px rgba(0, 0, 0, 0.3);
+
+  /* Elevation: three steps, all tuned for a dark ground */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 10px 26px rgba(0, 0, 0, 0.36);
+  --shadow-lg: 0 28px 70px rgba(0, 0, 0, 0.45);
+  --shadow: var(--shadow-lg);
+
+  /* Type ladder */
+  --font-sans: Inter, "Segoe UI", Arial, "Noto Sans", "Microsoft YaHei", sans-serif;
+  --font-display: "Iowan Old Style", Palatino, Georgia, "Times New Roman", serif;
+  --font-read: Georgia, "Iowan Old Style", Palatino, "Songti SC", serif;
+  --text-2xs: 0.66rem;
+  --text-xs: 0.72rem;
+  --text-sm: 0.8rem;
+  --text-base: 0.88rem;
+  --text-md: 1rem;
+  --text-lg: 1.2rem;
+  --text-xl: 1.55rem;
+  --text-2xl: 2rem;
+  --text-3xl: clamp(2.1rem, 4.2vw, 3.1rem);
+
+  /* Space ladder */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+
+  /* Radii */
+  --r-xs: 3px;
+  --r-sm: 5px;
+  --r-md: 8px;
+  --r-lg: 14px;
+  --r-full: 999px;
+
+  /* Motion */
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --fast: 140ms;
+  --slow: 300ms;
+
   --document-width: 820px;
   --content-font-size: 20px;
+  /* The reader topbar is sticky, so the bar under it and the layout height both
+     need the same number; keeping it here stops them drifting apart. */
+  --topbar-h: 72px;
 }
 
 body:not(.dark) {
   color-scheme: light;
-  --app-bg: #eef2ef;
-  --topbar: #f9fbf9;
-  --sidebar: #f3f6f3;
+
+  --bg: #f4f1ea;
+  --app-bg: var(--bg);
+  --bg-sunken: #e9e5db;
+  --topbar: #fdfcf9;
+  --sidebar: #f7f5ef;
   --surface: #ffffff;
-  --surface-raised: #e7ede9;
-  --paper: #171c19;
-  --paper-text: #e1e7e3;
+  --surface-raised: #f2efe7;
+  --surface-hover: #ebe7dd;
+
+  /* The reading sheet stays dark-on-light in this theme */
+  --paper: #ffffff;
+  --paper-text: #1e2621;
+
   --text: #17211c;
-  --muted: #65736b;
-  --border: #ccd7d0;
-  --border-soft: #dde5e0;
-  --accent: #16866d;
-  --accent-strong: #0d755e;
+  --text-soft: #37423b;
+  --muted: #62706a;
+  --faint: #8b968f;
+
+  --border: #d6cfc0;
+  --border-soft: #e5dfd2;
+  --border-strong: #c0b8a6;
+
+  --accent: #187a63;
+  --accent-strong: #0d6a55;
   --accent-ink: #ffffff;
-  --warm: #c95f43;
-  --vermilion: #b94b37;
-  --gold: #8c7041;
+  --accent-wash: rgba(24, 122, 99, 0.09);
+  --vermilion: #c84e39;
+  --warm: #b8792f;
+  --gold: #8b682c;
   --danger: #b42318;
-  --shadow: 0 24px 60px rgba(33, 53, 43, 0.12);
+
+  --shadow-sm: 0 1px 2px rgba(48, 40, 24, 0.08);
+  --shadow-md: 0 8px 22px rgba(48, 40, 24, 0.1);
+  --shadow-lg: 0 24px 60px rgba(48, 40, 24, 0.14);
+  --shadow: var(--shadow-lg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 * {
@@ -1570,8 +1666,8 @@ body:not(.dark) .theme-moon {
 .layout {
   display: grid;
   grid-template-columns: 272px minmax(0, 1fr);
-  min-height: calc(100vh - 72px);
-  min-height: calc(100dvh - 72px);
+  min-height: calc(100vh - var(--topbar-h));
+  min-height: calc(100dvh - var(--topbar-h));
 }
 
 .sidebar {
@@ -1604,8 +1700,7 @@ body:not(.dark) .theme-moon {
 }
 
 .library-header h2,
-.document-header h2,
-.paper-header h3 {
+.paper-header h2 {
   margin: 0;
   letter-spacing: 0;
 }
@@ -1672,7 +1767,7 @@ body:not(.dark) .theme-moon {
   contain-intrinsic-size: auto 44px;
   position: relative;
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr);
+  grid-template-columns: 30px minmax(0, 1fr);
   align-items: center;
   gap: 0.65rem;
   width: 100%;
@@ -1688,7 +1783,7 @@ body:not(.dark) .theme-moon {
 
 .document-item > span:nth-child(2) {
   overflow: hidden;
-  font-size: 0.83rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1698,21 +1793,26 @@ body:not(.dark) .theme-moon {
   grid-column: 2;
   margin-top: -0.42rem;
   color: var(--muted);
-  font-size: 0.66rem;
+  font-size: var(--text-2xs);
 }
 
-.document-icon {
+/* Used to be an empty bordered square that read as an unchecked checkbox; it is
+   now the chapter number, which is what a reader actually needs when scanning. */
+.document-index {
   grid-row: 1 / span 2;
-  width: 14px;
-  height: 17px;
-  border: 1.4px solid var(--muted);
-  border-radius: 2px;
-  opacity: 0.72;
+  align-self: center;
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+  text-align: right;
 }
 
 .document-item:hover {
   background: var(--surface);
 }
+
+.document-item:hover .document-index { color: var(--muted); }
 
 .document-item.active {
   border-color: color-mix(in srgb, var(--accent) 34%, transparent);
@@ -1726,12 +1826,13 @@ body:not(.dark) .theme-moon {
   bottom: 9px;
   left: -1px;
   width: 3px;
-  border-radius: 0 2px 2px 0;
-  background: var(--warm);
+  border-radius: 0 var(--r-xs) var(--r-xs) 0;
+  background: var(--vermilion);
 }
 
-.document-item.active .document-icon {
-  border-color: var(--accent-strong);
+.document-item.active .document-index {
+  color: var(--accent-strong);
+  font-weight: 700;
 }
 
 .empty-list {
@@ -1748,277 +1849,130 @@ body:not(.dark) .theme-moon {
   padding: 0 clamp(1rem, 3vw, 3rem) 1.5rem;
 }
 
-.document-header {
-  display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(180px, 260px) auto;
-  align-items: center;
-  gap: clamp(1rem, 3vw, 2.5rem);
-  min-height: 118px;
-  padding: 1.25rem 0;
+/* One sticky bar replaces the old header + toolbar pair. The chapter title moved
+   to the reading sheet, so the title is stated once instead of twice. */
+.reader-bar {
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 8;
+  margin: 0 0 var(--space-5);
+  background: color-mix(in srgb, var(--topbar) 92%, transparent);
+  backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--border-soft);
 }
 
-.document-heading {
-  min-width: 0;
+/* A hairline of progress across the very top; no label row, no track chrome. */
+.reader-bar-progress {
+  height: 2px;
+  background: var(--border-soft);
 }
 
-.document-header h2 {
+.reader-bar-progress span {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-strong));
+  transition: width var(--slow) var(--ease);
+}
+
+.reader-bar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+}
+
+.reader-bar-position {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
   overflow: hidden;
-  font-family: Inter, "Segoe UI", sans-serif;
-  font-size: clamp(1.35rem, 2vw, 1.75rem);
+  color: var(--muted);
+  font-size: var(--text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.metadata-row {
+.reader-bar-position strong {
+  flex: none;
+  color: var(--accent-strong);
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.reader-bar-tools {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 0.55rem;
-  margin-top: 0.55rem;
-  color: var(--muted);
-  font-size: 0.74rem;
+  gap: var(--space-2);
 }
 
-.status-dot::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  margin-right: 0.35rem;
-  border-radius: 50%;
-  background: var(--warm);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warm) 16%, transparent);
-}
-
-.reading-progress {
-  min-width: 0;
-}
-
-.progress-copy {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 0.55rem;
-  color: var(--muted);
-  font-size: 0.72rem;
-}
-
-.progress-copy strong {
-  color: var(--text);
-  font-size: 0.78rem;
-}
-
-.progress-track {
-  height: 5px;
-  overflow: hidden;
-  border-radius: 3px;
-  background: var(--surface-raised);
-}
-
-.progress-track span {
-  display: block;
-  width: 0;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--accent);
-  transition: width 240ms ease;
-}
-
-.document-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-}
-
-.nav-button {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-}
-
-.nav-button .icon {
-  width: 18px;
-  height: 18px;
-}
-
-.document-toolbar {
-  position: sticky;
-  top: 82px;
-  z-index: 8;
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  width: 100%;
-  margin: 0.8rem 0 0;
-  padding: 0.55rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-  backdrop-filter: blur(16px);
+.reader-bar-nav {
+  gap: 0;
 }
 
 .toolbar-group {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  min-height: 38px;
+  gap: var(--space-1);
+  min-height: 34px;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-sm);
+  background: var(--surface);
   color: var(--muted);
-  font-size: 0.76rem;
+  font-size: var(--text-xs);
 }
 
-.font-controls {
-  padding: 0 0.25rem;
-  border-right: 1px solid var(--border-soft);
+.font-controls span {
+  min-width: 34px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
 
 .tool-button {
   display: grid;
   place-items: center;
-  min-width: 36px;
-  height: 32px;
-  padding: 0 0.35rem;
+  min-width: 30px;
+  height: 28px;
+  padding: 0 var(--space-1);
   border-color: transparent;
+  border-radius: var(--r-xs);
   background: transparent;
-  font-size: 0.78rem;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
 }
 
-.width-control {
-  padding-left: 0.25rem;
+.tool-button:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.tool-button:disabled {
+  color: var(--faint);
+}
+
+.tool-button .icon {
+  width: 16px;
+  height: 16px;
 }
 
 .toolbar-group select {
   width: auto;
-  min-height: 32px;
-  padding: 0 1.8rem 0 0.55rem;
+  min-height: 28px;
+  padding: 0 1.6rem 0 var(--space-2);
   border-color: transparent;
   background-color: transparent;
-}
-
-.toolbar-spacer {
-  flex: 1;
+  font-size: var(--text-xs);
 }
 
 .secondary-action {
   border-color: color-mix(in srgb, var(--accent) 52%, var(--border));
   color: var(--accent-strong);
-}
-
-.audio-toolbar {
-  display: grid;
-  grid-template-columns: minmax(160px, 1fr) minmax(140px, 190px) minmax(160px, 240px) 82px auto;
-  align-items: end;
-  gap: 0.65rem;
-  margin-top: 0.55rem;
-  padding: 0.65rem;
-  border: 1px solid var(--border-soft);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--surface) 72%, transparent);
-}
-
-.audio-heading {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  min-width: 0;
-  min-height: 38px;
-  padding: 0 0.35rem;
-  color: var(--muted);
-}
-
-.audio-heading > .icon {
-  width: 19px;
-  height: 19px;
-  color: var(--accent-strong);
-}
-
-.audio-heading div {
-  min-width: 0;
-}
-
-.audio-heading strong,
-.audio-heading small {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.audio-heading strong {
-  color: var(--text);
-  font-size: 0.78rem;
-}
-
-.audio-heading small {
-  margin-top: 0.15rem;
-  color: var(--muted);
-  font-size: 0.66rem;
-}
-
-.audio-field {
-  display: grid;
-  gap: 0.3rem;
-  min-width: 0;
-  color: var(--muted);
-  font-size: 0.67rem;
-  font-weight: 650;
-}
-
-.audio-field select {
-  width: 100%;
-  min-width: 0;
-  height: 36px;
-  padding: 0 1.75rem 0 0.65rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--text);
-  font-size: 0.74rem;
-}
-
-.audio-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.audio-play,
-.audio-stop {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  height: 36px;
-  padding: 0 0.75rem;
-  font-size: 0.74rem;
-  font-weight: 700;
-}
-
-.audio-play {
-  min-width: 92px;
-  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
-  color: var(--accent-strong);
-}
-
-.audio-stop {
-  width: 36px;
-  padding: 0;
-  color: var(--muted);
-}
-
-.speech-pause-icon {
-  display: none;
-}
-
-.audio-play.is-speaking .speech-play-icon {
-  display: none;
-}
-
-.audio-play.is-speaking .speech-pause-icon {
-  display: block;
 }
 
 .document-canvas {
@@ -2028,80 +1982,74 @@ body:not(.dark) .theme-moon {
   padding: clamp(1.25rem, 2.5vw, 2.25rem) 0 1rem;
 }
 
+/* The sheet used to be a bordered card with a 470px floor, so an untranslated
+   chapter showed as a huge empty box. It is now the page itself: no frame, no
+   minimum height, and it collapses to just the heading when there is nothing yet. */
 .document-paper {
   position: relative;
   width: min(var(--document-width), 100%);
-  min-height: 470px;
-  padding: clamp(1.4rem, 4vw, 3.6rem);
-  border: 1px solid color-mix(in srgb, var(--paper-text) 14%, transparent);
-  border-radius: 8px;
-  background: var(--paper);
+  padding: 0 0 var(--space-6);
+  border: 0;
+  background: transparent;
   color: var(--paper-text);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
-}
-
-.document-paper::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: clamp(1.4rem, 4vw, 3.6rem);
-  width: 46px;
-  height: 4px;
-  background: var(--accent);
 }
 
 .paper-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: clamp(1.5rem, 3vw, 2.5rem);
-  padding-bottom: 1.25rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--paper-text) 13%, transparent);
+  display: grid;
+  gap: var(--space-1);
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border-soft);
 }
 
 .paper-header .eyebrow {
-  color: color-mix(in srgb, var(--paper-text) 55%, transparent);
+  color: var(--faint);
 }
 
-.paper-header h3 {
-  font-family: Inter, "Segoe UI", sans-serif;
-  font-size: clamp(1.25rem, 2vw, 1.65rem);
+.paper-header h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
 }
 
 .status-pill {
+  justify-self: start;
   display: inline-flex;
   align-items: center;
-  min-height: 27px;
-  padding: 0 0.65rem;
-  border: 1px solid color-mix(in srgb, var(--paper-text) 16%, transparent);
-  border-radius: 999px;
-  color: color-mix(in srgb, var(--paper-text) 65%, transparent);
-  background: color-mix(in srgb, var(--paper-text) 5%, transparent);
-  font-size: 0.68rem;
+  min-height: 22px;
+  margin-top: var(--space-1);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-full);
+  color: var(--muted);
+  background: var(--surface);
+  font-size: var(--text-2xs);
   font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
+/* Long-form reading gets a serif and a looser measure. */
 .document-text {
   white-space: pre-wrap;
   color: var(--paper-text);
-  font-family: Inter, "Segoe UI", Arial, "Noto Sans", sans-serif;
+  font-family: var(--font-read);
   font-size: var(--content-font-size);
-  line-height: 1.72;
-  letter-spacing: 0;
+  line-height: 1.85;
+  letter-spacing: 0.002em;
   text-wrap: pretty;
   font-variant-ligatures: common-ligatures;
   text-rendering: optimizeLegibility;
 }
 
 .document-text.empty {
-  display: grid;
-  place-items: center;
-  min-height: 230px;
-  color: color-mix(in srgb, var(--paper-text) 45%, transparent);
-  font-family: Inter, "Segoe UI", sans-serif;
-  font-size: 0.9rem;
-  text-align: center;
+  padding: var(--space-5) 0;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
 }
 
 .document-text.is-loading {
@@ -2214,29 +2162,6 @@ body:not(.dark) .theme-moon {
     top: 132px;
   }
 
-  .audio-toolbar {
-    grid-template-columns: minmax(140px, 1fr) minmax(150px, 1fr) auto;
-  }
-
-  .genre-field {
-    grid-column: 1;
-    grid-row: 2;
-  }
-
-  .voice-field {
-    grid-column: 2;
-    grid-row: 2;
-  }
-
-  .rate-field {
-    grid-column: 3;
-    grid-row: 2;
-  }
-
-  .audio-actions {
-    grid-column: 3;
-    grid-row: 1;
-  }
 }
 
 @media (max-width: 720px) {
@@ -2362,60 +2287,20 @@ body:not(.dark) .theme-moon {
     width: 100%;
   }
 
-  .audio-toolbar {
-    grid-template-columns: minmax(0, 1fr) 88px;
-    align-items: end;
-  }
-
-  .audio-heading {
-    grid-column: 1 / -1;
-  }
-
-  .voice-field {
-    grid-column: 1 / -1;
-  }
-
-  .genre-field {
-    grid-column: 1 / -1;
-    grid-row: auto;
-  }
-
-  .rate-field {
-    grid-column: 1;
-    grid-row: auto;
-  }
-
-  .audio-actions {
-    grid-column: 2;
-    grid-row: auto;
-  }
-
-  .audio-play {
-    min-width: 0;
-    flex: 1;
-    padding-inline: 0.55rem;
-  }
-
   .document-canvas {
     padding: 1rem 0 1.5rem;
   }
 
   .document-paper {
-    min-height: 360px;
-    padding: 1.35rem 1.15rem 2rem;
-    border-radius: 6px;
-  }
-
-  .document-paper::before {
-    left: 1.15rem;
+    padding: 0 0 var(--space-5);
   }
 
   .paper-header {
-    margin-bottom: 1.4rem;
+    margin-bottom: var(--space-5);
   }
 
-  .paper-header h3 {
-    font-size: 1.25rem;
+  .paper-header h2 {
+    font-size: var(--text-lg);
   }
 
   .document-text {
@@ -2659,43 +2544,9 @@ body:not(.dark) .theme-moon {
 
 }
 
-/* 2026 library discovery refresh */
-:root {
-  --app-bg: #0d1110;
-  --topbar: #111614;
-  --sidebar: #101513;
-  --surface: #171c1a;
-  --surface-raised: #222926;
-  --paper: #151a18;
-  --paper-text: #e3e9e5;
-  --text: #f1f3f1;
-  --muted: #9ba59f;
-  --border: #34403a;
-  --border-soft: #242d29;
-  --accent: #6fa694;
-  --accent-strong: #8cc1af;
-  --warm: #d6a454;
-  --vermilion: #df654f;
-  --gold: #d7b36d;
-}
-
-body:not(.dark) {
-  --app-bg: #f1f4f2;
-  --topbar: #ffffff;
-  --sidebar: #e8eeea;
-  --surface: #ffffff;
-  --surface-raised: #e2e9e5;
-  --text: #15201b;
-  --muted: #64736b;
-  --border: #c8d4cd;
-  --border-soft: #dce4df;
-  --accent: #187a63;
-  --accent-strong: #0d6a55;
-  --warm: #b8792f;
-  --vermilion: #c84e39;
-  --gold: #8b682c;
-}
-
+/* The palette that used to live here was a second, competing :root. It has been
+   folded into the single token block at the top of this file; its identity hues
+   (seal red, antique gold) were kept. */
 .library-view {
   background: var(--app-bg);
 }
@@ -3143,14 +2994,6 @@ body:not(.dark) {
   background: color-mix(in srgb, var(--sidebar) 96%, transparent);
 }
 
-.document-paper {
-  border-top: 3px solid var(--vermilion);
-  box-shadow: 0 24px 65px rgba(0, 0, 0, 0.23);
-}
-
-.document-paper::before {
-  display: none;
-}
 
 @media (max-width: 1180px) {
   .catalog-grid {

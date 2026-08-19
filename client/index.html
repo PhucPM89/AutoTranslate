@@ -1,9 +1,9 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="vi">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Thư viện truyện dịch cá nhân, đọc EPUB, dịch chương và nghe audio tiếng Việt.">
+    <meta name="description" content="Thư viện truyện dịch chọn lọc: đọc EPUB và dịch từng chương sang tiếng Việt.">
     <title>Trạm Chữ</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="preload" href="/library/covers/misty-pagoda-hero.webp" as="image" fetchpriority="high">
@@ -277,30 +277,31 @@
         </aside>
 
         <section class="workspace-main">
-          <header class="document-header">
-            <div class="document-heading"><p class="eyebrow">Đang đọc</p><h2 id="documentTitle">Chưa chọn chương</h2><div class="metadata-row"><span id="chapterCounter">Chưa có mục lục</span><span id="documentStatus" class="status-dot">Chờ</span></div></div>
-            <div class="reading-progress" aria-label="Tiến độ đọc"><div class="progress-copy"><span>Tiến độ</span><strong id="progressLabel">0%</strong></div><div class="progress-track" aria-hidden="true"><span id="progressBar"></span></div></div>
-            <div class="document-header-actions"><button id="prevChapter" class="nav-button" type="button" disabled aria-label="Chương trước" title="Chương trước"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"></path></svg></button><button id="nextChapter" class="nav-button" type="button" disabled aria-label="Chương sau" title="Chương sau"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg></button></div>
+          <header class="reader-bar">
+            <div class="reader-bar-progress" aria-label="Tiến độ đọc"><span id="progressBar"></span></div>
+            <div class="reader-bar-row">
+              <p class="reader-bar-position"><span id="chapterCounter">Chưa có mục lục</span><strong id="progressLabel">0%</strong></p>
+              <div class="reader-bar-tools">
+                <div class="toolbar-group font-controls" aria-label="Cỡ chữ"><button id="fontDecrease" class="tool-button" type="button" aria-label="Giảm cỡ chữ" title="Giảm cỡ chữ">A−</button><span id="fontSizeLabel">20px</span><button id="fontIncrease" class="tool-button" type="button" aria-label="Tăng cỡ chữ" title="Tăng cỡ chữ">A＋</button></div>
+                <label class="toolbar-group width-control"><span class="sr-only">Độ rộng nội dung</span><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"></path></svg><select id="widthPreset"><option value="comfortable">Tiêu chuẩn</option><option value="compact">Gọn</option><option value="wide">Rộng</option></select></label>
+                <div class="toolbar-group reader-bar-nav"><button id="prevChapter" class="tool-button" type="button" disabled aria-label="Chương trước" title="Chương trước"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"></path></svg></button><button id="nextChapter" class="tool-button" type="button" disabled aria-label="Chương sau" title="Chương sau"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg></button></div>
+                <button id="translateButton" class="primary-action" type="button" disabled><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m5 3 14 9-14 9V3Z"></path></svg>Dịch chương</button>
+                <button id="retranslateButton" class="secondary-action" type="button" hidden><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v6h-6M4 18v-6h6"></path><path d="M18.49 9A7 7 0 0 0 5.64 6.64L4 9M20 15l-1.64 2.36A7 7 0 0 1 5.51 15"></path></svg>Dịch lại</button>
+              </div>
+            </div>
           </header>
 
-          <div class="document-toolbar" aria-label="Tùy chỉnh trình đọc">
-            <div class="toolbar-group font-controls" aria-label="Cỡ chữ"><button id="fontDecrease" class="tool-button" type="button" aria-label="Giảm cỡ chữ" title="Giảm cỡ chữ">A−</button><span id="fontSizeLabel">20px</span><button id="fontIncrease" class="tool-button" type="button" aria-label="Tăng cỡ chữ" title="Tăng cỡ chữ">A＋</button></div>
-            <label class="toolbar-group width-control"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"></path></svg><span>Độ rộng</span><select id="widthPreset" aria-label="Độ rộng nội dung"><option value="comfortable">Tiêu chuẩn</option><option value="compact">Gọn</option><option value="wide">Rộng</option></select></label>
-            <div class="toolbar-spacer"></div>
-            <button id="translateButton" class="primary-action" type="button" disabled><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m5 3 14 9-14 9V3Z"></path></svg>Dịch chương</button>
-            <button id="retranslateButton" class="secondary-action" type="button" hidden><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v6h-6M4 18v-6h6"></path><path d="M18.49 9A7 7 0 0 0 5.64 6.64L4 9M20 15l-1.64 2.36A7 7 0 0 1 5.51 15"></path></svg>Dịch lại</button>
-          </div>
-
-          <div class="audio-toolbar" aria-label="Điều khiển giọng đọc">
-            <div class="audio-heading"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 14a8 8 0 0 1 16 0"></path><path d="M18 19c0 1.1-.9 2-2 2h-1v-7h3a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2ZM6 19a2 2 0 0 1-2-2v-1a2 2 0 0 1 2-2h3v7H8a2 2 0 0 1-2-2Z"></path></svg><div><strong>Giọng đọc AI</strong><small id="speechStatus">Chưa có bản dịch</small></div></div>
-            <label class="audio-field genre-field"><span>Thể loại</span><select id="speechGenre" aria-label="Thể loại truyện"><option value="fantasy" selected>Huyền huyễn</option><option value="horror">Linh dị / Kinh dị</option><option value="apocalypse">Mạt thế</option><option value="detective">Trinh thám</option><option value="xianxia">Tiên hiệp</option></select></label>
-            <label class="audio-field voice-field"><span>Giọng đọc</span><select id="speechVoice" aria-label="Giọng đọc"><option value="Kore" selected>Kore · Rõ ràng</option><option value="Aoede">Aoede · Ấm áp</option><option value="Leda">Leda · Sáng</option><option value="Puck">Puck · Biểu cảm</option><option value="Charon">Charon · Trầm</option></select></label>
-            <label class="audio-field rate-field"><span>Tốc độ</span><select id="speechRate" aria-label="Tốc độ đọc"><option value="0.8">0.8x</option><option value="1" selected>1.0x</option><option value="1.2">1.2x</option><option value="1.5">1.5x</option></select></label>
-            <div class="audio-actions"><button id="speechPlay" class="audio-play" type="button" disabled aria-label="Nghe bản dịch" title="Nghe bản dịch"><svg class="icon speech-play-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m5 3 14 9-14 9V3Z"></path></svg><svg class="icon speech-pause-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"></path></svg><span id="speechPlayLabel">Nghe</span></button><button id="speechStop" class="audio-stop" type="button" disabled aria-label="Dừng audio" title="Dừng audio"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"></rect></svg></button></div>
-          </div>
-
           <div id="sourceText" hidden></div>
-          <section class="document-canvas"><article class="document-paper translation-section"><div class="paper-header"><div><p class="eyebrow">Bản dịch tiếng Việt</p><h3 id="paperTitle">Nội dung chương</h3></div><span class="status-pill" id="outputStatus">Chờ dịch</span></div><div id="translationText" class="document-text empty">Chưa có bản dịch.</div></article></section>
+          <section class="document-canvas">
+            <article class="document-paper translation-section">
+              <div class="paper-header">
+                <p class="eyebrow">Bản dịch tiếng Việt</p>
+                <h2 id="paperTitle">Nội dung chương</h2>
+                <span class="status-pill" id="outputStatus">Chờ dịch</span>
+              </div>
+              <div id="translationText" class="document-text empty">Chưa có bản dịch.</div>
+            </article>
+          </section>
           <footer class="footer-nav"><button id="bottomPrevChapter" class="text-nav" type="button" disabled><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"></path></svg>Chương trước</button><span id="bottomChapterCounter">Chưa có mục lục</span><button id="bottomNextChapter" class="text-nav" type="button" disabled>Chương sau<svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg></button></footer>
         </section>
       </main>
