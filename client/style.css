@@ -1,4 +1,4 @@
-/* ============================================================================
+﻿/* ============================================================================
    Design tokens — "mực và sơn mài"
    Dark is the primary theme: near-black pine ground, jade accent, seal-red and
    antique gold as the two warm notes. Light is warm rice paper, never cold grey.
@@ -52,8 +52,13 @@
 
   /* Type ladder */
   --font-sans: Inter, "Segoe UI", Arial, "Noto Sans", "Microsoft YaHei", sans-serif;
-  --font-display: "Iowan Old Style", Palatino, Georgia, "Times New Roman", serif;
-  --font-read: Georgia, "Iowan Old Style", Palatino, "Songti SC", serif;
+  /* Georgia is deliberately absent from both stacks. It has no precomposed
+     glyphs for Vietnamese vowels that carry two marks (ố, ắ, ế, ầ, ậ…), so the
+     browser falls back per character and the tone mark renders as a separate
+     glyph with its own advance width — the text visibly comes apart. Every font
+     listed below was checked against those letters. Do not put Georgia back. */
+  --font-display: "Palatino Linotype", Cambria, Constantia, "Times New Roman", serif;
+  --font-read: Cambria, "Palatino Linotype", "Sitka Text", Constantia, "Times New Roman", serif;
   --text-2xs: 0.66rem;
   --text-xs: 0.72rem;
   --text-sm: 0.8rem;
@@ -222,7 +227,7 @@ body {
   border-radius: 6px;
   background: var(--vermilion);
   color: #fff;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: 1.05rem;
   font-weight: 700;
 }
@@ -233,7 +238,7 @@ body {
 }
 
 .library-brand strong {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: 1rem;
 }
 
@@ -315,7 +320,7 @@ body {
 
 .admin-dialog-header h2 {
   margin: 0.2rem 0 0;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: 1.45rem;
   letter-spacing: 0;
 }
@@ -519,7 +524,7 @@ body {
 
 .crawler-overview h3 {
   margin: 0.2rem 0 0;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: 1.18rem;
 }
 
@@ -996,7 +1001,7 @@ body {
 
 .intro-copy h1 {
   margin: 0.35rem 0 0.8rem;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: clamp(3.2rem, 7vw, 6.8rem);
   font-weight: 500;
   line-height: 0.95;
@@ -1030,7 +1035,7 @@ body {
 }
 
 .library-stats strong {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: 1.35rem;
   font-weight: 500;
 }
@@ -1058,7 +1063,7 @@ body {
 
 .continue-band h2 {
   margin-top: 0.25rem;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: 1.45rem;
 }
 
@@ -1084,7 +1089,7 @@ body {
 .request-band h2,
 .catalog-empty h3 {
   margin: 0.3rem 0 0;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-weight: 500;
 }
 
@@ -1270,7 +1275,7 @@ body {
 .book-card h3 {
   overflow: hidden;
   margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: 1.16rem;
   font-weight: 650;
   line-height: 1.35;
@@ -2880,7 +2885,7 @@ body:not(.dark) .theme-moon {
   border-radius: 4px;
   background: rgba(7, 10, 9, 0.78);
   color: #fff;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: 0.76rem;
   font-weight: 700;
   backdrop-filter: blur(8px);
@@ -3179,7 +3184,7 @@ body:not(.dark) .theme-moon {
 .support-copy h2 {
   margin: 0.45rem 0 1.1rem;
   color: var(--text);
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: clamp(2.1rem, 4.5vw, 4.5rem);
   font-weight: 500;
   line-height: 1.03;
@@ -3313,7 +3318,7 @@ body:not(.dark) .theme-moon {
 
 .support-dialog-header h2 {
   margin: 0.2rem 0 0;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: 1.35rem;
 }
 
