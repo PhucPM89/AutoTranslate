@@ -20,7 +20,7 @@ const SPEECH_CACHE_NAME = "epubTranslator.speech.v2";
 const LEGACY_SPEECH_CACHE_NAME = "epubTranslator.speech.v1";
 const SPEECH_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const SPEECH_DAILY_USAGE_KEY = "epubTranslator.speechDailyUsage";
-const SPEECH_DAILY_REQUEST_BUDGET = 90;
+const SPEECH_DAILY_REQUEST_BUDGET = 95;
 const SPEECH_GENRE_PRESETS = {
   fantasy: { voice: "Puck", rate: "1" },
   horror: { voice: "Charon", rate: "0.8" },
@@ -512,7 +512,7 @@ function speechProgressLabel(action) {
   return `${action} ${speechState.index + 1} / ${speechState.chunks.length}`;
 }
 
-function splitSpeechText(text, maxLength = 5000) {
+function splitSpeechText(text, maxLength = 6000) {
   const sentences = String(text || "")
     .split(/\n{2,}/)
     .flatMap((paragraph) => paragraph.match(/[^.!?…]+[.!?…]+|[^.!?…]+$/g) || [paragraph])
