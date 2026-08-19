@@ -13,6 +13,30 @@ const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const CACHE_DB_NAME = "epubTranslator.cache";
 const CACHE_DB_VERSION = 1;
 const CACHE_STORE = "books";
+const SPEECH_VOICE_KEY = "epubTranslator.speechVoice";
+const SPEECH_RATE_KEY = "epubTranslator.speechRate";
+const SPEECH_GENRE_KEY = "epubTranslator.speechGenre";
+const SPEECH_CACHE_NAME = "epubTranslator.speech.v1";
+const SPEECH_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const SPEECH_GENRE_PRESETS = {
+  fantasy: { voice: "Puck", rate: "1" },
+  horror: { voice: "Charon", rate: "0.8" },
+  apocalypse: { voice: "Kore", rate: "1" },
+  detective: { voice: "Charon", rate: "1" },
+  xianxia: { voice: "Aoede", rate: "1" }
+};
+
+const speechState = {
+  audio: null,
+  abortControllers: new Set(),
+  audioUrls: new Map(),
+  audioPromises: new Map(),
+  chunks: [],
+  settings: null,
+  index: 0,
+  mode: "idle",
+  session: 0
+};
 
 const els = {
   fileInput: document.getElementById("fileInput"),
@@ -38,6 +62,13 @@ const els = {
   translationText: document.getElementById("translationText"),
   translateButton: document.getElementById("translateButton"),
   retranslateButton: document.getElementById("retranslateButton"),
+  speechGenre: document.getElementById("speechGenre"),
+  speechVoice: document.getElementById("speechVoice"),
+  speechRate: document.getElementById("speechRate"),
+  speechPlay: document.getElementById("speechPlay"),
+  speechPlayLabel: document.getElementById("speechPlayLabel"),
+  speechStop: document.getElementById("speechStop"),
+  speechStatus: document.getElementById("speechStatus"),
   themeToggle: document.getElementById("themeToggle"),
   themeLabel: document.getElementById("themeLabel"),
   fontDecrease: document.getElementById("fontDecrease"),
@@ -50,6 +81,7 @@ const parser = new DOMParser();
 
 initPreferences();
 bindEvents();
+initSpeech();
 restoreCachedBook();
 
 function bindEvents() {
@@ -62,6 +94,13 @@ function bindEvents() {
   els.globalSearch.addEventListener("input", renderChapterControls);
   els.translateButton.addEventListener("click", () => translateCurrentChapter(false));
   els.retranslateButton.addEventListener("click", () => translateCurrentChapter(true));
+  els.speechGenre.addEventListener("change", applySpeechGenrePreset);
+  els.speechVoice.addEventListener("change", saveSpeechPreferences);
+  els.speechRate.addEventListener("change", saveSpeechPreferences);
+  els.speechPlay.addEventListener("click", toggleSpeech);
+  els.speechStop.addEventListener("click", () => stopSpeech());
+  document.addEventListener("visibilitychange", pauseSpeechWhenHidden);
+  window.addEventListener("beforeunload", () => stopSpeech());
   els.themeToggle.addEventListener("click", toggleTheme);
   els.fontDecrease.addEventListener("click", () => changeFontSize(-1));
   els.fontIncrease.addEventListener("click", () => changeFontSize(1));
@@ -106,6 +145,393 @@ function toggleTheme() {
   const isDark = document.body.classList.toggle("dark");
   localStorage.setItem("epubTranslator.theme", isDark ? "dark" : "light");
   els.themeLabel.textContent = isDark ? "Light" : "Dark";
+}
+
+function initSpeech() {
+  const savedGenre = localStorage.getItem(SPEECH_GENRE_KEY) || "fantasy";
+  els.speechGenre.value = SPEECH_GENRE_PRESETS[savedGenre] ? savedGenre : "fantasy";
+  const preset = SPEECH_GENRE_PRESETS[els.speechGenre.value];
+  const savedVoice = localStorage.getItem(SPEECH_VOICE_KEY) || preset.voice;
+  const savedRate = localStorage.getItem(SPEECH_RATE_KEY) || preset.rate;
+  els.speechVoice.value = Array.from(els.speechVoice.options).some((option) => option.value === savedVoice)
+    ? savedVoice
+    : "Kore";
+  els.speechRate.value = Array.from(els.speechRate.options).some((option) => option.value === savedRate)
+    ? savedRate
+    : "1";
+  speechState.audio = new Audio();
+  saveSpeechPreferences();
+  pruneSpeechCache();
+  updateSpeechAvailability();
+}
+
+function saveSpeechPreferences() {
+  localStorage.setItem(SPEECH_GENRE_KEY, els.speechGenre.value);
+  localStorage.setItem(SPEECH_VOICE_KEY, els.speechVoice.value);
+  localStorage.setItem(SPEECH_RATE_KEY, els.speechRate.value);
+}
+
+function applySpeechGenrePreset() {
+  const preset = SPEECH_GENRE_PRESETS[els.speechGenre.value] || SPEECH_GENRE_PRESETS.fantasy;
+  els.speechVoice.value = preset.voice;
+  els.speechRate.value = preset.rate;
+  saveSpeechPreferences();
+  els.speechStatus.textContent = `${els.speechGenre.options[els.speechGenre.selectedIndex].text} · ${preset.voice}`;
+}
+
+function pauseSpeechWhenHidden() {
+  if (!document.hidden || speechState.mode !== "speaking") return;
+  speechState.audio.pause();
+  setSpeechMode("paused", "Paused while tab is hidden");
+}
+
+async function toggleSpeech() {
+  if (els.speechPlay.disabled) return;
+
+  if (speechState.mode === "speaking") {
+    speechState.audio.pause();
+    setSpeechMode("paused", "Paused");
+    return;
+  }
+
+  if (speechState.mode === "paused") {
+    await speechState.audio.play();
+    setSpeechMode("speaking", speechProgressLabel("Playing"));
+    return;
+  }
+
+  const text = getCurrentTranslation();
+  speechState.chunks = splitSpeechText(text);
+  speechState.settings = Object.freeze({
+    genre: els.speechGenre.value,
+    voice: els.speechVoice.value,
+    rate: els.speechRate.value
+  });
+  speechState.index = 0;
+  if (!speechState.chunks.length) return;
+
+  speechState.session += 1;
+  await playCurrentSpeechChunk(speechState.session);
+}
+
+async function playCurrentSpeechChunk(session) {
+  if (session !== speechState.session) return;
+  if (speechState.index >= speechState.chunks.length) {
+    finishSpeech();
+    return;
+  }
+
+  const audioWasBuffered = speechState.audioUrls.has(speechState.index);
+  if (!audioWasBuffered) {
+    const action = speechState.index === 0 ? "Generating" : "Buffering";
+    setSpeechMode("generating", speechProgressLabel(action));
+  }
+
+  try {
+    const chunkIndex = speechState.index;
+    const audioUrl = await prepareSpeechChunk(chunkIndex, session);
+    if (!audioUrl || session !== speechState.session) return;
+
+    speechState.audio.src = audioUrl;
+    speechState.audio.onended = () => {
+      if (session !== speechState.session) return;
+      releaseSpeechUrl(chunkIndex);
+      speechState.index += 1;
+      playCurrentSpeechChunk(session);
+    };
+    speechState.audio.onerror = () => {
+      if (session === speechState.session) stopSpeech("Audio playback failed");
+    };
+
+    await speechState.audio.play();
+    setSpeechMode("speaking", speechProgressLabel("Playing"));
+    prefetchNextSpeechChunk(session);
+  } catch (error) {
+    if (error.name !== "AbortError" && session === speechState.session) {
+      stopSpeech(error.message || "Unable to generate audio");
+    }
+  }
+}
+
+function prepareSpeechChunk(index, session) {
+  if (speechState.audioUrls.has(index)) {
+    return Promise.resolve(speechState.audioUrls.get(index));
+  }
+  if (speechState.audioPromises.has(index)) {
+    return speechState.audioPromises.get(index);
+  }
+
+  let controller = null;
+  let promise;
+  promise = (async () => {
+    const cacheRequest = await createSpeechCacheRequest(speechState.chunks[index], speechState.settings);
+    const cachedBlob = await readSpeechCache(cacheRequest);
+    if (cachedBlob && session === speechState.session) {
+      const cachedUrl = URL.createObjectURL(cachedBlob);
+      speechState.audioUrls.set(index, cachedUrl);
+      return cachedUrl;
+    }
+
+    controller = new AbortController();
+    speechState.abortControllers.add(controller);
+    const response = await fetch("/api/speech", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify({
+        text: speechState.chunks[index],
+        genre: speechState.settings.genre,
+        voice: speechState.settings.voice,
+        rate: speechState.settings.rate,
+        segmentIndex: index,
+        segmentCount: speechState.chunks.length
+      })
+    });
+      const data = await response.json();
+      if (!response.ok) {
+        const error = new Error(
+          data.code === "quota_exceeded"
+            ? "Đã hết hạn mức giọng đọc AI. Hãy thử lại sau hoặc kiểm tra billing."
+            : data.error || "Không thể tạo giọng đọc."
+        );
+        error.code = data.code;
+        throw error;
+      }
+      if (session !== speechState.session) return "";
+
+      const audioBlob = base64ToBlob(data.audio, data.mimeType || "audio/wav");
+      await writeSpeechCache(cacheRequest, audioBlob);
+      const audioUrl = URL.createObjectURL(audioBlob);
+      speechState.audioUrls.set(index, audioUrl);
+      return audioUrl;
+    })()
+    .finally(() => {
+      if (controller) speechState.abortControllers.delete(controller);
+      if (speechState.audioPromises.get(index) === promise) {
+        speechState.audioPromises.delete(index);
+      }
+    });
+
+  speechState.audioPromises.set(index, promise);
+  return promise;
+}
+
+async function createSpeechCacheRequest(text, settings) {
+  const source = JSON.stringify({ text, ...settings });
+  let key = "";
+  if (window.crypto?.subtle) {
+    const digest = await window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(source));
+    key = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  } else {
+    let hash = 0;
+    for (let index = 0; index < source.length; index += 1) {
+      hash = (hash * 31 + source.charCodeAt(index)) >>> 0;
+    }
+    key = String(hash);
+  }
+  return new Request(`/__speech-cache/${key}`);
+}
+
+async function readSpeechCache(request) {
+  if (!("caches" in window)) return null;
+  try {
+    const cache = await caches.open(SPEECH_CACHE_NAME);
+    const response = await cache.match(request);
+    if (!response) return null;
+    if (Number(response.headers.get("X-Speech-Expires")) <= Date.now()) {
+      await cache.delete(request);
+      return null;
+    }
+    return response.blob();
+  } catch (error) {
+    console.warn("Unable to read the local audio cache.", error);
+    return null;
+  }
+}
+
+async function writeSpeechCache(request, audioBlob) {
+  if (!("caches" in window)) return;
+  try {
+    const cache = await caches.open(SPEECH_CACHE_NAME);
+    await cache.put(
+      request,
+      new Response(audioBlob, {
+        headers: {
+          "Content-Type": audioBlob.type || "audio/wav",
+          "X-Speech-Expires": String(Date.now() + SPEECH_CACHE_TTL_MS)
+        }
+      })
+    );
+  } catch (error) {
+    console.warn("Unable to save the local audio cache.", error);
+  }
+}
+
+async function pruneSpeechCache() {
+  if (!("caches" in window)) return;
+  try {
+    const cache = await caches.open(SPEECH_CACHE_NAME);
+    const requests = await cache.keys();
+    await Promise.all(
+      requests.map(async (request) => {
+        const response = await cache.match(request);
+        if (!response || Number(response.headers.get("X-Speech-Expires")) <= Date.now()) {
+          await cache.delete(request);
+        }
+      })
+    );
+  } catch (error) {
+    console.warn("Unable to prune the local audio cache.", error);
+  }
+}
+
+function prefetchNextSpeechChunk(session) {
+  const nextIndex = speechState.index + 1;
+  if (nextIndex >= speechState.chunks.length) return;
+  prepareSpeechChunk(nextIndex, session).catch((error) => {
+    if (error.name !== "AbortError" && session === speechState.session) {
+      console.warn("Unable to buffer the next audio segment.", error);
+    }
+  });
+}
+
+function finishSpeech() {
+  releaseAllSpeechUrls();
+  speechState.chunks = [];
+  speechState.settings = null;
+  speechState.index = 0;
+  setSpeechMode("idle", "Playback complete");
+}
+
+function stopSpeech(statusMessage = "") {
+  speechState.session += 1;
+  for (const controller of speechState.abortControllers) controller.abort();
+  speechState.abortControllers.clear();
+  speechState.audioPromises.clear();
+  speechState.mode = "idle";
+  speechState.chunks = [];
+  speechState.settings = null;
+  speechState.index = 0;
+  if (speechState.audio) {
+    speechState.audio.pause();
+    speechState.audio.onended = null;
+    speechState.audio.onerror = null;
+    speechState.audio.removeAttribute("src");
+    speechState.audio.load();
+  }
+  releaseAllSpeechUrls();
+  setSpeechMode("idle", statusMessage || (hasSpeakableOutput() ? "Ready" : "No output available"));
+}
+
+function releaseSpeechUrl(index) {
+  const audioUrl = speechState.audioUrls.get(index);
+  if (!audioUrl) return;
+  URL.revokeObjectURL(audioUrl);
+  speechState.audioUrls.delete(index);
+}
+
+function releaseAllSpeechUrls() {
+  for (const audioUrl of speechState.audioUrls.values()) URL.revokeObjectURL(audioUrl);
+  speechState.audioUrls.clear();
+}
+
+function setSpeechMode(mode, statusMessage) {
+  speechState.mode = mode;
+  els.speechPlay.classList.toggle("is-speaking", mode === "speaking");
+  els.speechPlay.classList.toggle("is-paused", mode === "paused");
+  els.speechPlayLabel.textContent =
+    mode === "generating" ? "Generating" : mode === "speaking" ? "Pause" : mode === "paused" ? "Resume" : "Listen";
+  els.speechPlay.setAttribute(
+    "aria-label",
+    mode === "speaking" ? "Pause audio" : mode === "paused" ? "Resume audio" : "Listen to output"
+  );
+  els.speechPlay.title = els.speechPlay.getAttribute("aria-label");
+  els.speechStop.disabled = mode === "idle";
+  els.speechPlay.disabled = mode === "generating" || (mode === "idle" && !hasSpeakableOutput());
+  els.speechGenre.disabled = mode !== "idle";
+  els.speechVoice.disabled = mode !== "idle";
+  els.speechRate.disabled = mode !== "idle";
+  if (statusMessage) {
+    els.speechStatus.textContent = statusMessage;
+    els.speechStatus.title = statusMessage;
+  }
+}
+
+function updateSpeechAvailability() {
+  const available = hasSpeakableOutput();
+  els.speechPlay.disabled = !available || speechState.mode === "generating";
+  if (!available && speechState.mode !== "idle") {
+    stopSpeech();
+  } else if (speechState.mode === "idle") {
+    const renderedOutput =
+      !els.translationText.classList.contains("empty") && Boolean(els.translationText.textContent.trim());
+    els.speechStatus.textContent = available
+      ? "Ready · Vietnamese AI voice"
+      : renderedOutput
+        ? "Output is not Vietnamese"
+        : "No output available";
+  }
+}
+
+function hasSpeakableOutput() {
+  const chapter = state.chapters[state.currentIndex];
+  const translation = getCurrentTranslation();
+  return (
+    Boolean(chapter && translation) &&
+    isUsableTranslation(chapter.text, translation) &&
+    !els.translationText.classList.contains("empty") &&
+    !els.translationText.classList.contains("is-loading") &&
+    !els.translationText.classList.contains("status-error")
+  );
+}
+
+function getCurrentTranslation() {
+  return String(
+    state.translations[state.currentIndex] || localStorage.getItem(translationKey()) || ""
+  ).trim();
+}
+
+function speechProgressLabel(action) {
+  return `${action} ${speechState.index + 1} / ${speechState.chunks.length}`;
+}
+
+function splitSpeechText(text, maxLength = 900) {
+  const sentences = String(text || "")
+    .split(/\n{2,}/)
+    .flatMap((paragraph) => paragraph.match(/[^.!?…]+[.!?…]+|[^.!?…]+$/g) || [paragraph])
+    .map((sentence) => sentence.trim())
+    .filter(Boolean)
+    .flatMap((sentence) => {
+      if (sentence.length <= maxLength) return [sentence];
+      const pieces = [];
+      for (let start = 0; start < sentence.length; start += maxLength) {
+        pieces.push(sentence.slice(start, start + maxLength));
+      }
+      return pieces;
+    });
+
+  const chunks = [];
+  let current = "";
+  for (const sentence of sentences) {
+    const next = current ? `${current} ${sentence}` : sentence;
+    if (next.length > maxLength && current) {
+      chunks.push(current);
+      current = sentence;
+    } else {
+      current = next;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+function base64ToBlob(base64, mimeType) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new Blob([bytes], { type: mimeType });
 }
 
 async function handleFile(event) {
@@ -281,6 +707,7 @@ function renderChapterControls() {
 
 function goToChapter(index) {
   if (!state.chapters.length) return;
+  stopSpeech();
   state.currentIndex = Math.min(Math.max(index, 0), state.chapters.length - 1);
   localStorage.setItem(currentChapterKey(), String(state.currentIndex));
 
@@ -325,6 +752,7 @@ function loadCachedTranslation() {
   }
 
   if (cached) {
+    state.translations[state.currentIndex] = cached;
     els.translationText.textContent = cached;
     els.translationText.classList.remove("empty", "status-error", "is-loading");
     els.outputStatus.textContent = "Cached";
@@ -338,6 +766,7 @@ function loadCachedTranslation() {
     els.translateButton.hidden = false;
     els.retranslateButton.hidden = true;
   }
+  updateSpeechAvailability();
 }
 
 async function translateCurrentChapter(force) {
@@ -352,6 +781,7 @@ async function translateCurrentChapter(force) {
     }
   }
 
+  stopSpeech();
   setTranslationStatus("Processing document...");
   els.outputStatus.textContent = "Running";
   els.translateButton.disabled = true;
@@ -378,6 +808,7 @@ async function translateCurrentChapter(force) {
     await saveCurrentBookCache();
     els.translationText.textContent = data.translation;
     els.translationText.classList.remove("empty", "status-error", "is-loading");
+    updateSpeechAvailability();
     els.outputStatus.textContent = "Complete";
     els.translateButton.hidden = true;
     els.retranslateButton.hidden = false;
@@ -400,22 +831,27 @@ function formatSeconds(ms) {
 }
 
 function setTranslationStatus(message, isError = false) {
+  stopSpeech();
   els.translationText.textContent = message;
   els.translationText.classList.toggle("status-error", isError);
   els.translationText.classList.toggle("empty", !isError);
   els.translationText.classList.toggle("is-loading", !isError);
   if (isError) els.outputStatus.textContent = "Error";
+  updateSpeechAvailability();
 }
 
 function setBusy(message) {
+  stopSpeech();
   els.sourceText.textContent = message;
   els.translationText.textContent = "No output available.";
   els.translationText.classList.add("empty");
   els.translationText.classList.remove("is-loading", "status-error");
   els.outputStatus.textContent = "Loading";
+  updateSpeechAvailability();
 }
 
 function resetReader(message) {
+  stopSpeech();
   state.bookId = "";
   state.fileName = "";
   state.title = "";
@@ -442,6 +878,7 @@ function resetReader(message) {
   els.nextChapter.disabled = true;
   els.bottomNextChapter.disabled = true;
   els.translateButton.disabled = true;
+  updateSpeechAvailability();
 }
 
 async function restoreCachedBook() {

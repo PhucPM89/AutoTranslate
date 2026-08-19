@@ -2,6 +2,7 @@ const path = require("path");
 const fs = require("fs");
 const express = require("express");
 const { translateText } = require("./gemini");
+const { generateSpeech } = require("./speech");
 
 loadLocalEnv(path.join(__dirname, "..", ".env"));
 
@@ -41,6 +42,32 @@ app.post("/api/translate", async (req, res) => {
     console.error(error);
     const status = error.status && error.status >= 400 && error.status < 600 ? error.status : 500;
     res.status(status).json({ error: formatPublicError(error) });
+  }
+});
+
+app.post("/api/speech", async (req, res) => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) return res.status(500).json({ error: "Server chua co GEMINI_API_KEY." });
+
+    const result = await generateSpeech(req.body?.text, apiKey, {
+      genre: req.body?.genre,
+      voice: req.body?.voice,
+      rate: req.body?.rate,
+      segmentIndex: req.body?.segmentIndex,
+      segmentCount: req.body?.segmentCount
+    });
+    res.json(result);
+  } catch (error) {
+    console.error(error);
+    const status = error.status && error.status >= 400 && error.status < 600 ? error.status : 500;
+    res.status(status).json({
+      error:
+        error.code === "quota_exceeded"
+          ? "Da het han muc Gemini TTS. Hay thu lai sau hoac kiem tra billing cua API key."
+          : `Khong the tao giong doc: ${error.message || "Khong ro loi."}`,
+      code: error.code || "speech_error"
+    });
   }
 });
 
