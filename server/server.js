@@ -48,10 +48,10 @@ app.post("/api/translate", async (req, res) => {
 app.post("/api/speech", async (req, res) => {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) return res.status(500).json({ error: "Server chua co GEMINI_API_KEY." });
 
     const result = await generateSpeech(req.body?.text, apiKey, {
       genre: req.body?.genre,
+      provider: req.body?.provider,
       voice: req.body?.voice,
       rate: req.body?.rate,
       segmentIndex: req.body?.segmentIndex,

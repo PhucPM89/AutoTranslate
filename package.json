@@ -11,6 +11,7 @@
     "syntax": "node --check server/server.js && node --check server/gemini.js && node --check server/speech.js && node --check api/translate.js && node --check api/speech.js && node --check public/app.js"
   },
   "dependencies": {
+    "@andresaya/edge-tts": "^1.8.0",
     "express": "^4.19.2",
     "jszip": "^3.10.1"
   },

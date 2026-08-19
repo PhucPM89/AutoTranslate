@@ -30,9 +30,12 @@ const speechState = {
   audio: null,
   abortControllers: new Set(),
   audioUrls: new Map(),
+  audioProviders: new Map(),
+  audioVoices: new Map(),
   audioPromises: new Map(),
   chunks: [],
   settings: null,
+  provider: "auto",
   index: 0,
   mode: "idle",
   session: 0
@@ -196,7 +199,13 @@ async function toggleSpeech() {
 
   if (speechState.mode === "paused") {
     await speechState.audio.play();
-    setSpeechMode("speaking", speechProgressLabel("Playing"));
+    const provider = speechState.audioProviders.get(chunkIndex);
+    const voice = speechState.audioVoices.get(chunkIndex);
+    const status =
+      provider === "edge"
+        ? `${speechProgressLabel("Playing")} · ${formatSpeechVoice(voice)} · Edge fallback`
+        : speechProgressLabel("Playing");
+    setSpeechMode("speaking", status);
     return;
   }
 
@@ -207,6 +216,7 @@ async function toggleSpeech() {
     voice: els.speechVoice.value,
     rate: els.speechRate.value
   });
+  speechState.provider = "auto";
   speechState.index = 0;
   if (!speechState.chunks.length) return;
 
@@ -265,10 +275,13 @@ function prepareSpeechChunk(index, session) {
   let promise;
   promise = (async () => {
     const cacheRequest = await createSpeechCacheRequest(speechState.chunks[index], speechState.settings);
-    const cachedBlob = await readSpeechCache(cacheRequest);
-    if (cachedBlob && session === speechState.session) {
-      const cachedUrl = URL.createObjectURL(cachedBlob);
+    const cachedAudio = await readSpeechCache(cacheRequest);
+    if (cachedAudio && session === speechState.session) {
+      const cachedUrl = URL.createObjectURL(cachedAudio.blob);
       speechState.audioUrls.set(index, cachedUrl);
+      speechState.audioProviders.set(index, cachedAudio.provider);
+      speechState.audioVoices.set(index, cachedAudio.voice);
+      if (cachedAudio.provider === "edge") speechState.provider = "edge";
       return cachedUrl;
     }
 
@@ -280,6 +293,7 @@ function prepareSpeechChunk(index, session) {
       signal: controller.signal,
       body: JSON.stringify({
         text: speechState.chunks[index],
+        provider: speechState.provider,
         genre: speechState.settings.genre,
         voice: speechState.settings.voice,
         rate: speechState.settings.rate,
@@ -300,9 +314,12 @@ function prepareSpeechChunk(index, session) {
       if (session !== speechState.session) return "";
 
       const audioBlob = base64ToBlob(data.audio, data.mimeType || "audio/wav");
-      await writeSpeechCache(cacheRequest, audioBlob);
+      await writeSpeechCache(cacheRequest, audioBlob, data.provider, data.voice);
       const audioUrl = URL.createObjectURL(audioBlob);
       speechState.audioUrls.set(index, audioUrl);
+      speechState.audioProviders.set(index, data.provider);
+      speechState.audioVoices.set(index, data.voice);
+      if (data.provider === "edge") speechState.provider = "edge";
       return audioUrl;
     })()
     .finally(() => {
@@ -342,14 +359,18 @@ async function readSpeechCache(request) {
       await cache.delete(request);
       return null;
     }
-    return response.blob();
+    return {
+      blob: await response.blob(),
+      provider: response.headers.get("X-Speech-Provider") || "cache",
+      voice: response.headers.get("X-Speech-Voice") || ""
+    };
   } catch (error) {
     console.warn("Unable to read the local audio cache.", error);
     return null;
   }
 }
 
-async function writeSpeechCache(request, audioBlob) {
+async function writeSpeechCache(request, audioBlob, provider, voice) {
   if (!("caches" in window)) return;
   try {
     const cache = await caches.open(SPEECH_CACHE_NAME);
@@ -358,7 +379,9 @@ async function writeSpeechCache(request, audioBlob) {
       new Response(audioBlob, {
         headers: {
           "Content-Type": audioBlob.type || "audio/wav",
-          "X-Speech-Expires": String(Date.now() + SPEECH_CACHE_TTL_MS)
+          "X-Speech-Expires": String(Date.now() + SPEECH_CACHE_TTL_MS),
+          "X-Speech-Provider": provider || "unknown",
+          "X-Speech-Voice": voice || ""
         }
       })
     );
@@ -399,6 +422,7 @@ function finishSpeech() {
   releaseAllSpeechUrls();
   speechState.chunks = [];
   speechState.settings = null;
+  speechState.provider = "auto";
   speechState.index = 0;
   setSpeechMode("idle", "Playback complete");
 }
@@ -411,6 +435,7 @@ function stopSpeech(statusMessage = "") {
   speechState.mode = "idle";
   speechState.chunks = [];
   speechState.settings = null;
+  speechState.provider = "auto";
   speechState.index = 0;
   if (speechState.audio) {
     speechState.audio.pause();
@@ -428,11 +453,21 @@ function releaseSpeechUrl(index) {
   if (!audioUrl) return;
   URL.revokeObjectURL(audioUrl);
   speechState.audioUrls.delete(index);
+  speechState.audioProviders.delete(index);
+  speechState.audioVoices.delete(index);
 }
 
 function releaseAllSpeechUrls() {
   for (const audioUrl of speechState.audioUrls.values()) URL.revokeObjectURL(audioUrl);
   speechState.audioUrls.clear();
+  speechState.audioProviders.clear();
+  speechState.audioVoices.clear();
+}
+
+function formatSpeechVoice(voice) {
+  if (voice === "vi-VN-NamMinhNeural") return "Nam Minh";
+  if (voice === "vi-VN-HoaiMyNeural") return "Hoài My";
+  return voice || "Edge Neural";
 }
 
 function setSpeechMode(mode, statusMessage) {

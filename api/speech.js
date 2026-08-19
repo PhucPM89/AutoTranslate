@@ -8,11 +8,11 @@ module.exports = async function handler(req, res) {
 
   try {
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) return res.status(500).json({ error: "Server chua co GEMINI_API_KEY." });
 
     const body = typeof req.body === "object" && req.body !== null ? req.body : await readJsonBody(req);
     const result = await generateSpeech(body?.text, apiKey, {
       genre: body?.genre,
+      provider: body?.provider,
       voice: body?.voice,
       rate: body?.rate,
       segmentIndex: body?.segmentIndex,
