@@ -59,6 +59,14 @@ function buildBookIndex({ book, revision, chapters, publicUrlFor }) {
     status: book.status || "",
     description: book.description || "",
     cover: book.cover || "",
+    // Provenance travels with the index because index.json is the canonical
+    // per-book document. Leaving it out meant anything rebuilding a database row
+    // from the index - the translation worker's safety net, the storage fallback -
+    // recreated the book as an admin upload with no source id, and the crawler
+    // then stopped recognising its own novels.
+    source: book.source || "admin",
+    sourceId: book.sourceId ? String(book.sourceId) : "",
+    sourceUrl: book.sourceUrl || "",
     totalChapters: chapters.length,
     translatedChapters: chapters.filter((c) => c.translationStatus === "completed").length,
     updatedAt: new Date().toISOString(),

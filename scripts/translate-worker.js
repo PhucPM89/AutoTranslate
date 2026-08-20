@@ -201,7 +201,12 @@ async function ensureBookRow({ storage, db, job }) {
       status: index.status,
       totalChapters: index.totalChapters || 0,
       translatedChapters: index.translatedChapters || 0,
-      revision: job.revision
+      revision: job.revision,
+      // Carried from the index so a row created here is not born as an admin
+      // upload. The crawler recognises its books by these two fields.
+      source: index.source || "admin",
+      sourceId: index.sourceId || null,
+      sourceUrl: index.sourceUrl || null
     })
     .catch((error) => console.warn(`  (Supabase book insert lỗi: ${error.message})`));
 }
