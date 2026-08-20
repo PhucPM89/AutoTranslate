@@ -148,22 +148,49 @@ async function verifyGitHubOidc(token) {
     if (payload.iss !== "https://token.actions.githubusercontent.com" || payload.aud !== "https://auto-translate-xi.vercel.app") return false;
     if (payload.exp < now || payload.nbf > now + 30 || String(payload.repository || "").toLowerCase() !== "phucpm89/autotranslate") return false;
     if (payload.ref !== "refs/heads/main" || !String(payload.workflow_ref || "").toLowerCase().includes("/.github/workflows/fanqie-crawler.yml@refs/heads/main")) return false;
-    const keys = await getGitHubKeys();
-    const key = keys.find((item) => item.kid === header.kid && item.kty === "RSA");
+    let key = findRsaKey(await getGitHubKeys(), header.kid);
+    if (!key) {
+      // Unknown kid: refresh once before deciding the token is not genuine.
+      key = findRsaKey(await getGitHubKeys({ force: true }), header.kid);
+    }
     if (!key) return false;
     return crypto.verify("RSA-SHA256", Buffer.from(`${parts[0]}.${parts[1]}`), crypto.createPublicKey({ key, format: "jwk" }), Buffer.from(parts[2], "base64url"));
-  } catch {
+  } catch (error) {
+    // Without this line a network failure fetching the JWKS is indistinguishable
+    // from a bad token in the logs, which is what made the intermittent 401s hard
+    // to place.
+    console.error("Crawler OIDC verification failed:", error.message);
     return false;
   }
 }
 
-async function getGitHubKeys() {
-  if (githubKeys && Date.now() < githubKeysExpiresAt) return githubKeys;
+// `force` exists because GitHub rotates its signing keys: a warm serverless
+// instance can hold an hour-old key set, and an unknown kid then looks like a
+// forged token rather than a stale cache. The minimum interval keeps a stream of
+// junk kids from turning into a stream of outbound fetches.
+const KEY_REFETCH_MIN_INTERVAL_MS = 60 * 1000;
+// Only forced refetches move this. Rate-limiting against the last *forced*
+// refetch rather than the last fetch of any kind matters: a rotation can land
+// seconds after a normal fetch, and measuring from that fetch would reject the
+// new key for a minute - the very failure this is here to prevent. An attacker
+// spamming unknown kids still gets at most one extra fetch per minute.
+let githubKeysForcedAt = 0;
+
+async function getGitHubKeys({ force = false } = {}) {
+  const fresh = githubKeys && Date.now() < githubKeysExpiresAt;
+  const mayRefetch = force && Date.now() - githubKeysForcedAt >= KEY_REFETCH_MIN_INTERVAL_MS;
+  if (fresh && !mayRefetch) return githubKeys;
+  if (force) githubKeysForcedAt = Date.now();
+
   const response = await fetch("https://token.actions.githubusercontent.com/.well-known/jwks", { signal: AbortSignal.timeout(10000) });
   if (!response.ok) throw new Error("Không tải được GitHub signing keys.");
   githubKeys = (await response.json()).keys || [];
   githubKeysExpiresAt = Date.now() + 60 * 60 * 1000;
   return githubKeys;
+}
+
+function findRsaKey(keys, kid) {
+  return (keys || []).find((item) => item.kid === kid && item.kty === "RSA");
 }
 
 async function readBlobJson(pathname, fallback) {
