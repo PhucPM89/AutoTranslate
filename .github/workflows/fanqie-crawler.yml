@@ -9,7 +9,13 @@ on:
       - "server/crawler-store.js"
       - "api/crawler/**"
   schedule:
-    - cron: "7,22,37,52 * * * *"
+    # Every ten minutes rather than every fifteen. GitHub treats cron as best
+    # effort and drops or delays firings under load - the observed runs came at
+    # 12:16, 13:15, 14:03, 14:49, 15:01, 15:20 and 15:54, which matches no
+    # schedule at all - so more chances means fewer long gaps. The concurrency
+    # group below makes an extra firing wait rather than overlap, and a run now
+    # keeps working for hours, so this is a safety net rather than the mechanism.
+    - cron: "3,13,23,33,43,53 * * * *"
   workflow_dispatch:
 
 concurrency:

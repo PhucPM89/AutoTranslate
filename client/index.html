@@ -242,7 +242,18 @@
         </div>
         <div class="crawler-state" aria-live="polite">
           <span id="crawlerStateBadge" class="crawler-state-badge">Chưa chạy</span>
-          <div><strong id="crawlerStateMessage">Đang tải trạng thái...</strong><small id="crawlerStateMeta"></small></div>
+          <div class="crawler-state-body">
+            <strong id="crawlerStateMessage">Đang tải trạng thái...</strong>
+            <small id="crawlerStateMeta"></small>
+            <div id="crawlerProgress" class="crawler-progress" hidden>
+              <div class="crawler-progress-bar"><span id="crawlerProgressFill"></span></div>
+              <small id="crawlerProgressLabel"></small>
+            </div>
+            <div id="crawlerRecent" class="crawler-recent" hidden>
+              <p class="crawler-recent-title">Đã tải về</p>
+              <ul id="crawlerRecentList"></ul>
+            </div>
+          </div>
         </div>
         <fieldset class="crawler-categories">
           <legend>Thể loại theo dõi</legend>

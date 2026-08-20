@@ -43,12 +43,23 @@ const DEFAULT_STATUS = {
   message: "Crawler chưa chạy.",
   startedAt: "",
   finishedAt: "",
+  // Written on every status update, so the admin can tell a run that is working
+  // from one that died holding the "running" flag. "Started 40 minutes ago" says
+  // nothing on its own; "last heartbeat 20 seconds ago" says it is alive.
+  updatedAt: "",
   currentBookId: "",
+  currentBookTitle: "",
+  currentChapters: 0,
+  currentTotalChapters: 0,
   resumeAttempts: 0,
   discovered: 0,
   published: 0,
-  failed: 0
+  failed: 0,
+  // What actually arrived, newest first. A count of one is not enough to know
+  // whether the crawler is producing anything.
+  recent: []
 };
+const MAX_RECENT = 8;
 
 function sanitizeCrawlerConfig(value) {
   const categories = Array.isArray(value?.categories)
@@ -75,13 +86,28 @@ function sanitizeCrawlerStatus(value) {
     message: clean(value?.message, 300) || DEFAULT_STATUS.message,
     startedAt: cleanDate(value?.startedAt),
     finishedAt: cleanDate(value?.finishedAt),
+    updatedAt: cleanDate(value?.updatedAt),
     currentBookId: clean(value?.currentBookId, 30).replace(/\D/g, ""),
+    currentBookTitle: clean(value?.currentBookTitle, 200),
+    currentChapters: clampInteger(value?.currentChapters, 0, 100000, 0),
+    currentTotalChapters: clampInteger(value?.currentTotalChapters, 0, 100000, 0),
     // How many runs have already tried to finish `currentBookId`, so a book that
     // can never download cannot block discovery forever.
     resumeAttempts: clampInteger(value?.resumeAttempts, 0, 10, 0),
     discovered: clampInteger(value?.discovered, 0, 1000, 0),
     published: clampInteger(value?.published, 0, 1000, 0),
-    failed: clampInteger(value?.failed, 0, 1000, 0)
+    failed: clampInteger(value?.failed, 0, 1000, 0),
+    recent: Array.isArray(value?.recent)
+      ? value.recent
+          .slice(0, MAX_RECENT)
+          .map((entry) => ({
+            title: clean(entry?.title, 200),
+            chapters: clampInteger(entry?.chapters, 0, 100000, 0),
+            at: cleanDate(entry?.at),
+            sourceId: clean(entry?.sourceId, 30).replace(/\D/g, "")
+          }))
+          .filter((entry) => entry.title)
+      : []
   };
 }
 

@@ -20,6 +20,11 @@ const els = {
   crawlerStateBadge: document.getElementById("crawlerStateBadge"),
   crawlerStateMessage: document.getElementById("crawlerStateMessage"),
   crawlerStateMeta: document.getElementById("crawlerStateMeta"),
+  crawlerProgress: document.getElementById("crawlerProgress"),
+  crawlerProgressFill: document.getElementById("crawlerProgressFill"),
+  crawlerProgressLabel: document.getElementById("crawlerProgressLabel"),
+  crawlerRecent: document.getElementById("crawlerRecent"),
+  crawlerRecentList: document.getElementById("crawlerRecentList"),
   crawlerWorkerWarning: document.getElementById("crawlerWorkerWarning"),
   crawlerRefresh: document.getElementById("crawlerRefresh"),
   statsTab: document.getElementById("adminStatsTab"),
@@ -262,6 +267,29 @@ async function loadAdminCatalog() {
   startNewBook();
 }
 
+let crawlerPollTimer = null;
+
+// Only the status is fetched on a tick - never the config - so polling can never
+// stomp on a value being edited in the form.
+function startCrawlerPolling() {
+  stopCrawlerPolling();
+  crawlerPollTimer = setInterval(async () => {
+    if (activeAdminTab !== "crawler" || document.hidden) return;
+    try {
+      const result = await requestJson("/api/admin/crawler");
+      renderCrawlerStatus(result.status);
+    } catch {
+      // A failed poll is not worth interrupting the admin over; the next tick
+      // either recovers or the heartbeat goes stale, which is the real signal.
+    }
+  }, 15000);
+}
+
+function stopCrawlerPolling() {
+  if (crawlerPollTimer) clearInterval(crawlerPollTimer);
+  crawlerPollTimer = null;
+}
+
 async function loadCrawlerConfig() {
   const result = await requestJson("/api/admin/crawler");
   fillChoices(els.crawlerWordCount, result.wordCountBuckets, result.config.wordCountBucket);
@@ -394,13 +422,64 @@ async function saveCrawlerConfig(event) {
   }
 }
 
+// How long ago, in words. The point of showing this is to answer one question -
+// is the crawler still alive - and an absolute timestamp does not answer it.
+function describeAge(iso) {
+  if (!iso) return "";
+  const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (seconds < 60) return `${seconds} giây trước`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} phút trước`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} giờ trước`;
+  return `${Math.round(hours / 24)} ngày trước`;
+}
+
 function renderCrawlerStatus(status = {}) {
   const labels = { idle: "Chưa chạy", running: "Đang chạy", success: "Hoàn tất", error: "Có lỗi", disabled: "Đang tắt" };
   els.crawlerStateBadge.textContent = labels[status.state] || labels.idle;
   els.crawlerStateBadge.dataset.state = status.state || "idle";
   els.crawlerStateMessage.textContent = status.message || "Crawler chưa chạy.";
-  const finished = status.finishedAt ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(new Date(status.finishedAt)) : "Chưa có lượt chạy";
-  els.crawlerStateMeta.textContent = `${finished} · Đã thêm ${status.published || 0} · Lỗi ${status.failed || 0} · Lịch 15 phút`;
+  // The heartbeat, not the start time. A run that began 40 minutes ago tells you
+  // nothing; a heartbeat 20 seconds old tells you it is working, and one an hour
+  // old tells you it is not.
+  const beat = status.updatedAt || status.finishedAt;
+  const parts = [];
+  if (beat) parts.push(`Cập nhật ${describeAge(beat)}`);
+  if (status.state === "running" && status.startedAt) parts.push(`chạy từ ${describeAge(status.startedAt)}`);
+  parts.push(`đã thêm ${status.published || 0}`);
+  if (status.failed) parts.push(`lỗi ${status.failed}`);
+  const stale = beat && Date.now() - new Date(beat).getTime() > 15 * 60 * 1000;
+  if (status.state === "running" && stale) parts.push("⚠ không có nhịp mới, có thể đã chết");
+  els.crawlerStateMeta.textContent = parts.join(" · ");
+
+  // Live progress on the book being downloaded.
+  const total = Number(status.currentTotalChapters || 0);
+  const saved = Number(status.currentChapters || 0);
+  const showProgress = status.state === "running" && total > 0;
+  if (els.crawlerProgress) {
+    els.crawlerProgress.hidden = !showProgress;
+    if (showProgress) {
+      const percent = Math.min(100, Math.round((saved / total) * 100));
+      els.crawlerProgressFill.style.width = `${percent}%`;
+      els.crawlerProgressLabel.textContent =
+        `${status.currentBookTitle || "Đang tải"} — ${saved.toLocaleString("vi-VN")}/${total.toLocaleString("vi-VN")} chương (${percent}%)`;
+    }
+  }
+
+  // What actually arrived, so "đã thêm 1" is backed by a name and a length.
+  const recent = Array.isArray(status.recent) ? status.recent : [];
+  if (els.crawlerRecent) {
+    els.crawlerRecent.hidden = !recent.length;
+    els.crawlerRecentList.innerHTML = "";
+    for (const entry of recent) {
+      const item = document.createElement("li");
+      appendText(item, "span", "crawler-recent-name", entry.title);
+      appendText(item, "span", "crawler-recent-count", `${Number(entry.chapters || 0).toLocaleString("vi-VN")} chương`);
+      appendText(item, "span", "crawler-recent-age", describeAge(entry.at));
+      els.crawlerRecentList.appendChild(item);
+    }
+  }
 }
 
 const ADMIN_TABS = [
@@ -419,6 +498,8 @@ function selectAdminTab(tab) {
   });
   setStatus("");
   if (activeAdminTab === "stats") loadAnalytics();
+  if (activeAdminTab === "crawler") startCrawlerPolling();
+  else stopCrawlerPolling();
 }
 
 function renderBookOptions(selectedId = "") {

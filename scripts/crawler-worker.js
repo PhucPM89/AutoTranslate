@@ -78,16 +78,29 @@ async function main() {
           break;
         }
         status.currentBookId = candidate.sourceId;
+        status.currentBookTitle = "";
+        status.currentChapters = 0;
+        status.currentTotalChapters = 0;
         status.message = `Đang tải Fanqie book ${candidate.sourceId}...`;
         await updateStatus(status);
         try {
           const published = await downloadAndPublish(candidate, status, config.wordCountBucket);
           status.published += 1;
           status.currentBookId = "";
+          status.currentBookTitle = "";
+          status.currentChapters = 0;
+          status.currentTotalChapters = 0;
           status.resumeAttempts = 0;
+          const chapters = Number(published.totalChapters || 0);
           status.message = candidate.isUpdate
-            ? `Đã cập nhật ${published.title}.`
-            : `Đã thêm ${published.title} vào thư viện.`;
+            ? `Đã cập nhật ${published.title} (${chapters} chương).`
+            : `Đã thêm ${published.title} (${chapters} chương).`;
+          // Newest first, so the admin sees a list of arrivals rather than a
+          // single counter that says nothing about what came in.
+          status.recent = [
+            { title: published.title, chapters, at: new Date().toISOString(), sourceId: String(candidate.sourceId) },
+            ...(status.recent || [])
+          ].slice(0, 8);
         } catch (error) {
           status.failed += 1;
           status.message = `Book ${candidate.sourceId} thất bại: ${error.message}`;
@@ -120,10 +133,13 @@ async function main() {
 
     let discovery = null;
     let newCandidateCount = 0;
-    // Minutes are free on a public repo, so the run keeps working until its time
-    // budget is nearly spent rather than stopping after a single book and waiting
-    // for the next scheduled run.
-    if (remainingBudgetMs() >= MIN_BUDGET_FOR_NEW_JOB_MS) {
+    // Minutes are free on a public repo, and the job is allowed 330 of them, so
+    // the run keeps discovering and downloading until its budget is nearly spent.
+    // It used to do exactly one pass for maxNewBooksPerRun books, finish in about
+    // five minutes and then sit idle for the remaining 295 waiting on the next
+    // cron - and GitHub delivers those late or not at all, which is what produced
+    // the long gaps with nothing downloading.
+    while (remainingBudgetMs() >= MIN_BUDGET_FOR_NEW_JOB_MS) {
       const candidates = await discoverBooks(config, categories, status);
       const newCandidates = candidates.filter((item) => !existingIds.has(item.sourceId) && !excludedIds.has(item.sourceId));
       newCandidateCount = newCandidates.length;
@@ -144,8 +160,14 @@ async function main() {
           await updateStatus(status);
         }
       );
-      status.discovered = discovery.selected.length;
+      // Nothing left that this configuration can reach: stop rather than spin
+      // through the same rejected candidates for the rest of the budget.
+      if (!discovery.selected.length) break;
+
+      status.discovered += discovery.selected.length;
       await runJobs(discovery.selected);
+      // Everything just taken is known now, so the next pass looks past it.
+      for (const item of discovery.selected) existingIds.add(String(item.sourceId));
     }
 
     if (!status.published && !status.failed) {
@@ -701,9 +723,18 @@ async function waitForJob(jobId, status) {
     }
     if (job.state === "done") return job;
     if (["failed", "canceled"].includes(job.state)) throw new Error(job.message || `Tomato job ${job.state}.`);
-    if (Date.now() - lastStatusUpdate > 60 * 1000) {
-      const progress = job.progress ? `${job.progress.saved_chapters || 0}/${job.progress.chapter_total || 0} chương` : "đang chuẩn bị";
-      status.message = `Đang tải ${job.title || job.book_id}: ${progress}.`;
+    // Every 20s rather than every 60: this doubles as the heartbeat the admin
+    // reads, and a minute of silence during a four-hour download looks like death.
+    if (Date.now() - lastStatusUpdate > 20 * 1000) {
+      const saved = Number(job.progress?.saved_chapters || 0);
+      const total = Number(job.progress?.chapter_total || 0);
+      // Kept as numbers as well as prose so the admin can draw a bar instead of
+      // asking the reader to parse a sentence.
+      status.currentBookTitle = job.title || String(job.book_id || "");
+      status.currentChapters = saved;
+      status.currentTotalChapters = total;
+      const progress = job.progress ? `${saved}/${total} chương` : "đang chuẩn bị";
+      status.message = `Đang tải ${status.currentBookTitle}: ${progress}.`;
       await updateStatus(status);
       lastStatusUpdate = Date.now();
     }
@@ -900,7 +931,9 @@ function crawlerStateOptions() {
 async function updateStatus(status) {
   try {
     crawlerState = crawlerState || createCrawlerState(crawlerStateOptions());
-    return await crawlerState.writeStatus(status);
+    // Stamped here rather than by callers, so no status write can forget it and
+    // leave the admin unable to tell a working run from a dead one.
+    return await crawlerState.writeStatus({ ...status, updatedAt: new Date().toISOString() });
   } catch (error) {
     console.warn(`Không ghi được trạng thái crawler: ${error.message}`);
     return null;
