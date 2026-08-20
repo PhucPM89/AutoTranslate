@@ -42,7 +42,9 @@ function createR2Storage(env = process.env) {
         }
       });
       if (!response.ok) throw new Error(`R2 PUT ${key} lỗi HTTP ${response.status}: ${await safeText(response)}`);
-      return { key, size: buffer.length, url: this.publicUrl(key) };
+      // Uploading must not depend on a public domain being configured yet: the
+      // migration writes objects long before the CDN hostname exists.
+      return { key, size: buffer.length, url: publicBase ? this.publicUrl(key) : "" };
     },
 
     async get(key) {
@@ -72,8 +74,12 @@ function createR2Storage(env = process.env) {
         const response = await send("GET", "", { query });
         if (!response.ok) throw new Error(`R2 LIST ${prefix} lỗi HTTP ${response.status}`);
         const xml = await response.text();
-        for (const m of xml.matchAll(/<Key>([^<]+)<\/Key>\s*<LastModified>[^<]*<\/LastModified>\s*<ETag>[^<]*<\/ETag>\s*<Size>(\d+)<\/Size>/g)) {
-          out.push({ key: decodeXml(m[1]), size: Number(m[2]) });
+        // Parse each <Contents> block and pull fields independently: depending on
+        // element order here made listing silently return nothing.
+        for (const block of xml.matchAll(/<Contents>([\s\S]*?)<\/Contents>/g)) {
+          const key = (block[1].match(/<Key>([\s\S]*?)<\/Key>/) || [])[1];
+          if (!key) continue;
+          out.push({ key: decodeXml(key), size: Number((block[1].match(/<Size>(\d+)<\/Size>/) || [])[1]) || 0 });
         }
         token = (xml.match(/<NextContinuationToken>([^<]+)<\/NextContinuationToken>/) || [])[1] || "";
       } while (token);

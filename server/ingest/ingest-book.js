@@ -32,6 +32,9 @@ async function ingestBook({
   requestBudget = Infinity,
   deadlineAt = Infinity,
   spacingMs = 0,
+  // Uploads dominate ingest wall-clock: a 1,425-chapter book is ~2,850 objects,
+  // which takes hours one at a time and minutes in parallel.
+  uploadConcurrency = 24,
   log = () => {}
 }) {
   if (!storage) throw new Error("ingestBook cần storage.");
@@ -59,10 +62,13 @@ async function ingestBook({
   // 3. Source chapters. Written first so translation can resume from storage
   //    without re-parsing the EPUB.
   const chapterList = [];
+  const sourceWrites = [];
   for await (const chapter of extractChapters(epub)) {
-    await storage.put(
-      originalKey(book.id, rev, chapter.chapterNumber),
-      JSON.stringify(buildOriginalDocument({ bookId: book.id, revision: rev, chapter }))
+    sourceWrites.push(() =>
+      storage.put(
+        originalKey(book.id, rev, chapter.chapterNumber),
+        JSON.stringify(buildOriginalDocument({ bookId: book.id, revision: rev, chapter }))
+      )
     );
     chapterList.push({
       chapterNumber: chapter.chapterNumber,
@@ -71,6 +77,7 @@ async function ingestBook({
       translationStatus: "pending"
     });
   }
+  await runPool(sourceWrites, uploadConcurrency);
   if (!chapterList.length) throw new Error("EPUB không có chương nào đọc được.");
   log({ event: "ingest.chapters_extracted", bookId: book.id, chapters: chapterList.length });
 
@@ -85,23 +92,27 @@ async function ingestBook({
   await publishIndex({ storage, book: bookRecord, revision: rev, chapters: chapterList, state });
 
   // 6. Untranslated chapters are published as-is so no reader ever hits a 404.
-  for (const entry of chapterList) {
-    const key = chapterKey(book.id, rev, entry.chapterNumber);
-    if (await storage.head(key)) continue;
-    const source = await readJson(storage, originalKey(book.id, rev, entry.chapterNumber));
-    await storage.put(
-      key,
-      JSON.stringify(
-        buildChapterDocument({
-          bookId: book.id,
-          revision: rev,
-          chapter: source,
-          translation: null,
-          translationStatus: "pending"
-        })
-      )
-    );
-  }
+  await runPool(
+    chapterList.map((entry) => async () => {
+      const key = chapterKey(book.id, rev, entry.chapterNumber);
+      if (await storage.head(key)) return;
+      const source = await readJson(storage, originalKey(book.id, rev, entry.chapterNumber));
+      if (!source) return;
+      await storage.put(
+        key,
+        JSON.stringify(
+          buildChapterDocument({
+            bookId: book.id,
+            revision: rev,
+            chapter: source,
+            translation: null,
+            translationStatus: "pending"
+          })
+        )
+      );
+    }),
+    uploadConcurrency
+  );
 
   // 7. Translate, if a translator was supplied and there is budget for it.
   let translationResult = { translated: 0, failed: 0, quotaExhausted: false, spent: 0, summary: summarize(state), done: isDone(state) };
@@ -168,10 +179,33 @@ async function publishIndex({ storage, book, revision, chapters, state }) {
     const jobEntry = state.chapters.find((entry) => entry.n === chapter.chapterNumber);
     return { ...chapter, translationStatus: jobEntry ? jobEntry.status : chapter.translationStatus };
   });
+  // When no public hostname is configured yet the index still gets written, with a
+  // relative template that the reader resolves against its configured CDN base.
+  let publicUrlFor = null;
+  try {
+    storage.publicUrl(indexKey(book.id));
+    publicUrlFor = (key) => storage.publicUrl(key);
+  } catch {
+    publicUrlFor = null;
+  }
   await storage.put(
     indexKey(book.id),
-    JSON.stringify(buildBookIndex({ book, revision, chapters: withStatus, publicUrlFor: (key) => storage.publicUrl(key) }))
+    JSON.stringify(buildBookIndex({ book, revision, chapters: withStatus, publicUrlFor }))
   );
+}
+
+// Bounded parallelism: keeps `concurrency` uploads in flight without building a
+// promise for every one of a book's thousands of chapters up front.
+async function runPool(tasks, concurrency) {
+  let index = 0;
+  const workers = Array.from({ length: Math.max(1, Math.min(concurrency, tasks.length)) }, async () => {
+    while (index < tasks.length) {
+      const current = index;
+      index += 1;
+      await tasks[current]();
+    }
+  });
+  await Promise.all(workers);
 }
 
 async function readJson(storage, key) {
