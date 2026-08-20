@@ -38,9 +38,14 @@ const SECRETS = [
   "GITHUB_DISPATCH_TOKEN"
 ];
 
-// READER_CDN_ENABLED is deliberately never set: it switches real readers onto the
-// CDN and stays off until that path is signed off by hand.
-const NEVER_SET = ["READER_CDN_ENABLED", "GEMINI_API_KEY"];
+// GEMINI_API_KEY is never set here: translation happens in GitHub Actions, and
+// nothing served to a browser should be able to call Gemini.
+const NEVER_SET = ["GEMINI_API_KEY"];
+
+// READER_CDN_ENABLED switches real readers onto the CDN, so it takes an explicit
+// flag rather than being picked up from whatever happens to be in the environment:
+//   node scripts/configure-cloudflare.js --enable-cdn-reader
+const ENABLE_CDN_READER = process.argv.includes("--enable-cdn-reader");
 
 // A dotenv parser that does not expand anything.
 function parseEnvFile(file) {
@@ -101,6 +106,9 @@ async function main() {
     if (!(name in secretValues)) secretValues[name] = env[name] || "";
   }
 
+  // Build-time only: the browser bundle inlines it, the Worker never reads it.
+  if (ENABLE_CDN_READER) resolved.READER_CDN_ENABLED = "true";
+
   const envVars = {};
   for (const [name, value] of Object.entries(resolved)) envVars[name] = { type: "plain_text", value };
   for (const name of SECRETS) envVars[name] = { type: "secret_text", value: secretValues[name] };
@@ -130,6 +138,9 @@ async function main() {
     if (name in envVars) throw new Error(`${name} không được cấu hình ở đây.`);
   }
   console.log(`\nKhông đặt: ${NEVER_SET.join(", ")}`);
+  console.log(
+    `Đường đọc chapter: ${ENABLE_CDN_READER ? "CDN (READER_CDN_ENABLED=true)" : "EPUB (READER_CDN_ENABLED không đặt)"}`
+  );
 
   if (dryRun) {
     console.log("\nDRY RUN — không gửi gì.");
@@ -169,7 +180,11 @@ async function main() {
   console.log(`  compatibility : ${production.compatibility_date} ${JSON.stringify(production.compatibility_flags)}`);
   console.log(`  r2 bindings   : ${Object.keys(production.r2_buckets || {}).join(", ")}`);
   console.log(`  biến          : ${Object.keys(production.env_vars || {}).length}`);
-  console.log(`  READER_CDN_ENABLED: ${"READER_CDN_ENABLED" in (production.env_vars || {}) ? "CÓ — sai" : "không"}`);
+  const readerFlag = "READER_CDN_ENABLED" in (production.env_vars || {});
+  console.log(
+    `  READER_CDN_ENABLED: ${readerFlag ? "có" : "không"}` +
+      `${readerFlag === ENABLE_CDN_READER ? "" : "  <-- không khớp với flag đã truyền"}`
+  );
 }
 
 main().catch((error) => {
