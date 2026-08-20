@@ -13,7 +13,6 @@
 // bucket is served in full over the CDN and operational state has no business
 // being public.
 
-const { createArchiveStorage, createStorage } = require("./storage");
 const { createSupabase } = require("./supabase");
 const {
   CATEGORY_DEFINITIONS,
@@ -26,13 +25,15 @@ const {
 const CONFIG_KEY = "crawler/config.json";
 const STATUS_KEY = "crawler/status.json";
 
-function createCrawlerState({ storage = null, readerStorage = null, db = null } = {}) {
-  // Falls back to the reader bucket only when no separate archive bucket is
-  // configured, which is the local-development case.
-  const store = storage || createArchiveStorage() || createStorage();
+// `storage` is required rather than defaulted. Reaching for the ambient storage
+// layer here would pull the filesystem driver into a Workers bundle, where fs does
+// not exist - and a module that picks its own backend is harder to test besides.
+// Callers running under Node build it from server/storage; the Worker passes an R2
+// binding adapter.
+function createCrawlerState({ storage, readerStorage = null, db = null } = {}) {
+  if (!storage) throw new Error("createCrawlerState cần storage.");
+  const store = storage;
   const database = db === null ? createSupabase() : db;
-  // Injectable so the snapshot fallback can be tested without depending on
-  // whichever driver the ambient environment happens to select.
   const reader = readerStorage || null;
 
   async function readConfig() {
@@ -87,9 +88,12 @@ function createCrawlerState({ storage = null, readerStorage = null, db = null } 
   }
 
   // Fallback for when Supabase is unreachable: the published snapshot carries the
-  // same book ids, and a fanqie id is recoverable from the "fanqie-<id>" key.
+  // same book ids, and a fanqie id is recoverable from the "fanqie-<id>" key. With
+  // no reader storage there is nothing to fall back to, and an empty catalogue is
+  // safe - the crawler re-checks a book rather than skipping one.
   async function readCatalogSnapshot() {
-    const snapshot = await readJson(reader || createStorage(), "catalog/latest.json");
+    if (!reader) return { books: [] };
+    const snapshot = await readJson(reader, "catalog/latest.json");
     const books = (snapshot?.books || []).map((book) => ({
       id: book.id,
       source: /^fanqie-/.test(book.id) ? "fanqie" : "admin",

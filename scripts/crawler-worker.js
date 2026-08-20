@@ -6,6 +6,7 @@ const JSZip = require("jszip");
 const { runIngest } = require("../server/ingest/run-ingest");
 const { translateMetadata } = require("../server/gemini");
 const { createCrawlerState } = require("../server/crawler-state");
+const { createStorage, createArchiveStorage } = require("../server/storage");
 
 const TOMATO_URL = String(process.env.TOMATO_URL || "http://127.0.0.1:18423").replace(/\/$/, "");
 const TOMATO_PASSWORD = process.env.TOMATO_PASSWORD || "";
@@ -40,7 +41,7 @@ async function main() {
   // Config, status and the crawled-book list come straight from R2 and Supabase.
   // Going through the site for its own state is what made every run fail once
   // the old blob-backed API went away.
-  const state = createCrawlerState();
+  const state = createCrawlerState(crawlerStateOptions());
   const control = await state.readControl();
   const { config, categories, catalog, status: previousStatus } = control;
   if (!config.enabled) {
@@ -887,9 +888,15 @@ async function jsonRequest(url, options = {}) {
 // download in flight.
 let crawlerState = null;
 
+// Crawler state lives in the private bucket; the catalogue snapshot it falls back
+// to lives in the public one.
+function crawlerStateOptions() {
+  return { storage: createArchiveStorage() || createStorage(), readerStorage: createStorage() };
+}
+
 async function updateStatus(status) {
   try {
-    crawlerState = crawlerState || createCrawlerState();
+    crawlerState = crawlerState || createCrawlerState(crawlerStateOptions());
     return await crawlerState.writeStatus(status);
   } catch (error) {
     console.warn(`Không ghi được trạng thái crawler: ${error.message}`);

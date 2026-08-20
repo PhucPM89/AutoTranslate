@@ -1,6 +1,6 @@
 "use strict";
 
-const crypto = require("crypto");
+const crypto = require("node:crypto");
 
 const SESSION_TTL_MS = 30 * 60 * 1000;
 

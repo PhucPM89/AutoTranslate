@@ -12,7 +12,7 @@
 // signed, and the payload hash is the literal UNSIGNED-PAYLOAD - the signature
 // cannot depend on bytes the server never sees.
 
-const crypto = require("crypto");
+const crypto = require("node:crypto");
 
 const REGION = "auto";
 const SERVICE = "s3";

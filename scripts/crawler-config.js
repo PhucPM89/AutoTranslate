@@ -12,6 +12,7 @@
 // stay in agreement. Handy for changing config without opening the browser.
 
 const { createCrawlerState } = require("../server/crawler-state");
+const { createStorage, createArchiveStorage } = require("../server/storage");
 const { CATEGORY_DEFINITIONS, WORD_COUNT_BUCKETS, CREATION_STATUSES } = require("../server/crawler-store");
 
 const args = process.argv.slice(2);
@@ -36,7 +37,10 @@ function describe(config) {
 }
 
 async function main() {
-  const state = createCrawlerState();
+  const state = createCrawlerState({
+    storage: createArchiveStorage() || createStorage(),
+    readerStorage: createStorage()
+  });
 
   if (args.includes("--show") || args.length === 0) {
     describe(await state.readConfig());

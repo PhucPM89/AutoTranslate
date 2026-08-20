@@ -122,7 +122,7 @@ test("the CSP omits the CDN cleanly when no base URL is set", async () => {
   assert.ok(!/ ;/.test(csp), `không được để lại khoảng trắng trước ";": ${csp}`);
 });
 
-test("an unknown path falls through to the SPA shell, not a 404", async () => {
+test("an unknown path falls through to the assets binding, not a 404", async () => {
   const response = await call("/truyen/khong-ton-tai");
   assert.equal(response.status, 200);
 });

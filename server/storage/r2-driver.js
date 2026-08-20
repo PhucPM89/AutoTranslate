@@ -1,6 +1,6 @@
 "use strict";
 
-const crypto = require("crypto");
+const crypto = require("node:crypto");
 const { cacheControlFor, contentTypeFor } = require("./keys");
 
 // Minimal S3 (SigV4) client for Cloudflare R2. Deliberately hand-rolled instead

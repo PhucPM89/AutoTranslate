@@ -1,4 +1,16 @@
-# Cloudflare Workers configuration. This is the only deployment target.
+# Cloudflare configuration.
+#
+# The live deployment is Cloudflare PAGES, project "tram-chu-web": Pages serves
+# public/ and routes functions/api/admin/[[path]].js, which wraps the same router
+# in worker/api.js that the Workers entry below uses. Pages was chosen because the
+# available API token carries Cloudflare Pages: Edit but not Workers Scripts: Edit,
+# so a Pages project can be created, configured and deployed end to end without a
+# manual step.
+#
+# This file configures the Workers alternative (`wrangler deploy`), which is kept
+# working so the target can be switched without a rewrite. Pages ignores it -
+# variables and bindings for Pages live on the project, set by
+# `npm run configure:cf`.
 #
 # `npm run build` writes the static site into public/. The Worker in
 # worker/index.js serves those files through the ASSETS binding and handles the

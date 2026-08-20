@@ -142,3 +142,35 @@ node scripts/crawler-config.js --set maxNewBooksPerRun=2
 ```
 
 Trang admin ghi cùng hai object đó qua Worker, nên CLI và UI luôn khớp nhau.
+
+## Deploy (Cloudflare Pages)
+
+Project `tram-chu-web`. Biến và binding nằm trên project, không trong file config:
+
+```bash
+npm run configure:cf   # đặt 13 biến + 2 R2 binding + nodejs_compat
+npm run build          # cần R2_PUBLIC_BASE_URL, SUPABASE_URL, SUPABASE_ANON_KEY
+npm run deploy         # wrangler pages deploy
+```
+
+`configure:cf` đọc `.env`/`.env.local` **bằng Node, không qua shell**. Đây không
+phải chuyện thẩm mỹ: `set -a; . ./.env` sẽ expand `$` trong giá trị, và hash mật
+khẩu có dạng `scrypt$salt$hash` — nó từng bị cắt từ 116 xuống 27 ký tự và tạo ra
+một bản deploy mà mật khẩu đúng vẫn bị từ chối. Script kiểm tra hash có đúng 3
+phần và dừng nếu không.
+
+`READER_CDN_ENABLED` không bao giờ được đặt bởi script này. Build in ra chế độ nó
+tạo (`reader: chapter từ EPUB|CDN`) nên đọc log là biết.
+
+### Tên miền
+
+`cdn.tram-chu.online` trỏ vào R2 và đang chạy. `tram-chu.online` cùng
+`www.tram-chu.online` đã được gắn vào Pages nhưng ở trạng thái `initializing`: cần
+một bản ghi DNS mà token hiện tại không tạo được. Thêm trong dashboard:
+
+```
+CNAME  @      tram-chu-web.pages.dev   (proxied)
+CNAME  www    tram-chu-web.pages.dev   (proxied)
+```
+
+Sau đó custom domain tự chuyển sang `active`.

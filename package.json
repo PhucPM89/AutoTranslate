@@ -7,8 +7,9 @@
     "build": "node scripts/build-client.js",
     "postinstall": "node scripts/build-client.js",
     "setup:admin": "node scripts/setup-admin-env.js",
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "dev": "wrangler pages dev public --compatibility-flags nodejs_compat",
+    "configure:cf": "node scripts/configure-cloudflare.js",
+    "deploy": "wrangler pages deploy public --project-name tram-chu-web --branch main",
     "test": "node --test \"server/**/*.test.js\""
   },
   "dependencies": {
