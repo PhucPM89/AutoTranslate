@@ -3,8 +3,8 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const JSZip = require("jszip");
-const { sanitizeCrawlerConfig, sanitizeCrawlerStatus, isCrawlerRequest } = require("./crawler-store");
-const { discoverCandidates, discoverFromLibrary, fetchLibraryPage, bucketChapterFloor, parseRankBookIds, parseRankBooks, estimateChapterCount, parseFanqieChapterCount, roundRobin, readEpubMetadata, selectWorkItems, selectResumeJob, jwtExpiresAt, selectNewBookCandidates, describeEmptyRun, fetchText } = require("../scripts/crawler-worker");
+const { sanitizeCrawlerConfig, sanitizeCrawlerStatus } = require("./crawler-store");
+const { discoverCandidates, discoverFromLibrary, fetchLibraryPage, bucketChapterFloor, parseRankBookIds, parseRankBooks, estimateChapterCount, parseFanqieChapterCount, roundRobin, readEpubMetadata, selectWorkItems, selectResumeJob, selectNewBookCandidates, describeEmptyRun, fetchText } = require("../scripts/crawler-worker");
 
 function jwt(payload) {
   const encode = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -83,18 +83,6 @@ test("falls back to safe defaults for unknown word-count and status choices", ()
   const kept = sanitizeCrawlerConfig({ wordCountBucket: "0", creationStatus: "1" });
   assert.equal(kept.wordCountBucket, 0, "chuỗi số vẫn được nhận");
   assert.equal(kept.creationStatus, 1);
-});
-
-test("authenticates crawler requests with a timing-safe bearer secret", async () => {
-  const previous = process.env.CRAWLER_SECRET;
-  process.env.CRAWLER_SECRET = "crawler-test-secret";
-  try {
-    assert.equal(await isCrawlerRequest({ headers: { authorization: "Bearer crawler-test-secret" } }), true);
-    assert.equal(await isCrawlerRequest({ headers: { authorization: "Bearer wrong-secret" } }), false);
-  } finally {
-    if (previous === undefined) delete process.env.CRAWLER_SECRET;
-    else process.env.CRAWLER_SECRET = previous;
-  }
 });
 
 test("sanitizes crawler status before it is persisted", () => {
@@ -457,13 +445,6 @@ test("every crawler category has an established-novel board", () => {
     assert.equal(definition.longRanks.length, definition.ranks.length, `${key} lệch số bảng xếp hạng`);
     definition.longRanks.forEach((rank) => assert.match(rank, /^\d+_2_\d+$/, `${key} longRanks phải là bảng _2_`));
   }
-});
-
-test("reads the expiry out of a GitHub OIDC token", () => {
-  const exp = Math.floor(Date.parse("2026-08-20T12:00:00Z") / 1000);
-  assert.equal(jwtExpiresAt(jwt({ exp })), exp * 1000);
-  assert.equal(jwtExpiresAt("not-a-jwt"), 0, "a malformed token forces a refresh");
-  assert.equal(jwtExpiresAt(jwt({})), 0, "a token with no exp forces a refresh");
 });
 
 test("resumes the book an interrupted run was downloading", () => {

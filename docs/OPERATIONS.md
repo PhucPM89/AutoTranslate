@@ -12,7 +12,7 @@ và kiểm tra được mà không cần cloud.
 
 ## Thêm truyện
 
-Admin upload và crawler đi qua cùng một `ingestBook()`. Không cần redeploy Vercel.
+Admin upload và crawler đi qua cùng một `ingestBook()`. Không cần redeploy gì.
 
 Ingest publish `index.json` **trước khi** dịch xong, nên truyện đọc được ngay bằng
 nội dung gốc; bản dịch lấp dần theo hàng đợi.
@@ -106,12 +106,11 @@ purge khi mới bật CORS.
 
 ## Cloudflare Pages
 
-Static site trong `public/` (do `scripts/build-client.js` sinh ra, kèm `_headers`).
-Function trong `functions/` được Pages tự route theo đường dẫn:
-`functions/api/admin/upload.js` phục vụ `/api/admin/upload` — **cùng path** với
-function Vercel tương ứng, nên `client/admin-upload.js` không cần biết đang chạy ở đâu.
+Static site trong `public/` (do `scripts/build-client.js` sinh ra, kèm `_headers`,
+mà Workers Assets có phục vụ và tôn trọng). Route động do `worker/index.js` phân
+phối; mọi đường khác trả về asset.
 
-Tạo project (cần quyền `Account · Cloudflare Pages · Edit`; token R2 **không** đủ):
+Tạo project (cần token có quyền Workers; token R2 **không** đủ):
 
 ```
 Build command   : npm run build
@@ -134,7 +133,7 @@ so từng byte URL của hai bản ký để chúng không lệch nhau.
 ## Cấu hình crawler
 
 Config và status nằm ở R2 bucket **private** (`crawler/config.json`,
-`crawler/status.json`), không phải Vercel Blob, không phải bucket public.
+`crawler/status.json`), không phải bucket public.
 
 ```bash
 node scripts/crawler-config.js --show
@@ -142,5 +141,4 @@ node scripts/crawler-config.js --enable
 node scripts/crawler-config.js --set maxNewBooksPerRun=2
 ```
 
-Trang admin trên Vercel vẫn ghi config vào Blob — crawler **không đọc chỗ đó nữa**.
-Dùng CLI trên cho tới khi phần admin chuyển sang Pages function.
+Trang admin ghi cùng hai object đó qua Worker, nên CLI và UI luôn khớp nhau.

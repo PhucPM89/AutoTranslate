@@ -34,7 +34,7 @@ export GEMINI_API_KEY=your_key
 Chạy app:
 
 ```bash
-npm start
+npm run dev
 ```
 
 Mở:
@@ -123,38 +123,45 @@ GEMINI_API_KEY=your_key
 Build step không cần. Start command:
 
 ```bash
-npm start
+npm run dev
 ```
 
-## Deploy Vercel
+## Deploy Cloudflare
 
-Project đã có `api/translate.js` để chạy trên Vercel Serverless Functions.
+Toàn bộ site là một Cloudflare Worker: `worker/index.js` phục vụ file tĩnh qua
+binding `ASSETS` và xử lý các route `/api/admin/*`. Người đọc không chạm Worker —
+catalogue và mọi chapter là object tĩnh trên R2 do CDN phục vụ.
 
-Vercel settings:
+Cấu hình build:
 
 ```text
-Framework Preset: Other
-Build Command: npm run build
-Output Directory: public
-Install Command: npm install
+Build command   : npm run build
+Deploy command  : npx wrangler deploy
 ```
 
-Environment Variables trên Vercel:
+`wrangler.toml` khai báo `main`, `[assets]` và hai R2 binding. Danh sách biến đầy
+đủ, kèm cái nào là secret và cái nào build cần, nằm ngay trong file đó.
+
+Ba biến được inline vào bundle browser nên **phải có lúc build**, không chỉ lúc
+chạy: `R2_PUBLIC_BASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`. Log build sẽ in
 
 ```text
-GEMINI_API_KEY=your_key
-GEMINI_MODEL=gemini-3.1-flash-lite
-GEMINI_FALLBACK_MODELS=gemini-3.5-flash-lite,gemini-3.6-flash
-GEMINI_CHUNK_SIZE=4000
-GEMINI_TRANSLATE_CONCURRENCY=1
+/_headers 2.1 KB (cdn: https://cdn.tram-chu.online)
 ```
 
-## Upload EPUB không cần database
+Nếu thấy `(chưa có CDN origin)` thì `R2_PUBLIC_BASE_URL` chưa tới được bước build.
 
-Thư viện dùng Vercel Blob. Gói Hobby có thể dùng miễn phí trong hạn mức của Vercel; file EPUB được upload thẳng từ trình duyệt lên Blob nên không đi qua giới hạn dung lượng request của Function.
+`READER_CDN_ENABLED` để **trống** cho tới khi đường đọc CDN được kiểm tra tay.
 
-1. Trong Vercel Dashboard, mở project, vào `Storage` > `Create Database` > `Blob`, rồi kết nối store với project. Vercel sẽ tự thêm `BLOB_READ_WRITE_TOKEN`.
-2. Sinh hash mật khẩu và khóa phiên ở local:
+Chạy thử đúng runtime production ở local:
+
+```bash
+npm run dev          # wrangler dev, chạy workerd thật
+```
+
+## Quản trị và upload EPUB
+
+1. Sinh hash mật khẩu và khóa phiên ở local:
 
 ```powershell
 $env:ADMIN_PASSWORD="mat-khau-quan-tri"
@@ -162,24 +169,29 @@ npm run setup:admin
 Remove-Item Env:ADMIN_PASSWORD
 ```
 
-3. Mở `.env`, đưa hai giá trị sau vào Vercel `Settings` > `Environment Variables` cho Production, Preview và Development:
+2. Đặt `LIBRARY_UPLOAD_PASSWORD_HASH` và `LIBRARY_SESSION_SECRET` làm secret của
+   Worker. Đổi `LIBRARY_SESSION_SECRET` sẽ đăng xuất mọi phiên đang mở.
 
-```text
-LIBRARY_UPLOAD_PASSWORD_HASH
-LIBRARY_SESSION_SECRET
-```
+3. Nút hình khóa trên thanh đầu trang mở khu vực quản trị.
 
-4. Redeploy project. Nút hình khóa trên thanh đầu trang mở khu vực quản trị.
+EPUB **không** đi qua Worker. Cloudflare giới hạn body request 100 MB còn EPUB có
+thể 200 MB, nên Worker chỉ cấp một URL `PUT` có chữ ký ngắn hạn (30 phút) và trình
+duyệt đẩy file thẳng lên bucket private `novel-archive`. Sau đó Worker gọi
+`workflow_dispatch` để GitHub Actions ingest — việc đó mất nhiều phút, quá lâu cho
+bất kỳ request nào.
 
-Mật khẩu không được ghi vào source. Server chỉ giữ hash `scrypt`, phiên quản trị nằm trong cookie `HttpOnly`, hết hạn sau 30 phút và endpoint upload kiểm tra quyền lại trước khi cấp token Blob. Mã HTML/CSS/JS gửi tới trình duyệt luôn có thể xem bằng DevTools; không đặt secret hay quyền ghi trong mã frontend.
+Mật khẩu không nằm trong source: server chỉ giữ hash `scrypt`, phiên nằm trong
+cookie `HttpOnly; Secure; SameSite=Strict` hết hạn sau 30 phút, và mọi route admin
+kiểm tra lại quyền cùng same-origin trước khi làm gì. Mã gửi tới browser luôn xem
+được bằng DevTools; không đặt secret nào trong đó.
 
 ## Fanqie crawler tự động
 
-Crawler chạy bằng GitHub Actions mỗi 15 phút, 24/7, lấy book ID từ bảng xếp hạng Fanqie, dùng Tomato Novel Downloader để tạo EPUB, rồi upload EPUB và ảnh bìa vào Vercel Blob. Không cần VPS và không cần nhập link thủ công.
+Crawler chạy bằng GitHub Actions mỗi 15 phút, 24/7, lấy book ID từ bảng xếp hạng Fanqie, dùng Tomato Novel Downloader để tạo EPUB, rồi ingest thẳng vào R2 và Supabase. Không cần VPS và không cần nhập link thủ công.
 
-Workflow không cần GitHub secret: nó dùng GitHub OIDC token ngắn hạn, bị giới hạn cho đúng repo `PhucPM89/AutoTranslate`, nhánh `main` và file workflow crawler. Sau khi deploy, đăng nhập khu vực quản trị, mở tab `Crawler`, chọn thể loại và bật tự động. Có thể chạy ngay workflow `Fanqie crawler` bằng nút `Run workflow`; lịch mặc định là phút 07, 22, 37 và 52 mỗi giờ.
+Worker crawler đọc config và ghi trạng thái trực tiếp trên R2, không gọi website nào, nên không cần token phiên. Sau khi deploy, đăng nhập khu vực quản trị, mở tab `Crawler`, chọn thể loại và bật tự động — hoặc dùng `node scripts/crawler-config.js --enable`. Có thể chạy ngay workflow `Fanqie crawler` bằng nút `Run workflow`; lịch mặc định là phút 07, 22, 37 và 52 mỗi giờ.
 
-Worker ưu tiên cập nhật truyện Fanqie đã quá 24 giờ chưa đồng bộ; nếu lượt cập nhật đó không thêm được gì thì worker vẫn tiếp tục tìm truyện mới trong cùng lượt. File tải tạm chỉ nằm trong cache GitHub Actions, còn thư viện chính nằm trên Vercel Blob.
+Worker ưu tiên cập nhật truyện Fanqie đã quá 24 giờ chưa đồng bộ; nếu lượt cập nhật đó không thêm được gì thì worker vẫn tiếp tục tìm truyện mới trong cùng lượt. File tải tạm chỉ nằm trong cache GitHub Actions, còn thư viện chính nằm trên R2.
 
 ### Tìm truyện dài
 
@@ -202,37 +214,17 @@ Nếu API thư viện lỗi, worker tự chuyển sang quét bảng xếp hạng
 
 Truyện vài nghìn chương cần nhiều giờ để tải, nên worker được thiết kế để chạy dài:
 
-- **Token OIDC được làm mới trong lúc chạy.** Token của GitHub chỉ sống khoảng 5 phút; trước đây worker lấy một lần lúc khởi động rồi dùng lại cho mọi lần gọi `updateStatus`, nên mọi lượt tải dài đều chết ở phút thứ 5. Giờ token tự làm mới trước khi hết hạn và thử lại một lần nếu gặp 401.
+- **Không còn phụ thuộc website.** Trạng thái được ghi thẳng lên R2. Trước đây worker gọi API của site bằng token OIDC sống ~5 phút, nên mọi lượt tải dài đều chết ở phút thứ 5; và khi storage của site ngừng hoạt động thì mọi lượt đều thất bại.
 - **Cache của Tomato luôn được lưu.** `actions/cache` chỉ lưu khi job thành công, tức là đúng những lượt tải dở lại bị mất sạch. Workflow tách thành `cache/restore` và `cache/save` với `if: always()`.
 - **Lượt sau tải tiếp đúng truyện đó.** Nếu một lượt chết giữa lúc tải, `currentBookId` được giữ lại trong trạng thái và lượt kế tiếp tải tiếp truyện đó trước, tối đa 3 lần rồi mới bỏ qua.
 - **Ngân sách thời gian.** Mặc định mỗi lượt làm việc tối đa 300 phút (`CRAWLER_RUN_BUDGET_MINUTES`), trong khi job cho phép 330 phút. Worker dừng chủ động khi gần hết ngân sách để còn kịp upload, publish và lưu cache; nó cũng không bắt đầu một truyện mới khi còn dưới 20 phút.
 
 Repo đang là public nên GitHub Actions không giới hạn số phút. Lịch 15 phút vẫn giữ nguyên: nhờ `concurrency` group, lượt mới sẽ chờ lượt đang chạy kết thúc rồi khởi động gần như ngay lập tức, nên không còn khoảng trống 15 phút giữa các lần tải.
 
-## Giới hạn 12 Serverless Function
-
-Vercel Hobby chỉ cho phép **12 serverless function mỗi deployment**, và project đang dùng đúng 12. Thêm một file `.js` mới vào `api/` sẽ làm deploy thất bại với lỗi:
-
-```text
-No more than 12 Serverless Functions can be added to a Deployment on the Hobby plan.
-```
-
-Vì vậy vài endpoint được gộp chung một function, phân nhánh theo HTTP method:
-
-```text
-api/analytics.js        POST   = beacon công khai từ trình duyệt người đọc
-                        GET    = số liệu cho admin (cần phiên quản trị)
-api/admin/login.js      GET    = kiểm tra phiên
-                        POST   = đăng nhập
-                        DELETE = đăng xuất
-```
-
-`vercel.json` giữ rewrite cho các path cũ (`/api/admin/logout`, `/api/admin/analytics`) để trình duyệt còn giữ bundle cũ không bị lỗi. Khi cần thêm endpoint mới, hãy gộp vào function sẵn có thay vì tạo file mới.
-
 ## Số liệu người đọc
 
 Tab `Số liệu` trong khu quản trị hiển thị lượt truy cập và lượt mở truyện theo hôm nay / 7 ngày / 30 ngày / tổng cộng, kèm danh sách truyện được mở nhiều nhất.
 
-Cách đếm được thiết kế cho hạn mức miễn phí: trình duyệt chỉ gửi beacon tới `/api/analytics` **một lần mỗi phiên** và **một lần cho mỗi truyện được mở**, chứ không phải mỗi lần đổi trang. Một người đọc vì vậy chỉ tốn một hai lần gọi function.
+Cách đếm được thiết kế cho hạn mức miễn phí: trình duyệt insert thẳng vào Supabase bằng khóa anon **một lần mỗi phiên** và **một lần cho mỗi truyện được mở**, chứ không phải mỗi lần đổi trang. Không có function nào được gọi. RLS cho phép anon insert `analytics_events` và không cho đọc lại, sửa hay xoá bất cứ thứ gì.
 
-Số liệu nằm trong `library/analytics.json` trên Vercel Blob, giữ 60 ngày gần nhất. Không lưu IP, cookie hay bất kỳ danh tính nào, nên con số là **số phiên truy cập** chứ không phải số người chính xác.
+Số liệu nằm ở bảng `analytics_events` trên Supabase và được đọc qua view tổng hợp `analytics_daily`. Không lưu IP, cookie hay bất kỳ danh tính nào — chỉ một id phiên ngẫu nhiên trong `sessionStorage` — nên con số là **số phiên truy cập** chứ không phải số người chính xác.

@@ -18,13 +18,19 @@ const jszipUrl = copyVendor(
   "/vendor/jszip.min.js"
 );
 
-// The admin bundle carries the Vercel Blob client (~110 KB) and is only useful
-// to the site owner, so it ships as a module that app.js imports on demand.
+// The admin bundle is only useful to the site owner, so it ships as a separate
+// module that app.js imports on demand rather than sitting in every reader's
+// download.
 const adminUrl = bundle({
   entry: path.join(CLIENT_DIR, "admin-upload.js"),
   outfile: path.join(PUBLIC_DIR, "admin-upload.js"),
   publicPath: "/admin-upload.js",
-  format: "esm"
+  format: "esm",
+  // The admin page reads the published catalogue straight from the CDN, so it
+  // needs the same base URL the reader bundle gets. Still only the public value.
+  define: {
+    __CDN_BASE__: JSON.stringify(process.env.R2_PUBLIC_BASE_URL || "")
+  }
 });
 
 const appUrl = bundle({
@@ -52,6 +58,19 @@ const styleUrl = minifyCss({
 
 writeHtml({ appUrl, styleUrl });
 writeHeaders();
+reportReaderMode();
+
+// The CDN reader is a one-line flag with a large effect, and it is inlined into
+// the bundle, so nothing about the built files shows which way it went. Printing
+// it means a deploy log is enough to tell.
+function reportReaderMode() {
+  const enabled = process.env.READER_CDN_ENABLED === "true";
+  const base = process.env.R2_PUBLIC_BASE_URL || "";
+  console.log(
+    `reader: chapter từ ${enabled && base ? "CDN" : "EPUB"}` +
+      ` (READER_CDN_ENABLED=${process.env.READER_CDN_ENABLED ?? "(không đặt)"})`
+  );
+}
 
 function bundle({ entry, outfile, publicPath, format, define }) {
   esbuild.buildSync({
@@ -105,13 +124,17 @@ function writeHeaders() {
   const templatePath = path.join(CLIENT_DIR, "_headers.template");
   if (!fs.existsSync(templatePath)) return;
   const origin = cdnOrigin();
-  // Substituting the trailing space too keeps the CSP tidy when there is no CDN
-  // origin yet, instead of leaving a double space inside the directive.
   // Normalised to LF regardless of how git checked the template out. On Windows
   // with autocrlf the template arrives as CRLF, and a deploy artifact must not
   // depend on that.
   const template = fs.readFileSync(templatePath, "utf8").split("\r\n").join("\n");
-  const body = template.replaceAll("%CDN_ORIGIN% ", origin ? origin + " " : "");
+  // The placeholder is one token in a space-separated CSP source list, and it may
+  // be the last one before a ";". Consuming the space in front of it means both
+  // positions come out right: with an origin the space is put back, without one
+  // the token and its separator disappear together. Matching only the trailing
+  // space shipped a literal %CDN_ORIGIN%; re-adding one unconditionally left
+  // "origin ;" and "data: ;" behind.
+  const body = template.replace(/ ?%CDN_ORIGIN%/g, origin ? ` ${origin}` : "");
   fs.writeFileSync(path.join(PUBLIC_DIR, "_headers"), body);
   const note = origin ? ` (cdn: ${origin})` : " (chưa có CDN origin)";
   console.log(`/_headers ${formatKb(Buffer.byteLength(body))}${note}`);

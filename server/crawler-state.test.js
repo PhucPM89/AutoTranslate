@@ -27,7 +27,7 @@ function memoryStore(initial = {}) {
 test("falls back to defaults when no config has been written yet", async () => {
   const state = createCrawlerState({ storage: memoryStore(), db: false });
   const config = await state.readConfig();
-  // The old behaviour read this from Vercel Blob and silently produced
+  // The old behaviour read this from external blob storage and silently produced
   // enabled:false, which is how the crawler ended up switched off.
   assert.equal(config.enabled, DEFAULT_CONFIG.enabled);
   assert.ok(Array.isArray(config.categories));

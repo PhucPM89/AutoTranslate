@@ -25,12 +25,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 330
     env:
-      SITE_URL: https://auto-translate-xi.vercel.app
       TOMATO_PASSWORD: tomato-local-worker
       TOMATO_DATA_DIR: ${{ github.workspace }}/.crawler-data
-      # The crawler now writes chapters to R2 and metadata to Supabase through
-      # runIngest(), so it needs the same credentials as the translation worker.
-      # Without these the ingest step fails at the first storage write.
+      # The crawler writes chapters to R2 and metadata to Supabase through
+      # runIngest(), and reads its own config and status from R2. It makes no
+      # request to any website, so there is no site URL or token here.
       R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
@@ -39,8 +38,8 @@ jobs:
       R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      # Only used to translate book title/author/description, which is a handful
-      # of calls. Chapter translation is the separate worker's job.
+      # Only translates title, author and description, a handful of calls.
+      # Chapter bodies are the translation worker's job.
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
       GEMINI_FALLBACK_MODELS: ${{ secrets.GEMINI_FALLBACK_MODELS }}

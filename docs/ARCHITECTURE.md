@@ -4,7 +4,7 @@
 
 Với dữ liệu đọc nhiều: **CDN > object storage > API > database**.
 
-Đường đọc chapter không được chạm Vercel Function, Supabase hay Gemini.
+Đường đọc chapter không được chạm Worker, Supabase hay Gemini.
 
 ## Trạng thái migration
 

@@ -4,11 +4,10 @@
 // infrastructure the rest of the pipeline uses.
 //
 // This exists because of a real outage. The crawler used to fetch all three from
-// /api/crawler/* on Vercel, which kept them in Vercel Blob. Once that store went
-// away the crawler could neither read its config - so it fell back to
-// enabled:false - nor record its status, which returned HTTP 400, and every
-// scheduled run failed. A worker running in GitHub Actions has no reason to ask a
-// web app for its own state.
+// a web API backed by external blob storage; when that storage went away it could
+// neither read its config - so it fell back to enabled:false - nor record its
+// status, and every scheduled run failed. A worker running in GitHub Actions has
+// no reason to ask a website for its own state.
 //
 // State lives in the PRIVATE archive bucket, not the reader bucket: the reader
 // bucket is served in full over the CDN and operational state has no business

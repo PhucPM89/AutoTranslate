@@ -7,12 +7,8 @@ const { runIngest } = require("../server/ingest/run-ingest");
 const { translateMetadata } = require("../server/gemini");
 const { createCrawlerState } = require("../server/crawler-state");
 
-const SITE_URL = String(process.env.SITE_URL || "https://auto-translate-xi.vercel.app").replace(/\/$/, "");
-const CRAWLER_SECRET = process.env.CRAWLER_SECRET || "";
-let crawlerAuthToken = CRAWLER_SECRET;
-let crawlerTokenExpiresAt = CRAWLER_SECRET ? Number.POSITIVE_INFINITY : 0;
 const TOMATO_URL = String(process.env.TOMATO_URL || "http://127.0.0.1:18423").replace(/\/$/, "");
-const TOMATO_PASSWORD = process.env.TOMATO_PASSWORD || CRAWLER_SECRET;
+const TOMATO_PASSWORD = process.env.TOMATO_PASSWORD || "";
 const TOMATO_DATA_DIR = path.resolve(process.env.TOMATO_DATA_DIR || ".crawler-data");
 const JOB_TIMEOUT_MS = clampNumber(process.env.CRAWLER_JOB_TIMEOUT_MINUTES, 15, 320, 300) * 60 * 1000;
 // The workflow allows 330 minutes. Stopping a little before that leaves room to
@@ -35,7 +31,6 @@ const LONG_NOVEL_RANK_PAGE_COUNT = 5;
 const FANQIE_REQUEST_SPACING_MS = 400;
 const FANQIE_RETRY_BACKOFF_MS = 2500;
 const THROTTLE_ABORT_STREAK = 6;
-const TOKEN_REFRESH_MARGIN_MS = 60 * 1000;
 const AVERAGE_CHARS_PER_CHAPTER = 2200;
 // Probing /page/ is only a fallback now, so it gets a tight budget.
 const MAX_DETAIL_PROBES = 12;
@@ -44,7 +39,7 @@ async function main() {
   requireEnvironment();
   // Config, status and the crawled-book list come straight from R2 and Supabase.
   // Going through the site for its own state is what made every run fail once
-  // Vercel Blob went away.
+  // the old blob-backed API went away.
   const state = createCrawlerState();
   const control = await state.readControl();
   const { config, categories, catalog, status: previousStatus } = control;
@@ -674,21 +669,16 @@ async function downloadAndPublish(candidate, status, wordCountBucket = -1) {
 
 // Metadata translation runs locally when the worker has a Gemini key, so the
 // crawler no longer needs the website to be reachable. The site call remains as a
-// fallback for as long as the legacy deployment exists.
+// Title, author and description are the only things translated here; chapter
+// bodies are the translation worker's job.
 async function translateBookMetadata(source) {
-  if (process.env.GEMINI_API_KEY) {
-    try {
-      return await translateMetadata(source, process.env.GEMINI_API_KEY);
-    } catch (error) {
-      console.warn(`Dịch metadata tại worker thất bại (${error.message}); thử qua site.`);
-    }
+  if (!process.env.GEMINI_API_KEY) {
+    // There is no server to fall back to any more, and the workflow always
+    // supplies this key, so a missing one is a configuration error worth failing
+    // on rather than working around.
+    throw new Error("Không dịch được metadata: thiếu GEMINI_API_KEY.");
   }
-  if (!SITE_URL) throw new Error("Không dịch được metadata: thiếu GEMINI_API_KEY và SITE_URL.");
-  return siteRequest("/api/crawler/control", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(source)
-  });
+  return translateMetadata(source, process.env.GEMINI_API_KEY);
 }
 
 async function waitForJob(jobId, status) {
@@ -878,23 +868,6 @@ class ThrottleError extends Error {
   }
 }
 
-async function siteRequest(pathname, options = {}) {
-  const send = async () =>
-    jsonRequest(`${SITE_URL}${pathname}`, {
-      ...options,
-      headers: { Authorization: `Bearer ${await getCrawlerToken()}`, ...(options.headers || {}) }
-    });
-
-  try {
-    return await send();
-  } catch (error) {
-    // A 401 mid-run means the token aged out between checks; force one refresh.
-    if (!/HTTP 401/.test(String(error.message)) || CRAWLER_SECRET) throw error;
-    crawlerTokenExpiresAt = 0;
-    return send();
-  }
-}
-
 async function tomatoRequest(pathname, options = {}) {
   return jsonRequest(`${TOMATO_URL}${pathname}`, {
     ...options,
@@ -936,40 +909,6 @@ function requireEnvironment() {
   }
 }
 
-// GitHub's OIDC id tokens live about five minutes, and the site verifies `exp`.
-// Fetching one at startup and reusing it killed every long download at ~5 minutes,
-// so the token is now refreshed on demand for the whole run.
-async function getCrawlerToken() {
-  if (CRAWLER_SECRET) return CRAWLER_SECRET;
-  if (crawlerAuthToken && Date.now() < crawlerTokenExpiresAt - TOKEN_REFRESH_MARGIN_MS) return crawlerAuthToken;
-
-  crawlerAuthToken = await requestGitHubOidcToken();
-  crawlerTokenExpiresAt = jwtExpiresAt(crawlerAuthToken) || Date.now() + 4 * 60 * 1000;
-  return crawlerAuthToken;
-}
-
-function jwtExpiresAt(token) {
-  try {
-    const payload = JSON.parse(Buffer.from(String(token).split(".")[1], "base64url").toString("utf8"));
-    const seconds = Number(payload.exp);
-    return Number.isFinite(seconds) ? seconds * 1000 : 0;
-  } catch {
-    return 0;
-  }
-}
-
-async function requestGitHubOidcToken() {
-  const url = new URL(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
-  url.searchParams.set("audience", SITE_URL);
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` },
-    signal: AbortSignal.timeout(30000)
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok || !body.value) throw new Error("GitHub không cấp được OIDC token cho crawler.");
-  return body.value;
-}
-
 function unique(values) {
   return Array.from(new Set(values));
 }
@@ -1003,7 +942,6 @@ module.exports = {
   readEpubMetadata,
   selectWorkItems,
   selectResumeJob,
-  jwtExpiresAt,
   selectNewBookCandidates,
   describeEmptyRun,
   fetchText

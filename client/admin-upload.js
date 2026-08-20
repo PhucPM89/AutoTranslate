@@ -1,4 +1,6 @@
 
+const CDN_BASE = String(__CDN_BASE__ || "").replace(/\/$/, "");
+
 const els = {
   open: document.getElementById("adminOpen"),
   close: document.getElementById("adminClose"),
@@ -47,7 +49,7 @@ let activeAdminTab = "library";
 let mounted = false;
 
 // app.js imports this module the first time the lock button is pressed, so the
-// Vercel Blob client never lands in a regular reader's bundle.
+// so the admin code never lands in a regular reader's bundle.
 export function mountAdmin() {
   if (!mounted) {
     mounted = true;
@@ -81,7 +83,7 @@ async function openAdmin() {
   try {
     const session = await requestJson("/api/admin/session");
     showAuthenticated(session.authenticated);
-    if (session.authenticated && !session.storageReady) setStatus("Vercel Blob chưa được kết nối với dự án.", true);
+    if (session.authenticated && !session.storageReady) setStatus("R2 chưa được cấu hình trên Worker nên chưa upload được.", true);
     else if (session.authenticated) {
       await Promise.all([loadAdminCatalog(), loadCrawlerConfig()]);
       setStatus("Chọn một truyện để chỉnh sửa hoặc thêm truyện mới.");
@@ -251,7 +253,11 @@ async function deleteSelectedBook() {
 }
 
 async function loadAdminCatalog() {
-  adminCatalog = await requestJson(`/api/library?admin=${Date.now()}`);
+  // The same published snapshot the reader uses. The cache-busting query matters:
+  // the CDN holds it for 60s and an admin needs to see their own edit at once.
+  adminCatalog = CDN_BASE
+    ? await requestJson(`${CDN_BASE}/catalog/latest.json?admin=${Date.now()}`)
+    : { books: [] };
   renderBookOptions();
   startNewBook();
 }
@@ -304,7 +310,7 @@ function describeCrawlerReach() {
 async function loadAnalytics() {
   setStatus("Đang tải số liệu truy cập...");
   try {
-    renderAnalytics(await requestJson("/api/analytics"));
+    renderAnalytics(await requestJson("/api/admin/analytics"));
     setStatus("");
   } catch (error) {
     setStatus(error.message, true);
@@ -344,7 +350,7 @@ function renderAnalytics(summary) {
   const range = summary.firstDay ? `từ ${summary.firstDay}` : "chưa có dữ liệu";
   els.statsNote.textContent = summary.storageReady
     ? `Đếm theo phiên truy cập của trình duyệt (${range}, giữ 60 ngày gần nhất). Không lưu IP, cookie hay danh tính người đọc, nên con số là số phiên chứ không phải số người chính xác.`
-    : "Vercel Blob chưa được kết nối nên số liệu chưa được lưu.";
+    : "Chưa cấu hình Supabase cho phần quản trị nên chưa đọc được số liệu.";
 }
 
 function formatCount(value) {

@@ -2,18 +2,16 @@
   "name": "epub-translator",
   "version": "1.0.0",
   "description": "Personal EPUB reader and Chinese to Vietnamese translator using Gemini API.",
-  "main": "server/server.js",
+  "main": "worker/index.js",
   "scripts": {
     "build": "node scripts/build-client.js",
     "postinstall": "node scripts/build-client.js",
     "setup:admin": "node scripts/setup-admin-env.js",
-    "start": "node server/server.js",
-    "test": "node --test \"server/**/*.test.js\"",
-    "syntax": "node --check server/server.js && node --check server/admin-auth.js && node --check server/blob-concurrency.js && node --check server/library-catalog.js && node --check server/analytics-store.js && node --check server/crawler-store.js && node --check server/storage/keys.js && node --check server/storage/index.js && node --check server/storage/local-driver.js && node --check server/storage/r2-driver.js && node --check server/ingest/epub.js && node --check server/ingest/documents.js && node --check server/ingest/translation-queue.js && node --check server/ingest/ingest-book.js && node --check server/gemini.js && node --check api/translate.js && node --check api/library.js && node --check api/analytics.js && node --check api/admin/login.js && node --check api/admin/upload.js && node --check api/admin/catalog.js && node --check api/admin/crawler.js && node --check api/crawler/control.js && node --check api/crawler/status.js && node --check api/crawler/publish.js && node --check api/crawler/upload.js && node --check scripts/crawler-worker.js"
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node --test \"server/**/*.test.js\""
   },
   "dependencies": {
-    "@vercel/blob": "^2.8.0",
-    "express": "^4.19.2",
     "jszip": "^3.10.1"
   },
   "engines": {

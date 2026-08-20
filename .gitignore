@@ -16,3 +16,10 @@ public/index.html
 public/vendor/
 .storage/
 .storage-e2e/
+
+# wrangler local secrets
+.dev.vars
+.dev.vars.*
+
+# wrangler local state, cache and bundles
+.wrangler/

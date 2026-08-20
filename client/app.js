@@ -41,7 +41,7 @@ const ANALYTICS_READ_KEY = "epubTranslator.readCounted";
 const JSZIP_URL = __ASSET_JSZIP__;
 const ADMIN_MODULE_URL = __ASSET_ADMIN__;
 // Reader CDN path. Chapter JSON is fetched straight from R2 through the CDN:
-// no Vercel function, no Supabase query, no Gemini call on the read path.
+// no Worker invocation, no Supabase query, no Gemini call on the read path.
 const CDN_BASE = String(__CDN_BASE__ || "").replace(/\/$/, "");
 // Analytics goes straight to Supabase so a page view costs no serverless
 // invocation. The anon key is public by design: RLS lets it insert events and
@@ -282,19 +282,8 @@ function sendBeacon(payload) {
     return;
   }
 
-  // Fallback for as long as the Vercel route still exists.
-  const body = JSON.stringify(payload);
-  try {
-    if (navigator.sendBeacon?.("/api/analytics", new Blob([body], { type: "application/json" }))) return;
-  } catch (_error) {
-    // Fall through to fetch below.
-  }
-  fetch("/api/analytics", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body,
-    keepalive: true
-  }).catch(() => {});
+  // No fallback: analytics is a nice-to-have and there is no server route to
+  // post to. Without Supabase configured, page views simply are not counted.
 }
 
 // A random per-session value, kept only in sessionStorage. No IP, no user agent,
@@ -391,13 +380,11 @@ function requestIdle(callback) {
 
 async function loadLibraryManifest() {
   try {
-    // Preferred: a snapshot on the CDN, so opening the library costs no
-    // serverless invocation. /api/library stays as the migration fallback and
-    // /library.json as the last resort when both are unreachable.
+    // The catalogue snapshot on the CDN, with the bundled /library.json as the
+    // only fallback. There is no server-side catalogue endpoint any more.
     let manifest = await loadCatalogSnapshot();
     if (!manifest) {
-      let response = await fetch("/api/library");
-      if (!response.ok) response = await fetch("/library.json");
+      const response = await fetch("/library.json");
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       manifest = await response.json();
     }
@@ -413,7 +400,10 @@ async function loadLibraryManifest() {
 // The snapshot stores the same shape the manifest already uses, so the rest of the
 // library code is untouched. A miss returns null and the caller falls back.
 async function loadCatalogSnapshot() {
-  if (!READER_CDN_ENABLED) return null;
+  // Deliberately not gated on READER_CDN_ENABLED. That flag controls where
+  // chapters are read from; the catalogue is a static object on the CDN and is
+  // the only source of the library now, so gating it here emptied the shelf.
+  if (!CDN_BASE) return null;
   try {
     const response = await fetch(cdnUrl("catalog/latest.json"), { cache: "no-cache" });
     if (!response.ok) return null;
@@ -1206,40 +1196,19 @@ async function translateCurrentChapter(force) {
   els.retranslateButton.disabled = true;
 
   try {
-    const response = await fetch("/api/translate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: chapter.text })
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Không thể dịch chương này.");
-    if (!isUsableTranslation(chapter.text, data.translation)) {
-      throw new Error("Gemini vẫn trả lại nội dung tiếng Trung. Kết quả này chưa được lưu; hãy thử dịch lại.");
-    }
-
-    state.translations[state.currentIndex] = data.translation;
-    await putTranslation(state.bookId, state.currentIndex, data.translation);
-    els.translationText.textContent = data.translation;
-    els.translationText.classList.remove("empty", "status-error", "is-loading");
-    els.outputStatus.textContent = "Hoàn tất";
-    els.translateButton.hidden = true;
-    els.retranslateButton.hidden = false;
-    if (data.elapsedMs) {
-      const modelNote = Array.isArray(data.modelsUsed) && data.modelsUsed.length ? ` · ${data.modelsUsed.join(", ")}` : "";
-      els.bookMeta.textContent = `${state.chapters.length} chương · ${data.chunkCount || 1} phần trong ${formatSeconds(
-        data.elapsedMs
-      )}${modelNote}`;
-    }
+    // On-demand translation needed a server that could call Gemini. Nothing in
+    // this deployment can: translation happens once, during ingest, in GitHub
+    // Actions, and the result is served as a static file. A chapter that arrives
+    // untranslated is waiting in the queue, not waiting for a click.
+    throw new Error(
+      "Bản dịch được tạo sẵn khi thêm truyện, không dịch trực tiếp trên trang. Chương này đang trong hàng đợi dịch."
+    );
   } catch (error) {
     setTranslationStatus(error.message, true);
   } finally {
     els.translateButton.disabled = false;
     els.retranslateButton.disabled = false;
   }
-}
-
-function formatSeconds(ms) {
-  return `${Math.max(1, Math.round(ms / 1000))}s`;
 }
 
 function setTranslationStatus(message, isError = false) {

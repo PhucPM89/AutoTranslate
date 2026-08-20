@@ -1,6 +1,6 @@
 "use strict";
 
-// Read and change the crawler's config where it now lives: R2, not Vercel Blob.
+// Read and change the crawler's config. It lives in the private R2 bucket.
 //
 //   node scripts/crawler-config.js --show
 //   node scripts/crawler-config.js --enable
@@ -8,9 +8,8 @@
 //   node scripts/crawler-config.js --set wordCountBucket=4 --set maxNewBooksPerRun=2
 //   node scripts/crawler-config.js --categories fantasy,urban
 //
-// The admin UI still writes crawler config to Vercel Blob, which the crawler no
-// longer reads. Until that moves to the Cloudflare Pages function, this is how
-// the crawler is configured.
+// The admin page writes the same objects through the Worker, so this and the UI
+// stay in agreement. Handy for changing config without opening the browser.
 
 const { createCrawlerState } = require("../server/crawler-state");
 const { CATEGORY_DEFINITIONS, WORD_COUNT_BUCKETS, CREATION_STATUSES } = require("../server/crawler-store");
