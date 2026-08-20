@@ -1,33 +1,49 @@
-# Cloudflare Pages configuration.
+# Cloudflare Workers configuration, for a Workers project with static assets.
 #
-# The site is static: scripts/build-client.js writes public/, including the
-# _headers file that carries the CSP and the cache rules. Functions in functions/
-# are picked up automatically and routed by path, so functions/api/admin/upload.js
-# serves /api/admin/upload.
+# The build (`npm run build`) writes the static site into public/. The Worker in
+# worker/index.js serves those assets through the ASSETS binding and handles the
+# one dynamic route, /api/admin/upload, by importing the handler from functions/.
 #
-# No compatibility flag is needed: the functions use Web Crypto rather than
+# Why a Worker entry at all: `wrangler deploy` is the Workers command and needs
+# either `main` or `[assets]`. Pages would route functions/ by file path on its
+# own, but this account's project is a Worker, so the routing is explicit.
+#
+# No compatibility flag is needed: the code uses Web Crypto rather than
 # node:crypto, deliberately (see functions/_lib/sigv4.js).
 
 name = "tram-chu"
-pages_build_output_dir = "public"
+main = "worker/index.js"
 compatibility_date = "2026-08-01"
 
+[assets]
+directory = "./public"
+binding = "ASSETS"
+# The reader is a single-page app: deep links like /#book/<id> are served the
+# app shell rather than a 404.
+not_found_handling = "single-page-application"
+
+[build]
+command = "npm run build"
+
 # Environment variables are NOT set here - this file is committed to a public
-# repository. Set them on the Pages project (Settings > Environment variables),
-# where they are encrypted:
+# repository. Set them on the Worker (Settings > Variables and Secrets), where
+# secrets are encrypted:
 #
 #   R2_ACCOUNT_ID              signing the upload URL
 #   R2_ACCESS_KEY_ID           signing the upload URL
-#   R2_SECRET_ACCESS_KEY       signing the upload URL
+#   R2_SECRET_ACCESS_KEY       signing the upload URL          (secret)
 #   R2_BUCKET                  novel-storage, for cover uploads
 #   R2_ARCHIVE_BUCKET          novel-archive, for EPUBs; must stay private
-#   R2_PUBLIC_BASE_URL         https://cdn.tram-chu.online, read at build time
-#   SUPABASE_URL               read at build time, inlined into the bundle
-#   SUPABASE_ANON_KEY          read at build time, publishable by design
-#   LIBRARY_SESSION_SECRET     verifying the admin session cookie
-#   GITHUB_DISPATCH_TOKEN      Actions: write, to start an ingest run
+#   R2_PUBLIC_BASE_URL         https://cdn.tram-chu.online
+#   SUPABASE_URL               also read at build time, inlined into the bundle
+#   SUPABASE_ANON_KEY          publishable by design
+#   LIBRARY_SESSION_SECRET     verifying the admin session cookie  (secret)
+#   GITHUB_DISPATCH_TOKEN      Actions: write, to start an ingest run  (secret)
 #   GITHUB_REPOSITORY          PhucPM89/AutoTranslate
 #   READER_CDN_ENABLED         leave unset until the CDN reader is signed off
 #
-# SUPABASE_SERVICE_ROLE_KEY must never be set here. Nothing served from Pages
+# R2_PUBLIC_BASE_URL, SUPABASE_URL, SUPABASE_ANON_KEY and READER_CDN_ENABLED are
+# read by the build, so they must also exist as build-time variables.
+#
+# SUPABASE_SERVICE_ROLE_KEY must never be set here. Nothing served to a browser
 # needs it, and the build inlines only the two SUPABASE_ vars listed above.

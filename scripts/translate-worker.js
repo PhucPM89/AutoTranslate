@@ -40,6 +40,10 @@ const ONLY_BOOK = flag("--book", "");
 // Raise it if 429s appear; do not lower it to zero.
 const SPACING_MS = Number(process.env.TRANSLATE_SPACING_MS || 1000);
 const RESERVE_MS = 3 * 60 * 1000;
+// How often to republish index.json and resync Supabase mid-run. At the measured
+// 3.37 chapters/minute this is roughly every seven minutes: frequent enough that
+// readers see progress, rare enough that the 1,425-row upsert is noise.
+const PUBLISH_EVERY = Math.max(1, Number(process.env.TRANSLATE_PUBLISH_EVERY || 25));
 
 async function main() {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -73,6 +77,11 @@ async function main() {
     const state = job.state;
     if (isDone(state)) continue;
     console.log(`\n=== ${job.bookId} r${job.revision} ===`);
+    let sinceLastPublish = 0;
+    // chapters.book_id references books.id, and refreshBookOutputs upserts
+    // chapters before the book row. Ingest normally creates the book first, but
+    // if it did not, every chapter sync would fail on the foreign key.
+    await ensureBookRow({ storage, db, job });
 
     const result = await runTranslationJobs({
       state,
@@ -107,10 +116,22 @@ async function main() {
         );
       },
       saveState: (next) => storage.put(jobStateKey(job.bookId), JSON.stringify(next)),
-      // Chapter rows are synced in bulk after the run instead of one request per
-      // chapter: fewer round trips, and R2 stays the source of truth either way.
+      // Chapter rows are synced in bulk rather than one request per chapter:
+      // fewer round trips, and R2 stays the source of truth either way. But the
+      // sync cannot wait for the end of the run - a run may translate for five
+      // hours, and one killed at the Actions timeout would publish nothing at
+      // all, leaving readers looking at a count from hours ago.
       onProgress: async ({ chapter, status, completed, total }) => {
         console.log(`  ch ${chapter}: ${status}  (${completed}/${total})`);
+        if (status !== "completed") return;
+        sinceLastPublish += 1;
+        if (sinceLastPublish < PUBLISH_EVERY) return;
+        sinceLastPublish = 0;
+        // Never let a publishing hiccup end a run that is otherwise translating.
+        await refreshBookOutputs({ storage, db, job, state }).catch((error) =>
+          console.warn(`  (không publish được tiến độ: ${error.message})`)
+        );
+        console.log(`  -> đã publish tiến độ: ${completed}/${total}`);
       }
     });
 
