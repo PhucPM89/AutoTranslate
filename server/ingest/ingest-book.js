@@ -88,6 +88,13 @@ async function ingestBook({
   const state = mergeJobState(existingState, createJobState({ bookId: book.id, revision: rev, chapters: chapterList }));
   await storage.put(jobStateKey(book.id), JSON.stringify(state));
 
+  // Carry the merged statuses onto the chapter list before anything is published.
+  // This used to happen only when ingest also translated, so a crawler re-ingest -
+  // which never translates - reported every chapter as pending and reset the
+  // book's translated count to 0 in the database, hiding hundreds of finished
+  // chapters from the reader.
+  syncChapterStatuses(chapterList, state);
+
   // 5. Publish the index now. The book is browsable and every chapter is already
   //    readable in its source language while translation catches up.
   const bookRecord = { ...book, cover: coverUrl };
@@ -144,12 +151,8 @@ async function ingestBook({
       onProgress: (progress) => log({ event: "ingest.chapter_translated", bookId: book.id, ...progress })
     });
 
-    // Reflect finished chapters in the index so the reader sees real statuses.
-    for (const entry of chapterList) {
-      const jobEntry = state.chapters.find((c) => c.n === entry.chapterNumber);
-      if (jobEntry && jobEntry.status === "completed") entry.translationStatus = "completed";
-      else if (jobEntry) entry.translationStatus = jobEntry.status;
-    }
+    // Translation just moved several chapters on, so refresh the statuses.
+    syncChapterStatuses(chapterList, state);
     await publishIndex({ storage, book: bookRecord, revision: rev, chapters: chapterList, state });
   }
 
@@ -180,6 +183,18 @@ async function ingestBook({
   };
   log({ event: "ingest.completed", ...result });
   return result;
+}
+
+// The job state is the truth about what is translated; the chapter list is what
+// gets published. Keeping them in step is what makes the counts in the index and
+// the database agree.
+function syncChapterStatuses(chapterList, state) {
+  const byNumber = new Map(state.chapters.map((entry) => [entry.n, entry.status]));
+  for (const entry of chapterList) {
+    const status = byNumber.get(entry.chapterNumber);
+    if (status) entry.translationStatus = status;
+  }
+  return chapterList;
 }
 
 async function publishIndex({ storage, book, revision, chapters, state }) {
