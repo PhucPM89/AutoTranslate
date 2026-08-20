@@ -80,6 +80,8 @@ const els = {
   libraryName: document.getElementById("libraryName"),
   libraryTagline: document.getElementById("libraryTagline"),
   featuredBackdrop: document.getElementById("featuredBackdrop"),
+  featuredPoster: document.getElementById("featuredPoster"),
+  featuredPosterLink: document.getElementById("featuredPosterLink"),
   featuredStory: document.getElementById("featuredStory"),
   featuredGenre: document.getElementById("featuredGenre"),
   featuredStatus: document.getElementById("featuredStatus"),
@@ -456,6 +458,14 @@ function renderFeaturedBook() {
   const backdrop = book.cover || heroVariant(fallbackCover);
   if (els.featuredBackdrop.getAttribute("src") !== backdrop) els.featuredBackdrop.src = backdrop;
   els.featuredBackdrop.addEventListener("error", () => { els.featuredBackdrop.src = heroVariant(fallbackCover); }, { once: true });
+  // The same artwork twice: blurred and bled across the panel as light, and sharp
+  // as a poster. It is decorative - the heading and the button already name and
+  // open the book - so it stays out of the accessibility tree and the tab order.
+  if (els.featuredPoster) {
+    const poster = book.cover || fallbackCover;
+    if (els.featuredPoster.getAttribute("src") !== poster) els.featuredPoster.src = poster;
+    els.featuredPoster.addEventListener("error", () => { els.featuredPoster.src = fallbackCover; }, { once: true });
+  }
   els.featuredGenre.textContent = book.genre || "Đề cử hôm nay";
   els.featuredStatus.textContent = book.status || "Có sẵn";
   els.featuredTitle.textContent = book.title;
@@ -508,6 +518,44 @@ function renderGenreOptions() {
   els.libraryGenre.value = genres.includes(selected) ? selected : "";
 }
 
+// Fades tiles in as they come into view, with a small stagger so a shelf builds
+// rather than appearing all at once.
+//
+// Deliberately additive: the .reveal class is applied here, in script, so a page
+// without JS never has hidden content waiting for an observer that will not run.
+// Anyone who has asked for less motion gets the content immediately.
+const revealObserver =
+  typeof IntersectionObserver === "function" && !matchMedia("(prefers-reduced-motion: reduce)").matches
+    ? new IntersectionObserver(
+        (entries, observer) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            entry.target.classList.add("is-visible");
+            // One-shot: re-animating on every scroll past is noise, not polish.
+            observer.unobserve(entry.target);
+          }
+        },
+        { rootMargin: "0px 0px -8% 0px", threshold: 0.06 }
+      )
+    : null;
+
+function revealOnScroll(elements) {
+  if (!revealObserver) return;
+  const targets = [...elements];
+  targets.forEach((element, index) => {
+    element.classList.add("reveal");
+    element.style.transitionDelay = `${Math.min(index, 8) * 45}ms`;
+    revealObserver.observe(element);
+  });
+  // Insurance. A tile starts at opacity 0, so anything that stops the observer
+  // from firing - a container that never intersects, a browser quirk - would
+  // leave the shelf permanently blank. Animation is a nicety; showing the books
+  // is not, so after a moment they are shown regardless.
+  setTimeout(() => {
+    for (const element of targets) element.classList.add("is-visible");
+  }, 1600);
+}
+
 function renderCatalog() {
   const books = getFilteredCatalogBooks()
     .sort((a, b) => Number(Boolean(b.featured)) - Number(Boolean(a.featured)) || String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
@@ -519,6 +567,7 @@ function renderCatalog() {
 
   els.catalogGrid.innerHTML = "";
   visibleBooks.forEach((book, index) => els.catalogGrid.appendChild(createBookCard(book, start + index)));
+  revealOnScroll(els.catalogGrid.children);
   els.catalogEmpty.hidden = books.length > 0;
   renderCatalogPagination(books.length, totalPages, start, visibleBooks.length);
 }

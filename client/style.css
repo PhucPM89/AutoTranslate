@@ -246,6 +246,83 @@ body:not(.dark) {
   --glow-strong: 0 0 0 1px rgba(124, 58, 237, 0.32), 0 20px 56px rgba(124, 58, 237, 0.22);
 }
 
+/* =========================================================================
+   Ambient light
+   A flat fill is what makes a dark page feel like a document. Three large soft
+   lights sit behind everything and drift slowly, so the background has depth and
+   the accent gradient reads as coming from somewhere. Fixed, pointer-events off,
+   and animated on transform only - nothing here causes layout or repaint work.
+   The reduced-motion block below stops the drift.
+   ========================================================================= */
+body::before {
+  position: fixed;
+  z-index: 0;
+  inset: -25vmax;
+  background:
+    radial-gradient(38vmax 38vmax at 18% 12%, rgba(124, 58, 237, 0.5), transparent 62%),
+    radial-gradient(32vmax 32vmax at 82% 8%, rgba(6, 182, 212, 0.32), transparent 60%),
+    radial-gradient(34vmax 34vmax at 62% 88%, rgba(192, 38, 211, 0.3), transparent 62%);
+  content: "";
+  filter: blur(38px) saturate(1.2);
+  opacity: 0.9;
+  pointer-events: none;
+  animation: aurora-drift 34s ease-in-out infinite alternate;
+}
+
+/* A little grain over the top. Large flat gradients band on cheap panels; noise
+   hides the steps and keeps the surface from looking like plastic. */
+body::after {
+  position: fixed;
+  z-index: 1;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+  content: "";
+  mix-blend-mode: overlay;
+  opacity: 0.05;
+  pointer-events: none;
+}
+
+body:not(.dark)::before {
+  opacity: 0.4;
+}
+
+/* Everything real sits above the two decorative layers. */
+body > * {
+  position: relative;
+  z-index: 2;
+}
+
+@keyframes aurora-drift {
+  from {
+    transform: translate3d(-3%, -2%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(3%, 4%, 0) scale(1.12);
+  }
+}
+
+@keyframes gradient-pan {
+  from {
+    background-position: 0% 50%;
+  }
+  to {
+    background-position: 100% 50%;
+  }
+}
+
+/* Reveal on scroll. The class is added by app.js; without JS the content is
+   simply visible, which is the right failure mode. */
+.reveal {
+  opacity: 0;
+  transform: translateY(22px);
+  transition: opacity 620ms var(--ease), transform 620ms var(--ease);
+}
+
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -2751,16 +2828,16 @@ body:not(.dark) .theme-moon {
   position: relative;
   isolation: isolate;
   display: flex;
-  height: clamp(500px, calc(100dvh - 150px), 560px);
-  min-height: 500px;
-  align-items: flex-start;
+  height: clamp(560px, calc(100dvh - 130px), 660px);
+  min-height: 560px;
+  align-items: center;
   margin-top: 1.25rem;
   padding: 2rem clamp(1.4rem, 5vw, 5rem);
   overflow: hidden;
-  border: 1px solid var(--border-soft);
-  border-radius: 8px;
-  background: #101513;
-  box-shadow: 0 26px 80px rgba(0, 0, 0, 0.28);
+  border: 0;
+  border-radius: var(--r-xl);
+  background: var(--bg-sunken);
+  box-shadow: var(--shadow-lg);
 }
 
 .featured-backdrop,
@@ -2774,15 +2851,20 @@ body:not(.dark) .theme-moon {
 .featured-backdrop {
   z-index: -3;
   object-fit: cover;
-  object-position: center 24%;
-  filter: saturate(0.92) contrast(1.04);
-  transform: scale(1.01);
+  object-position: center 22%;
+  filter: saturate(1.15) contrast(1.05) blur(2px);
+  transform: scale(1.12);
+  mask-image: linear-gradient(180deg, #000 0%, #000 52%, transparent 100%);
 }
 
+/* Two jobs: hold the text legible over any artwork, and tint the whole panel
+   into the palette so a red or green cover does not fight the violet page. */
 .featured-overlay {
   z-index: -2;
-  background: rgba(6, 10, 8, 0.67);
-  box-shadow: inset 46vw 0 110px rgba(3, 7, 5, 0.42), inset 0 -170px 100px rgba(3, 7, 5, 0.58);
+  background:
+    linear-gradient(105deg, rgba(8, 6, 15, 0.94) 4%, rgba(8, 6, 15, 0.7) 42%, rgba(8, 6, 15, 0.25) 72%),
+    linear-gradient(0deg, var(--bg) 2%, transparent 46%),
+    radial-gradient(52vmax 40vmax at 88% 18%, rgba(124, 58, 237, 0.34), transparent 66%);
 }
 
 .intro-copy {
@@ -2792,12 +2874,60 @@ body:not(.dark) .theme-moon {
   text-shadow: 0 2px 22px rgba(0, 0, 0, 0.4);
 }
 
+.featured-poster {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  right: clamp(1.5rem, 5vw, 5.5rem);
+  width: clamp(180px, 20vw, 268px);
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: var(--r-lg);
+  /* Tilted and lifted so it reads as an object in the panel rather than another
+     rectangle in the layout. */
+  box-shadow: var(--glow-strong), 0 40px 90px rgba(3, 1, 10, 0.6);
+  transform: translateY(-50%) rotate(3deg);
+  transition: transform var(--slow) var(--ease), box-shadow var(--slow) var(--ease);
+}
+
+.featured-poster::after {
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: inherit;
+  content: "";
+}
+
+.featured-poster:hover {
+  transform: translateY(-52%) rotate(0deg) scale(1.03);
+}
+
+.featured-poster img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* No room for it beside the copy on a narrow screen, and the blurred backdrop
+   already carries the artwork there. */
+@media (max-width: 900px) {
+  .featured-poster {
+    display: none;
+  }
+}
+
 .intro-copy h1 {
   margin: 0.3rem 0 0.65rem;
-  font-size: clamp(3.3rem, 6vw, 5.2rem);
+  font-size: clamp(3.6rem, 7.5vw, 6.4rem);
   font-weight: 800;
-  letter-spacing: -0.035em;
-  line-height: 0.92;
+  letter-spacing: -0.045em;
+  line-height: 0.88;
+  /* The gradient pans slowly across the letters. Cheap - it animates
+     background-position on an element that is already painted - and it is what
+     makes the name feel alive instead of printed. */
+  background-size: 220% 100%;
+  animation: gradient-pan 9s ease-in-out infinite alternate;
   /* Painted with the accent gradient rather than filled white. background-clip
      is the only way to gradient text, and the transparent colour is what reveals
      it - so the fallback colour has to come first for anything that cannot clip. */
@@ -2855,9 +2985,10 @@ body:not(.dark) .theme-moon {
   margin: 0.85rem 0 0;
   color: #fff;
   font-family: var(--font-sans);
-  font-size: clamp(1.7rem, 3vw, 2.75rem);
-  font-weight: 780;
-  line-height: 1.12;
+  font-size: clamp(1.9rem, 3.4vw, 3.1rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.06;
 }
 
 .featured-story > p {
@@ -3002,11 +3133,39 @@ body:not(.dark) .theme-moon {
   background: var(--surface);
 }
 
+.catalog-head h2,
+.request-band h2 {
+  font-size: clamp(2rem, 3.6vw, 3rem);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+}
+
+.eyebrow {
+  position: relative;
+  padding-left: 2.6rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+
+/* A short gradient rule instead of a bullet, so every section label is stamped
+   with the same accent. */
+.eyebrow::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 2rem;
+  height: 2px;
+  border-radius: var(--r-full);
+  background: var(--gradient);
+  content: "";
+}
+
 .catalog-grid {
   /* auto-fill rather than a fixed five: a wide screen shows more posters and a
      narrow one fewer, without a media query for every step. */
-  grid-template-columns: repeat(auto-fill, minmax(178px, 1fr));
-  gap: var(--space-5) clamp(0.9rem, 1.4vw, 1.25rem);
+  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+  gap: var(--space-6) clamp(1rem, 1.5vw, 1.4rem);
 }
 
 .book-card {
@@ -3029,11 +3188,39 @@ body:not(.dark) .theme-moon {
   overflow: hidden;
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-md);
-  transition: box-shadow var(--slow) var(--ease);
+  transition: box-shadow var(--slow) var(--ease), transform var(--slow) var(--ease);
 }
 
 .book-card:hover .book-cover {
   box-shadow: var(--glow-strong);
+}
+
+/* A band of light crosses the poster on hover. It is one transform on a
+   pseudo-element, so it costs nothing, and it is the difference between a static
+   thumbnail and something that responds. */
+.book-cover::before {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  left: 0;
+  width: 55%;
+  height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+  content: "";
+  opacity: 0;
+  transform: translateX(-140%) skewX(-14deg);
+  transition: opacity var(--fast) var(--ease);
+}
+
+.book-card:hover .book-cover::before {
+  opacity: 1;
+  animation: cover-sheen 820ms var(--ease);
+}
+
+@keyframes cover-sheen {
+  to {
+    transform: translateX(320%) skewX(-14deg);
+  }
 }
 
 .book-cover::after {
@@ -3125,6 +3312,9 @@ body:not(.dark) .theme-moon {
   font-weight: 700;
   letter-spacing: -0.012em;
   line-height: 1.35;
+  /* Two lines' worth whether the title needs them or not, so every tile's
+     author and chapter count land on the same baseline across the row. */
+  min-height: calc(2 * 1.35em);
 }
 
 .book-author {
