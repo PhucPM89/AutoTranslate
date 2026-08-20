@@ -10,7 +10,7 @@
     "dev": "wrangler pages dev public --compatibility-flags nodejs_compat",
     "configure:cf": "node scripts/configure-cloudflare.js",
     "deploy": "wrangler pages deploy public --project-name tram-chu-web --branch main",
-    "test": "node --test \"server/**/*.test.js\""
+    "test": "node --test \"server/**/*.test.js\" \"client/**/*.test.js\""
   },
   "dependencies": {
     "jszip": "^3.10.1"

@@ -4078,3 +4078,242 @@ body:not(.dark) .theme-moon {
     display: none;
   }
 }
+
+/* ---------- Reader accounts ---------- */
+
+.account-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.account-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Signed in, the icon is replaced by an initial, so the button keeps the same
+   footprint as its neighbours and the header does not shift on load. */
+.account-initial {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: var(--accent-ink);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.account-button.is-signed-in {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.auth-dialog {
+  width: min(430px, calc(100% - 2rem));
+  max-height: calc(100dvh - 2rem);
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.auth-dialog::backdrop {
+  background: rgba(4, 7, 5, 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.auth-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 1.35rem;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.auth-dialog-header h2 {
+  margin: 0.2rem 0 0;
+  font-size: 1.3rem;
+}
+
+.auth-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.35rem;
+  padding: 0.75rem 1.35rem 0;
+}
+
+.auth-tab {
+  min-height: 40px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+.auth-tab.active {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}
+
+.auth-form {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1.1rem 1.35rem 1.35rem;
+}
+
+.auth-field {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.auth-field > span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.auth-field small {
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+.auth-field input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--app-bg);
+  color: var(--text);
+  font: inherit;
+  letter-spacing: 0;
+}
+
+.auth-field input:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+
+.auth-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.auth-note {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  max-width: 15rem;
+}
+
+.auth-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.auth-link:hover { color: var(--text); }
+
+.auth-resend {
+  display: block;
+  margin: 0 1.35rem 1.35rem;
+  color: var(--accent-strong);
+}
+
+.auth-account {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 1.2rem 1.35rem 1.35rem;
+}
+
+.auth-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: var(--accent-ink);
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.auth-account-copy {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+}
+
+/* An email is one long unbreakable token, so it needs an explicit escape or it
+   pushes the sign-out button off the dialog. */
+.auth-account-copy strong {
+  font-size: 0.86rem;
+  overflow-wrap: anywhere;
+}
+
+.auth-account-copy small {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.auth-message {
+  margin: 0 1.35rem 1.35rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: var(--app-bg);
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.auth-message.is-error {
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+  color: var(--danger);
+}
+
+.auth-message.is-success {
+  border-color: color-mix(in srgb, var(--accent-2) 40%, transparent);
+  color: var(--accent-2);
+}
+
+@media (max-width: 540px) {
+  .auth-dialog {
+    width: calc(100% - 1.5rem);
+  }
+
+  .auth-form-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .auth-note { max-width: none; }
+
+  .auth-form-actions .primary-action { width: 100%; }
+}

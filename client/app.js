@@ -1,5 +1,10 @@
 "use strict";
 
+// Reader accounts. Bundled rather than loaded on demand because the header has
+// to know on first paint whether anyone is signed in, and answering that costs
+// one localStorage read.
+const { initAuth } = require("./auth.js");
+
 const state = {
   // "epub" is the legacy path (download the whole book, parse with JSZip).
   // "cdn" fetches one chapter JSON at a time. Both stay supported during
@@ -56,6 +61,29 @@ const FALLBACK_BOOK_COVERS = [
 ];
 const els = {
   adminOpen: document.getElementById("adminOpen"),
+  accountOpen: document.getElementById("accountOpen"),
+  accountIcon: document.getElementById("accountIcon"),
+  accountInitial: document.getElementById("accountInitial"),
+  authDialog: document.getElementById("authDialog"),
+  authClose: document.getElementById("authClose"),
+  authTitle: document.getElementById("authTitle"),
+  authTabs: document.getElementById("authTabs"),
+  authLoginTab: document.getElementById("authLoginTab"),
+  authRegisterTab: document.getElementById("authRegisterTab"),
+  authLoginForm: document.getElementById("authLoginForm"),
+  authLoginEmail: document.getElementById("authLoginEmail"),
+  authLoginPassword: document.getElementById("authLoginPassword"),
+  authRegisterForm: document.getElementById("authRegisterForm"),
+  authRegisterEmail: document.getElementById("authRegisterEmail"),
+  authRegisterPassword: document.getElementById("authRegisterPassword"),
+  authRegisterConfirm: document.getElementById("authRegisterConfirm"),
+  authAccount: document.getElementById("authAccount"),
+  authAccountInitial: document.getElementById("authAccountInitial"),
+  authAccountEmail: document.getElementById("authAccountEmail"),
+  authSignOut: document.getElementById("authSignOut"),
+  authMessage: document.getElementById("authMessage"),
+  authResend: document.getElementById("authResend"),
+  authForgot: document.getElementById("authForgot"),
   libraryView: document.getElementById("libraryView"),
   readerView: document.getElementById("readerView"),
   bookView: document.getElementById("bookView"),
@@ -152,6 +180,10 @@ const parser = new DOMParser();
 
 initPreferences();
 bindEvents();
+// Before initializeLibrary, because a confirmation link comes back with tokens in
+// the URL fragment and they have to be consumed and wiped before anything else
+// reads the hash.
+initAuth({ url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY, els });
 initializeLibrary();
 
 function bindEvents() {

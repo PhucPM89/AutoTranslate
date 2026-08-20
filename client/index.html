@@ -25,6 +25,10 @@
         </nav>
 
         <div class="library-actions">
+          <button id="accountOpen" class="icon-button account-button" type="button" aria-label="Đăng nhập" title="Đăng nhập">
+            <span id="accountIcon" class="account-glyph"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"></circle><path d="M4.5 21a7.5 7.5 0 0 1 15 0"></path></svg></span>
+            <span id="accountInitial" class="account-initial" aria-hidden="true" hidden></span>
+          </button>
           <button id="adminOpen" class="icon-button" type="button" aria-label="Quản trị thư viện" title="Quản trị thư viện">
             <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg>
           </button>
@@ -193,6 +197,46 @@
       <p>Một lời ủng hộ nhỏ, một động lực thật lớn. Cảm ơn bạn đã đồng hành cùng Trạm Chữ.</p>
     </dialog>
 
+    <dialog id="authDialog" class="auth-dialog" aria-labelledby="authTitle">
+      <div class="auth-dialog-header">
+        <div><p class="eyebrow">Trạm Chữ</p><h2 id="authTitle">Đăng nhập</h2></div>
+        <button id="authClose" class="icon-button" type="button" aria-label="Đóng" title="Đóng"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"></path></svg></button>
+      </div>
+
+      <div id="authTabs" class="auth-tabs" role="tablist" aria-label="Đăng nhập hoặc đăng ký">
+        <button id="authLoginTab" class="auth-tab active" type="button" role="tab" aria-selected="true" aria-controls="authLoginForm">Đăng nhập</button>
+        <button id="authRegisterTab" class="auth-tab" type="button" role="tab" aria-selected="false" aria-controls="authRegisterForm">Đăng ký</button>
+      </div>
+
+      <form id="authLoginForm" class="auth-form" method="post">
+        <label class="auth-field"><span>Email</span><input id="authLoginEmail" name="email" type="email" autocomplete="email" required maxlength="254" placeholder="ban@example.com"></label>
+        <label class="auth-field"><span>Mật khẩu</span><input id="authLoginPassword" name="password" type="password" autocomplete="current-password" required maxlength="72"></label>
+        <div class="auth-form-actions">
+          <button id="authForgot" class="auth-link" type="button">Quên mật khẩu?</button>
+          <button class="primary-action" type="submit">Đăng nhập</button>
+        </div>
+      </form>
+
+      <form id="authRegisterForm" class="auth-form" method="post" hidden>
+        <label class="auth-field"><span>Email</span><input id="authRegisterEmail" name="email" type="email" autocomplete="email" required maxlength="254" placeholder="ban@example.com"></label>
+        <label class="auth-field"><span>Mật khẩu <small>ít nhất 6 ký tự</small></span><input id="authRegisterPassword" name="password" type="password" autocomplete="new-password" required minlength="6" maxlength="72"></label>
+        <label class="auth-field"><span>Nhập lại mật khẩu</span><input id="authRegisterConfirm" name="confirm" type="password" autocomplete="new-password" required minlength="6" maxlength="72"></label>
+        <div class="auth-form-actions">
+          <span class="auth-note">Tài khoản chỉ dùng để lưu tiến độ đọc.</span>
+          <button class="primary-action" type="submit">Tạo tài khoản</button>
+        </div>
+      </form>
+
+      <div id="authAccount" class="auth-account" hidden>
+        <span id="authAccountInitial" class="auth-avatar" aria-hidden="true">?</span>
+        <div class="auth-account-copy"><strong id="authAccountEmail"></strong><small>Đang đăng nhập</small></div>
+        <button id="authSignOut" class="secondary-action" type="button">Đăng xuất</button>
+      </div>
+
+      <p id="authMessage" class="auth-message" role="status" aria-live="polite" hidden></p>
+      <button id="authResend" class="auth-link auth-resend" type="button" hidden>Gửi lại email xác nhận</button>
+    </dialog>
+
     <dialog id="adminDialog" class="admin-dialog" aria-labelledby="adminTitle">
       <div class="admin-dialog-header">
         <div><p class="eyebrow">Khu vực riêng</p><h2 id="adminTitle">Quản trị thư viện</h2></div>
@@ -205,7 +249,7 @@
         <button id="adminStatsTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminStatsPanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 3v18h18"></path><path d="M7 15v3M12 9v9M17 12v6"></path></svg>Số liệu</button>
       </div>
 
-      <form id="adminLoginForm" class="admin-login-form">
+      <form id="adminLoginForm" class="admin-login-form" method="post">
         <input name="username" type="text" value="admin" autocomplete="username" hidden>
         <label class="admin-field"><span>Mật khẩu</span><input id="adminPassword" name="password" type="password" autocomplete="current-password" required maxlength="200"></label>
         <button class="primary-action" type="submit">Mở quyền upload</button>
