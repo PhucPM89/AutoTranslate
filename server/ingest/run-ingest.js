@@ -3,6 +3,7 @@
 const { createStorage, createArchiveStorage, hasR2Credentials } = require("../storage");
 const { createMetadataStore } = require("../supabase");
 const { ingestBook } = require("./ingest-book");
+const { publishCatalogSnapshot } = require("./catalog-snapshot");
 const { translateText } = require("../gemini");
 
 // The one entry point both the admin upload and the crawler call. It assembles
@@ -42,7 +43,7 @@ async function runIngest({
     log({ event: "ingest.translate_skipped", reason: "GEMINI_API_KEY chưa được cấu hình" });
   }
 
-  return ingestBook({
+  const result = await ingestBook({
     storage,
     epubBuffer,
     book,
@@ -55,6 +56,29 @@ async function runIngest({
     spacingMs,
     log
   });
+
+  // The reader's library is catalog/latest.json, not the database, so a book that
+  // exists in Supabase and on R2 is still invisible until the snapshot is
+  // rewritten. Only the translation worker used to do that, and only on runs that
+  // translated something - so a freshly crawled book could sit there unseen for
+  // as long as it took that to happen. Publishing here covers every ingest path,
+  // crawler and admin upload alike.
+  //
+  // A failure must not fail an ingest that otherwise succeeded: the book is
+  // already durable, and the next ingest or translation run republishes.
+  await publishCatalogSnapshot({ storage, site: siteSettings(), log }).catch((error) =>
+    log({ event: "ingest.catalog_publish_failed", message: error.message })
+  );
+
+  return result;
+}
+
+function siteSettings() {
+  return {
+    name: "Trạm Chữ",
+    tagline: "Một góc đọc truyện Trung được tuyển chọn và dịch.",
+    contactEmail: process.env.SITE_CONTACT_EMAIL || ""
+  };
 }
 
 function describeIngestTargets(env = process.env) {
