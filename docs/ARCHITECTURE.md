@@ -22,7 +22,10 @@ Với dữ liệu đọc nhiều: **CDN > object storage > API > database**.
 | R2 ingest thật | **Xong** — 1 truyện, 2.854 object, 33.2 MB, cache header đúng |
 | Cloudflare Pages project | **Chưa tạo** — token Cloudflare không hợp lệ |
 | R2 public CDN domain | **Chưa có** — cần control plane |
-| Migration 49 truyện | **Chưa chạy** — Vercel Blob bị block |
+| Migration 49 truyện | **Đã bỏ** — crawl lại từ đầu |
+| Cache Rule CDN | **Đã có**, `cf-cache-status: HIT` xác nhận |
+| Supabase schema | **Đã apply**, 6 object verify 200 |
+| Crawler / translation | **Đã tách**, hai workflow riêng |
 
 Reader giờ có hai đường: CDN (mới) và EPUB (cũ). Mặc định `READER_CDN_ENABLED`
 tắt, nên production chạy y như trước tới khi bật.

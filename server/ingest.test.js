@@ -351,3 +351,106 @@ test("a malformed book index does not break the whole catalog", async () => {
   const books = await buildSnapshotFromStorage(storage);
   assert.deepEqual(books.map((b) => b.id), ["b-ok"]);
 });
+
+test("a later crawl marks newly discovered chapters high priority", () => {
+  const first = createJobState({ bookId: "b", revision: 1, chapters: [{ chapterNumber: 1 }, { chapterNumber: 2 }] });
+  first.chapters[0].status = "completed";
+  // The crawler found two more chapters on a book that was already ingested.
+  const fresh = createJobState({
+    bookId: "b",
+    revision: 1,
+    chapters: [1, 2, 3, 4].map((n) => ({ chapterNumber: n }))
+  });
+  const merged = mergeJobState(first, fresh);
+
+  assert.equal(merged.chapters[0].status, "completed", "finished work survives");
+  assert.equal(merged.chapters[1].priority, "normal", "known backlog stays normal");
+  assert.equal(merged.chapters[2].priority, "high", "chapter 3 is new");
+  assert.equal(merged.chapters[3].priority, "high", "chapter 4 is new");
+  assert.equal(summarize(merged).highPriority, 2);
+});
+
+test("new chapters are translated first but the backlog is not starved", () => {
+  const state = createJobState({
+    bookId: "b",
+    revision: 1,
+    chapters: Array.from({ length: 8 }, (_, i) => ({ chapterNumber: i + 1 }))
+  });
+  // 1..4 are the old backlog, 5..8 were just discovered.
+  for (const entry of state.chapters) entry.priority = entry.n > 4 ? "high" : "normal";
+
+  const order = [];
+  for (let picked = 0; picked < 6; picked += 1) {
+    const entry = nextChapter(state, { picked });
+    order.push(entry.n);
+    entry.status = "completed";
+  }
+  // High priority leads, and the fairness slot pulls the backlog in.
+  assert.deepEqual(order.slice(0, 4), [5, 6, 7, 8]);
+  assert.ok(order.includes(1), `backlog must get a turn, got ${order.join(",")}`);
+});
+
+test("the fairness slot yields to high priority when the backlog is empty", () => {
+  const state = createJobState({ bookId: "b", revision: 1, chapters: [{ chapterNumber: 9 }] });
+  state.chapters[0].priority = "high";
+  // picked=4 would normally prefer a normal-priority chapter; there is none.
+  assert.equal(nextChapter(state, { picked: 4 }).n, 9);
+});
+
+test("the worker skips Gemini when a translated object already exists", async () => {
+  const { storage } = tempStorage();
+  const { chapterKey, originalKey, buildChapterDocument } = require("./ingest/documents");
+  const bookId = "b-idem";
+
+  await storage.put(originalKey(bookId, 1, 1), JSON.stringify({ chapterNumber: 1, title: "T", content: "nguon" }));
+  // A previous run already published this chapter.
+  await storage.put(
+    chapterKey(bookId, 1, 1),
+    JSON.stringify(
+      buildChapterDocument({
+        bookId,
+        revision: 1,
+        chapter: { chapterNumber: 1, title: "T", content: "nguon" },
+        translation: "da dich",
+        translationStatus: "completed"
+      })
+    )
+  );
+
+  const state = createJobState({ bookId, revision: 1, chapters: [{ chapterNumber: 1 }] });
+  let geminiCalls = 0;
+  const result = await runTranslationJobs({
+    state,
+    loadChapter: async () => JSON.parse((await storage.get(originalKey(bookId, 1, 1))).toString()),
+    translateChapter: async (chapter) => {
+      const existing = JSON.parse((await storage.get(chapterKey(bookId, 1, chapter.chapterNumber))).toString());
+      if (existing && existing.translationStatus === "completed" && existing.content) return existing.content;
+      geminiCalls += 1;
+      return "moi dich";
+    },
+    publishChapter: async () => {},
+    saveState: async () => {}
+  });
+
+  assert.equal(geminiCalls, 0, "a restart must not re-spend Gemini quota");
+  assert.equal(result.summary.completed, 1);
+});
+
+test("listJobs skips fully translated books and reports the high-priority count", async () => {
+  const { storage } = tempStorage();
+  const { listJobs } = require("../scripts/translate-worker");
+  const { jobStateKey } = require("./ingest/translation-queue");
+
+  const done = createJobState({ bookId: "b-done", revision: 1, chapters: [{ chapterNumber: 1 }] });
+  done.chapters[0].status = "completed";
+  await storage.put(jobStateKey("b-done"), JSON.stringify(done));
+
+  const busy = createJobState({ bookId: "b-busy", revision: 1, chapters: [{ chapterNumber: 1 }, { chapterNumber: 2 }] });
+  busy.chapters[1].priority = "high";
+  await storage.put(jobStateKey("b-busy"), JSON.stringify(busy));
+
+  const jobs = await listJobs(storage, "");
+  assert.deepEqual(jobs.map((job) => job.bookId), ["b-busy"]);
+  assert.equal(jobs[0].pending, 2);
+  assert.equal(jobs[0].highPriority, 1);
+});

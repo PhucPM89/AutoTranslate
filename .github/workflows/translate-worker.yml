@@ -1,0 +1,59 @@
+name: Translation worker
+
+# Deliberately separate from the crawler. The crawler detects and enqueues every
+# 15 minutes and must finish fast; this drains the Gemini queue on its own
+# schedule, checkpointing after each chapter so a run can stop any time.
+on:
+  schedule:
+    - cron: "5,35 * * * *"
+  workflow_dispatch:
+    inputs:
+      book:
+        description: "Chỉ dịch một bookId (để trống = tất cả)"
+        required: false
+      budget:
+        description: "Số lượt gọi Gemini tối đa cho lượt này"
+        required: false
+        default: "150"
+
+concurrency:
+  group: translate-worker
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  translate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
+      GEMINI_CHUNK_SIZE: ${{ secrets.GEMINI_CHUNK_SIZE }}
+      GEMINI_FALLBACK_MODELS: ${{ secrets.GEMINI_FALLBACK_MODELS }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_ARCHIVE_BUCKET: ${{ secrets.R2_ARCHIVE_BUCKET }}
+      R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      TRANSLATE_SPACING_MS: ${{ vars.TRANSLATE_SPACING_MS || '1000' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - name: Drain the translation queue
+        run: >
+          node scripts/translate-worker.js
+          --minutes 300
+          --budget ${{ github.event.inputs.budget || '150' }}
+          ${{ github.event.inputs.book && format('--book {0}', github.event.inputs.book) || '' }}

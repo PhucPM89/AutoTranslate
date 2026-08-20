@@ -636,11 +636,13 @@ async function downloadAndPublish(candidate, status, wordCountBucket = -1) {
     description: metadata.description || ""
   });
 
-  // One ingest path, shared with the admin upload: chapters and cover go to R2,
-  // metadata to Supabase, translation happens here rather than per reader.
-  status.message = `Đang tách và dịch chương cho ${translatedMetadata.title}...`;
+  // Extract and enqueue only. Translation is a separate workload: this job runs
+  // every 15 minutes and must finish in minutes, while a 3,000-chapter novel takes
+  // Gemini hours. scripts/translate-worker.js drains the queue on its own schedule.
+  status.message = `Đang tách chương cho ${translatedMetadata.title}...`;
   await updateStatus(status);
   const result = await runIngest({
+    translateEnabled: false,
     epubBuffer,
     book: {
       id: `fanqie-${candidate.sourceId}`,
@@ -657,11 +659,11 @@ async function downloadAndPublish(candidate, status, wordCountBucket = -1) {
     revision: 1,
     log: (event) => {
       if (event.event === "ingest.chapters_extracted") console.log(`  tách ${event.chapters} chương`);
-      if (event.event === "ingest.completed") console.log(`  ingest xong: ${event.totalChapters} chương, dịch ${event.translated}`);
+      if (event.event === "ingest.completed") console.log(`  ingest xong: ${event.totalChapters} chương đã xếp hàng chờ dịch`);
     }
   });
 
-  status.message = `Đã thêm ${translatedMetadata.title}: ${result.totalChapters} chương, đã dịch ${result.summary.completed}.`;
+  status.message = `Đã thêm ${translatedMetadata.title}: ${result.totalChapters} chương, ${result.summary.pending} chờ dịch.`;
   await updateStatus(status);
   return { title: translatedMetadata.title, ...result };
 }

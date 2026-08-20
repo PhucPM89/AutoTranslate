@@ -28,6 +28,10 @@ function createJobState({ bookId, revision, chapters }) {
     chapters: chapters.map((chapter) => ({
       n: chapter.chapterNumber,
       status: "pending",
+      // "high" is reserved for chapters a later crawl added to a book that was
+      // already ingested: an ongoing novel's newest chapters matter more than a
+      // backlog that has been waiting anyway.
+      priority: "normal",
       attempts: 0,
       lastError: "",
       nextAttemptAt: 0,
@@ -46,30 +50,48 @@ function mergeJobState(existing, fresh) {
     createdAt: existing.createdAt || fresh.createdAt,
     chapters: fresh.chapters.map((entry) => {
       const previous = byNumber.get(entry.n);
-      return previous && previous.status === "completed" ? previous : previous || entry;
+      // Keeping the previous entry preserves completed work, attempt counts and
+      // backoff. Absent means a new crawl just discovered this chapter.
+      if (previous) return previous;
+      return { ...entry, priority: "high" };
     })
   };
 }
 
 function summarize(state) {
   const counts = Object.fromEntries(STATES.map((s) => [s, 0]));
-  for (const entry of state.chapters) counts[entry.status] = (counts[entry.status] || 0) + 1;
-  return { total: state.chapters.length, ...counts };
+  let high = 0;
+  for (const entry of state.chapters) {
+    counts[entry.status] = (counts[entry.status] || 0) + 1;
+    if (entry.priority === "high" && entry.status !== "completed") high += 1;
+  }
+  return { total: state.chapters.length, ...counts, highPriority: high };
 }
 
 function isDone(state) {
   return state.chapters.every((entry) => entry.status === "completed");
 }
 
-// Chapters are handed out lowest-number-first so the opening chapters of a book
-// become readable long before a 4,000-chapter novel finishes.
-function nextChapter(state, { now = Date.now(), maxAttempts = DEFAULT_MAX_ATTEMPTS } = {}) {
+// Newly discovered chapters go first so an ongoing novel stays current, with a
+// fairness slot that keeps the backlog moving. Within a tier the lowest chapter
+// number wins, so a book becomes readable from the beginning.
+function nextChapter(state, { now = Date.now(), maxAttempts = DEFAULT_MAX_ATTEMPTS, picked = 0, fairnessEvery = 4 } = {}) {
   const candidates = state.chapters
     .filter((entry) => entry.status !== "completed")
     .filter((entry) => entry.status !== "failed" || entry.attempts < maxAttempts)
     .filter((entry) => (entry.nextAttemptAt || 0) <= now)
     .sort((a, b) => a.n - b.n);
-  return candidates[0] || null;
+  if (!candidates.length) return null;
+
+  const high = candidates.filter((entry) => entry.priority === "high");
+  const normal = candidates.filter((entry) => entry.priority !== "high");
+
+  // Newest chapters first, but every fourth pick comes from the backlog so old
+  // untranslated chapters are never starved by a novel that updates constantly.
+  const preferNormal = fairnessEvery > 0 && picked > 0 && picked % fairnessEvery === 0;
+  if (preferNormal && normal.length) return normal[0];
+  if (high.length) return high[0];
+  return normal[0] || high[0] || null;
 }
 
 function backoffFor(attempts, base = DEFAULT_BACKOFF_MS) {
@@ -107,7 +129,7 @@ async function runTranslationJobs({
     if (spent >= requestBudget) break;
     if (now() >= deadlineAt) break;
 
-    const entry = nextChapter(state, { now: now(), maxAttempts });
+    const entry = nextChapter(state, { now: now(), maxAttempts, picked: spent });
     if (!entry) break;
 
     entry.status = "processing";
