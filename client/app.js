@@ -350,15 +350,38 @@ function requestIdle(callback) {
 
 async function loadLibraryManifest() {
   try {
-    let response = await fetch("/api/library");
-    if (!response.ok) response = await fetch("/library.json");
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    applyLibraryManifest(await response.json());
+    // Preferred: a snapshot on the CDN, so opening the library costs no
+    // serverless invocation. /api/library stays as the migration fallback and
+    // /library.json as the last resort when both are unreachable.
+    let manifest = await loadCatalogSnapshot();
+    if (!manifest) {
+      let response = await fetch("/api/library");
+      if (!response.ok) response = await fetch("/library.json");
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      manifest = await response.json();
+    }
+    applyLibraryManifest(manifest);
   } catch (error) {
     console.warn("Unable to load the source library.", error);
     els.catalogGrid.innerHTML = "";
     els.catalogEmpty.hidden = false;
     els.catalogPagination.hidden = true;
+  }
+}
+
+// The snapshot stores the same shape the manifest already uses, so the rest of the
+// library code is untouched. A miss returns null and the caller falls back.
+async function loadCatalogSnapshot() {
+  if (!READER_CDN_ENABLED) return null;
+  try {
+    const response = await fetch(cdnUrl("catalog/latest.json"), { cache: "no-cache" });
+    if (!response.ok) return null;
+    const snapshot = await response.json();
+    if (!snapshot || !Array.isArray(snapshot.books)) return null;
+    return { site: snapshot.site || {}, books: snapshot.books };
+  } catch (error) {
+    console.warn("Không đọc được catalog từ CDN, dùng API.", error);
+    return null;
   }
 }
 

@@ -309,3 +309,45 @@ test("a new revision publishes to new immutable keys and leaves the old ones", a
   assert.equal(index.revision, 2);
   assert.match(index.chapterUrlTemplate, /\/r2\/ch\/\{n\}\.json$/);
 });
+
+test("the archive goes to the private store when one is configured", async () => {
+  const publicStore = tempStorage().storage;
+  const archiveStore = tempStorage().storage;
+  await ingestBook({
+    storage: publicStore,
+    archiveStorage: archiveStore,
+    epubBuffer: await buildEpub({ chapters: 2 }),
+    book: { id: "book-priv", title: "S" },
+    revision: 1
+  });
+  // The reader bucket is public, so a source EPUB must never land in it.
+  assert.equal(await publicStore.head("archives/book-priv.epub"), null, "public bucket must not hold the EPUB");
+  assert.ok(await archiveStore.head("archives/book-priv.epub"), "private bucket should hold it");
+  assert.ok(await publicStore.head("books/book-priv/index.json"), "chapters still go to the public bucket");
+});
+
+test("the catalog snapshot can be rebuilt from storage alone", async () => {
+  const { storage } = tempStorage();
+  const { publishCatalogSnapshot } = require("./ingest/catalog-snapshot");
+  for (const id of ["b-one", "b-two"]) {
+    await ingestBook({ storage, epubBuffer: await buildEpub({ chapters: 2 }), book: { id, title: `T ${id}` }, revision: 1 });
+  }
+  // No Supabase configured here, so this exercises the storage fallback path.
+  const snapshot = await publishCatalogSnapshot({ storage, site: { name: "X" }, env: {} });
+  assert.equal(snapshot.source, "storage");
+  assert.equal(snapshot.books.length, 2);
+  assert.deepEqual(snapshot.books.map((b) => b.id).sort(), ["b-one", "b-two"]);
+  assert.equal(snapshot.books[0].chapterCount, 2);
+  const written = JSON.parse((await storage.get("catalog/latest.json")).toString());
+  assert.equal(written.books.length, 2);
+  assert.equal(written.site.name, "X");
+});
+
+test("a malformed book index does not break the whole catalog", async () => {
+  const { storage } = tempStorage();
+  const { buildSnapshotFromStorage } = require("./ingest/catalog-snapshot");
+  await ingestBook({ storage, epubBuffer: await buildEpub({ chapters: 1 }), book: { id: "b-ok", title: "OK" }, revision: 1 });
+  await storage.put("books/b-broken/index.json", "{ not json");
+  const books = await buildSnapshotFromStorage(storage);
+  assert.deepEqual(books.map((b) => b.id), ["b-ok"]);
+});

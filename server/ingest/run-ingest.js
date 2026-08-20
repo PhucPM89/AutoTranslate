@@ -1,6 +1,6 @@
 "use strict";
 
-const { createStorage, hasR2Credentials } = require("../storage");
+const { createStorage, createArchiveStorage, hasR2Credentials } = require("../storage");
 const { createMetadataStore } = require("../supabase");
 const { ingestBook } = require("./ingest-book");
 const { translateText } = require("../gemini");
@@ -25,6 +25,7 @@ async function runIngest({
   log = () => {}
 } = {}) {
   const storage = createStorage();
+  const archiveStorage = createArchiveStorage();
   const metadataStore = createMetadataStore();
   const apiKey = process.env.GEMINI_API_KEY || "";
 
@@ -48,6 +49,7 @@ async function runIngest({
     revision,
     translate,
     metadataStore,
+    archiveStorage,
     requestBudget,
     deadlineAt: runBudgetMs === Infinity ? Infinity : Date.now() + runBudgetMs,
     spacingMs,

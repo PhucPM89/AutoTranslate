@@ -13,6 +13,14 @@ function createStorage(env = process.env) {
   return require("./local-driver").createLocalStorage(env);
 }
 
+// EPUB archives must not sit in the public bucket: r2.dev and a custom domain both
+// expose a whole bucket, which would make every source EPUB a public multi-megabyte
+// download. They go to a separate bucket that has no public access.
+function createArchiveStorage(env = process.env) {
+  if (!hasR2Credentials(env) || !env.R2_ARCHIVE_BUCKET) return null;
+  return require("./r2-driver").createR2Storage({ ...env, R2_BUCKET: env.R2_ARCHIVE_BUCKET, R2_PUBLIC_BASE_URL: "" });
+}
+
 function hasR2Credentials(env = process.env) {
   return Boolean(
     env.R2_ACCOUNT_ID && env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY && env.R2_BUCKET
@@ -25,4 +33,4 @@ function describeStorage(env = process.env) {
     : { driver: "local", root: env.LOCAL_STORAGE_DIR || ".storage", publicBase: env.LOCAL_PUBLIC_BASE_URL || "/local-cdn" };
 }
 
-module.exports = { createStorage, hasR2Credentials, describeStorage, LAYOUT, cacheControlFor, contentTypeFor };
+module.exports = { createStorage, createArchiveStorage, hasR2Credentials, describeStorage, LAYOUT, cacheControlFor, contentTypeFor };

@@ -29,6 +29,7 @@ async function ingestBook({
   revision,
   translate = null,
   metadataStore = null,
+  archiveStorage = null,
   requestBudget = Infinity,
   deadlineAt = Infinity,
   spacingMs = 0,
@@ -46,8 +47,9 @@ async function ingestBook({
   const epub = await readEpub(epubBuffer);
 
   // 1. Archive the EPUB itself. Never served to readers, kept so a book can be
-  //    re-ingested later without going back to the original source.
-  await storage.put(LAYOUT.archive(book.id), epubBuffer);
+  //    re-ingested later without going back to the original source. It goes to a
+  //    private store when one is configured, because the reader bucket is public.
+  await (archiveStorage || storage).put(LAYOUT.archive(book.id), epubBuffer);
 
   // 2. Cover, if the EPUB carries one and the catalog has none.
   let coverUrl = book.cover || "";
