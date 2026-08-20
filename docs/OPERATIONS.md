@@ -3,7 +3,7 @@
 ## Chạy pipeline ở local (không cần credential)
 
 ```bash
-npm test                          # 70 test, gồm ingest end-to-end
+npm test                          # 99 test, gồm ingest end-to-end
 LOCAL_STORAGE_DIR=.storage npm test
 ```
 
@@ -78,3 +78,28 @@ node scripts/translate-worker.js --book fanqie-123 --budget 50
 ```
 
 Worker bỏ qua Gemini nếu object dịch đã tồn tại trên R2 — restart không tốn quota.
+
+## Không bao giờ ghi đè chapter đã publish
+
+Chapter object mang `Cache-Control: immutable, max-age=31536000`. Ghi đè cùng key
+thì CDN vẫn phục vụ bản cũ tới một năm — nội dung mới chỉ thấy được khi thêm query
+lạ, tức là *người đọc thật sẽ không thấy*.
+
+Sửa nội dung một chapter thì **tăng revision** và ingest lại: key mới, cache cũ
+thành vô hại. Nếu buộc phải ghi đè (ví dụ vá gấp), phải purge đúng các URL đó
+trong Cloudflare (Caching → Configuration → Purge Cache → Custom Purge → by URL);
+không purge thì coi như chưa sửa gì.
+
+Quy tắc này áp dụng cho cả script vá tay, không riêng pipeline.
+
+## CORS trên R2
+
+Reader và CDN khác origin nên trình duyệt bắt buộc cần CORS. `curl` và `node fetch`
+không kiểm tra CORS, nên lỗi này **chỉ hiện ra khi test bằng trình duyệt thật**.
+
+- `novel-storage`: chỉ `GET, HEAD`, giới hạn theo origin của site.
+- `novel-archive`: chỉ `PUT`, cho trang admin upload presigned. Signature vẫn là
+  thứ cấp quyền; CORS chỉ cho phép trình duyệt gửi request.
+
+R2 trả thêm `Vary: Origin`, nên request có Origin được cache riêng — không cần
+purge khi mới bật CORS.
