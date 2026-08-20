@@ -44,6 +44,11 @@ const RESERVE_MS = 3 * 60 * 1000;
 // 3.37 chapters/minute this is roughly every seven minutes: frequent enough that
 // readers see progress, rare enough that the 1,425-row upsert is noise.
 const PUBLISH_EVERY = Math.max(1, Number(process.env.TRANSLATE_PUBLISH_EVERY || 25));
+// Chapters each book gets per turn before the worker moves on. One keeps the
+// rotation tightest, and since the Gemini call dominates the cost, slicing finely
+// is close to free.
+const CHAPTERS_PER_TURN = Math.max(1, Number(process.env.TRANSLATE_CHAPTERS_PER_TURN || 1));
+const ROTATION_KEY = "jobs/translate-rotation.json";
 
 async function main() {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -59,96 +64,152 @@ async function main() {
     return;
   }
 
-  // Books with newly discovered chapters go first, then the ones with the most
-  // outstanding work, so an ongoing novel stays current.
-  jobs.sort((a, b) => b.highPriority - a.highPriority || b.pending - a.pending);
-  console.log(`Có ${jobs.length} book trong hàng đợi:`);
-  for (const job of jobs) {
+  // Round-robin, a slice at a time, so every book moves every day.
+  //
+  // Draining one queue at a time is wrong for a reader whichever end you start.
+  // Longest-first spreads the daily allowance over everything and finishes
+  // nothing; shortest-first finishes books but leaves someone reading book nine
+  // waiting weeks to see a single translated chapter. Taking a small slice from
+  // each book in turn means every title gains ground daily, which is what stops
+  // anyone waiting indefinitely on the one book they happen to be reading.
+  //
+  // Ordered by id rather than size so the cycle is stable between runs, and
+  // rotated to resume after whichever book was served last - otherwise a day that
+  // runs out of quota part-way keeps favouring the same few books tomorrow.
+  const ordered = [...jobs].sort((a, b) => a.bookId.localeCompare(b.bookId));
+  const rotation = (await readJson(storage, ROTATION_KEY)) || {};
+  const resumeAfter = ordered.findIndex((job) => job.bookId === rotation.lastBookId);
+  const queue =
+    resumeAfter >= 0 ? [...ordered.slice(resumeAfter + 1), ...ordered.slice(0, resumeAfter + 1)] : ordered;
+
+  // Books that just gained chapters still go first: catching an ongoing novel up
+  // matters more than another slice of a backlog.
+  queue.sort((a, b) => b.highPriority - a.highPriority);
+
+  console.log(`Có ${jobs.length} book trong hàng đợi, xoay vòng ${CHAPTERS_PER_TURN} chương mỗi lượt:`);
+  for (const job of queue) {
     console.log(`  ${job.bookId} r${job.revision}: ${job.pending} chờ (${job.highPriority} ưu tiên cao) / ${job.total}`);
   }
+  if (rotation.lastBookId) console.log(`  (lượt trước dừng ở ${rotation.lastBookId}; vòng này bắt đầu sau đó)`);
 
   let spentTotal = 0;
   let translatedTotal = 0;
   let stoppedForQuota = false;
+  let stop = false;
+  let cycle = 0;
 
-  for (const job of jobs) {
-    if (spentTotal >= REQUEST_BUDGET || Date.now() >= deadlineAt) break;
+  // Publishing is throttled per book, not globally: with one chapter per turn a
+  // publish at the end of every slice would rewrite a 95 KB index per chapter.
+  const sincePublish = new Map();
+  const touched = new Map();
+  const rowChecked = new Set();
 
-    const state = job.state;
-    if (isDone(state)) continue;
-    console.log(`\n=== ${job.bookId} r${job.revision} ===`);
-    let sinceLastPublish = 0;
-    // chapters.book_id references books.id, and refreshBookOutputs upserts
-    // chapters before the book row. Ingest normally creates the book first, but
-    // if it did not, every chapter sync would fail on the foreign key.
-    await ensureBookRow({ storage, db, job });
+  const publishBook = (job) =>
+    refreshBookOutputs({ storage, db, job, state: job.state }).catch((error) =>
+      console.warn(`  (không publish được tiến độ ${job.bookId}: ${error.message})`)
+    );
 
-    const result = await runTranslationJobs({
-      state,
-      requestBudget: REQUEST_BUDGET === Infinity ? Infinity : REQUEST_BUDGET - spentTotal,
-      deadlineAt,
-      spacingMs: SPACING_MS,
-      loadChapter: (n) => readJson(storage, originalKey(job.bookId, job.revision, n)),
-      translateChapter: async (chapter) => {
-        // Never spend a Gemini call on work that is already durable. This is the
-        // guard that makes a worker restart free rather than expensive.
-        const existing = await readJson(storage, chapterKey(job.bookId, job.revision, chapter.chapterNumber));
-        if (existing && existing.translationStatus === "completed" && existing.content) {
-          console.log(`  ch ${chapter.chapterNumber}: đã có bản dịch trên R2, bỏ qua Gemini`);
-          return existing.content;
-        }
-        const output = await translateText(chapter.content, apiKey);
-        if (!output || !output.translation) throw new Error("Gemini không trả bản dịch.");
-        return output.translation;
-      },
-      publishChapter: async (chapter, translation) => {
-        await storage.put(
-          chapterKey(job.bookId, job.revision, chapter.chapterNumber),
-          JSON.stringify(
-            buildChapterDocument({
-              bookId: job.bookId,
-              revision: job.revision,
-              chapter,
-              translation,
-              translationStatus: "completed"
-            })
-          )
-        );
-      },
-      saveState: (next) => storage.put(jobStateKey(job.bookId), JSON.stringify(next)),
-      // Chapter rows are synced in bulk rather than one request per chapter:
-      // fewer round trips, and R2 stays the source of truth either way. But the
-      // sync cannot wait for the end of the run - a run may translate for five
-      // hours, and one killed at the Actions timeout would publish nothing at
-      // all, leaving readers looking at a count from hours ago.
-      onProgress: async ({ chapter, status, completed, total }) => {
-        console.log(`  ch ${chapter}: ${status}  (${completed}/${total})`);
-        if (status !== "completed") return;
-        sinceLastPublish += 1;
-        if (sinceLastPublish < PUBLISH_EVERY) return;
-        sinceLastPublish = 0;
-        // Never let a publishing hiccup end a run that is otherwise translating.
-        await refreshBookOutputs({ storage, db, job, state }).catch((error) =>
-          console.warn(`  (không publish được tiến độ: ${error.message})`)
-        );
-        console.log(`  -> đã publish tiến độ: ${completed}/${total}`);
+  while (!stop) {
+    cycle += 1;
+    let translatedThisCycle = 0;
+
+    for (const job of queue) {
+      if (spentTotal >= REQUEST_BUDGET || Date.now() >= deadlineAt) {
+        stop = true;
+        break;
       }
-    });
+      if (isDone(job.state)) continue;
 
-    spentTotal += result.spent;
-    translatedTotal += result.translated;
-    console.log(`  -> dịch ${result.translated}, lỗi ${result.failed}, còn ${result.summary.pending} chờ`);
+      if (!rowChecked.has(job.bookId)) {
+        // chapters.book_id references books.id. Ingest normally creates the row
+        // first, but if it did not every chapter sync fails on the foreign key.
+        await ensureBookRow({ storage, db, job });
+        rowChecked.add(job.bookId);
+      }
 
-    // Republish the index so the reader sees the new statuses, and refresh book
-    // totals in Supabase.
-    await refreshBookOutputs({ storage, db, job, state });
+      const remainingBudget = REQUEST_BUDGET === Infinity ? Infinity : REQUEST_BUDGET - spentTotal;
+      const result = await runTranslationJobs({
+        state: job.state,
+        // The slice. runTranslationJobs counts Gemini calls and a chapter is
+        // almost always one call, so in practice this is a chapter count.
+        requestBudget: Math.min(remainingBudget, CHAPTERS_PER_TURN),
+        deadlineAt,
+        spacingMs: SPACING_MS,
+        loadChapter: (n) => readJson(storage, originalKey(job.bookId, job.revision, n)),
+        translateChapter: async (chapter) => {
+          // Never spend a Gemini call on work that is already durable. This is
+          // the guard that makes a worker restart free rather than expensive.
+          const existing = await readJson(storage, chapterKey(job.bookId, job.revision, chapter.chapterNumber));
+          if (existing && existing.translationStatus === "completed" && existing.content) {
+            console.log(`  ch ${chapter.chapterNumber}: đã có bản dịch trên R2, bỏ qua Gemini`);
+            return existing.content;
+          }
+          const output = await translateText(chapter.content, apiKey);
+          if (!output || !output.translation) throw new Error("Gemini không trả bản dịch.");
+          return output.translation;
+        },
+        publishChapter: async (chapter, translation) => {
+          await storage.put(
+            chapterKey(job.bookId, job.revision, chapter.chapterNumber),
+            JSON.stringify(
+              buildChapterDocument({
+                bookId: job.bookId,
+                revision: job.revision,
+                chapter,
+                translation,
+                translationStatus: "completed"
+              })
+            )
+          );
+        },
+        saveState: (next) => storage.put(jobStateKey(job.bookId), JSON.stringify(next)),
+        onProgress: async ({ chapter, status, completed, total }) => {
+          console.log(`  [${job.bookId}] ch ${chapter}: ${status}  (${completed}/${total})`);
+        }
+      });
 
-    if (result.quotaExhausted) {
-      stoppedForQuota = true;
-      console.log("  -> hết quota Gemini, dừng để lượt sau tiếp tục");
-      break;
+      spentTotal += result.spent;
+      translatedTotal += result.translated;
+      translatedThisCycle += result.translated;
+
+      if (result.translated) {
+        touched.set(job.bookId, job);
+        const waiting = (sincePublish.get(job.bookId) || 0) + result.translated;
+        if (waiting >= PUBLISH_EVERY) {
+          sincePublish.set(job.bookId, 0);
+          await publishBook(job);
+          console.log(`  [${job.bookId}] -> đã publish tiến độ`);
+        } else {
+          sincePublish.set(job.bookId, waiting);
+        }
+      }
+
+      // Written after every slice, so an interrupted run still tells the next one
+      // where the cycle had reached.
+      rotation.lastBookId = job.bookId;
+      await storage.put(ROTATION_KEY, JSON.stringify(rotation)).catch(() => {});
+
+      if (result.quotaExhausted) {
+        stoppedForQuota = true;
+        stop = true;
+        console.log("  -> hết quota Gemini, dừng để lượt sau tiếp tục từ đây");
+        break;
+      }
     }
+
+    // A full pass that translated nothing means every queue is finished or
+    // waiting on a backoff, so spinning gains nothing.
+    if (!translatedThisCycle) break;
   }
+
+  // Anything with unpublished progress is written once at the end, so counts are
+  // current even for books whose slice never reached the publish threshold.
+  for (const [bookId, job] of touched) {
+    if (!sincePublish.get(bookId)) continue;
+    await publishBook(job);
+  }
+  console.log(`
+Đã chạy ${cycle} vòng, ${touched.size} truyện có bản dịch mới.`);
 
   if (translatedTotal > 0) {
     await publishCatalogSnapshot({ storage, site: siteSettings(), log: (event) => console.log("  ", JSON.stringify(event)) });
