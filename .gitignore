@@ -7,9 +7,12 @@ public/admin-upload.js
 
 .vercel
 .env*
+!.env.example
 .crawler-data/
 output/
 public/app.js
 public/style.css
 public/index.html
 public/vendor/
+.storage/
+.storage-e2e/

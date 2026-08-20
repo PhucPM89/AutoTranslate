@@ -34,7 +34,13 @@ const appUrl = bundle({
   format: "iife",
   define: {
     __ASSET_JSZIP__: JSON.stringify(jszipUrl),
-    __ASSET_ADMIN__: JSON.stringify(adminUrl)
+    __ASSET_ADMIN__: JSON.stringify(adminUrl),
+    // Reader CDN path. Only the public base URL reaches the browser bundle; no
+    // R2 or Supabase secret is ever inlined here.
+    __CDN_BASE__: JSON.stringify(process.env.R2_PUBLIC_BASE_URL || ""),
+    __READER_CDN_ENABLED__: JSON.stringify(process.env.READER_CDN_ENABLED === "true"),
+    __SUPABASE_URL__: JSON.stringify(process.env.SUPABASE_URL || ""),
+    __SUPABASE_ANON_KEY__: JSON.stringify(process.env.SUPABASE_ANON_KEY || "")
   }
 });
 
@@ -45,6 +51,7 @@ const styleUrl = minifyCss({
 });
 
 writeHtml({ appUrl, styleUrl });
+writeHeaders();
 
 function bundle({ entry, outfile, publicPath, format, define }) {
   esbuild.buildSync({
@@ -89,6 +96,31 @@ function report(publicPath, outfile, sourceFile) {
     `${publicPath} ${formatKb(sourceSize)} -> ${formatKb(bytes.length)}`
   );
   return `${publicPath}?v=${hash}`;
+}
+
+// Cloudflare Pages reads _headers from the output directory. Generated here so
+// the header policy has a single source and the CSP can learn the CDN origin at
+// build time instead of being hand-edited.
+function writeHeaders() {
+  const templatePath = path.join(CLIENT_DIR, "_headers.template");
+  if (!fs.existsSync(templatePath)) return;
+  const origin = cdnOrigin();
+  // Substituting the trailing space too keeps the CSP tidy when there is no CDN
+  // origin yet, instead of leaving a double space inside the directive.
+  const body = fs.readFileSync(templatePath, "utf8").replaceAll("%CDN_ORIGIN% ", origin ? origin + " " : "");
+  fs.writeFileSync(path.join(PUBLIC_DIR, "_headers"), body);
+  const note = origin ? ` (cdn: ${origin})` : " (chưa có CDN origin)";
+  console.log(`/_headers ${formatKb(Buffer.byteLength(body))}${note}`);
+}
+
+function cdnOrigin() {
+  const base = process.env.R2_PUBLIC_BASE_URL || "";
+  if (!base) return "";
+  try {
+    return new URL(base).origin;
+  } catch {
+    return "";
+  }
 }
 
 function writeHtml({ appUrl, styleUrl }) {

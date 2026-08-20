@@ -1,4 +1,3 @@
-import { upload } from "@vercel/blob/client";
 
 const els = {
   open: document.getElementById("adminOpen"),
@@ -144,35 +143,23 @@ async function submitBook(event) {
   setBusy(true);
   setProgress(1);
   try {
-    const baseName = slug(form.get("title")) || "truyen";
     let epubUrl = existingBook?.epub || "";
+    let archiveKey = "";
+    let coverKey = "";
     if (epub) {
       setStatus("Đang upload EPUB...");
-      const epubBlob = await upload(`library/books/${baseName}.epub`, epub, {
-        access: "public",
-        contentType: "application/epub+zip",
-        handleUploadUrl: "/api/admin/upload",
-        clientPayload: JSON.stringify({ kind: "epub" }),
-        multipart: epub.size > 100 * 1024 * 1024,
-        abortSignal: abortController.signal,
-        onUploadProgress: ({ percentage }) => setProgress(Math.round(percentage * (cover ? 0.7 : 0.9)))
-      });
-      epubUrl = epubBlob.url;
+      archiveKey = await uploadToR2(epub, "epub", abortController.signal, (percentage) =>
+        setProgress(Math.round(percentage * (cover ? 0.7 : 0.9)))
+      );
     }
 
     let coverUrl = existingBook?.cover || "";
     if (cover) {
       setStatus("Đang upload ảnh bìa...");
-      const extension = extensionOf(cover.name);
-      const coverBlob = await upload(`library/covers/${baseName}${extension}`, cover, {
-        access: "public",
-        contentType: cover.type,
-        handleUploadUrl: "/api/admin/upload",
-        clientPayload: JSON.stringify({ kind: "cover" }),
-        abortSignal: abortController.signal,
-        onUploadProgress: ({ percentage }) => setProgress(70 + Math.round(percentage * 0.2))
-      });
-      coverUrl = coverBlob.url;
+      coverKey = await uploadToR2(cover, "cover", abortController.signal, (percentage) =>
+        setProgress(70 + Math.round(percentage * 0.2))
+      );
+      coverUrl = coverKey;
     }
 
     setStatus("Đang cập nhật danh mục...");
@@ -193,6 +180,30 @@ async function submitBook(event) {
         cover: coverUrl
       })
     });
+    // The EPUB is in the private bucket; ingest itself takes minutes, so it runs
+    // in GitHub Actions rather than blocking this request.
+    if (archiveKey) {
+      setStatus("Đang gửi lệnh ingest...");
+      setProgress(97);
+      const dispatch = await fetch("/api/admin/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "ingest",
+          archiveKey,
+          coverKey,
+          title: form.get("title"),
+          author: form.get("author"),
+          genre: form.get("genre")
+        })
+      });
+      if (!dispatch.ok) {
+        // The upload and the catalogue row both succeeded, so say exactly what
+        // failed rather than implying the whole thing was lost.
+        setStatus("Đã upload nhưng chưa chạy được ingest. Chạy workflow \"Ingest uploaded book\" thủ công.", true);
+      }
+    }
+
     setProgress(100);
     adminCatalog = result.catalog;
     renderBookOptions(result.book.id);
@@ -497,11 +508,41 @@ function setProgress(value) {
   els.progressBar.style.width = `${Math.max(0, Math.min(100, value))}%`;
 }
 
-function slug(value) {
-  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 70);
-}
+// Two steps and no bytes through a serverless function: ask the server for a
+// short-lived PUT URL, then send the file straight to R2. XHR rather than fetch
+// because fetch still has no upload progress.
+async function uploadToR2(file, kind, signal, onProgress) {
+  const presign = await requestJson("/api/admin/upload", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      kind,
+      filename: file.name,
+      size: file.size,
+      contentType: kind === "epub" ? "application/epub+zip" : file.type
+    })
+  });
 
-function extensionOf(name) {
-  const match = String(name).toLowerCase().match(/\.(jpe?g|png|webp)$/);
-  return match ? match[0] : ".webp";
+  await new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("PUT", presign.uploadUrl, true);
+    request.setRequestHeader(
+      "Content-Type",
+      kind === "epub" ? "application/epub+zip" : file.type || "application/octet-stream"
+    );
+    request.upload.addEventListener("progress", (event) => {
+      if (event.lengthComputable) onProgress((event.loaded / event.total) * 100);
+    });
+    request.addEventListener("load", () =>
+      request.status >= 200 && request.status < 300
+        ? resolve()
+        : reject(new Error(`R2 trả về ${request.status}.`))
+    );
+    request.addEventListener("error", () => reject(new Error("Mất kết nối khi upload.")));
+    request.addEventListener("abort", () => reject(new Error("Upload đã bị huỷ.")));
+    signal?.addEventListener("abort", () => request.abort(), { once: true });
+    request.send(file);
+  });
+
+  return presign.key;
 }

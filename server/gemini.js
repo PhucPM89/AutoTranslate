@@ -15,7 +15,7 @@ async function translateText(text, apiKey) {
     (chunk, index) => translateChunk(apiKey, chunk, index, chunks.length)
   );
   const translatedChunks = chunkResults.map((result) => result.text);
-  const translation = translatedChunks.join("\n\n").trim();
+  const translation = stripMarkdown(translatedChunks.join("\n\n").trim());
   const modelsUsed = Array.from(new Set(chunkResults.map((result) => result.model)));
 
   return {
@@ -91,6 +91,22 @@ function validateTranslatedMetadata(source, translated) {
       throw error;
     }
   }
+}
+
+// Gemini decorates prose with Markdown even when the prompt asks for plain text
+// - chapter headings came back as **Chương 7: ...** and the reader, which renders
+// text nodes rather than HTML, showed the asterisks. Only emphasis, headings and
+// code fences are removed; a lone asterisk in the prose survives because every
+// pattern needs a matched pair wrapped around non-space content.
+function stripMarkdown(text) {
+  return String(text || "")
+    .replace(/```[a-z]*\n?/gi, "")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/\*\*\*(?=\S)([\s\S]*?\S)\*\*\*/g, "$1")
+    .replace(/\*\*(?=\S)([\s\S]*?\S)\*\*/g, "$1")
+    .replace(/(^|[\s(])\*(?=\S)([^*\n]*?\S)\*(?=[\s.,;:!?)]|$)/g, "$1$2")
+    .replace(/(^|[\s(])_(?=\S)([^_\n]*?\S)_(?=[\s.,;:!?)]|$)/g, "$1$2")
+    .trim();
 }
 
 function cleanMetadataField(value, maxLength) {
@@ -364,4 +380,4 @@ function parseCsv(value) {
     .filter(Boolean);
 }
 
-module.exports = { translateText, translateMetadata, assessTranslation, splitTextIntoChunks };
+module.exports = { translateText, translateMetadata, assessTranslation, splitTextIntoChunks, stripMarkdown };

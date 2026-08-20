@@ -1,6 +1,11 @@
 "use strict";
 
 const state = {
+  // "epub" is the legacy path (download the whole book, parse with JSZip).
+  // "cdn" fetches one chapter JSON at a time. Both stay supported during
+  // migration so a CDN miss can fall back instead of breaking the reader.
+  mode: "epub",
+  cdnTemplate: "",
   bookId: "",
   fileName: "",
   title: "",
@@ -35,6 +40,15 @@ const ANALYTICS_VISIT_KEY = "epubTranslator.visitCounted";
 const ANALYTICS_READ_KEY = "epubTranslator.readCounted";
 const JSZIP_URL = __ASSET_JSZIP__;
 const ADMIN_MODULE_URL = __ASSET_ADMIN__;
+// Reader CDN path. Chapter JSON is fetched straight from R2 through the CDN:
+// no Vercel function, no Supabase query, no Gemini call on the read path.
+const CDN_BASE = String(__CDN_BASE__ || "").replace(/\/$/, "");
+// Analytics goes straight to Supabase so a page view costs no serverless
+// invocation. The anon key is public by design: RLS lets it insert events and
+// nothing else - verified against the live project.
+const SUPABASE_URL = String(__SUPABASE_URL__ || "").replace(/\/$/, "");
+const SUPABASE_ANON_KEY = String(__SUPABASE_ANON_KEY__ || "");
+const READER_CDN_ENABLED = Boolean(__READER_CDN_ENABLED__) && Boolean(CDN_BASE);
 const FALLBACK_BOOK_COVERS = [
   "/library/covers/night-temple.webp",
   "/library/covers/misty-pagoda.webp",
@@ -245,9 +259,33 @@ function countBookOpened(bookId) {
 }
 
 function sendBeacon(payload) {
+  // Analytics is never allowed to affect reading: every path here swallows its
+  // own errors and nothing awaits the result.
+  if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+    fetch(`${SUPABASE_URL}/rest/v1/analytics_events`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal"
+      },
+      body: JSON.stringify([
+        {
+          event_type: payload.type,
+          book_id: payload.bookId || null,
+          session_id: analyticsSessionId()
+        }
+      ]),
+      keepalive: true
+    }).catch(() => {});
+    return;
+  }
+
+  // Fallback for as long as the Vercel route still exists.
   const body = JSON.stringify(payload);
   try {
-    if (navigator.sendBeacon?.(("/api/analytics"), new Blob([body], { type: "application/json" }))) return;
+    if (navigator.sendBeacon?.("/api/analytics", new Blob([body], { type: "application/json" }))) return;
   } catch (_error) {
     // Fall through to fetch below.
   }
@@ -257,6 +295,18 @@ function sendBeacon(payload) {
     body,
     keepalive: true
   }).catch(() => {});
+}
+
+// A random per-session value, kept only in sessionStorage. No IP, no user agent,
+// nothing that identifies a person or survives the session.
+function analyticsSessionId() {
+  const key = "epubTranslator.analyticsSession";
+  let id = readSessionFlag(key);
+  if (!id) {
+    id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    writeSessionFlag(key, id);
+  }
+  return id;
 }
 
 function readSessionFlag(key) {
@@ -341,15 +391,38 @@ function requestIdle(callback) {
 
 async function loadLibraryManifest() {
   try {
-    let response = await fetch("/api/library");
-    if (!response.ok) response = await fetch("/library.json");
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    applyLibraryManifest(await response.json());
+    // Preferred: a snapshot on the CDN, so opening the library costs no
+    // serverless invocation. /api/library stays as the migration fallback and
+    // /library.json as the last resort when both are unreachable.
+    let manifest = await loadCatalogSnapshot();
+    if (!manifest) {
+      let response = await fetch("/api/library");
+      if (!response.ok) response = await fetch("/library.json");
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      manifest = await response.json();
+    }
+    applyLibraryManifest(manifest);
   } catch (error) {
     console.warn("Unable to load the source library.", error);
     els.catalogGrid.innerHTML = "";
     els.catalogEmpty.hidden = false;
     els.catalogPagination.hidden = true;
+  }
+}
+
+// The snapshot stores the same shape the manifest already uses, so the rest of the
+// library code is untouched. A miss returns null and the caller falls back.
+async function loadCatalogSnapshot() {
+  if (!READER_CDN_ENABLED) return null;
+  try {
+    const response = await fetch(cdnUrl("catalog/latest.json"), { cache: "no-cache" });
+    if (!response.ok) return null;
+    const snapshot = await response.json();
+    if (!snapshot || !Array.isArray(snapshot.books)) return null;
+    return { site: snapshot.site || {}, books: snapshot.books };
+  } catch (error) {
+    console.warn("Không đọc được catalog từ CDN, dùng API.", error);
+    return null;
   }
 }
 
@@ -412,7 +485,10 @@ window.addEventListener("library:refresh", (event) => {
 });
 
 function isValidLibraryBook(book) {
-  return Boolean(book && typeof book.id === "string" && typeof book.title === "string" && typeof book.epub === "string");
+  if (!book || typeof book.id !== "string" || typeof book.title !== "string") return false;
+  // A book is readable two ways: chapters on the CDN, addressed by revision, or a
+  // legacy single EPUB URL. Requiring `epub` dropped every CDN book on the floor.
+  return typeof book.epub === "string" || Number(book.revision) > 0;
 }
 
 function applyLibrarySiteSettings() {
@@ -755,6 +831,25 @@ async function loadCatalogBook(book, assignedFallbackCover = fallbackCoverForBoo
   const cover = book.cover || assignedFallbackCover;
   countBookOpened(book.id);
 
+  // Preferred path: one small chapter JSON from the CDN. Falls through to the
+  // legacy EPUB download if the book has not been ingested yet or the CDN misses.
+  if (READER_CDN_ENABLED) {
+    try {
+      if (await openBookFromCdn(book, cover, { startAtFirstChapter })) return;
+    } catch (error) {
+      console.warn("Đường CDN lỗi, chuyển sang EPUB.", error);
+    }
+  }
+
+  // Only a legacy book can go down the EPUB path; a CDN-only book has no archive
+  // to fall back to, so say so instead of failing on an undefined URL.
+  if (typeof book.epub !== "string" || !book.epub) {
+    resetReader("Truyện này chưa tải được từ CDN. Thử lại sau ít phút.");
+    return;
+  }
+
+  state.mode = "epub";
+
   try {
     // A parsed copy on the device means no EPUB download and no re-parse at all.
     const cachedBook = await readCachedBook(bookId).catch(() => null);
@@ -1018,7 +1113,7 @@ function goToChapter(index) {
   state.currentIndex = Math.min(Math.max(index, 0), state.chapters.length - 1);
 
   const chapter = state.chapters[state.currentIndex];
-  els.sourceText.textContent = chapter.text;
+  els.sourceText.textContent = chapter.text || "";
   const documentLabel = displayChapterTitle(state.currentIndex);
   const chapterLabel = `${documentLabel} · ${state.currentIndex + 1} / ${state.chapters.length}`;
   const progress = Math.ceil(((state.currentIndex + 1) / state.chapters.length) * 100);
@@ -1041,7 +1136,8 @@ function goToChapter(index) {
   els.chapterList.querySelector(`.document-item[data-index="${state.currentIndex}"]`)?.classList.add("active");
 
   saveProgressSoon();
-  loadCachedTranslation();
+  if (state.mode === "cdn") loadCdnChapter(state.currentIndex);
+  else loadCachedTranslation();
 }
 
 // Translations live in their own object store, so switching chapters reads and
@@ -1090,6 +1186,9 @@ function renderTranslation(cached, index) {
 }
 
 async function translateCurrentChapter(force) {
+  // CDN chapters arrive already translated. Guard so no reader can ever trigger
+  // a Gemini call, even if a stale button is clicked.
+  if (state.mode === "cdn") return;
   const chapter = state.chapters[state.currentIndex];
   if (!chapter) return;
 
@@ -1470,6 +1569,8 @@ function displayChapterTitle(index) {
 }
 
 function formatWordCount(chapter) {
+  // In CDN mode the body has not been fetched yet, so there is nothing to count.
+  if (!Number.isFinite(chapter.words) && typeof chapter.text !== "string") return "";
   if (!Number.isFinite(chapter.words)) chapter.words = countWords(chapter.text);
   if (chapter.words >= 1000) return `${Math.round(chapter.words / 100) / 10}k từ`;
   return `${chapter.words} từ`;
@@ -1530,4 +1631,130 @@ function resolveRelative(baseFile, relativePath) {
 
 function stripFragment(path) {
   return normalizeZipPath(path.split("#")[0]);
+}
+
+// ---------------------------------------------------------------------------
+// Reader CDN path
+//
+// A book that has been ingested has an index at
+//   {CDN_BASE}/books/{bookId}/index.json
+// which lists chapter titles and a URL template. Chapter bodies are fetched one
+// at a time and rendered directly: the JSON already holds the translated text,
+// so this path never calls /api/translate and never touches Gemini.
+// Any failure here returns false and the caller falls back to the EPUB reader.
+// ---------------------------------------------------------------------------
+
+function cdnUrl(pathname) {
+  return `${CDN_BASE}/${String(pathname).replace(/^\//, "")}`;
+}
+
+async function fetchBookIndex(bookId) {
+  if (!READER_CDN_ENABLED) return null;
+  try {
+    const response = await fetch(cdnUrl(`books/${bookId}/index.json`), { cache: "no-cache" });
+    if (!response.ok) return null;
+    const index = await response.json();
+    if (!index || !Array.isArray(index.chapters) || !index.chapters.length) return null;
+    return index;
+  } catch (error) {
+    console.warn("Không đọc được index từ CDN, dùng đường EPUB.", error);
+    return null;
+  }
+}
+
+function chapterUrlFor(index, chapterNumber) {
+  const template = String(index.chapterUrlTemplate || "");
+  if (!template) return cdnUrl(`books/${index.bookId}/r${index.revision}/ch/${chapterNumber}.json`);
+  // Ingest writes an absolute URL when a public base was configured at ingest
+  // time, and a bucket-relative one otherwise; both resolve here.
+  const resolved = template.replace("{n}", String(chapterNumber));
+  return /^https?:\/\//i.test(resolved) ? resolved : cdnUrl(resolved);
+}
+
+// Returns true when the book was opened from the CDN.
+async function openBookFromCdn(book, cover, { startAtFirstChapter = false } = {}) {
+  const index = await fetchBookIndex(book.id);
+  if (!index) return false;
+
+  state.mode = "cdn";
+  state.cdnTemplate = index.chapterUrlTemplate || "";
+  state.bookId = `cdn:${book.id}:r${index.revision}`;
+  state.fileName = "";
+  state.title = book.title || index.title || "Truyện";
+  state.cover = cover || index.cover || fallbackCoverForBook(book);
+  state.translations = {};
+  // Only titles live in memory. Bodies are fetched per chapter, so a
+  // 4,000-chapter novel costs the same as a short one to open.
+  state.chapters = index.chapters.map((entry) => ({
+    title: entry.title || `Chương ${entry.n}`,
+    chapterNumber: entry.n,
+    status: entry.status || "pending",
+    text: null,
+    words: null
+  }));
+
+  applyReaderHeader();
+  els.bookMeta.textContent = `${BRAND_NAME} · ${index.totalChapters} chương · ${index.translatedChapters} đã dịch`;
+  renderChapterControls();
+
+  const savedProgress = await readProgress(state.bookId).catch(() => null);
+  // "Đọc từ đầu" must ignore saved progress, which is why the flag reaches here
+  // rather than skipping the CDN path entirely.
+  goToChapter(startAtFirstChapter ? 0 : Number(savedProgress?.currentIndex) || 0);
+  return true;
+}
+
+// Fetches and renders one chapter. Immutable URL, so the CDN and the browser
+// cache do the work on every revisit.
+async function loadCdnChapter(index) {
+  const chapter = state.chapters[index];
+  if (!chapter) return;
+
+  if (typeof chapter.text === "string") {
+    renderCdnChapter(chapter, index);
+    return;
+  }
+
+  els.translationText.textContent = "Đang tải chương...";
+  els.translationText.classList.add("empty", "is-loading");
+  els.translationText.classList.remove("status-error");
+  els.outputStatus.textContent = "Đang tải";
+
+  try {
+    const response = await fetch(chapterUrlFor({ bookId: bookIdFromState(), revision: revisionFromState(), chapterUrlTemplate: state.cdnTemplate }, chapter.chapterNumber));
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const document_ = await response.json();
+    if (index !== state.currentIndex) return;
+    chapter.text = String(document_.content || "");
+    chapter.status = document_.translationStatus || chapter.status;
+    chapter.words = countWords(chapter.text);
+    renderCdnChapter(chapter, index);
+  } catch (error) {
+    if (index !== state.currentIndex) return;
+    console.warn("Không tải được chương từ CDN.", error);
+    els.translationText.textContent = "Không tải được chương này. Hãy thử lại.";
+    els.translationText.classList.remove("empty", "is-loading");
+    els.translationText.classList.add("status-error");
+    els.outputStatus.textContent = "Lỗi";
+  }
+}
+
+function renderCdnChapter(chapter, index) {
+  if (index !== state.currentIndex) return;
+  els.sourceText.textContent = chapter.text || "";
+  els.translationText.textContent = chapter.text || "";
+  els.translationText.classList.remove("empty", "is-loading", "status-error");
+  els.outputStatus.textContent = chapter.status === "completed" ? "Đã dịch" : "Bản gốc";
+  // Translation happened at ingest, so the reader has nothing to trigger.
+  els.translateButton.hidden = true;
+  els.retranslateButton.hidden = true;
+}
+
+function bookIdFromState() {
+  return String(state.bookId || "").split(":")[1] || "";
+}
+
+function revisionFromState() {
+  const match = String(state.bookId || "").match(/:r(\d+)$/);
+  return match ? Number(match[1]) : 1;
 }
