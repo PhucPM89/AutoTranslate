@@ -63,6 +63,10 @@ async function main() {
     failed: 0
   };
   await updateStatus(status);
+  // The status object is mutated in place from here on, so the heartbeat always
+  // persists the latest phase, book and progress without each phase remembering
+  // to write.
+  startHeartbeat(status);
 
   try {
     await waitForTomato();
@@ -171,6 +175,7 @@ async function main() {
     }
 
     if (!status.published && !status.failed) {
+      stopHeartbeat();
       status.state = "success";
       status.message = describeEmptyRun(config, newCandidateCount, discovery);
       status.currentBookId = "";
@@ -180,6 +185,7 @@ async function main() {
       return;
     }
 
+    stopHeartbeat();
     status.state = status.published ? "success" : "error";
     status.message = status.published
       ? `Hoàn tất: thêm ${status.published} truyện, lỗi ${status.failed}.`
@@ -190,6 +196,9 @@ async function main() {
     await updateStatus(status);
     if (!status.published) process.exitCode = 1;
   } catch (error) {
+    // Before the final write, or the heartbeat would overwrite the error state
+    // with a stale "running" a moment later.
+    stopHeartbeat();
     status.state = "error";
     status.message = error.message;
     // Keep currentBookId: a crash mid-download is exactly when resuming matters.
@@ -711,7 +720,6 @@ async function waitForJob(jobId, status) {
   // Bounded by whichever runs out first: the per-job limit or the run's budget.
   // Ending on our own terms lets the cache save so the next run resumes.
   const deadline = Date.now() + Math.max(0, Math.min(JOB_TIMEOUT_MS, remainingBudgetMs()));
-  let lastStatusUpdate = 0;
   while (Date.now() < deadline) {
     const data = await tomatoRequest(`/api/jobs?id=${encodeURIComponent(jobId)}&all=true`);
     const job = data.items?.[0];
@@ -723,21 +731,14 @@ async function waitForJob(jobId, status) {
     }
     if (job.state === "done") return job;
     if (["failed", "canceled"].includes(job.state)) throw new Error(job.message || `Tomato job ${job.state}.`);
-    // Every 20s rather than every 60: this doubles as the heartbeat the admin
-    // reads, and a minute of silence during a four-hour download looks like death.
-    if (Date.now() - lastStatusUpdate > 20 * 1000) {
-      const saved = Number(job.progress?.saved_chapters || 0);
-      const total = Number(job.progress?.chapter_total || 0);
-      // Kept as numbers as well as prose so the admin can draw a bar instead of
-      // asking the reader to parse a sentence.
-      status.currentBookTitle = job.title || String(job.book_id || "");
-      status.currentChapters = saved;
-      status.currentTotalChapters = total;
-      const progress = job.progress ? `${saved}/${total} chương` : "đang chuẩn bị";
-      status.message = `Đang tải ${status.currentBookTitle}: ${progress}.`;
-      await updateStatus(status);
-      lastStatusUpdate = Date.now();
-    }
+    // Recorded on every poll, written by the heartbeat. Kept as numbers as well
+    // as prose so the admin can draw a bar rather than parse a sentence.
+    const saved = Number(job.progress?.saved_chapters || 0);
+    const total = Number(job.progress?.chapter_total || 0);
+    status.currentBookTitle = job.title || String(job.book_id || "");
+    status.currentChapters = saved;
+    status.currentTotalChapters = total;
+    status.message = `Đang tải ${status.currentBookTitle}: ${job.progress ? `${saved}/${total} chương` : "đang chuẩn bị"}.`;
     await sleep(POLL_INTERVAL_MS);
   }
   throw new Error(`Tomato không hoàn tất sau ${Math.round(JOB_TIMEOUT_MS / 60000)} phút.`);
@@ -926,6 +927,28 @@ let crawlerState = null;
 // to lives in the public one.
 function crawlerStateOptions() {
   return { storage: createArchiveStorage() || createStorage(), readerStorage: createStorage() };
+}
+
+let heartbeatTimer = null;
+
+// A heartbeat that does not depend on which phase the run is in. The per-phase
+// updates only covered Tomato's download, so the ingest that follows - thousands
+// of object writes, several minutes - looked identical to a dead run.
+//
+// 45 seconds is a deliberate compromise: often enough that the admin can tell
+// the difference, rare enough that a five-hour run costs a few hundred R2 writes
+// rather than thousands.
+function startHeartbeat(status) {
+  stopHeartbeat();
+  heartbeatTimer = setInterval(() => {
+    updateStatus(status).catch(() => {});
+  }, 45 * 1000);
+  if (heartbeatTimer.unref) heartbeatTimer.unref();
+}
+
+function stopHeartbeat() {
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
+  heartbeatTimer = null;
 }
 
 async function updateStatus(status) {

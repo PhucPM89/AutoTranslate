@@ -449,7 +449,8 @@ function renderCrawlerStatus(status = {}) {
   if (status.state === "running" && status.startedAt) parts.push(`chạy từ ${describeAge(status.startedAt)}`);
   parts.push(`đã thêm ${status.published || 0}`);
   if (status.failed) parts.push(`lỗi ${status.failed}`);
-  const stale = beat && Date.now() - new Date(beat).getTime() > 15 * 60 * 1000;
+  // The heartbeat is every 45 seconds, so five minutes of silence is real.
+  const stale = beat && Date.now() - new Date(beat).getTime() > 5 * 60 * 1000;
   if (status.state === "running" && stale) parts.push("⚠ không có nhịp mới, có thể đã chết");
   els.crawlerStateMeta.textContent = parts.join(" · ");
 
