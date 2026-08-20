@@ -50,6 +50,8 @@ const appUrl = bundle({
   }
 });
 
+copyFonts();
+
 const styleUrl = minifyCss({
   entry: path.join(CLIENT_DIR, "style.css"),
   outfile: path.join(PUBLIC_DIR, "style.css"),
@@ -103,6 +105,24 @@ function minifyCss({ entry, outfile, publicPath }) {
 function copyVendor(source, target, publicPath) {
   fs.copyFileSync(source, target);
   return report(publicPath, target);
+}
+
+// Self-hosted so the page makes no request to a font host and the CSP needs no
+// exception. client/fonts.css declares them; this only moves the files.
+function copyFonts() {
+  const source = path.join(CLIENT_DIR, "fonts");
+  if (!fs.existsSync(source)) return;
+  const target = path.join(PUBLIC_DIR, "fonts");
+  fs.mkdirSync(target, { recursive: true });
+  let bytes = 0;
+  const files = fs.readdirSync(source).filter((name) => name.endsWith(".woff2"));
+  for (const name of files) {
+    fs.copyFileSync(path.join(source, name), path.join(target, name));
+    bytes += fs.statSync(path.join(target, name)).size;
+  }
+  // Only the subsets a page actually uses are downloaded, so the total on disk is
+  // not what a reader pays.
+  console.log(`/fonts ${files.length} file, ${formatKb(bytes)} trên đĩa`);
 }
 
 // Hashed query strings let every static asset ship with a one-year immutable
