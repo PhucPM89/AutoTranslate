@@ -51,6 +51,9 @@ jobs:
 
       - run: npm ci --ignore-scripts
 
+      - name: Check required secrets are present
+        run: node scripts/check-env.js translate
+
       - name: Drain the translation queue
         run: >
           node scripts/translate-worker.js

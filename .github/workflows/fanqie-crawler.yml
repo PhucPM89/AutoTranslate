@@ -28,6 +28,22 @@ jobs:
       SITE_URL: https://auto-translate-xi.vercel.app
       TOMATO_PASSWORD: tomato-local-worker
       TOMATO_DATA_DIR: ${{ github.workspace }}/.crawler-data
+      # The crawler now writes chapters to R2 and metadata to Supabase through
+      # runIngest(), so it needs the same credentials as the translation worker.
+      # Without these the ingest step fails at the first storage write.
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_ARCHIVE_BUCKET: ${{ secrets.R2_ARCHIVE_BUCKET }}
+      R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      # Only used to translate book title/author/description, which is a handful
+      # of calls. Chapter translation is the separate worker's job.
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
+      GEMINI_FALLBACK_MODELS: ${{ secrets.GEMINI_FALLBACK_MODELS }}
     steps:
       - name: Checkout website
         uses: actions/checkout@v4
@@ -62,6 +78,9 @@ jobs:
             -e TOMATO_WEB_PASSWORD="$TOMATO_PASSWORD" \
             -e TOMATO_DATA_DIR=/data \
             zhongbai233/tomato-novel-downloader-webui:latest
+
+      - name: Check required secrets are present
+        run: node scripts/check-env.js crawler
 
       - name: Discover and publish novels
         run: node scripts/crawler-worker.js

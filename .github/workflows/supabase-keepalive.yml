@@ -1,0 +1,37 @@
+name: Supabase keep-alive
+
+# Supabase free projects pause after about a week without activity. The reader
+# hot path deliberately never touches the database, and the crawler only touches
+# it when it is enabled, so this is the insurance that keeps the project awake.
+# One tiny indexed query per day is enough; anything more is waste.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: supabase-keepalive
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check required secrets are present
+        run: node scripts/check-env.js keepalive
+
+      - name: Ping Supabase
+        run: node scripts/supabase-keepalive.js

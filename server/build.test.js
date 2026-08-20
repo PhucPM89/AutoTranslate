@@ -7,6 +7,9 @@ const os = require("os");
 const path = require("path");
 const { execFileSync } = require("child_process");
 
+// These tests run the real build, which means they overwrite public/ with
+// whatever env they set. Always rebuild before deploying, or the deploy ships a
+// bundle configured for the test's placeholder CDN instead of the real one.
 const ROOT = path.join(__dirname, "..");
 
 function runBuild(env = {}) {
@@ -38,15 +41,39 @@ test("build emits a Cloudflare Pages _headers file with the cache policy", () =>
 
 test("the CSP learns the CDN origin at build time and stays tight without one", () => {
   const without = runBuild({ R2_PUBLIC_BASE_URL: "", READER_CDN_ENABLED: "" });
-  const connectWithout = without.headers.match(/connect-src[^;]*/)[0];
+  const connectWithout = directive(without.headers, "connect-src");
   assert.doesNotMatch(connectWithout, /cdn\./);
   assert.doesNotMatch(connectWithout, / {2,}/, "no double space where the origin would go");
 
   const withCdn = runBuild({ R2_PUBLIC_BASE_URL: "https://cdn.example.com/base", READER_CDN_ENABLED: "true" });
-  const connectWith = withCdn.headers.match(/connect-src[^;]*/)[0];
+  const connectWith = directive(withCdn.headers, "connect-src");
   assert.match(connectWith, /https:\/\/cdn\.example\.com/);
   assert.doesNotMatch(connectWith, /\/base/, "only the origin belongs in a CSP source");
 });
+
+test("the admin upload target is allowed to be contacted", () => {
+  const out = runBuild({ R2_PUBLIC_BASE_URL: "https://cdn.example.com", READER_CDN_ENABLED: "true" });
+  // A presigned PUT goes to the R2 S3 endpoint. Without this source the admin
+  // upload is blocked by the page's own CSP.
+  assert.match(directive(out.headers, "connect-src"), /https:\/\/\*\.r2\.cloudflarestorage\.com/);
+});
+
+// Read a directive out of the real Content-Security-Policy header, not out of the
+// first line of the file that happens to mention a directive name - the template
+// comments talk about them too.
+function directive(headers, name) {
+  const header = headers
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line.startsWith("Content-Security-Policy:"));
+  assert.ok(header, "khong tim thay header CSP");
+  const found = header
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${name} `));
+  assert.ok(found, `khong tim thay directive ${name}`);
+  return found;
+}
 
 test("the reader bundle carries the CDN base but never a secret", () => {
   const out = runBuild({

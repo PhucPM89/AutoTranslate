@@ -69,4 +69,4 @@ function number(value) {
   return n;
 }
 
-module.exports = { LAYOUT, cacheControlFor, contentTypeFor, IMMUTABLE, SHORT, LONG, PRIVATE };
+module.exports = { LAYOUT, cacheControlFor, contentTypeFor, slug, IMMUTABLE, SHORT, LONG, PRIVATE };

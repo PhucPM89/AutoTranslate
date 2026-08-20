@@ -43,6 +43,11 @@ const ADMIN_MODULE_URL = __ASSET_ADMIN__;
 // Reader CDN path. Chapter JSON is fetched straight from R2 through the CDN:
 // no Vercel function, no Supabase query, no Gemini call on the read path.
 const CDN_BASE = String(__CDN_BASE__ || "").replace(/\/$/, "");
+// Analytics goes straight to Supabase so a page view costs no serverless
+// invocation. The anon key is public by design: RLS lets it insert events and
+// nothing else - verified against the live project.
+const SUPABASE_URL = String(__SUPABASE_URL__ || "").replace(/\/$/, "");
+const SUPABASE_ANON_KEY = String(__SUPABASE_ANON_KEY__ || "");
 const READER_CDN_ENABLED = Boolean(__READER_CDN_ENABLED__) && Boolean(CDN_BASE);
 const FALLBACK_BOOK_COVERS = [
   "/library/covers/night-temple.webp",
@@ -254,9 +259,33 @@ function countBookOpened(bookId) {
 }
 
 function sendBeacon(payload) {
+  // Analytics is never allowed to affect reading: every path here swallows its
+  // own errors and nothing awaits the result.
+  if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+    fetch(`${SUPABASE_URL}/rest/v1/analytics_events`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal"
+      },
+      body: JSON.stringify([
+        {
+          event_type: payload.type,
+          book_id: payload.bookId || null,
+          session_id: analyticsSessionId()
+        }
+      ]),
+      keepalive: true
+    }).catch(() => {});
+    return;
+  }
+
+  // Fallback for as long as the Vercel route still exists.
   const body = JSON.stringify(payload);
   try {
-    if (navigator.sendBeacon?.(("/api/analytics"), new Blob([body], { type: "application/json" }))) return;
+    if (navigator.sendBeacon?.("/api/analytics", new Blob([body], { type: "application/json" }))) return;
   } catch (_error) {
     // Fall through to fetch below.
   }
@@ -266,6 +295,18 @@ function sendBeacon(payload) {
     body,
     keepalive: true
   }).catch(() => {});
+}
+
+// A random per-session value, kept only in sessionStorage. No IP, no user agent,
+// nothing that identifies a person or survives the session.
+function analyticsSessionId() {
+  const key = "epubTranslator.analyticsSession";
+  let id = readSessionFlag(key);
+  if (!id) {
+    id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    writeSessionFlag(key, id);
+  }
+  return id;
 }
 
 function readSessionFlag(key) {
