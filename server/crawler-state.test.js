@@ -82,8 +82,17 @@ test("the catalogue reports source ids so the crawler can skip known books", asy
   const db = {
     async request() {
       return [
-        { id: "fanqie-123", source: "fanqie", source_id: "123", revision: 1, total_chapters: 900, translated_chapters: 10 },
-        { id: "mot-truyen", source: "admin", source_id: null, revision: 2, total_chapters: 5, translated_chapters: 5 }
+        {
+          id: "fanqie-123",
+          source: "fanqie",
+          source_id: "123",
+          revision: 1,
+          total_chapters: 900,
+          translated_chapters: 10,
+          last_crawled_at: "2026-08-20T10:00:00Z",
+          book_categories: [{ categories: { name: "Huyền huyễn" } }]
+        },
+        { id: "mot-truyen", source: "admin", source_id: null, revision: 2, total_chapters: 5, translated_chapters: 5, last_crawled_at: null, book_categories: [] }
       ];
     }
   };
@@ -96,7 +105,14 @@ test("the catalogue reports source ids so the crawler can skip known books", asy
     sourceId: "123",
     revision: 1,
     chapterCount: 900,
-    translatedChapters: 10
+    translatedChapters: 10,
+    // Carried through because selectWorkItems decides refreshes from it. Dropping
+    // it made every book look permanently stale and the crawler never moved on to
+    // discovering new ones.
+    lastCrawledAt: "2026-08-20T10:00:00Z",
+    // The books table has no genre column, so the category comes from the join. A
+    // refresh that lost it relabelled the book with the placeholder "Fanqie".
+    genre: "Huyền huyễn"
   });
   // A null source_id must become "" rather than the string "null", which would
   // otherwise be treated as a real id when de-duplicating.
@@ -132,7 +148,7 @@ test("a Supabase failure degrades to the published snapshot", async () => {
   // The source id has to be recovered from the "fanqie-<id>" key, or every book
   // looks new and gets downloaded again.
   assert.deepEqual(catalog.books, [
-    { id: "fanqie-777", source: "fanqie", sourceId: "777", revision: 3, chapterCount: 1200, translatedChapters: 4 }
+    { id: "fanqie-777", source: "fanqie", sourceId: "777", revision: 3, chapterCount: 1200, translatedChapters: 4, lastCrawledAt: "", genre: "" }
   ]);
 });
 

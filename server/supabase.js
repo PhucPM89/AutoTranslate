@@ -1,5 +1,7 @@
 "use strict";
 
+const { CATEGORY_DEFINITIONS, categorySlugForLabel } = require("./crawler-store");
+
 // Thin PostgREST client. No SDK dependency: the four things this project needs
 // from Postgres are an upsert, a select, an insert and a count, all of which are
 // plain HTTP against Supabase's REST endpoint.
@@ -50,6 +52,30 @@ function createSupabase(env = process.env, { role = "service" } = {}) {
       });
     },
 
+    // A partial update, deliberately. The translation worker knows the chapter
+    // counts and nothing else; upserting a whole row from index.json reset
+    // source to "admin" and source_id to null, which made the crawler lose track
+    // of its own books and queue them for download all over again. A component
+    // writes only the columns it owns.
+    async updateBookProgress(bookId, { totalChapters, translatedChapters, revision }) {
+      const patch = {};
+      if (Number.isFinite(totalChapters)) patch.total_chapters = totalChapters;
+      if (Number.isFinite(translatedChapters)) patch.translated_chapters = translatedChapters;
+      if (Number.isFinite(revision)) patch.revision = revision;
+      if (!Object.keys(patch).length) return null;
+      return request("books", {
+        method: "PATCH",
+        query: `?id=eq.${encodeURIComponent(bookId)}`,
+        headers: { Prefer: "return=minimal" },
+        body: patch
+      });
+    },
+
+    async bookExists(bookId) {
+      const rows = await request("books", { query: `?select=id&id=eq.${encodeURIComponent(bookId)}&limit=1` });
+      return Array.isArray(rows) && rows.length > 0;
+    },
+
     // ---- chapters ------------------------------------------------------
     // Chunked because a 4,000-chapter novel in one request would be a very large
     // body; the unique (book_id, revision, chapter_number) key makes it idempotent.
@@ -83,7 +109,11 @@ function createSupabase(env = process.env, { role = "service" } = {}) {
     // ---- catalogue reads ----------------------------------------------
     async listBooks({ limit = 24, offset = 0, genre = "", search = "", order = "updated_at.desc" } = {}) {
       const params = new URLSearchParams({
-        select: "id,title,author,description,cover_url,status,total_chapters,translated_chapters,revision,featured,updated_at",
+        // book_categories is embedded rather than joined by hand: the books table
+        // has no genre column, so this is where a book's category comes from, and
+        // without it the reader's category filter had nothing to populate.
+        select:
+          "id,title,author,description,cover_url,status,total_chapters,translated_chapters,revision,featured,updated_at,book_categories(categories(slug,name))",
         published: "eq.true",
         order,
         limit: String(limit),
@@ -95,6 +125,38 @@ function createSupabase(env = process.env, { role = "service" } = {}) {
         params.set("or", `(title.ilike.*${search}*,author.ilike.*${search}*)`);
       }
       return request("books", { query: `?${params}` });
+    },
+
+    // ---- categories ----------------------------------------------------
+
+    async upsertCategories(categories) {
+      if (!categories.length) return [];
+      return request("categories", {
+        method: "POST",
+        query: "?on_conflict=slug",
+        headers: { Prefer: "resolution=merge-duplicates,return=representation" },
+        body: categories.map((item) => ({ slug: item.slug, name: item.name, source_id: item.sourceId ?? null }))
+      });
+    },
+
+    async listCategories() {
+      return request("categories", { query: "?select=id,slug,name,source_id&order=name.asc" });
+    },
+
+    // One category per book is all the reader needs, so an existing link is
+    // replaced rather than added to.
+    async setBookCategory(bookId, categoryId) {
+      await request("book_categories", {
+        method: "DELETE",
+        query: `?book_id=eq.${encodeURIComponent(bookId)}`
+      });
+      if (!categoryId) return null;
+      return request("book_categories", {
+        method: "POST",
+        query: "?on_conflict=book_id,category_id",
+        headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: [{ book_id: bookId, category_id: categoryId }]
+      });
     },
 
     async countBooks() {
@@ -163,7 +225,19 @@ function createMetadataStore(env = process.env) {
   if (!client) return null;
   return {
     upsertBook: (book) => client.upsertBook(book),
-    upsertChapters: (bookId, revision, chapters) => client.upsertChapters(bookId, revision, chapters)
+    upsertChapters: (bookId, revision, chapters) => client.upsertChapters(bookId, revision, chapters),
+    // Best effort: a book with no recognised category is simply uncategorised, and
+    // failing to record that must never fail an ingest that otherwise worked.
+    async linkCategory(bookId, genreLabel) {
+      const slug = categorySlugForLabel(genreLabel);
+      if (!slug) return null;
+      const definition = CATEGORY_DEFINITIONS[slug];
+      const [row] = await client.upsertCategories([
+        { slug, name: definition.label, sourceId: definition.categoryIds?.[0] ?? null }
+      ]);
+      if (!row?.id) return null;
+      return client.setBookCategory(bookId, row.id);
+    }
   };
 }
 

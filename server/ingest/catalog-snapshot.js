@@ -26,6 +26,9 @@ async function buildSnapshotFromSupabase(env = process.env) {
     description: row.description || "",
     cover: row.cover_url || "",
     status: row.status || "",
+    // Flattened from the embedded join; "" when a book has no category yet, which
+    // the client treats as uncategorised rather than inventing a label.
+    genre: row.book_categories?.[0]?.categories?.name || "",
     chapterCount: row.total_chapters || 0,
     translatedChapters: row.translated_chapters || 0,
     revision: row.revision || 1,

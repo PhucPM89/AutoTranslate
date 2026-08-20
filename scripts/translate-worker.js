@@ -186,6 +186,11 @@ async function ensureBookRow({ storage, db, job }) {
   if (!db) return;
   const index = await readJson(storage, `books/${job.bookId}/index.json`);
   if (!index) return;
+  // Only creates a missing row. Overwriting an existing one would reset the
+  // provenance the crawler depends on, since index.json carries no source or
+  // source_id.
+  const exists = await db.bookExists(job.bookId).catch(() => true);
+  if (exists) return;
   await db
     .upsertBook({
       id: job.bookId,
@@ -198,7 +203,7 @@ async function ensureBookRow({ storage, db, job }) {
       translatedChapters: index.translatedChapters || 0,
       revision: job.revision
     })
-    .catch((error) => console.warn(`  (Supabase book upsert lỗi: ${error.message})`));
+    .catch((error) => console.warn(`  (Supabase book insert lỗi: ${error.message})`));
 }
 
 async function refreshBookOutputs({ storage, db, job, state }) {
@@ -231,14 +236,9 @@ async function refreshBookOutputs({ storage, db, job, state }) {
       .upsertChapters(job.bookId, job.revision, chapters)
       .catch((error) => console.warn(`  (Supabase chapters sync lỗi: ${error.message})`));
     const completed = chapters.filter((chapter) => chapter.translationStatus === "completed").length;
+    // Counts only: title, cover and provenance belong to whoever ingested the book.
     await db
-      .upsertBook({
-        id: job.bookId,
-        title: index.title,
-        author: index.author,
-        description: index.description,
-        cover: index.cover,
-        status: index.status,
+      .updateBookProgress(job.bookId, {
         totalChapters: chapters.length,
         translatedChapters: completed,
         revision: job.revision

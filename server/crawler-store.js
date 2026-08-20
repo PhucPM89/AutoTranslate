@@ -108,6 +108,21 @@ function allowedChoice(value, choices, fallback) {
   return choices.some((choice) => choice.value === number) ? number : fallback;
 }
 
+// Fanqie is asked for categories by id but books carry the human label, so this
+// maps a label back to its slug. Used when linking a book to a category row.
+function categorySlugForLabel(label) {
+  const wanted = String(label || "").trim().toLowerCase();
+  if (!wanted) return "";
+  for (const [slug, definition] of Object.entries(CATEGORY_DEFINITIONS)) {
+    if (definition.label.toLowerCase() === wanted) return slug;
+  }
+  // "Linh dị" against "Linh dị / Kinh dị": accept either half of a compound label.
+  for (const [slug, definition] of Object.entries(CATEGORY_DEFINITIONS)) {
+    if (definition.label.toLowerCase().split("/").some((part) => part.trim() === wanted)) return slug;
+  }
+  return "";
+}
+
 module.exports = {
   CATEGORY_DEFINITIONS,
   WORD_COUNT_BUCKETS,
@@ -115,5 +130,6 @@ module.exports = {
   DEFAULT_CONFIG,
   DEFAULT_STATUS,
   sanitizeCrawlerConfig,
-  sanitizeCrawlerStatus
+  sanitizeCrawlerStatus,
+  categorySlugForLabel
 };

@@ -250,7 +250,10 @@ function selectWorkItems(newBooks, existingBooks, updateExisting, now = Date.now
     const refreshBefore = now - 24 * 60 * 60 * 1000;
     const due = existingBooks
       .map((book) => ({ book, crawledAt: new Date(book.lastCrawledAt || 0).getTime() || 0 }))
-      .filter((item) => item.book.metadataVersion !== 2 || item.crawledAt < refreshBefore)
+      // metadataVersion was a marker on the old blob catalogue and no longer
+      // exists, so keeping it here made the condition always true and every book
+      // permanently due. Age is the only thing that decides a refresh now.
+      .filter((item) => item.crawledAt < refreshBefore)
       .sort((a, b) => a.crawledAt - b.crawledAt)[0]?.book;
     if (due) {
       return [{

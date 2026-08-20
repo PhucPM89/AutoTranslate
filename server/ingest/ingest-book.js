@@ -162,6 +162,12 @@ async function ingestBook({
       translatedChapters: chapterList.filter((c) => c.translationStatus === "completed").length
     });
     await metadataStore.upsertChapters(book.id, rev, chapterList);
+    // The genre is a label on the book; the database stores it as a category link.
+    if (metadataStore.linkCategory) {
+      await metadataStore
+        .linkCategory(book.id, book.genre)
+        .catch((error) => log({ event: "ingest.category_link_failed", message: error.message }));
+    }
   }
 
   const result = {

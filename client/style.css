@@ -1494,6 +1494,11 @@ button:disabled {
   min-height: 100vh;
   min-height: 100dvh;
   display: grid;
+  /* The column is stated explicitly. Without it the single implicit column is
+     sized to min-content, so anything inside that refuses to shrink - the reader
+     top bar's search field, in practice - made the whole page wider than the
+     viewport and gave phones a sideways scroll. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: 72px 1fr;
 }
 
@@ -1597,6 +1602,8 @@ button:disabled {
 .command-search input {
   width: 100%;
   min-width: 0;
+  /* A comfortable touch target; the bare input was about 23px tall. */
+  min-height: 40px;
   border: 0;
   outline: 0;
   background: transparent;
@@ -1849,6 +1856,11 @@ body:not(.dark) .theme-moon {
 .workspace-main {
   min-width: 0;
   display: grid;
+  /* Same reason as .app-shell: an implicit column is sized to min-content, so the
+     sticky reader bar inside it set the page width and phones scrolled sideways.
+     min-width: 0 on the container is not enough - the track has to be told it may
+     shrink. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto auto auto;
   align-content: start;
   padding: 0 clamp(1rem, 3vw, 3rem) 1.5rem;
@@ -1912,6 +1924,10 @@ body:not(.dark) .theme-moon {
 .reader-bar-tools {
   display: flex;
   align-items: center;
+  /* Wraps because the row it sits in wraps but this did not, so on a phone the
+     toolbar groups formed one rigid 490px line and set the page width. */
+  flex-wrap: wrap;
+  min-width: 0;
   gap: var(--space-2);
 }
 
@@ -2426,6 +2442,11 @@ body:not(.dark) .theme-moon {
 }
 
 @media (max-width: 560px) {
+  .reader-bar-tools {
+    width: 100%;
+    justify-content: space-between;
+  }
+
   .admin-login-form {
     align-items: stretch;
     flex-direction: column;

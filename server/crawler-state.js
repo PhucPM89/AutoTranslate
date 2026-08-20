@@ -68,7 +68,14 @@ function createCrawlerState({ storage, readerStorage = null, db = null } = {}) {
     if (database) {
       try {
         const rows = await database.request("books", {
-          query: "?select=id,source,source_id,revision,total_chapters,translated_chapters&order=updated_at.desc"
+          // last_crawled_at is not optional: selectWorkItems decides what needs a
+          // refresh from it, and without it every book looked permanently stale,
+          // so the crawler re-ingested the same books forever and never
+          // discovered a new one.
+          // genre travels with the book so a refresh keeps its category instead of
+          // falling back to the placeholder "Fanqie".
+          query:
+            "?select=id,source,source_id,revision,total_chapters,translated_chapters,last_crawled_at,book_categories(categories(name))&order=updated_at.desc"
         });
         return {
           books: (rows || []).map((row) => ({
@@ -77,7 +84,9 @@ function createCrawlerState({ storage, readerStorage = null, db = null } = {}) {
             sourceId: row.source_id ? String(row.source_id) : "",
             revision: row.revision || 1,
             chapterCount: row.total_chapters || 0,
-            translatedChapters: row.translated_chapters || 0
+            translatedChapters: row.translated_chapters || 0,
+            lastCrawledAt: row.last_crawled_at || "",
+            genre: row.book_categories?.[0]?.categories?.name || ""
           }))
         };
       } catch (error) {
@@ -100,7 +109,11 @@ function createCrawlerState({ storage, readerStorage = null, db = null } = {}) {
       sourceId: /^fanqie-(.+)$/.test(book.id) ? String(book.id).replace(/^fanqie-/, "") : "",
       revision: book.revision || 1,
       chapterCount: book.chapterCount || 0,
-      translatedChapters: book.translatedChapters || 0
+      translatedChapters: book.translatedChapters || 0,
+      // The snapshot carries no crawl timestamp. Treating that as "never crawled"
+      // would make every book due for refresh, which is the loop this avoids.
+      lastCrawledAt: book.updatedAt || "",
+      genre: book.genre || ""
     }));
     return { books };
   }

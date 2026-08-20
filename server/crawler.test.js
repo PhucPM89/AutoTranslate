@@ -494,16 +494,35 @@ test("refreshes the oldest stale book before discovering a new one", () => {
   assert.deepEqual(jobs, [{ sourceId: "2222222222222222222", genre: "Trinh thám", category: "existing", isUpdate: true }]);
 });
 
-test("refreshes untranslated crawler metadata immediately", () => {
-  const now = Date.parse("2026-08-19T12:00:00Z");
-  const jobs = selectWorkItems(
-    [{ sourceId: "9999999999999999999", genre: "Tiên hiệp" }],
-    [{ sourceId: "1111111111111111111", genre: "Tiên hiệp", metadataVersion: 1, lastCrawledAt: "2026-08-19T11:55:00Z" }],
-    true,
-    now
-  );
-  assert.equal(jobs[0].sourceId, "1111111111111111111");
-  assert.equal(jobs[0].isUpdate, true);
+test("only refreshes a book once its last crawl is a day old", () => {
+  const now = Date.parse("2026-08-20T12:00:00Z");
+  const fresh = { sourceId: "1111111111111111111", genre: "Tiên hiệp", lastCrawledAt: "2026-08-20T11:55:00Z" };
+  const stale = { sourceId: "2222222222222222222", genre: "Tiên hiệp", lastCrawledAt: "2026-08-18T09:00:00Z" };
+
+  // The regression this guards: a book crawled minutes ago must not be picked for
+  // refresh. It used to be, because the condition also accepted any book whose
+  // metadataVersion was not 2 - a field the catalogue stopped carrying, so it was
+  // always true. Every run then re-ingested a book it already had and never went
+  // looking for a new one.
+  assert.deepEqual(selectWorkItems([], [fresh], true, now), []);
+
+  const picked = selectWorkItems([{ sourceId: "9999999999999999999" }], [stale], true, now);
+  assert.equal(picked[0].sourceId, "2222222222222222222");
+  assert.equal(picked[0].isUpdate, true);
+});
+
+test("a book that was never crawled counts as due", () => {
+  const now = Date.parse("2026-08-20T12:00:00Z");
+  const picked = selectWorkItems([], [{ sourceId: "3333333333333333333", lastCrawledAt: "" }], true, now);
+  assert.equal(picked[0].sourceId, "3333333333333333333");
+});
+
+test("with nothing due, discovery candidates are returned instead", () => {
+  const now = Date.parse("2026-08-20T12:00:00Z");
+  const fresh = { sourceId: "1111111111111111111", lastCrawledAt: "2026-08-20T11:00:00Z" };
+  const jobs = selectWorkItems([{ sourceId: "9999999999999999999" }], [fresh], true, now);
+  assert.equal(jobs.length, 1);
+  assert.equal(jobs[0].sourceId, "9999999999999999999");
 });
 
 test("reads title, author, chapter count, and cover from an EPUB", async () => {

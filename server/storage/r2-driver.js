@@ -17,16 +17,41 @@ function createR2Storage(env = process.env) {
   const endpoint = env.R2_ENDPOINT || `https://${accountId}.r2.cloudflarestorage.com`;
   const publicBase = (env.R2_PUBLIC_BASE_URL || "").replace(/\/$/, "");
 
+  // Retried because R2 does return the occasional 5xx, and an ingest is thousands
+  // of sequential writes: a single transient 502 was enough to abandon a
+  // 4,000-chapter book and make the next run start it over. Every operation here
+  // is idempotent - a PUT writes the same bytes to the same key - so replaying one
+  // is safe. The signature is regenerated per attempt because it is timestamped.
+  const MAX_ATTEMPTS = Math.max(1, Number(env.R2_MAX_ATTEMPTS || 4));
+
   async function send(method, key, { body, headers = {}, query = "" } = {}) {
     const url = `${endpoint}/${bucket}/${encodeKey(key)}${query}`;
-    const signed = signRequest({ method, url, body, headers, accessKeyId, secretAccessKey });
-    const response = await fetch(url, {
-      method,
-      headers: signed,
-      body,
-      signal: AbortSignal.timeout(Number(env.R2_TIMEOUT_MS || 30000))
-    });
-    return response;
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+      try {
+        const signed = signRequest({ method, url, body, headers, accessKeyId, secretAccessKey });
+        const response = await fetch(url, {
+          method,
+          headers: signed,
+          body,
+          signal: AbortSignal.timeout(Number(env.R2_TIMEOUT_MS || 30000))
+        });
+        // 4xx is our own mistake and will not improve by asking again.
+        if (response.status < 500 && response.status !== 429) return response;
+        if (attempt === MAX_ATTEMPTS) return response;
+        lastError = `HTTP ${response.status}`;
+      } catch (error) {
+        // A timeout or a dropped connection is worth another attempt too.
+        if (attempt === MAX_ATTEMPTS) throw error;
+        lastError = error.message;
+      }
+      const backoffMs = 500 * 2 ** (attempt - 1);
+      console.warn(`R2 ${method} ${key}: ${lastError}, thử lại sau ${backoffMs}ms (lần ${attempt}/${MAX_ATTEMPTS})`);
+      await new Promise((resolve) => setTimeout(resolve, backoffMs));
+    }
+
+    throw new Error(`R2 ${method} ${key} thất bại sau ${MAX_ATTEMPTS} lần.`);
   }
 
   return {
