@@ -154,10 +154,15 @@ async function main() {
     await publishCatalogSnapshot({ storage, site: siteSettings(), log: (event) => console.log("  ", JSON.stringify(event)) });
   }
 
-  console.log(
-    `\nXong: dịch ${translatedTotal} chương, dùng ${spentTotal} lượt gọi.` +
-      (stoppedForQuota ? " Dừng vì quota." : Date.now() >= deadlineAt ? " Dừng vì hết thời gian." : "")
-  );
+  // "Dừng vì quota" on its own leaves you guessing whether the worker is broken
+  // or the day's allowance is simply spent. The free tier is a per-model daily
+  // allowance, so it is a wall that running more often cannot push through.
+  const reason = stoppedForQuota
+    ? " Dừng vì hết quota Gemini trong ngày; quota free tier tính theo ngày cho từng model, nên lượt sau chỉ tiếp tục được sau khi reset."
+    : Date.now() >= deadlineAt
+      ? " Dừng vì hết thời gian chạy."
+      : " Hết việc trong hàng đợi.";
+  console.log(`\nXong: dịch ${translatedTotal} chương, dùng ${spentTotal} lượt gọi.${reason}`);
 }
 
 async function listJobs(storage, onlyBook) {
