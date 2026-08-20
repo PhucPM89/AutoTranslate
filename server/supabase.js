@@ -66,6 +66,12 @@ function createSupabase(env = process.env, { role = "service" } = {}) {
         }));
         await request("chapters", {
           method: "POST",
+          // on_conflict is required, not decorative: the table's primary key is a
+          // surrogate bigserial, so merge-duplicates alone resolves against `id`
+          // and every re-sync raised a 409 on chapters_unique instead of updating
+          // the row. Chapter statuses therefore never advanced past the first
+          // insert.
+          query: "?on_conflict=book_id,revision,chapter_number",
           headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
           body: slice
         });

@@ -485,7 +485,10 @@ window.addEventListener("library:refresh", (event) => {
 });
 
 function isValidLibraryBook(book) {
-  return Boolean(book && typeof book.id === "string" && typeof book.title === "string" && typeof book.epub === "string");
+  if (!book || typeof book.id !== "string" || typeof book.title !== "string") return false;
+  // A book is readable two ways: chapters on the CDN, addressed by revision, or a
+  // legacy single EPUB URL. Requiring `epub` dropped every CDN book on the floor.
+  return typeof book.epub === "string" || Number(book.revision) > 0;
 }
 
 function applyLibrarySiteSettings() {
@@ -830,12 +833,19 @@ async function loadCatalogBook(book, assignedFallbackCover = fallbackCoverForBoo
 
   // Preferred path: one small chapter JSON from the CDN. Falls through to the
   // legacy EPUB download if the book has not been ingested yet or the CDN misses.
-  if (READER_CDN_ENABLED && !startAtFirstChapter) {
+  if (READER_CDN_ENABLED) {
     try {
-      if (await openBookFromCdn(book, cover)) return;
+      if (await openBookFromCdn(book, cover, { startAtFirstChapter })) return;
     } catch (error) {
       console.warn("Đường CDN lỗi, chuyển sang EPUB.", error);
     }
+  }
+
+  // Only a legacy book can go down the EPUB path; a CDN-only book has no archive
+  // to fall back to, so say so instead of failing on an undefined URL.
+  if (typeof book.epub !== "string" || !book.epub) {
+    resetReader("Truyện này chưa tải được từ CDN. Thử lại sau ít phút.");
+    return;
   }
 
   state.mode = "epub";
@@ -1662,7 +1672,7 @@ function chapterUrlFor(index, chapterNumber) {
 }
 
 // Returns true when the book was opened from the CDN.
-async function openBookFromCdn(book, cover) {
+async function openBookFromCdn(book, cover, { startAtFirstChapter = false } = {}) {
   const index = await fetchBookIndex(book.id);
   if (!index) return false;
 
@@ -1688,7 +1698,9 @@ async function openBookFromCdn(book, cover) {
   renderChapterControls();
 
   const savedProgress = await readProgress(state.bookId).catch(() => null);
-  goToChapter(Number(savedProgress?.currentIndex) || 0);
+  // "Đọc từ đầu" must ignore saved progress, which is why the flag reaches here
+  // rather than skipping the CDN path entirely.
+  goToChapter(startAtFirstChapter ? 0 : Number(savedProgress?.currentIndex) || 0);
   return true;
 }
 
