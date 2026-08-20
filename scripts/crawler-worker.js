@@ -5,6 +5,7 @@ const path = require("path");
 const JSZip = require("jszip");
 const { runIngest } = require("../server/ingest/run-ingest");
 const { translateMetadata } = require("../server/gemini");
+const { createCrawlerState } = require("../server/crawler-state");
 
 const SITE_URL = String(process.env.SITE_URL || "https://auto-translate-xi.vercel.app").replace(/\/$/, "");
 const CRAWLER_SECRET = process.env.CRAWLER_SECRET || "";
@@ -41,8 +42,11 @@ const MAX_DETAIL_PROBES = 12;
 
 async function main() {
   requireEnvironment();
-  await getCrawlerToken();
-  const control = await siteRequest("/api/crawler/control");
+  // Config, status and the crawled-book list come straight from R2 and Supabase.
+  // Going through the site for its own state is what made every run fail once
+  // Vercel Blob went away.
+  const state = createCrawlerState();
+  const control = await state.readControl();
   const { config, categories, catalog, status: previousStatus } = control;
   if (!config.enabled) {
     await updateStatus({ state: "disabled", message: "Crawler đang tắt trong trang quản trị.", finishedAt: new Date().toISOString() });
@@ -905,13 +909,30 @@ async function jsonRequest(url, options = {}) {
   return body;
 }
 
+// Status is written to R2 directly. A failure here must never abort a run that
+// is otherwise working - losing a progress note is far cheaper than losing the
+// download in flight.
+let crawlerState = null;
+
 async function updateStatus(status) {
-  return siteRequest("/api/crawler/status", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(status) });
+  try {
+    crawlerState = crawlerState || createCrawlerState();
+    return await crawlerState.writeStatus(status);
+  } catch (error) {
+    console.warn(`Không ghi được trạng thái crawler: ${error.message}`);
+    return null;
+  }
 }
 
 function requireEnvironment() {
-  if (!CRAWLER_SECRET && (!process.env.ACTIONS_ID_TOKEN_REQUEST_URL || !process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN)) {
-    throw new Error("Worker cần GitHub OIDC hoặc CRAWLER_SECRET khi chạy local.");
+  // The worker no longer talks to the site for its own state, so a site token is
+  // not a precondition any more - only the storage it actually writes to is.
+  // Site auth is checked lazily, and only if the metadata fallback fires.
+  const missing = ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET"].filter(
+    (name) => !process.env[name]
+  );
+  if (missing.length) {
+    throw new Error(`Thiếu biến R2 cho crawler: ${missing.join(", ")}.`);
   }
 }
 
