@@ -2,9 +2,6 @@
 
 const test = require("node:test");
 const assert = require("node:assert");
-const fs = require("fs");
-const os = require("os");
-const path = require("path");
 const { createCrawlerState, CONFIG_KEY, STATUS_KEY } = require("./crawler-state");
 const { DEFAULT_CONFIG } = require("./crawler-store");
 
@@ -116,24 +113,39 @@ test("readControl keeps the shape the worker already destructures", async () => 
   assert.ok(Object.keys(control.categories).length > 0, "categories phải có định nghĩa");
 });
 
-test("a Supabase failure does not take the crawler down", async () => {
+test("a Supabase failure degrades to the published snapshot", async () => {
   const db = {
     async request() {
       throw new Error("Supabase GET books lỗi HTTP 503");
     }
   };
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "crawler-state-"));
-  const previous = process.env.LOCAL_STORAGE_DIR;
-  process.env.LOCAL_STORAGE_DIR = dir;
-  try {
-    const state = createCrawlerState({ storage: memoryStore(), db });
-    // Falls through to the published snapshot, which is empty here - an empty
-    // catalogue is safe: the crawler re-checks a book rather than skipping one.
-    const catalog = await state.readCatalog();
-    assert.deepEqual(catalog.books, []);
-  } finally {
-    if (previous === undefined) delete process.env.LOCAL_STORAGE_DIR;
-    else process.env.LOCAL_STORAGE_DIR = previous;
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  const snapshot = JSON.stringify({
+    books: [{ id: "fanqie-777", revision: 3, chapterCount: 1200, translatedChapters: 4 }]
+  });
+  const state = createCrawlerState({
+    storage: memoryStore(),
+    readerStorage: memoryStore({ "catalog/latest.json": snapshot }),
+    db
+  });
+
+  const catalog = await state.readCatalog();
+  // The source id has to be recovered from the "fanqie-<id>" key, or every book
+  // looks new and gets downloaded again.
+  assert.deepEqual(catalog.books, [
+    { id: "fanqie-777", source: "fanqie", sourceId: "777", revision: 3, chapterCount: 1200, translatedChapters: 4 }
+  ]);
+});
+
+test("an empty snapshot is safe: a book gets re-checked, never silently skipped", async () => {
+  const db = {
+    async request() {
+      throw new Error("Supabase down");
+    }
+  };
+  const state = createCrawlerState({
+    storage: memoryStore(),
+    readerStorage: memoryStore({ "catalog/latest.json": JSON.stringify({ books: [] }) }),
+    db
+  });
+  assert.deepEqual((await state.readCatalog()).books, []);
 });
