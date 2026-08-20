@@ -82,6 +82,11 @@ const els = {
   featuredBackdrop: document.getElementById("featuredBackdrop"),
   featuredPoster: document.getElementById("featuredPoster"),
   featuredPosterLink: document.getElementById("featuredPosterLink"),
+  rankSection: document.getElementById("rankSection"),
+  rankRail: document.getElementById("rankRail"),
+  rankPrev: document.getElementById("rankPrev"),
+  rankNext: document.getElementById("rankNext"),
+  genrePills: document.getElementById("genrePills"),
   featuredStory: document.getElementById("featuredStory"),
   featuredGenre: document.getElementById("featuredGenre"),
   featuredStatus: document.getElementById("featuredStatus"),
@@ -163,6 +168,9 @@ function bindEvents() {
   els.supportDialog.addEventListener("click", (event) => {
     if (event.target === els.supportDialog) els.supportDialog.close();
   });
+  trackMobileBar();
+  els.rankPrev?.addEventListener("click", () => scrollRail(-1));
+  els.rankNext?.addEventListener("click", () => scrollRail(1));
   els.catalogPrevPage.addEventListener("click", () => changeCatalogPage(libraryState.catalogPage - 1));
   els.catalogNextPage.addEventListener("click", () => changeCatalogPage(libraryState.catalogPage + 1));
   els.continueReading.addEventListener("click", resumeCachedBook);
@@ -424,6 +432,8 @@ function applyLibraryManifest(manifest) {
   applyLibrarySiteSettings();
   renderFeaturedBook();
   renderGenreOptions();
+  renderGenrePills();
+  renderRankRail();
   renderCatalog();
   // A shared #book/<id> link only resolves once the catalog has arrived.
   if (!openDetailFromHash()) alignHashedSection();
@@ -554,6 +564,123 @@ function revealOnScroll(elements) {
   setTimeout(() => {
     for (const element of targets) element.classList.add("is-visible");
   }, 1600);
+}
+
+// The ranked rail. A shelf of equal tiles says nothing about what to read first,
+// so the longest few get a horizontal strip of their own with the position set in
+// big numerals beside the artwork.
+// One item's width per click, so the arrows move the rail in the same steps the
+// snap points use.
+// The bottom bar shipped with "Thư viện" marked active in the markup, which is a
+// lie the moment you scroll. This keeps the highlight on whichever section is
+// actually in view. Cheap: one observer over four sections, no scroll handler.
+function trackMobileBar() {
+  const items = [...document.querySelectorAll(".mobile-bar-item")];
+  if (!items.length || typeof IntersectionObserver !== "function") return;
+
+  const byId = new Map();
+  for (const item of items) {
+    const id = (item.getAttribute("href") || "").replace("#", "");
+    const section = id && document.getElementById(id);
+    if (section) byId.set(section, item);
+  }
+  if (!byId.size) return;
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      // The entry closest to filling the viewport wins, so passing through a
+      // short section does not steal the highlight from a long one.
+      const best = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+      if (!best) return;
+      for (const item of items) item.classList.remove("is-active");
+      byId.get(best.target)?.classList.add("is-active");
+    },
+    { threshold: [0.25, 0.5, 0.75] }
+  );
+  for (const section of byId.keys()) observer.observe(section);
+}
+
+function scrollRail(direction) {
+  if (!els.rankRail) return;
+  const first = els.rankRail.firstElementChild;
+  const step = first ? first.getBoundingClientRect().width + 32 : 320;
+  els.rankRail.scrollBy({ left: step * direction, behavior: "smooth" });
+}
+
+function renderRankRail() {
+  if (!els.rankRail) return;
+  const ranked = [...libraryState.books]
+    .sort((a, b) => Number(b.chapterCount || 0) - Number(a.chapterCount || 0))
+    .slice(0, 8);
+  els.rankSection.hidden = ranked.length < 3;
+  els.rankRail.innerHTML = "";
+  ranked.forEach((book, index) => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "rank-item";
+    item.addEventListener("click", () => showBookDetail(book));
+
+    const position = document.createElement("span");
+    position.className = "rank-number";
+    position.textContent = String(index + 1);
+    position.setAttribute("aria-hidden", "true");
+
+    const art = document.createElement("span");
+    art.className = "rank-art";
+    const image = document.createElement("img");
+    const fallback = fallbackCoverForBook(book);
+    image.src = book.cover || fallback;
+    image.alt = "";
+    image.setAttribute("aria-hidden", "true");
+    image.loading = "lazy";
+    image.decoding = "async";
+    image.addEventListener("error", () => { image.src = fallback; }, { once: true });
+    art.appendChild(image);
+
+    const text = document.createElement("span");
+    text.className = "rank-text";
+    appendTextElement(text, "strong", "", book.title);
+    appendTextElement(text, "span", "", `${formatNumber(book.chapterCount)} chương`);
+
+    item.append(position, art, text);
+    els.rankRail.appendChild(item);
+  });
+  revealOnScroll(els.rankRail.children);
+}
+
+// Pills instead of a <select>. A dropdown hides the genres until you ask; the
+// whole point is that they are the first thing you see. The original select stays
+// in the DOM as the single source of the current value so every existing filter
+// path keeps working, but it is hidden from assistive tech and the tab order -
+// these buttons are the real control.
+function renderGenrePills() {
+  if (!els.genrePills) return;
+  const genres = [...new Set(libraryState.books.map((book) => book.genre).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b, "vi")
+  );
+  els.genrePills.hidden = !genres.length;
+  els.genrePills.innerHTML = "";
+  const current = els.libraryGenre.value;
+  for (const [value, label] of [["", "Tất cả"], ...genres.map((genre) => [genre, genre])]) {
+    const pill = document.createElement("button");
+    pill.type = "button";
+    pill.className = "genre-pill";
+    pill.textContent = label;
+    pill.setAttribute("aria-pressed", String(value === current));
+    pill.addEventListener("click", () => {
+      els.libraryGenre.value = value;
+      resetCatalogPage();
+      renderGenrePills();
+      document.getElementById("catalog")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    els.genrePills.appendChild(pill);
+  }
+}
+
+function formatNumber(value) {
+  return Number(value || 0).toLocaleString("vi-VN");
 }
 
 function renderCatalog() {

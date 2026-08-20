@@ -323,6 +323,249 @@ body > * {
   transform: none;
 }
 
+/* =========================================================================
+   Ranked rail, genre pills, mobile bar
+   The page used to be one uniform grid behind a dropdown, which is the shape of
+   every library template. These three give it an order to read in, put the
+   genres in the open, and make the phone layout behave like an app.
+   ========================================================================= */
+.rank-section {
+  margin: var(--space-7) 0 var(--space-6);
+}
+
+.rank-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.rank-header h2 {
+  margin: 0.2rem 0 0;
+  font-size: clamp(1.8rem, 3.2vw, 2.6rem);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+}
+
+.rank-nav {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.rail-arrow {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--surface) 70%, transparent);
+  color: var(--text-soft);
+  backdrop-filter: blur(10px);
+  transition: border-color var(--fast) var(--ease), color var(--fast) var(--ease), transform var(--fast) var(--ease);
+}
+
+.rail-arrow:hover {
+  border-color: var(--accent);
+  color: var(--text);
+  transform: translateY(-2px);
+}
+
+/* Scroll-snap so a flick lands on an item rather than between two. */
+.rank-rail {
+  display: flex;
+  gap: clamp(1.5rem, 3vw, 2.6rem);
+  overflow-x: auto;
+  /* Left padding so the first numeral is not clipped by the scroll container. */
+  padding: 0 var(--space-2) var(--space-3);
+  scroll-behavior: smooth;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.rank-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.rank-item {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-end;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  scroll-snap-align: start;
+  text-align: left;
+}
+
+/* The numeral is the device. Outlined and oversized so it reads as editorial
+   ranking rather than a badge, and overlapping the artwork so the two are one
+   object instead of two boxes side by side. */
+.rank-number {
+  position: relative;
+  /* Behind the artwork, not in front: the poster is meant to overlap the right
+     side of the numeral. Being a later sibling, the art wins without this. */
+  z-index: 0;
+  /* Small overlap on purpose. "1" is a narrow glyph, so anything deeper hid it
+     under the poster entirely while the wider digits still showed. */
+  margin-right: -0.12em;
+  padding-bottom: 0.06em;
+  color: transparent;
+  font-size: clamp(4.4rem, 8vw, 7rem);
+  font-weight: 800;
+  line-height: 0.7;
+  -webkit-text-stroke: 2px color-mix(in srgb, var(--accent) 55%, var(--border-strong));
+  transition: -webkit-text-stroke-color var(--slow) var(--ease);
+}
+
+.rank-item:hover .rank-number {
+  -webkit-text-stroke-color: var(--accent-strong);
+}
+
+.rank-art {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: clamp(88px, 9vw, 124px);
+  overflow: hidden;
+  aspect-ratio: 2 / 3;
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+  transition: box-shadow var(--slow) var(--ease), transform var(--slow) var(--ease);
+}
+
+.rank-item:hover .rank-art {
+  box-shadow: var(--glow-strong);
+  transform: translateY(-6px);
+}
+
+.rank-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.rank-text {
+  display: grid;
+  gap: 0.2rem;
+  max-width: 168px;
+  padding: 0 0 0.5rem 0.9rem;
+}
+
+.rank-text strong {
+  overflow: hidden;
+  font-size: var(--text-base);
+  font-weight: 700;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.rank-text span {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+/* ---- genre pills ------------------------------------------------------ */
+.genre-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+.genre-pill {
+  min-height: 40px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: color-mix(in srgb, var(--surface) 62%, transparent);
+  color: var(--text-soft);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  transition: border-color var(--fast) var(--ease), color var(--fast) var(--ease), transform var(--fast) var(--ease);
+}
+
+.genre-pill:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+  transform: translateY(-2px);
+}
+
+.genre-pill[aria-pressed="true"] {
+  border-color: transparent;
+  background: var(--gradient);
+  color: #fff;
+  box-shadow: var(--glow);
+}
+
+/* The dropdown it replaces stays as the value holder, out of sight. */
+.genre-filter {
+  display: none;
+}
+
+/* ---- mobile bar ------------------------------------------------------- */
+.mobile-bar {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .mobile-bar {
+    position: fixed;
+    z-index: 40;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    /* Clears the iOS home indicator instead of sitting under it. */
+    padding: 0.4rem 0.4rem calc(0.4rem + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border-soft);
+    background: var(--topbar);
+    backdrop-filter: blur(22px) saturate(1.4);
+  }
+
+  .mobile-bar-item {
+    display: grid;
+    gap: 0.15rem;
+    justify-items: center;
+    padding: 0.45rem 0;
+    border-radius: var(--r-md);
+    color: var(--muted);
+    font-size: var(--text-2xs);
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  .mobile-bar-item .icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .mobile-bar-item.is-active {
+    color: var(--text);
+  }
+
+  .mobile-bar-item.is-active .icon {
+    color: var(--accent-strong);
+  }
+
+  /* So the bar never covers the end of the page. */
+  .library-footer {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+
+  .rank-text {
+    max-width: 130px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
