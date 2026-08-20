@@ -14,17 +14,31 @@ Branch `refactor/r2-supabase-migration`:
 
 **Chưa sửa reader, chưa sửa API, chưa xoá gì.** Production không bị ảnh hưởng.
 
+## Quyết định: không cứu dữ liệu Blob cũ
+
+49 EPUB trên Vercel Blob (store `auto-translate-library`, trạng thái **Suspended**)
+**không** được migrate. Chủ project chọn crawl lại từ đầu qua pipeline mới.
+
+Đã xác nhận không có đường lấy nội dung ra:
+
+```
+GET public blob URL      -> 403 "Your store is blocked"
+vercel blob get <path>   -> 403 Forbidden   (CLI dùng cùng public URL bên dưới)
+list()/head() qua token  -> OK, nhưng chỉ trả metadata
+```
+
+`scripts/migration/migrate-blob-to-r2.js` được giữ lại: nếu store được bỏ suspend
+thì chạy được ngay. Không xoá gì trên Blob.
+
 ## Còn lại (bị chặn bởi credential)
 
 | Bước | Chặn bởi |
 |---|---|
-| Tạo R2 bucket + custom domain CDN | R2 credential |
-| Apply schema Supabase | Supabase credential |
-| Migrate 49 EPUB + 47 cover từ Blob sang R2 | R2 credential |
-| Đổi reader sang đọc chapter từ CDN (kèm fallback EPUB) | cần R2 để test thật |
-| Analytics sang INSERT-only | Supabase credential |
-| Thay `catalog.json` bằng Supabase query | Supabase credential |
-| Load test 1.000 reader đồng thời | cần CDN thật |
+| Tạo Cloudflare Pages project | token Cloudflare không hợp lệ (`9109`) |
+| Gắn custom domain cho R2 | token Cloudflare không hợp lệ |
+| Apply schema Supabase | cần connection string / DB password |
+| Load test 1.000 reader đồng thời | cần CDN domain thật |
+| Migrate 49 EPUB cũ | **đã bỏ** — crawl lại |
 
 ## Thứ tự an toàn khi đã có credential
 
@@ -50,3 +64,18 @@ Nếu số liệu verify lệch ở bước 3 thì **không** chuyển traffic.
 | Đã ingest lên R2 | Để nguyên, chỉ tốn dung lượng |
 
 Vercel Blob gốc vẫn là bản backup cho tới khi xoá thủ công.
+
+## Đã xong trong lượt mới nhất
+
+- Reader đọc chapter từ CDN, có `READER_CDN_ENABLED` + fallback EPUB. Verify bằng
+  Chrome: mở truyện và sang chương kế tiếp phát sinh **0 lượt gọi `/api`**, không
+  tải EPUB, không nạp JSZip, không chạm Gemini.
+- `client/_headers.template` sinh `public/_headers` cho Cloudflare Pages; CSP tự
+  nhận CDN origin lúc build.
+- `server/supabase.js` — PostgREST client, service role cho ghi, anon cho đọc,
+  analytics INSERT-only.
+- `server/ingest/run-ingest.js` — điểm vào ingest duy nhất, dùng bởi cả crawler và
+  admin upload.
+- Crawler đã bỏ `@vercel/blob`: chương và cover đi R2, metadata đi Supabase, dịch
+  metadata tại worker khi có `GEMINI_API_KEY`.
+- R2 ingest thật: 2.854 object, 33.2 MB, cache header đúng từng loại key.

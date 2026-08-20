@@ -3,7 +3,8 @@
 const fs = require("fs");
 const path = require("path");
 const JSZip = require("jszip");
-const { upload } = require("@vercel/blob/client");
+const { runIngest } = require("../server/ingest/run-ingest");
+const { translateMetadata } = require("../server/gemini");
 
 const SITE_URL = String(process.env.SITE_URL || "https://auto-translate-xi.vercel.app").replace(/\/$/, "");
 const CRAWLER_SECRET = process.env.CRAWLER_SECRET || "";
@@ -626,56 +627,62 @@ async function downloadAndPublish(candidate, status, wordCountBucket = -1) {
       `EPUB chỉ có ${metadata.chapterCount} chương, nghi bị tải dở (cần tối thiểu ${truncationFloor}).`
     );
   }
+
   status.message = `Đang dịch thông tin Fanqie book ${candidate.sourceId}...`;
   await updateStatus(status);
-  const translatedMetadata = await siteRequest("/api/crawler/control", {
+  const translatedMetadata = await translateBookMetadata({
+    title: metadata.title || completedJob.title || `Fanqie ${candidate.sourceId}`,
+    author: metadata.author || completedJob.author || "",
+    description: metadata.description || ""
+  });
+
+  // One ingest path, shared with the admin upload: chapters and cover go to R2,
+  // metadata to Supabase, translation happens here rather than per reader.
+  status.message = `Đang tách và dịch chương cho ${translatedMetadata.title}...`;
+  await updateStatus(status);
+  const result = await runIngest({
+    epubBuffer,
+    book: {
+      id: `fanqie-${candidate.sourceId}`,
+      title: translatedMetadata.title,
+      author: translatedMetadata.author,
+      description: translatedMetadata.description,
+      genre: candidate.genre,
+      status: "Đang cập nhật",
+      source: "fanqie",
+      sourceId: String(candidate.sourceId),
+      sourceUrl: `https://fanqienovel.com/page/${candidate.sourceId}`,
+      lastCrawledAt: new Date().toISOString()
+    },
+    revision: 1,
+    log: (event) => {
+      if (event.event === "ingest.chapters_extracted") console.log(`  tách ${event.chapters} chương`);
+      if (event.event === "ingest.completed") console.log(`  ingest xong: ${event.totalChapters} chương, dịch ${event.translated}`);
+    }
+  });
+
+  status.message = `Đã thêm ${translatedMetadata.title}: ${result.totalChapters} chương, đã dịch ${result.summary.completed}.`;
+  await updateStatus(status);
+  return { title: translatedMetadata.title, ...result };
+}
+
+// Metadata translation runs locally when the worker has a Gemini key, so the
+// crawler no longer needs the website to be reachable. The site call remains as a
+// fallback for as long as the legacy deployment exists.
+async function translateBookMetadata(source) {
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      return await translateMetadata(source, process.env.GEMINI_API_KEY);
+    } catch (error) {
+      console.warn(`Dịch metadata tại worker thất bại (${error.message}); thử qua site.`);
+    }
+  }
+  if (!SITE_URL) throw new Error("Không dịch được metadata: thiếu GEMINI_API_KEY và SITE_URL.");
+  return siteRequest("/api/crawler/control", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      title: metadata.title || completedJob.title || `Fanqie ${candidate.sourceId}`,
-      author: metadata.author || completedJob.author || "",
-      description: metadata.description || ""
-    })
+    body: JSON.stringify(source)
   });
-  const title = translatedMetadata.title;
-  const epubBlob = await upload(`library/books/fanqie-${candidate.sourceId}.epub`, epubBuffer, {
-    access: "public",
-    contentType: "application/epub+zip",
-    handleUploadUrl: `${SITE_URL}/api/crawler/upload`,
-    headers: { Authorization: `Bearer ${await getCrawlerToken()}` },
-    clientPayload: JSON.stringify({ kind: "epub" }),
-    multipart: true
-  });
-
-  let coverUrl = "";
-  if (metadata.cover?.data) {
-    const extension = coverExtension(metadata.cover.contentType);
-    const coverBlob = await upload(`library/covers/fanqie-${candidate.sourceId}${extension}`, metadata.cover.data, {
-      access: "public",
-      contentType: metadata.cover.contentType,
-      handleUploadUrl: `${SITE_URL}/api/crawler/upload`,
-      headers: { Authorization: `Bearer ${await getCrawlerToken()}` },
-      clientPayload: JSON.stringify({ kind: "cover" })
-    });
-    coverUrl = coverBlob.url;
-  }
-
-  const result = await siteRequest("/api/crawler/publish", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sourceId: candidate.sourceId,
-        title,
-        author: translatedMetadata.author,
-        genre: candidate.genre,
-        status: "Đang cập nhật",
-        description: translatedMetadata.description,
-        chapterCount: metadata.chapterCount,
-        epub: epubBlob.url,
-        cover: coverUrl
-      })
-  });
-  return result.book;
 }
 
 async function waitForJob(jobId, status) {
@@ -801,10 +808,6 @@ function normalizeImageType(mediaType, href) {
   if (/\.png$/i.test(href)) return "image/png";
   if (/\.webp$/i.test(href)) return "image/webp";
   return "image/jpeg";
-}
-
-function coverExtension(contentType) {
-  return contentType === "image/png" ? ".png" : contentType === "image/webp" ? ".webp" : ".jpg";
 }
 
 function findProducedEpub(before, startedAt) {
