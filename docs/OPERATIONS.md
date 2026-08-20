@@ -103,3 +103,44 @@ không kiểm tra CORS, nên lỗi này **chỉ hiện ra khi test bằng trình
 
 R2 trả thêm `Vary: Origin`, nên request có Origin được cache riêng — không cần
 purge khi mới bật CORS.
+
+## Cloudflare Pages
+
+Static site trong `public/` (do `scripts/build-client.js` sinh ra, kèm `_headers`).
+Function trong `functions/` được Pages tự route theo đường dẫn:
+`functions/api/admin/upload.js` phục vụ `/api/admin/upload` — **cùng path** với
+function Vercel tương ứng, nên `client/admin-upload.js` không cần biết đang chạy ở đâu.
+
+Tạo project (cần quyền `Account · Cloudflare Pages · Edit`; token R2 **không** đủ):
+
+```
+Build command   : npm run build
+Output directory : public
+Production branch: main
+```
+
+Biến môi trường đặt trên project, danh sách đầy đủ trong `wrangler.toml`.
+**Không** đặt `SUPABASE_SERVICE_ROLE_KEY` ở đây.
+
+### Vì sao presign chứ không upload qua Worker
+
+Cloudflare giới hạn request body 100 MB; EPUB có thể 200 MB. Nên browser nhận một
+URL PUT có chữ ký ngắn hạn và đẩy thẳng lên R2 — byte không đi qua function nào.
+
+Function chỉ ký và dispatch. `functions/_lib/sigv4.js` dùng Web Crypto thay vì
+`node:crypto` để không phụ thuộc cờ `nodejs_compat`; `server/pages-functions.test.js`
+so từng byte URL của hai bản ký để chúng không lệch nhau.
+
+## Cấu hình crawler
+
+Config và status nằm ở R2 bucket **private** (`crawler/config.json`,
+`crawler/status.json`), không phải Vercel Blob, không phải bucket public.
+
+```bash
+node scripts/crawler-config.js --show
+node scripts/crawler-config.js --enable
+node scripts/crawler-config.js --set maxNewBooksPerRun=2
+```
+
+Trang admin trên Vercel vẫn ghi config vào Blob — crawler **không đọc chỗ đó nữa**.
+Dùng CLI trên cho tới khi phần admin chuyển sang Pages function.

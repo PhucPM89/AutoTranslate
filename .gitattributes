@@ -1,0 +1,7 @@
+# The build reads these and writes deploy artifacts from them, so their line
+# endings must not depend on the machine that did the checkout.
+client/_headers.template text eol=lf
+public/_headers         text eol=lf
+
+# Functions run on the Workers runtime; keep them LF like the rest of the source.
+functions/**/*.js       text eol=lf

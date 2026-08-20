@@ -107,7 +107,11 @@ function writeHeaders() {
   const origin = cdnOrigin();
   // Substituting the trailing space too keeps the CSP tidy when there is no CDN
   // origin yet, instead of leaving a double space inside the directive.
-  const body = fs.readFileSync(templatePath, "utf8").replaceAll("%CDN_ORIGIN% ", origin ? origin + " " : "");
+  // Normalised to LF regardless of how git checked the template out. On Windows
+  // with autocrlf the template arrives as CRLF, and a deploy artifact must not
+  // depend on that.
+  const template = fs.readFileSync(templatePath, "utf8").split("\r\n").join("\n");
+  const body = template.replaceAll("%CDN_ORIGIN% ", origin ? origin + " " : "");
   fs.writeFileSync(path.join(PUBLIC_DIR, "_headers"), body);
   const note = origin ? ` (cdn: ${origin})` : " (chưa có CDN origin)";
   console.log(`/_headers ${formatKb(Buffer.byteLength(body))}${note}`);

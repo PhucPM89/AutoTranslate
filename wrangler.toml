@@ -1,0 +1,33 @@
+# Cloudflare Pages configuration.
+#
+# The site is static: scripts/build-client.js writes public/, including the
+# _headers file that carries the CSP and the cache rules. Functions in functions/
+# are picked up automatically and routed by path, so functions/api/admin/upload.js
+# serves /api/admin/upload.
+#
+# No compatibility flag is needed: the functions use Web Crypto rather than
+# node:crypto, deliberately (see functions/_lib/sigv4.js).
+
+name = "tram-chu"
+pages_build_output_dir = "public"
+compatibility_date = "2026-08-01"
+
+# Environment variables are NOT set here - this file is committed to a public
+# repository. Set them on the Pages project (Settings > Environment variables),
+# where they are encrypted:
+#
+#   R2_ACCOUNT_ID              signing the upload URL
+#   R2_ACCESS_KEY_ID           signing the upload URL
+#   R2_SECRET_ACCESS_KEY       signing the upload URL
+#   R2_BUCKET                  novel-storage, for cover uploads
+#   R2_ARCHIVE_BUCKET          novel-archive, for EPUBs; must stay private
+#   R2_PUBLIC_BASE_URL         https://cdn.tram-chu.online, read at build time
+#   SUPABASE_URL               read at build time, inlined into the bundle
+#   SUPABASE_ANON_KEY          read at build time, publishable by design
+#   LIBRARY_SESSION_SECRET     verifying the admin session cookie
+#   GITHUB_DISPATCH_TOKEN      Actions: write, to start an ingest run
+#   GITHUB_REPOSITORY          PhucPM89/AutoTranslate
+#   READER_CDN_ENABLED         leave unset until the CDN reader is signed off
+#
+# SUPABASE_SERVICE_ROLE_KEY must never be set here. Nothing served from Pages
+# needs it, and the build inlines only the two SUPABASE_ vars listed above.
