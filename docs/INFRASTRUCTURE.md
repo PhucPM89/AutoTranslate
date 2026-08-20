@@ -4,7 +4,9 @@
 
 | Dịch vụ | Dùng cho | Không dùng cho |
 |---|---|---|
-| Vercel | frontend tĩnh, admin, crawler control, ingest trigger | phục vụ chapter |
+| Cloudflare Pages | frontend tĩnh (host chính) | phục vụ chapter |
+| Vercel | **legacy** — admin/crawler API trong lúc migration | frontend, chapter |
+| Vercel Blob | **legacy/backup, đang bị block** | mọi dữ liệu mới |
 | Cloudflare R2 | chapter JSON, cover, EPUB archive, job state | dữ liệu quan hệ |
 | Cloudflare CDN | phân phối chapter/cover | — |
 | Supabase Postgres | books/chapters metadata, categories, analytics events | nội dung chapter |
@@ -53,3 +55,25 @@ SUPABASE_SERVICE_ROLE_KEY   # server-side only, KHÔNG gửi ra browser
 
 Khi thiếu `R2_*`, storage layer tự dùng driver filesystem (`LOCAL_STORAGE_DIR`),
 nên toàn bộ pipeline vẫn chạy và test được ở local mà không cần cloud.
+
+## Trạng thái Vercel
+
+Vercel đã **block** Blob store do vượt hạn mức Blob Advanced Operations trên plan
+Hobby. Hệ quả đo được:
+
+```
+GET library/catalog.json → 403 "Your store is blocked"
+GET /api/library         → 200 {"books": []}   (fallback rỗng)
+```
+
+Thư viện production hiện trắng. Blob chỉ còn là **nguồn legacy cần cứu dữ liệu**,
+không dùng cho bất cứ ghi mới nào. Không xoá gì trên đó.
+
+## Cloudflare: data plane vs control plane
+
+| Mặt | Trạng thái |
+|---|---|
+| R2 S3 API (đọc/ghi object) | **hoạt động** — đã ingest thật 2.854 object |
+| Cloudflare API (Pages, custom domain, cache purge) | **không truy cập được** — token trả `9109 Invalid access token` |
+
+Vì vậy tạo Pages project và gắn custom domain cho R2 phải làm thủ công một lần.

@@ -16,11 +16,34 @@ Với dữ liệu đọc nhiều: **CDN > object storage > API > database**.
 | Translation queue (retry / backoff / resume / quota) | Xong, có test |
 | `ingestBook()` dùng chung admin + crawler | Xong, có test |
 | Supabase schema | SQL đã viết, **chưa apply** — thiếu credential |
-| R2 bucket + CDN domain | **Chưa tạo** — thiếu credential |
-| Reader đọc chapter từ CDN | **Chưa đổi** — vẫn tải EPUB như cũ |
-| Migration dữ liệu Blob → R2 | **Chưa chạy** — thiếu credential |
+| R2 bucket `novel-storage` | **Đã có**, S3 read/write đã verify |
+| Reader đọc chapter từ CDN | **Xong**, có feature flag + fallback, đã verify bằng Chrome |
+| `_headers` cho Cloudflare Pages | **Xong**, CSP tự nhận CDN origin lúc build |
+| R2 ingest thật | **Xong** — 1 truyện, 2.854 object, 33.2 MB, cache header đúng |
+| Cloudflare Pages project | **Chưa tạo** — token Cloudflare không hợp lệ |
+| R2 public CDN domain | **Chưa có** — cần control plane |
+| Migration 49 truyện | **Chưa chạy** — Vercel Blob bị block |
 
-Reader và toàn bộ API hiện tại **chưa bị sửa**, nên production chạy y như trước.
+Reader giờ có hai đường: CDN (mới) và EPUB (cũ). Mặc định `READER_CDN_ENABLED`
+tắt, nên production chạy y như trước tới khi bật.
+
+## Host: Cloudflare Pages
+
+```
+GitHub → Cloudflare Pages → npm install → npm run build → public/
+```
+
+| Cấu hình | Giá trị (đọc từ project) |
+|---|---|
+| Install command | `npm install` (postinstall tự chạy build) |
+| Build command | `npm run build` |
+| Output directory | `public` |
+| Node version | `>=18` |
+| Header rules | `public/_headers` (sinh từ `client/_headers.template`) |
+
+Biến build browser-safe: `R2_PUBLIC_BASE_URL`, `READER_CDN_ENABLED`,
+`SUPABASE_URL`, `SUPABASE_ANON_KEY`. Secret **không** bao giờ vào bundle —
+có test chạy build thật với secret trong env rồi grep output để chứng minh.
 
 ## Đường đọc mục tiêu
 

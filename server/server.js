@@ -38,6 +38,30 @@ app.all("/api/crawler/status", require("../api/crawler/status"));
 app.all("/api/crawler/publish", require("../api/crawler/publish"));
 app.all("/api/crawler/upload", require("../api/crawler/upload"));
 
+// Dev-only CDN stand-in. When the local storage driver is in use, this serves
+// .storage at the same path the reader expects from Cloudflare, so the CDN reader
+// path can be exercised end to end without a public R2 domain. Production never
+// hits this: Cloudflare serves those objects directly from R2.
+const localStorageDir = path.resolve(process.env.LOCAL_STORAGE_DIR || ".storage");
+if (fs.existsSync(localStorageDir)) {
+  app.use(
+    "/local-cdn",
+    express.static(localStorageDir, {
+      setHeaders: (res, filePath) => {
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        // Normalise separators first: on Windows express hands back backslashes.
+        const normalised = String(filePath).split("\\").join("/");
+        if (/\/r\d+\/ch\//.test(normalised)) {
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        } else {
+          res.setHeader("Cache-Control", "public, max-age=60");
+        }
+      }
+    })
+  );
+  console.log(`Local CDN stand-in: /local-cdn -> ${localStorageDir}`);
+}
+
 // `npm run build` writes the minified client plus vendor/jszip.min.js into public/.
 const publicDir = path.join(__dirname, "..", "public");
 
