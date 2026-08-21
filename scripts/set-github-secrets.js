@@ -29,7 +29,7 @@ const REQUIRED = [
   "GEMINI_API_KEY"
 ];
 
-const OPTIONAL = ["GEMINI_MODEL", "GEMINI_FALLBACK_MODELS", "GEMINI_CHUNK_SIZE", "SITE_CONTACT_EMAIL"];
+const OPTIONAL = ["GEMINI_API_KEYS", "GEMINI_MODEL", "GEMINI_FALLBACK_MODELS", "GEMINI_CHUNK_SIZE", "SITE_CONTACT_EMAIL"];
 
 const ROOT = path.join(__dirname, "..");
 const dryRun = process.argv.includes("--dry-run");
