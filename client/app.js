@@ -1205,15 +1205,17 @@ async function showBookDetail(book, { updateHash = true } = {}) {
   els.bookViewReadLabel.textContent = "Đọc từ đầu";
   els.bookViewRestart.hidden = true;
 
-  const progress = await readProgress(`library:${book.id}:${book.updatedAt || "current"}`).catch(() => null);
+  const progress = await findProgressForBook(book);
   if (libraryState.detailBook !== book) return;
-  if (progress?.chapterCount) {
+  if (progress?.chapterCount && Number(progress.currentIndex) >= 0) {
     const index = Math.min(Number(progress.currentIndex) || 0, progress.chapterCount - 1);
     els.bookViewProgress.textContent = `${progress.chapterTitle || `Chương ${index + 1}`} · ${index + 1}/${progress.chapterCount}`;
     els.bookViewReadLabel.textContent = `Đọc tiếp chương ${index + 1}`;
     els.bookViewRestart.hidden = false;
   } else {
     els.bookViewProgress.textContent = "Chưa đọc";
+    els.bookViewReadLabel.textContent = "Đọc từ đầu";
+    els.bookViewRestart.hidden = true;
   }
 }
 
@@ -2732,6 +2734,40 @@ function readProgress(bookId) {
   return withStore(PROGRESS_STORE, "readonly", (store) => requestToPromise(store.get(bookId)));
 }
 
+function findProgressForBook(book) {
+  if (!book || !book.id) return Promise.resolve(null);
+  const rawId = book.id;
+  const cleanId = String(rawId).replace(/^cdn:/, "").split(":")[0];
+
+  return withStore(PROGRESS_STORE, "readonly", (store) => {
+    return new Promise((resolve) => {
+      const request = store.openCursor();
+      let bestProgress = null;
+      request.onsuccess = (event) => {
+        const cursor = event.target.result;
+        if (!cursor) {
+          return resolve(bestProgress);
+        }
+        const val = cursor.value;
+        const valId = String(val.id || "");
+        if (
+          valId === rawId ||
+          valId === cleanId ||
+          valId.startsWith(`cdn:${cleanId}:`) ||
+          valId.startsWith(`library:${cleanId}:`) ||
+          valId.includes(cleanId)
+        ) {
+          if (!bestProgress || (Number(val.lastOpenedAt) || 0) > (Number(bestProgress.lastOpenedAt) || 0)) {
+            bestProgress = val;
+          }
+        }
+        cursor.continue();
+      };
+      request.onerror = () => resolve(null);
+    });
+  }).catch(() => null);
+}
+
 // A reverse cursor stops at the first live record instead of loading them all.
 function readMostRecentProgress() {
   return withStore(PROGRESS_STORE, "readonly", (store) => {
@@ -3004,9 +3040,9 @@ async function openBookFromCdn(book, cover, { startAtFirstChapter = false } = {}
   els.bookMeta.textContent = `${BRAND_NAME} · ${index.totalChapters} chương · ${index.translatedChapters} đã dịch`;
   renderChapterControls();
 
-  const savedProgress = await readProgress(state.bookId).catch(() => null);
-  // "Đọc từ đầu" must ignore saved progress, which is why the flag reaches here
-  // rather than skipping the CDN path entirely.
+  const savedProgress = startAtFirstChapter
+    ? null
+    : ((await readProgress(state.bookId).catch(() => null)) || (await findProgressForBook(book)));
   goToChapter(startAtFirstChapter ? 0 : Number(savedProgress?.currentIndex) || 0);
   return true;
 }
