@@ -1006,12 +1006,15 @@ function createBookCard(book, index = 0) {
   const description = appendTextElement(body, "p", "book-description", book.description || "Mở truyện để xem mục lục và bắt đầu dịch theo chương.");
   const footer = document.createElement("div");
   footer.className = "book-card-footer";
-  const translated = Number(book.translatedChapters || 0);
-  const total = Number(book.chapterCount || 0);
+  const catalogBook = libraryState.books.find((b) => b.id === book.id) || book;
+  const translated = Number(catalogBook.translatedChapters || book.translatedChapters || 0);
+  const total = Number(catalogBook.chapterCount || book.chapterCount || catalogBook.totalChapters || book.totalChapters || 0);
   if (translated > 0) {
     const badge = document.createElement("span");
     badge.className = "catalog-translate-badge";
-    badge.innerHTML = `<svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px;display:inline"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Dịch ${translated} ch`;
+    const rawPct = total > 0 ? (translated / total) * 100 : 0;
+    const pctLabel = rawPct >= 1 ? `${rawPct.toFixed(0)}%` : `${rawPct.toFixed(1)}%`;
+    badge.innerHTML = `<svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px;display:inline"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Dịch ${translated}/${total} (${pctLabel})`;
     footer.appendChild(badge);
   } else {
     appendTextElement(footer, "span", "", total ? `${total} chương` : "EPUB");
@@ -1124,20 +1127,37 @@ async function showBookDetail(book, { updateHash = true } = {}) {
   els.bookViewTitle.textContent = book.title;
   els.bookViewAuthor.textContent = book.author ? `Tác giả: ${book.author}` : "Tác giả chưa cập nhật";
   els.bookViewChapters.textContent = book.chapterCount ? `${book.chapterCount} chương` : "Định dạng EPUB";
-  els.bookViewUpdated.textContent = book.updatedAt || "Chưa rõ";
+  const catalogBook = libraryState.books.find((b) => b.id === book.id) || book;
+  const totalCh = Number(catalogBook.chapterCount || catalogBook.totalChapters || book.chapterCount || book.totalChapters || 0);
+  const transCh = Number(catalogBook.translatedChapters || book.translatedChapters || 0);
 
-  const totalCh = Number(book.chapterCount || book.totalChapters || 0);
-  const transCh = Number(book.translatedChapters || 0);
-  const transPct = totalCh > 0 ? Math.min(100, Math.round((transCh / totalCh) * 100)) : (transCh > 0 ? 100 : 0);
+  let transPctStr = "0%";
+  let fillWidthPct = 0;
+  if (totalCh > 0 && transCh > 0) {
+    const rawPct = (transCh / totalCh) * 100;
+    if (rawPct >= 100 || transCh >= totalCh) {
+      transPctStr = "100%";
+      fillWidthPct = 100;
+    } else if (rawPct >= 1) {
+      transPctStr = `${rawPct.toFixed(1)}%`;
+      fillWidthPct = rawPct;
+    } else {
+      transPctStr = `${rawPct.toFixed(2)}%`;
+      fillWidthPct = Math.max(3.5, rawPct);
+    }
+  } else if (book.status === "Hoàn thành") {
+    transPctStr = "100%";
+    fillWidthPct = 100;
+  }
 
   if (els.bookViewTranslateProgress) {
-    els.bookViewTranslateProgress.textContent = transCh > 0 ? `${transCh.toLocaleString("vi-VN")} / ${totalCh.toLocaleString("vi-VN")} chương` : (book.status === "Hoàn thành" ? "Hoàn tất" : "Đang dịch");
+    els.bookViewTranslateProgress.textContent = transCh > 0 ? `${transCh.toLocaleString("vi-VN")} / ${totalCh.toLocaleString("vi-VN")} chương` : (book.status === "Hoàn thành" ? "Hoàn tất" : "Đang cập nhật");
   }
   if (els.bookViewTranslatePercent) {
-    els.bookViewTranslatePercent.textContent = `${transPct}%`;
+    els.bookViewTranslatePercent.textContent = transPctStr;
   }
   if (els.bookViewTranslateFill) {
-    els.bookViewTranslateFill.style.width = `${transPct}%`;
+    els.bookViewTranslateFill.style.width = `${fillWidthPct}%`;
   }
 
   renderBookDescription(book.description);
