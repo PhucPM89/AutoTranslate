@@ -188,7 +188,7 @@ async function main() {
         translateChapter: async (chapter) => {
           const existing = await readJson(storage, chapterKey(job.bookId, job.revision, chapter.chapterNumber));
           if (existing && existing.translationStatus === "completed" && existing.content) {
-            console.log(`  ch ${chapter.chapterNumber}: đã có bản dịch trên R2, bỏ qua Gemini`);
+            console.log(`  ch ${chapter.chapterNumber}: đã có bản dịch trên R2, bỏ qua Groq AI`);
             return existing.content;
           }
           const glossary = await engine.loadGlossary(job.bookId);
@@ -197,7 +197,7 @@ async function main() {
             glossary,
             engine
           });
-          if (!output || !output.translation) throw new Error("Gemini không trả bản dịch.");
+          if (!output || !output.translation) throw new Error("Groq AI không trả bản dịch.");
           return output.translation;
         },
         translateBatch: async (chapters) => {
@@ -270,7 +270,7 @@ async function main() {
       if (result.quotaExhausted) {
         stoppedForQuota = true;
         stop = true;
-        console.log("  -> hết quota Gemini, dừng để lượt sau tiếp tục từ đây");
+        console.log("  -> hết quota Groq AI, dừng để lượt sau tiếp tục từ đây");
         break;
       }
     }
@@ -294,7 +294,7 @@ async function main() {
     translatedThisRun: translatedTotal,
     spentRequests: spentTotal,
     message: stoppedForQuota
-      ? `Tạm dừng: Hết quota Gemini. Đã dịch ${translatedTotal} chương trong phiên.`
+      ? `Tạm dừng: Hết quota Groq AI. Đã dịch ${translatedTotal} chương trong phiên.`
       : `Phiên dịch hoàn tất: Đã dịch ${translatedTotal} chương mới trên ${touched.size} bộ truyện.`,
     queue: queue.map((j) => ({
       bookId: j.bookId,
@@ -312,11 +312,8 @@ async function main() {
     await publishCatalogSnapshot({ storage, site: siteSettings(), log: (event) => console.log("  ", JSON.stringify(event)) });
   }
 
-  // "Dừng vì quota" on its own leaves you guessing whether the worker is broken
-  // or the day's allowance is simply spent. The free tier is a per-model daily
-  // allowance, so it is a wall that running more often cannot push through.
   const reason = stoppedForQuota
-    ? " Dừng vì hết quota Gemini trong ngày; quota free tier tính theo ngày cho từng model, nên lượt sau chỉ tiếp tục được sau khi reset."
+    ? " Dừng vì hết quota Groq AI trong ngày; lượt sau sẽ tiếp tục sau khi hồi phục hạn mức."
     : Date.now() >= deadlineAt
       ? " Dừng vì hết thời gian chạy."
       : " Hết việc trong hàng đợi.";

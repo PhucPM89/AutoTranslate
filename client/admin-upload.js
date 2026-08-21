@@ -460,7 +460,7 @@ function renderTranslateStatus(status = {}) {
   const labels = {
     idle: "Tạm nghỉ",
     running: "Đang dịch AI",
-    paused_quota: "Hết Quota Gemini",
+    paused_quota: "Hết Quota Groq",
     completed: "Hoàn tất",
     error: "Có lỗi"
   };
@@ -471,7 +471,7 @@ function renderTranslateStatus(status = {}) {
   const beat = status.updatedAt || status.finishedAt;
   const parts = [];
   if (beat) parts.push(`Nhịp tim: ${describeAge(beat)}`);
-  if (status.spentRequests) parts.push(`${status.spentRequests} requests Gemini`);
+  if (status.spentRequests) parts.push(`${status.spentRequests} requests Groq AI`);
   if (status.translatedThisRun) parts.push(`đã dịch ${status.translatedThisRun} chương mới`);
   els.translateStateMeta.textContent = parts.join(" · ");
 
