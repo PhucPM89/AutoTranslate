@@ -115,7 +115,12 @@ class TTSEngine {
       name.includes("tiếng việt") ||
       name.includes("tieng viet") ||
       name.includes("hoaimy") ||
-      name.includes("namminh")
+      name.includes("hoài my") ||
+      name.includes("namminh") ||
+      name.includes("nam minh") ||
+      name.includes("linh") ||
+      name.includes("mai") ||
+      (name.includes("an") && (lang.startsWith("vi") || !lang || name.includes("viet")))
     );
   }
 
@@ -133,7 +138,14 @@ class TTSEngine {
       name.includes("hanhan") ||
       name.includes("kangkang") ||
       name.includes("taiwan") ||
-      name.includes("mandarin")
+      name.includes("mandarin") ||
+      name.includes("cantonese") ||
+      name.includes("xiaoxiao") ||
+      name.includes("yunxi") ||
+      name.includes("yunjian") ||
+      name.includes("普通话") ||
+      name.includes("粤语") ||
+      name.includes("國語")
     );
   }
 
@@ -144,10 +156,10 @@ class TTSEngine {
 
   getAvailableVoices() {
     if (!this.voices.length && this.synth) this.voices = this.synth.getVoices() || [];
-    // Sort Vietnamese voices first, then other non-Chinese voices
     const vi = this.voices.filter((v) => this.isVietnameseVoice(v));
-    const nonVi = this.voices.filter((v) => !this.isVietnameseVoice(v) && !this.isChineseVoice(v));
-    return [...vi, ...nonVi];
+    // Strictly return Vietnamese voices only to prevent foreign language pronunciation issues
+    if (vi.length > 0) return vi;
+    return [];
   }
 
   setVoice(voiceURI) {

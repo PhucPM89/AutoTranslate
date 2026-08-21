@@ -2254,33 +2254,42 @@ function initTTSController() {
     if (!available.length) {
       const opt = document.createElement("option");
       opt.value = "";
-      opt.textContent = "Giọng mặc định";
+      opt.textContent = "🇻🇳 Giọng tiếng Việt (Mặc định)";
       els.ttsVoiceSelect.appendChild(opt);
       return;
     }
     const savedVoice = localStorage.getItem("epubTranslator.ttsVoice");
-    const viVoices = ttsEngine.getVietnameseVoices();
-    let hasViSelected = false;
+    let hasSelected = false;
 
     available.forEach((v) => {
       const opt = document.createElement("option");
       const uri = v.voiceURI || v.name;
       opt.value = uri;
-      const isVi = ttsEngine.isVietnameseVoice(v);
-      const langCode = (v.lang || "").split("-")[0].toUpperCase();
-      const langLabel = isVi ? "VI" : langCode;
-      // Clean up voice name: remove vendor prefix, keep just the voice name
-      const cleanName = v.name
-        .replace(/^(Microsoft|Google|Apple)\s+/i, "")
-        .replace(/\s+Online\s*\(Natural\)/i, " ★")
-        .replace(/\s*-\s*[A-Za-z\-]+\s*\(.*?\)$/i, "");
-      opt.textContent = `[${langLabel}] ${cleanName}`;
+      
+      let cleanName = v.name;
+      if (cleanName.includes("NamMinh") || cleanName.includes("Nam Minh")) {
+        cleanName = "Microsoft Nam Minh (Nam - Tự nhiên)";
+      } else if (cleanName.includes("HoaiMy") || cleanName.includes("Hoài My")) {
+        cleanName = "Microsoft Hoài My (Nữ - Tự nhiên)";
+      } else if (cleanName.includes("Google") || cleanName.toLowerCase().includes("tiếng việt") || cleanName.toLowerCase() === "an") {
+        cleanName = "Google Tiếng Việt / An (Nữ - Chuẩn)";
+      } else if (cleanName.includes("Linh") || cleanName.includes("Mai")) {
+        cleanName = "Apple Tiếng Việt (Nữ)";
+      } else {
+        cleanName = v.name.replace(/^(Microsoft|Google|Apple)\s+/i, "");
+      }
+
+      opt.textContent = `🇻🇳 ${cleanName}`;
       if (savedVoice ? savedVoice === uri : (currentSelected && (currentSelected.voiceURI === uri || currentSelected.name === uri))) {
         opt.selected = true;
-        hasViSelected = isVi;
+        hasSelected = true;
       }
       els.ttsVoiceSelect.appendChild(opt);
     });
+
+    if (!hasSelected && els.ttsVoiceSelect.options.length > 0) {
+      els.ttsVoiceSelect.options[0].selected = true;
+    }
 
     if (savedVoice) {
       ttsEngine.setVoice(savedVoice);
