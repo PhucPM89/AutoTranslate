@@ -2593,6 +2593,8 @@ function initSponsorController() {
 
 function updateRankBadgeUI() {
   const profile = getReaderProfile();
+  const nickname = getReaderNickname();
+  const myNickname = nickname || authClient?.getUser()?.user_metadata?.full_name || authClient?.getUser()?.email?.split("@")[0] || "Ẩn danh đạo hữu";
 
   // Topbar badge
   if (els.rankBadgeIcon) els.rankBadgeIcon.textContent = profile.schoolIcon;
@@ -2629,8 +2631,20 @@ function updateRankBadgeUI() {
   }
 
   // Nickname input in dialog
-  if (els.readerNicknameInput && !els.readerNicknameInput.value) {
-    els.readerNicknameInput.value = getReaderNickname();
+  if (els.readerNicknameInput) {
+    els.readerNicknameInput.value = nickname;
+  }
+
+  // User standing footer in dialog
+  if (els.myStandingName) els.myStandingName.textContent = myNickname;
+  if (els.myStandingBadge) {
+    els.myStandingBadge.textContent = `[${profile.title}]`;
+    els.myStandingBadge.className = `reader-rank-badge ${profile.badgeClass}`;
+  }
+  if (els.myStandingIcon) els.myStandingIcon.textContent = profile.schoolIcon;
+  const chaptersRead = getStoredChaptersRead();
+  if (els.myStandingMeta) {
+    els.myStandingMeta.textContent = `${profile.exp.toLocaleString("vi-VN")} Tu Vi · ${chaptersRead} chương`;
   }
 
   // Highlight active school card in dialog
@@ -2643,7 +2657,7 @@ function updateRankBadgeUI() {
 }
 
 let currentLeaderboardSchool = "all";
-let activeRankHubTab = "leaderboard";
+let activeRankHubTab = "profile";
 
 function switchRankHubTab(tabName) {
   activeRankHubTab = tabName;
@@ -2680,7 +2694,8 @@ async function renderLeaderboardData(school = "all") {
   const profile = getReaderProfile();
   const myUid = authClient?.getUser()?.id || getReaderId();
   const myExp = profile.exp;
-  const myNickname = getReaderNickname() || authClient?.getUser()?.user_metadata?.full_name || authClient?.getUser()?.email?.split("@")[0] || "Ẩn danh đạo hữu";
+  const nickname = getReaderNickname();
+  const myNickname = nickname || authClient?.getUser()?.user_metadata?.full_name || authClient?.getUser()?.email?.split("@")[0] || "Ẩn danh đạo hữu";
 
   // Render bottom user standing
   if (els.myStandingName) els.myStandingName.textContent = myNickname;
@@ -2693,7 +2708,7 @@ async function renderLeaderboardData(school = "all") {
   if (els.myStandingMeta) {
     els.myStandingMeta.textContent = `${myExp.toLocaleString("vi-VN")} Tu Vi · ${chaptersRead} chương`;
   }
-  if (els.readerNicknameInput) els.readerNicknameInput.value = getReaderNickname();
+  if (els.readerNicknameInput) els.readerNicknameInput.value = nickname;
 
   const items = await fetchLeaderboard({
     supabaseUrl: SUPABASE_URL,
@@ -2773,7 +2788,8 @@ async function renderLeaderboardData(school = "all") {
 function initReaderRankController() {
   updateRankBadgeUI();
 
-  function openRankModal(defaultTab = "leaderboard") {
+  function openRankModal(defaultTab = "profile") {
+    updateRankBadgeUI();
     switchRankHubTab(defaultTab);
     els.rankSchoolDialog?.showModal();
     syncReaderLeaderboard({ supabaseUrl: SUPABASE_URL, supabaseKey: SUPABASE_ANON_KEY, user: authClient?.getUser() }).catch(() => {});
@@ -2783,8 +2799,8 @@ function initReaderRankController() {
     els.rankSchoolDialog?.close();
   }
 
-  els.readerRankBadge?.addEventListener("click", () => openRankModal("leaderboard"));
-  els.readerTopRankBtn?.addEventListener("click", () => openRankModal("leaderboard"));
+  els.readerRankBadge?.addEventListener("click", () => openRankModal("profile"));
+  els.readerTopRankBtn?.addEventListener("click", () => openRankModal("profile"));
   els.commentRankTriggerBtn?.addEventListener("click", () => openRankModal("profile"));
   els.rankSchoolClose?.addEventListener("click", closeRankModal);
   els.rankSchoolDialog?.addEventListener("click", (e) => {
@@ -2796,15 +2812,27 @@ function initReaderRankController() {
 
   els.myStandingEditNameBtn?.addEventListener("click", () => {
     switchRankHubTab("profile");
-    setTimeout(() => els.readerNicknameInput?.focus(), 150);
+    setTimeout(() => {
+      els.readerNicknameInput?.focus();
+      els.readerNicknameInput?.select();
+    }, 150);
   });
 
-  els.saveNicknameBtn?.addEventListener("click", async () => {
+  async function handleSaveNickname() {
     const raw = els.readerNicknameInput?.value || "";
     const clean = setReaderNickname(raw);
+    if (els.commentAuthorInput) els.commentAuthorInput.value = clean;
+    updateRankBadgeUI();
     showToast(clean ? `✓ Đã lưu đạo hiệu: ${clean}` : "✓ Đã đặt lại đạo hiệu mặc định", 2500);
     await syncReaderLeaderboard({ supabaseUrl: SUPABASE_URL, supabaseKey: SUPABASE_ANON_KEY, user: authClient?.getUser(), force: true });
-    updateRankBadgeUI();
+  }
+
+  els.saveNicknameBtn?.addEventListener("click", handleSaveNickname);
+  els.readerNicknameInput?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleSaveNickname();
+    }
   });
 
   els.rankPanelLeaderboard?.addEventListener("click", (e) => {

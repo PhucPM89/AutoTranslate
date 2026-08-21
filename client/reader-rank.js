@@ -73,8 +73,8 @@ function getReaderId() {
 }
 
 function getReaderNickname() {
-  if (typeof localStorage === "undefined") return "Ẩn danh đạo hữu";
-  return localStorage.getItem(RANK_NICKNAME_KEY) || "";
+  if (typeof localStorage === "undefined") return "";
+  return localStorage.getItem(RANK_NICKNAME_KEY) || localStorage.getItem("epubTranslator.commentAuthor") || "";
 }
 
 function setReaderNickname(name) {
@@ -82,10 +82,13 @@ function setReaderNickname(name) {
   if (typeof localStorage !== "undefined") {
     if (clean) {
       localStorage.setItem(RANK_NICKNAME_KEY, clean);
+      localStorage.setItem("epubTranslator.commentAuthor", clean);
     } else {
       localStorage.removeItem(RANK_NICKNAME_KEY);
+      localStorage.removeItem("epubTranslator.commentAuthor");
     }
   }
+  invalidateLeaderboardCache();
   return clean;
 }
 
@@ -166,6 +169,7 @@ function setRankSchool(schoolId) {
   if (typeof localStorage !== "undefined") {
     localStorage.setItem(RANK_SCHOOL_KEY, schoolId);
   }
+  invalidateLeaderboardCache();
   return getReaderProfile();
 }
 
@@ -181,6 +185,11 @@ function formatRankBadge(title, badgeClass = "rank-1") {
 let leaderboardCache = null;
 let leaderboardCacheTime = 0;
 const LEADERBOARD_CACHE_TTL = 30000; // 30s cache
+
+function invalidateLeaderboardCache() {
+  leaderboardCache = null;
+  leaderboardCacheTime = 0;
+}
 
 async function fetchLeaderboard({ supabaseUrl, supabaseKey, school = "all", limit = 20 } = {}) {
   if (!supabaseUrl || !supabaseKey) return [];
@@ -218,15 +227,12 @@ let lastSyncTime = 0;
 async function syncReaderLeaderboard({ supabaseUrl, supabaseKey, user = null, force = false } = {}) {
   if (!supabaseUrl || !supabaseKey) return false;
   const now = Date.now();
-  if (!force && now - lastSyncTime < 20000) return false; // Throttled 20s
-
-  const exp = getStoredExp();
-  if (exp <= 0 && !user) return false;
+  if (!force && now - lastSyncTime < 10000) return false; // Throttled 10s
 
   const profile = getReaderProfile();
   const id = user?.id || getReaderId();
   const nickname = getReaderNickname();
-  const displayName = nickname || user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Đạo hữu ẩn danh";
+  const displayName = nickname || user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Ẩn danh đạo hữu";
   const avatarUrl = user?.user_metadata?.avatar_url || "";
   const chaptersRead = getStoredChaptersRead();
 
@@ -244,6 +250,7 @@ async function syncReaderLeaderboard({ supabaseUrl, supabaseKey, user = null, fo
 
   try {
     lastSyncTime = now;
+    invalidateLeaderboardCache();
     await fetch(`${supabaseUrl}/rest/v1/reader_leaderboard`, {
       method: "POST",
       headers: {
@@ -276,5 +283,6 @@ module.exports = {
   getStoredChaptersRead,
   incrementChaptersRead,
   fetchLeaderboard,
-  syncReaderLeaderboard
+  syncReaderLeaderboard,
+  invalidateLeaderboardCache
 };
