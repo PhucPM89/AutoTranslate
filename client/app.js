@@ -356,21 +356,21 @@ function bindEvents() {
   window.addEventListener("hashchange", handleHashChange);
   window.addEventListener("load", () => setTimeout(alignHashedSection, 400));
   els.fileInput?.addEventListener("change", handleFile);
-  els.libraryBrand.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
-  els.librarySearch.addEventListener("input", debounce(resetCatalogPage, SEARCH_DEBOUNCE_MS));
-  els.libraryGenre.addEventListener("change", resetCatalogPage);
+  els.libraryBrand?.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+  els.librarySearch?.addEventListener("input", debounce(resetCatalogPage, SEARCH_DEBOUNCE_MS));
+  els.libraryGenre?.addEventListener("change", resetCatalogPage);
   els.viewAllBooks?.addEventListener("click", () => {
     activeShelfTab = "all";
-    els.viewAllBooks.classList.add("active");
-    els.viewAllBooks.setAttribute("aria-selected", "true");
+    els.viewAllBooks?.classList.add("active");
+    els.viewAllBooks?.setAttribute("aria-selected", "true");
     els.viewMyShelf?.classList.remove("active");
     els.viewMyShelf?.setAttribute("aria-selected", "false");
     resetCatalogPage();
   });
   els.viewMyShelf?.addEventListener("click", () => {
     activeShelfTab = "myShelf";
-    els.viewMyShelf.classList.add("active");
-    els.viewMyShelf.setAttribute("aria-selected", "true");
+    els.viewMyShelf?.classList.add("active");
+    els.viewMyShelf?.setAttribute("aria-selected", "true");
     els.viewAllBooks?.classList.remove("active");
     els.viewAllBooks?.setAttribute("aria-selected", "false");
     resetCatalogPage();
@@ -411,47 +411,47 @@ function bindEvents() {
     if (isAutoScrolling && !e.target.closest("#autoScrollBtn")) stopAutoScroll();
   }, { passive: true });
   els.adminOpen?.addEventListener("click", bootstrapAdminPanel);
-  els.featuredRead.addEventListener("click", openFeaturedBook);
-  els.supportQrOpen.addEventListener("click", () => els.supportDialog.showModal());
-  els.supportQrClose.addEventListener("click", () => els.supportDialog.close());
-  els.supportDialog.addEventListener("click", (event) => {
-    if (event.target === els.supportDialog) els.supportDialog.close();
+  els.featuredRead?.addEventListener("click", openFeaturedBook);
+  els.supportQrOpen?.addEventListener("click", () => els.supportDialog?.showModal());
+  els.supportQrClose?.addEventListener("click", () => els.supportDialog?.close());
+  els.supportDialog?.addEventListener("click", (event) => {
+    if (event.target === els.supportDialog) els.supportDialog?.close();
   });
   trackMobileBar();
   els.rankPrev?.addEventListener("click", () => scrollRail(-1));
   els.rankNext?.addEventListener("click", () => scrollRail(1));
-  els.catalogPrevPage.addEventListener("click", () => changeCatalogPage(libraryState.catalogPage - 1));
-  els.catalogNextPage.addEventListener("click", () => changeCatalogPage(libraryState.catalogPage + 1));
-  els.continueReading.addEventListener("click", resumeCachedBook);
-  els.backToLibrary.addEventListener("click", showLibrary);
-  els.bookBackToLibrary.addEventListener("click", showLibrary);
-  els.bookThemeToggle.addEventListener("click", toggleTheme);
-  els.bookViewRead.addEventListener("click", () => {
+  els.catalogPrevPage?.addEventListener("click", () => changeCatalogPage(libraryState.catalogPage - 1));
+  els.catalogNextPage?.addEventListener("click", () => changeCatalogPage(libraryState.catalogPage + 1));
+  els.continueReading?.addEventListener("click", resumeCachedBook);
+  els.backToLibrary?.addEventListener("click", showLibrary);
+  els.bookBackToLibrary?.addEventListener("click", showLibrary);
+  els.bookThemeToggle?.addEventListener("click", toggleTheme);
+  els.bookViewRead?.addEventListener("click", () => {
     const book = libraryState.detailBook;
     if (book) loadCatalogBook(book);
   });
-  els.bookViewRestart.addEventListener("click", () => {
+  els.bookViewRestart?.addEventListener("click", () => {
     const book = libraryState.detailBook;
     if (book) loadCatalogBook(book, fallbackCoverForBook(book), { startAtFirstChapter: true });
   });
   els.readerImportButton?.addEventListener("click", () => els.fileInput?.click());
-  els.readerThemeToggle.addEventListener("click", toggleTheme);
-  els.prevChapter.addEventListener("click", () => goToChapter(state.currentIndex - 1));
-  els.nextChapter.addEventListener("click", () => goToChapter(state.currentIndex + 1));
-  els.bottomPrevChapter.addEventListener("click", () => goToChapter(state.currentIndex - 1));
-  els.bottomNextChapter.addEventListener("click", () => goToChapter(state.currentIndex + 1));
-  els.chapterSelect.addEventListener("change", () => goToChapter(Number(els.chapterSelect.value)));
-  els.chapterList.addEventListener("click", (event) => {
+  els.readerThemeToggle?.addEventListener("click", toggleTheme);
+  els.prevChapter?.addEventListener("click", () => goToChapter(state.currentIndex - 1));
+  els.nextChapter?.addEventListener("click", () => goToChapter(state.currentIndex + 1));
+  els.bottomPrevChapter?.addEventListener("click", () => goToChapter(state.currentIndex - 1));
+  els.bottomNextChapter?.addEventListener("click", () => goToChapter(state.currentIndex + 1));
+  els.chapterSelect?.addEventListener("change", () => goToChapter(Number(els.chapterSelect.value)));
+  els.chapterList?.addEventListener("click", (event) => {
     const item = event.target.closest(".document-item");
     if (item) goToChapter(Number(item.dataset.index));
   });
-  els.globalSearch.addEventListener("input", debounce(renderChapterControls, SEARCH_DEBOUNCE_MS));
-  els.translateButton.addEventListener("click", () => translateCurrentChapter(false));
-  els.retranslateButton.addEventListener("click", () => translateCurrentChapter(true));
-  els.themeToggle.addEventListener("click", toggleTheme);
-  els.fontDecrease.addEventListener("click", () => changeFontSize(-1));
-  els.fontIncrease.addEventListener("click", () => changeFontSize(1));
-  els.widthPreset.addEventListener("change", updateReaderSettings);
+  els.globalSearch?.addEventListener("input", debounce(renderChapterControls, SEARCH_DEBOUNCE_MS));
+  els.translateButton?.addEventListener("click", () => translateCurrentChapter(false));
+  els.retranslateButton?.addEventListener("click", () => translateCurrentChapter(true));
+  els.themeToggle?.addEventListener("click", toggleTheme);
+  els.fontDecrease?.addEventListener("click", () => changeFontSize(-1));
+  els.fontIncrease?.addEventListener("click", () => changeFontSize(1));
+  els.widthPreset?.addEventListener("change", updateReaderSettings);
 }
 
 // JSZip (~95 KB) is only needed once a reader actually opens a book, and the
