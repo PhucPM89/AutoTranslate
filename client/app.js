@@ -711,7 +711,7 @@ async function loadCatalogSnapshot() {
   // the only source of the library now, so gating it here emptied the shelf.
   if (!CDN_BASE) return null;
   try {
-    const response = await fetch(`${cdnUrl("catalog/latest.json")}?t=${Date.now()}`, { cache: "no-store" });
+    const response = await fetch(`${cdnUrl("catalog/latest.json")}?t=${Date.now()}`);
     if (!response.ok) return null;
     const snapshot = await response.json();
     if (!snapshot || !Array.isArray(snapshot.books)) return null;
@@ -3541,7 +3541,7 @@ async function fetchBookIndex(bookId) {
   if (!clean) return null;
   const url = cdnUrl(`books/${clean}/index.json`);
   try {
-    const response = await fetch(url, { cache: "no-cache" });
+    const response = await fetch(url);
     if (!response.ok) {
       console.error(`fetchBookIndex failed: HTTP ${response.status} from ${url}`);
       return null;
