@@ -5058,6 +5058,60 @@ body.zen-mode .document-paper {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
+/* Mandatory Login Gate Card */
+.login-gate-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 3.5rem 2rem;
+  margin: 2rem auto;
+  max-width: 520px;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-xl);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
+  animation: fadeIn 0.3s ease;
+}
+
+.login-gate-icon {
+  font-size: 2.8rem;
+  margin-bottom: 1.2rem;
+  filter: drop-shadow(0 4px 12px rgba(168, 85, 247, 0.3));
+}
+
+.login-gate-card h3 {
+  margin: 0 0 0.6rem;
+  font-size: 1.35rem;
+  font-family: var(--font-display);
+  color: var(--text-bright);
+}
+
+.login-gate-card p {
+  margin: 0 0 1.8rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.65;
+}
+
+.login-gate-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.8rem 1.8rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(168, 85, 247, 0.3);
+  transition: all 0.2s ease;
+}
+
+.login-gate-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(168, 85, 247, 0.45);
+}
+
 /* Floating Audio TTS Player Bar */
 .tts-audio-bar {
   position: fixed;

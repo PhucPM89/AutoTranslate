@@ -24,12 +24,16 @@ test("reader-rank: calculateRank returns correct level for cultivation school", 
   assert.equal(rank100.levelNumber, 2);
 
   const rank800 = calculateRank(800, "cultivation");
-  assert.equal(rank800.title, "Kim Đan");
-  assert.equal(rank800.levelNumber, 4);
+  assert.equal(rank800.title, "Trúc Cơ");
+  assert.equal(rank800.levelNumber, 3);
 
   const rank20000 = calculateRank(20000, "cultivation");
-  assert.equal(rank20000.title, "Tiên Tôn");
-  assert.equal(rank20000.levelNumber, 7);
+  assert.equal(rank20000.title, "Hóa Thần");
+  assert.equal(rank20000.levelNumber, 6);
+
+  const rank400000 = calculateRank(400000, "cultivation");
+  assert.equal(rank400000.title, "Độ Kiếp Tiên Tôn");
+  assert.equal(rank400000.levelNumber, 10);
 });
 
 test("reader-rank: calculateRank supports scholarly and modern schools", () => {
@@ -37,7 +41,7 @@ test("reader-rank: calculateRank supports scholarly and modern schools", () => {
   assert.equal(scholarlyRank.title, "Tú Tài");
 
   const modernRank = calculateRank(300, "modern");
-  assert.equal(modernRank.title, "Mọt Sách");
+  assert.equal(modernRank.title, "Độc Giả Tập Sự");
 });
 
 test("reader-rank: formatRankBadge outputs valid badge span", () => {

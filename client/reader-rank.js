@@ -13,12 +13,15 @@ const RANK_SCHOOLS = {
     icon: "🔮",
     levels: [
       { minExp: 0, title: "Phàm Nhân", badgeClass: "rank-1" },
-      { minExp: 50, title: "Luyện Khí", badgeClass: "rank-2" },
-      { minExp: 200, title: "Trúc Cơ", badgeClass: "rank-3" },
-      { minExp: 600, title: "Kim Đan", badgeClass: "rank-4" },
-      { minExp: 1800, title: "Nguyên Anh", badgeClass: "rank-5" },
-      { minExp: 5000, title: "Hóa Thần", badgeClass: "rank-6" },
-      { minExp: 15000, title: "Tiên Tôn", badgeClass: "rank-7" }
+      { minExp: 100, title: "Luyện Khí", badgeClass: "rank-2" },
+      { minExp: 500, title: "Trúc Cơ", badgeClass: "rank-3" },
+      { minExp: 1500, title: "Kim Đan", badgeClass: "rank-4" },
+      { minExp: 4000, title: "Nguyên Anh", badgeClass: "rank-5" },
+      { minExp: 10000, title: "Hóa Thần", badgeClass: "rank-6" },
+      { minExp: 25000, title: "Luyện Hư", badgeClass: "rank-7" },
+      { minExp: 60000, title: "Hợp Thể", badgeClass: "rank-7" },
+      { minExp: 150000, title: "Đại Thừa", badgeClass: "rank-7" },
+      { minExp: 350000, title: "Độ Kiếp Tiên Tôn", badgeClass: "rank-7" }
     ]
   },
   scholarly: {
@@ -27,12 +30,15 @@ const RANK_SCHOOLS = {
     icon: "📜",
     levels: [
       { minExp: 0, title: "Đồng Sinh", badgeClass: "rank-1" },
-      { minExp: 50, title: "Tú Tài", badgeClass: "rank-2" },
-      { minExp: 200, title: "Cử Nhân", badgeClass: "rank-3" },
-      { minExp: 600, title: "Thám Hoa", badgeClass: "rank-4" },
-      { minExp: 1800, title: "Bảng Nhãn", badgeClass: "rank-5" },
-      { minExp: 5000, title: "Trạng Nguyên", badgeClass: "rank-6" },
-      { minExp: 15000, title: "Đại Học Sĩ", badgeClass: "rank-7" }
+      { minExp: 100, title: "Tú Tài", badgeClass: "rank-2" },
+      { minExp: 500, title: "Cử Nhân", badgeClass: "rank-3" },
+      { minExp: 1500, title: "Cống Sĩ", badgeClass: "rank-4" },
+      { minExp: 4000, title: "Tiến Sĩ", badgeClass: "rank-5" },
+      { minExp: 10000, title: "Thám Hoa", badgeClass: "rank-6" },
+      { minExp: 25000, title: "Bảng Nhãn", badgeClass: "rank-7" },
+      { minExp: 60000, title: "Trạng Nguyên", badgeClass: "rank-7" },
+      { minExp: 150000, title: "Hàn Lâm Học Sĩ", badgeClass: "rank-7" },
+      { minExp: 350000, title: "Văn Thánh", badgeClass: "rank-7" }
     ]
   },
   modern: {
@@ -41,12 +47,15 @@ const RANK_SCHOOLS = {
     icon: "⚡",
     levels: [
       { minExp: 0, title: "Người Qua Đường", badgeClass: "rank-1" },
-      { minExp: 50, title: "Độc Giả Mới", badgeClass: "rank-2" },
-      { minExp: 200, title: "Mọt Sách", badgeClass: "rank-3" },
-      { minExp: 600, title: "Đọc Xuyên Đêm", badgeClass: "rank-4" },
-      { minExp: 1800, title: "Cao Thủ Cày Truyện", badgeClass: "rank-5" },
-      { minExp: 5000, title: "Trùm Đọc Truyện", badgeClass: "rank-6" },
-      { minExp: 15000, title: "Thần Thoại Cày Đêm", badgeClass: "rank-7" }
+      { minExp: 100, title: "Độc Giả Tập Sự", badgeClass: "rank-2" },
+      { minExp: 500, title: "Mọt Sách Trẻ", badgeClass: "rank-3" },
+      { minExp: 1500, title: "Cú Đêm Luyện Chữ", badgeClass: "rank-4" },
+      { minExp: 4000, title: "Đọc Xuyên Màn Đêm", badgeClass: "rank-5" },
+      { minExp: 10000, title: "Chiến Thần Đọc Truyện", badgeClass: "rank-6" },
+      { minExp: 25000, title: "Đại Lão Thư Viện", badgeClass: "rank-7" },
+      { minExp: 60000, title: "Trùm Cày Truyện", badgeClass: "rank-7" },
+      { minExp: 150000, title: "Huyền Thoại Bất Bại", badgeClass: "rank-7" },
+      { minExp: 350000, title: "Thần Thoại Độc Giả", badgeClass: "rank-7" }
     ]
   }
 };
