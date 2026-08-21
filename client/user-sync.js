@@ -99,6 +99,10 @@ function createUserSync({ url, anonKey, authClient, storage, fetchImpl = fetch }
     }
   }
 
+  function cleanId(id) {
+    return String(id || "").replace(/^(cdn|library):/, "").split(":")[0];
+  }
+
   async function sendRemoteUpsert(items) {
     const token = getSessionToken();
     const userId = getUserId();
@@ -106,7 +110,7 @@ function createUserSync({ url, anonKey, authClient, storage, fetchImpl = fetch }
 
     const payload = items.map((b) => ({
       user_id: userId,
-      book_id: b.bookId,
+      book_id: cleanId(b.bookId),
       chapter_index: b.chapterIndex || 0,
       chapter_title: b.chapterTitle || "",
       progress_pct: Math.round(b.progressPct || 0),

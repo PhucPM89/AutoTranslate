@@ -2232,10 +2232,6 @@ function initTTSController() {
     if (savedVoice) {
       ttsEngine.setVoice(savedVoice);
     }
-
-    if (viVoices.length === 0) {
-      showToast("⚠ Máy bạn chưa cài giọng Tiếng Việt. Vào Settings > Language > Tiếng Việt > Text‑to‑Speech để cài.", 8000);
-    }
   }
 
   ttsEngine.onVoicesLoaded = (voices, selected) => {
