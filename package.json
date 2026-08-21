@@ -9,7 +9,7 @@
     "setup:admin": "node scripts/setup-admin-env.js",
     "dev": "wrangler pages dev public --compatibility-flags nodejs_compat",
     "configure:cf": "node scripts/configure-cloudflare.js",
-    "deploy": "wrangler pages deploy public --project-name tram-chu-web --branch main",
+    "deploy": "node scripts/deploy-pages.js",
     "test": "node --test \"server/**/*.test.js\" \"client/**/*.test.js\""
   },
   "dependencies": {
