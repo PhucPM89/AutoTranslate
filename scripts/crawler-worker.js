@@ -707,7 +707,21 @@ async function downloadAndPublish(candidate, status, wordCountBucket = -1) {
 // Title, author and description are the only things translated here; chapter
 // bodies are the translation worker's job.
 async function translateBookMetadata(source) {
-  const apiKey = process.env.GROQ_API_KEY || process.env.GROQ_API_KEYS || process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYS;
+  let apiKey = "";
+  try {
+    const storage = createStorage();
+    const rawKeys = await storage.get("config/api-keys.json");
+    if (rawKeys) {
+      const parsed = JSON.parse(rawKeys.toString("utf8"));
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        apiKey = parsed.join(",");
+      }
+    }
+  } catch {}
+
+  if (!apiKey) {
+    apiKey = process.env.GROQ_API_KEY || process.env.GROQ_API_KEYS || process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYS;
+  }
   if (!apiKey) {
     throw new Error("Không dịch được metadata: thiếu GROQ_API_KEY / GEMINI_API_KEY.");
   }

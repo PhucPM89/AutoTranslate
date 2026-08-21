@@ -67,10 +67,24 @@ async function writeTranslateStatus(storage, status) {
 }
 
 async function main() {
-  const apiKey = process.env.GROQ_API_KEYS || process.env.GROQ_API_KEY || process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("Thiếu GROQ_API_KEY / GEMINI_API_KEY.");
-
   const storage = createStorage();
+
+  // Load dynamically configured keys from R2 Storage if present
+  let apiKey = "";
+  try {
+    const rawKeys = await storage.get("config/api-keys.json");
+    if (rawKeys) {
+      const parsed = JSON.parse(rawKeys.toString("utf8"));
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        apiKey = parsed.join(",");
+      }
+    }
+  } catch {}
+
+  if (!apiKey) {
+    apiKey = process.env.GROQ_API_KEYS || process.env.GROQ_API_KEY || process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY;
+  }
+  if (!apiKey) throw new Error("Thiếu GROQ_API_KEY / GEMINI_API_KEY.");
   const db = createSupabase();
   const engine = createTranslationEngine({ storage });
   const deadlineAt = Date.now() + Math.max(0, RUN_MINUTES * 60 * 1000 - RESERVE_MS);
