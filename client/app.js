@@ -561,7 +561,7 @@ async function loadCatalogSnapshot() {
   // the only source of the library now, so gating it here emptied the shelf.
   if (!CDN_BASE) return null;
   try {
-    const response = await fetch(cdnUrl("catalog/latest.json"), { cache: "no-cache" });
+    const response = await fetch(`${cdnUrl("catalog/latest.json")}?t=${Date.now()}`, { cache: "no-store" });
     if (!response.ok) return null;
     const snapshot = await response.json();
     if (!snapshot || !Array.isArray(snapshot.books)) return null;

@@ -2,7 +2,7 @@
 
 // Service Worker for Trạm Chữ — Offline shell and chapter caching.
 
-const CACHE_NAME = "tramchu-cache-v1";
+const CACHE_NAME = "tramchu-cache-v2";
 const SHELL_ASSETS = [
   "/",
   "/index.html",
@@ -42,8 +42,24 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Chapter JSON from CDN / R2 -> Cache-First
-  if (url.pathname.includes("/chapters/") || url.pathname.endsWith(".json")) {
+  // Catalog or library manifest -> Network-First (always fetch latest novel list)
+  if (url.pathname.includes("/catalog/") || url.pathname.endsWith("library.json")) {
+    event.respondWith(
+      fetch(event.request)
+        .then((res) => {
+          if (res.ok) {
+            const clone = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return res;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Chapter content from CDN / R2 -> Cache-First (immutable chapters)
+  if (url.pathname.includes("/ch/") || url.pathname.includes("/chapters/")) {
     event.respondWith(
       caches.open(CACHE_NAME).then(async (cache) => {
         const cached = await cache.match(event.request);
