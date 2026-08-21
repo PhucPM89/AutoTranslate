@@ -1493,22 +1493,36 @@ async function loadCatalogBook(book, assignedFallbackCover = fallbackCoverForBoo
   const cover = book.cover || assignedFallbackCover;
   countBookOpened(book.id);
 
-  // Preferred path: one small chapter JSON from the CDN. Falls through to the
-  // legacy EPUB download if the book has not been ingested yet or the CDN misses.
-  if (READER_CDN_ENABLED) {
+  // Preferred path: one small chapter JSON from the CDN.
+  try {
+    const opened = await openBookFromCdn(book, cover, { startAtFirstChapter });
+    if (opened) return;
+  } catch (error) {
+    console.error("Lỗi khi mở truyện từ CDN:", error);
+  }
+
+  // Only a legacy book can go down the EPUB path
+  if (typeof book.epub === "string" && book.epub) {
+    state.mode = "epub";
     try {
-      if (await openBookFromCdn(book, cover, { startAtFirstChapter })) return;
+      const bookId = `library:${cleanId}:${book.updatedAt || "current"}`;
+      const response = await fetch(book.epub);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const arrayBuffer = await response.arrayBuffer();
+      await applyLoadedEpub(arrayBuffer, {
+        bookId,
+        fileName: book.epub.split("/").pop() || `${cleanId}.epub`,
+        displayTitle: book.title,
+        cover,
+        startAtFirstChapter
+      });
+      return;
     } catch (error) {
-      console.warn("Đường CDN lỗi, chuyển sang EPUB.", error);
+      console.error("Lỗi khi tải EPUB:", error);
     }
   }
 
-  // Only a legacy book can go down the EPUB path; a CDN-only book has no archive
-  // to fall back to, so say so instead of failing on an undefined URL.
-  if (typeof book.epub !== "string" || !book.epub) {
-    resetReader("Truyện này chưa tải được từ CDN. Thử lại sau ít phút.");
-    return;
-  }
+  resetReader("Chưa thể tải mục lục từ máy chủ. Hãy thử lại hoặc chọn truyện khác.");
 
   state.mode = "epub";
 
@@ -3541,17 +3555,23 @@ function cdnUrl(pathname) {
 }
 
 async function fetchBookIndex(bookId) {
-  if (!READER_CDN_ENABLED) return null;
   const clean = cleanBookId(bookId);
   if (!clean) return null;
+  const url = cdnUrl(`books/${clean}/index.json`);
   try {
-    const response = await fetch(cdnUrl(`books/${clean}/index.json`), { cache: "no-cache" });
-    if (!response.ok) return null;
+    const response = await fetch(url, { cache: "no-cache" });
+    if (!response.ok) {
+      console.error(`fetchBookIndex failed: HTTP ${response.status} from ${url}`);
+      return null;
+    }
     const index = await response.json();
-    if (!index || !Array.isArray(index.chapters) || !index.chapters.length) return null;
+    if (!index || !Array.isArray(index.chapters) || !index.chapters.length) {
+      console.error(`fetchBookIndex invalid chapters payload from ${url}:`, index);
+      return null;
+    }
     return index;
   } catch (error) {
-    console.warn("Không đọc được index từ CDN, dùng đường EPUB.", error);
+    console.error(`fetchBookIndex error fetching ${url}:`, error);
     return null;
   }
 }
