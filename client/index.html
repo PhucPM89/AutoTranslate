@@ -73,6 +73,10 @@
         </nav>
 
         <div class="library-actions">
+          <div id="streakBadge" class="streak-badge" title="Chuỗi ngày đọc liên tiếp" hidden>
+            <span class="streak-flame">🔥</span>
+            <span id="streakDays">1 ngày</span>
+          </div>
           <button id="accountOpen" class="icon-button account-button" type="button" aria-label="Đăng nhập" title="Đăng nhập">
             <span id="accountIcon" class="account-glyph"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"></circle><path d="M4.5 21a7.5 7.5 0 0 1 15 0"></path></svg></span>
             <span id="accountInitial" class="account-initial" aria-hidden="true" hidden></span>
@@ -467,6 +471,10 @@
                     <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
                     <span>Zen</span>
                   </button>
+                  <button id="crossDeviceQrBtn" class="tool-button qr-device-button" type="button" aria-label="Đọc trên điện thoại" title="Chuyển sang đọc trên điện thoại (Quét QR)">
+                    <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><rect width="5" height="5" x="3" y="3" rx="1"></rect><rect width="5" height="5" x="16" y="3" rx="1"></rect><rect width="5" height="5" x="3" y="16" rx="1"></rect><path d="M21 16h-3a2 2 0 0 0-2 2v3m5-5v5m-9-9h1m4 0h1m-5 4h5"></path></svg>
+                    <span>📱 QR</span>
+                  </button>
                 </div>
                 <div class="toolbar-group reader-bar-nav"><button id="prevChapter" class="tool-button" type="button" disabled aria-label="Chương trước" title="Chương trước"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"></path></svg></button><button id="nextChapter" class="tool-button" type="button" disabled aria-label="Chương sau" title="Chương sau"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg></button></div>
                 <button id="translateButton" class="primary-action" type="button" disabled><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m5 3 14 9-14 9V3Z"></path></svg>Dịch chương</button>
@@ -552,7 +560,11 @@
       </button>
       <button id="quoteCardBtn" class="selection-btn primary" type="button" title="Tạo ảnh trích dẫn">
         <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
-        Tạo ảnh trích dẫn
+        Tạo ảnh
+      </button>
+      <button id="suggestTermBtn" class="selection-btn" type="button" title="Gợi ý sửa thuật ngữ / Báo lỗi">
+        <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+        Gợi ý dịch
       </button>
     </div>
 
@@ -568,6 +580,10 @@
         </button>
       </div>
       <div class="quote-dialog-body">
+        <div class="quote-format-bar">
+          <button type="button" id="quoteFormatPost" class="quote-format-btn is-active" data-format="post">Ảnh Vuông / Bài viết</button>
+          <button type="button" id="quoteFormatStory" class="quote-format-btn" data-format="story">Ảnh Dọc Story (9:16)</button>
+        </div>
         <canvas id="quoteCanvas" hidden></canvas>
         <div class="quote-preview-wrap">
           <img id="quotePreviewImg" class="quote-preview-img" alt="Ảnh trích dẫn truyện">
@@ -584,5 +600,82 @@
         </div>
       </div>
     </dialog>
+
+    <!-- Cross-Device QR Dialog -->
+    <dialog id="crossDeviceQrDialog" class="qr-dialog" aria-labelledby="crossDeviceQrTitle">
+      <div class="qr-dialog-header">
+        <div>
+          <p class="eyebrow">Chuyển thiết bị tức thì</p>
+          <h3 id="crossDeviceQrTitle">Quét để đọc trên điện thoại</h3>
+        </div>
+        <button id="crossDeviceQrClose" class="icon-button" type="button" aria-label="Đóng" title="Đóng">
+          <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+        </button>
+      </div>
+      <div class="qr-dialog-body">
+        <div class="qr-canvas-wrap">
+          <canvas id="crossDeviceQrCanvas" class="qr-canvas"></canvas>
+        </div>
+        <p class="qr-dialog-hint">Mở camera điện thoại quét mã trên để tiếp tục đọc đúng chương và đoạn này.</p>
+      </div>
+    </dialog>
+
+    <!-- Glossary Suggestion Dialog -->
+    <dialog id="suggestGlossaryDialog" class="glossary-dialog" aria-labelledby="suggestGlossaryTitle">
+      <div class="glossary-dialog-header">
+        <div>
+          <p class="eyebrow">Đóng góp bản dịch</p>
+          <h3 id="suggestGlossaryTitle">Gợi ý thuật ngữ / Báo lỗi</h3>
+        </div>
+        <button id="suggestGlossaryClose" class="icon-button" type="button" aria-label="Đóng" title="Đóng">
+          <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+        </button>
+      </div>
+      <form id="suggestGlossaryForm" class="glossary-form">
+        <div class="form-field">
+          <label for="suggestSourceTerm">Từ ngữ / Câu gốc cần sửa</label>
+          <input type="text" id="suggestSourceTerm" required readonly>
+        </div>
+        <div class="form-field">
+          <label for="suggestTranslationTerm">Gợi ý bản dịch chuẩn hơn *</label>
+          <input type="text" id="suggestTranslationTerm" placeholder="Nhập bản dịch chuẩn hoặc xưng hô đúng..." required maxlength="120">
+        </div>
+        <div class="form-field">
+          <label for="suggestNote">Ghi chú / Lý do (tùy chọn)</label>
+          <input type="text" id="suggestNote" placeholder="Ví dụ: Nhân vật nữ nên xưng 'nàng'..." maxlength="200">
+        </div>
+        <div class="glossary-form-actions">
+          <button type="button" id="suggestGlossaryCancel" class="secondary-action">Hủy</button>
+          <button type="submit" id="suggestGlossarySubmit" class="primary-action">Gửi đóng góp</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Inline Paragraph Comments Drawer -->
+    <div id="commentsOverlay" class="comments-overlay" hidden></div>
+    <aside id="commentsDrawer" class="comments-drawer" hidden aria-label="Bình luận đoạn văn">
+      <div class="comments-drawer-header">
+        <div>
+          <p class="eyebrow">Bình luận cộng đồng</p>
+          <h3 id="commentsDrawerTitle">Đoạn văn</h3>
+        </div>
+        <button id="commentsDrawerClose" class="icon-button" type="button" aria-label="Đóng" title="Đóng">
+          <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+        </button>
+      </div>
+      <div class="comments-snippet" id="commentsSnippet"></div>
+      <div class="comments-list" id="commentsList">
+        <p class="comments-empty">Chưa có bình luận nào. Hãy để lại cảm nghĩ đầu tiên!</p>
+      </div>
+      <form id="commentForm" class="comment-form">
+        <input type="text" id="commentAuthorInput" class="comment-author-input" placeholder="Tên hiển thị" maxlength="24" value="Độc giả">
+        <div class="comment-input-wrap">
+          <input type="text" id="commentContentInput" class="comment-content-input" placeholder="Viết cảm nghĩ (Enter để gửi)..." maxlength="280" required>
+          <button type="submit" id="commentSubmitBtn" class="comment-submit-btn" aria-label="Gửi bình luận">
+            <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+          </button>
+        </div>
+      </form>
+    </aside>
   </body>
 </html>

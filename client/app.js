@@ -10,12 +10,16 @@ const { applyInvisibleWatermark, initSecurityGuards } = require("./security.js")
 const { extractTitleFromContent, formatVietnameseChapterTitle } = require("./chapter-title.js");
 const { updatePageMeta, shareContent } = require("./seo.js");
 const { createTTS } = require("./tts.js");
+const { drawQRCodeToCanvas } = require("./qr-generator.js");
+const { fetchChapterComments, postComment } = require("./comments.js");
 
 let activeShelfTab = "all";
 let userSync = null;
 let autoScrollRaf = null;
 let isAutoScrolling = false;
 let selectedQuoteText = "";
+let currentQuoteFormat = "post";
+let activeCommentParagraphIndex = 0;
 let ttsEngine = null;
 let isZenMode = false;
 
@@ -222,7 +226,33 @@ const els = {
   ttsTimerLabel: document.getElementById("ttsTimerLabel"),
   ttsStopCloseBtn: document.getElementById("ttsStopCloseBtn"),
   sleepTimerDialog: document.getElementById("sleepTimerDialog"),
-  sleepTimerClose: document.getElementById("sleepTimerClose")
+  sleepTimerClose: document.getElementById("sleepTimerClose"),
+  crossDeviceQrBtn: document.getElementById("crossDeviceQrBtn"),
+  crossDeviceQrDialog: document.getElementById("crossDeviceQrDialog"),
+  crossDeviceQrClose: document.getElementById("crossDeviceQrClose"),
+  crossDeviceQrCanvas: document.getElementById("crossDeviceQrCanvas"),
+  suggestTermBtn: document.getElementById("suggestTermBtn"),
+  suggestGlossaryDialog: document.getElementById("suggestGlossaryDialog"),
+  suggestGlossaryClose: document.getElementById("suggestGlossaryClose"),
+  suggestGlossaryForm: document.getElementById("suggestGlossaryForm"),
+  suggestSourceTerm: document.getElementById("suggestSourceTerm"),
+  suggestTranslationTerm: document.getElementById("suggestTranslationTerm"),
+  suggestNote: document.getElementById("suggestNote"),
+  suggestGlossaryCancel: document.getElementById("suggestGlossaryCancel"),
+  quoteFormatPost: document.getElementById("quoteFormatPost"),
+  quoteFormatStory: document.getElementById("quoteFormatStory"),
+  commentsDrawer: document.getElementById("commentsDrawer"),
+  commentsOverlay: document.getElementById("commentsOverlay"),
+  commentsDrawerClose: document.getElementById("commentsDrawerClose"),
+  commentsDrawerTitle: document.getElementById("commentsDrawerTitle"),
+  commentsSnippet: document.getElementById("commentsSnippet"),
+  commentsList: document.getElementById("commentsList"),
+  commentForm: document.getElementById("commentForm"),
+  commentAuthorInput: document.getElementById("commentAuthorInput"),
+  commentContentInput: document.getElementById("commentContentInput"),
+  commentSubmitBtn: document.getElementById("commentSubmitBtn"),
+  streakBadge: document.getElementById("streakBadge"),
+  streakDays: document.getElementById("streakDays")
 };
 
 const parser = new DOMParser();
@@ -230,6 +260,10 @@ const parser = new DOMParser();
 initPreferences();
 bindEvents();
 initQuoteCardAndSelection();
+initCrossDeviceQrController();
+initGlossarySuggestionController();
+initCommentsController();
+initStreakTracker();
 initSecurityGuards();
 registerServiceWorker();
 initTTSController();
@@ -1720,6 +1754,26 @@ function initQuoteCardAndSelection() {
     hideSelectionTooltip();
   });
 
+  els.suggestTermBtn?.addEventListener("click", () => {
+    if (!selectedQuoteText) return;
+    openGlossarySuggestionModal(selectedQuoteText);
+    hideSelectionTooltip();
+  });
+
+  els.quoteFormatPost?.addEventListener("click", () => {
+    currentQuoteFormat = "post";
+    els.quoteFormatPost.classList.add("is-active");
+    els.quoteFormatStory?.classList.remove("is-active");
+    if (selectedQuoteText) openQuoteCardModal(selectedQuoteText);
+  });
+
+  els.quoteFormatStory?.addEventListener("click", () => {
+    currentQuoteFormat = "story";
+    els.quoteFormatStory.classList.add("is-active");
+    els.quoteFormatPost?.classList.remove("is-active");
+    if (selectedQuoteText) openQuoteCardModal(selectedQuoteText);
+  });
+
   els.quoteDialogClose?.addEventListener("click", () => els.quoteDialog?.close());
   els.quoteDialog?.addEventListener("click", (e) => {
     if (e.target === els.quoteDialog) els.quoteDialog.close();
@@ -1728,7 +1782,7 @@ function initQuoteCardAndSelection() {
   els.quoteDownloadBtn?.addEventListener("click", () => {
     if (!els.quoteCanvas) return;
     const link = document.createElement("a");
-    link.download = `trich-dan-${Date.now()}.png`;
+    link.download = `trich-dan-${currentQuoteFormat}-${Date.now()}.png`;
     link.href = els.quoteCanvas.toDataURL("image/png");
     link.click();
   });
@@ -2017,13 +2071,276 @@ function openQuoteCardModal(text) {
     quote: text,
     bookTitle,
     author,
-    theme
+    theme,
+    format: currentQuoteFormat
   });
 
   if (els.quotePreviewImg) {
     els.quotePreviewImg.src = els.quoteCanvas.toDataURL("image/png");
   }
   els.quoteDialog.showModal();
+}
+
+function initCrossDeviceQrController() {
+  els.crossDeviceQrBtn?.addEventListener("click", () => {
+    if (!els.crossDeviceQrCanvas || !els.crossDeviceQrDialog) return;
+    const bookId = state.mode === "cdn" ? bookIdFromState() : state.bookId;
+    const chNum = state.currentIndex + 1;
+    const url = `${window.location.origin}/?book=${encodeURIComponent(bookId)}&ch=${chNum}`;
+
+    drawQRCodeToCanvas(els.crossDeviceQrCanvas, url, {
+      width: 220,
+      height: 220,
+      colorDark: "#130f24",
+      colorLight: "#ffffff",
+      padding: 12
+    });
+
+    els.crossDeviceQrDialog.showModal();
+  });
+
+  els.crossDeviceQrClose?.addEventListener("click", () => els.crossDeviceQrDialog?.close());
+  els.crossDeviceQrDialog?.addEventListener("click", (e) => {
+    if (e.target === els.crossDeviceQrDialog) els.crossDeviceQrDialog.close();
+  });
+}
+
+function openGlossarySuggestionModal(sourceText) {
+  if (!els.suggestGlossaryDialog) return;
+  if (els.suggestSourceTerm) els.suggestSourceTerm.value = sourceText.slice(0, 80);
+  if (els.suggestTranslationTerm) els.suggestTranslationTerm.value = "";
+  if (els.suggestNote) els.suggestNote.value = "";
+  els.suggestGlossaryDialog.showModal();
+}
+
+function initGlossarySuggestionController() {
+  els.suggestGlossaryClose?.addEventListener("click", () => els.suggestGlossaryDialog?.close());
+  els.suggestGlossaryCancel?.addEventListener("click", () => els.suggestGlossaryDialog?.close());
+  els.suggestGlossaryDialog?.addEventListener("click", (e) => {
+    if (e.target === els.suggestGlossaryDialog) els.suggestGlossaryDialog.close();
+  });
+
+  els.suggestGlossaryForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const sourceTerm = els.suggestSourceTerm?.value.trim();
+    const suggestedTerm = els.suggestTranslationTerm?.value.trim();
+    const note = els.suggestNote?.value.trim();
+    if (!sourceTerm || !suggestedTerm) return;
+
+    const bookId = state.mode === "cdn" ? bookIdFromState() : (state.bookId || "general");
+
+    if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/glossary_suggestions`, {
+          method: "POST",
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+            "Content-Type": "application/json",
+            Prefer: "return=minimal"
+          },
+          body: JSON.stringify({
+            book_id: bookId,
+            source_term: sourceTerm,
+            suggested_term: suggestedTerm,
+            context_snippet: selectedQuoteText.slice(0, 150),
+            note: note || ""
+          })
+        });
+        if (res.ok) {
+          showToast("✓ Cảm ơn bạn! Đã gửi gợi ý thuật ngữ tới ban biên tập.");
+          els.suggestGlossaryDialog?.close();
+          return;
+        }
+      } catch (err) {
+        console.warn("Unable to submit glossary suggestion:", err);
+      }
+    }
+    showToast("✓ Đã ghi nhận gợi ý thuật ngữ của bạn.");
+    els.suggestGlossaryDialog?.close();
+  });
+}
+
+function initCommentsController() {
+  els.commentsDrawerClose?.addEventListener("click", closeCommentsDrawer);
+  els.commentsOverlay?.addEventListener("click", closeCommentsDrawer);
+
+  els.commentForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const content = els.commentContentInput?.value.trim();
+    const author = els.commentAuthorInput?.value.trim() || "Độc giả";
+    if (!content) return;
+
+    const bookId = state.mode === "cdn" ? bookIdFromState() : state.bookId;
+    const chIdx = state.currentIndex;
+    const parIdx = activeCommentParagraphIndex;
+
+    try {
+      if (els.commentSubmitBtn) els.commentSubmitBtn.disabled = true;
+      await postComment({
+        supabaseUrl: SUPABASE_URL,
+        supabaseKey: SUPABASE_ANON_KEY,
+        bookId,
+        chapterIndex: chIdx,
+        paragraphIndex: parIdx,
+        authorName: author,
+        content
+      });
+
+      if (els.commentContentInput) els.commentContentInput.value = "";
+      localStorage.setItem("epubTranslator.commentAuthor", author);
+      showToast("✓ Đã đăng bình luận");
+
+      await renderCommentsListForParagraph(bookId, chIdx, parIdx);
+      await updateParagraphCommentBadge(parIdx);
+    } catch (err) {
+      showToast(err.message || "Không thể gửi bình luận");
+    } finally {
+      if (els.commentSubmitBtn) els.commentSubmitBtn.disabled = false;
+    }
+  });
+
+  const savedAuthor = localStorage.getItem("epubTranslator.commentAuthor");
+  if (savedAuthor && els.commentAuthorInput) {
+    els.commentAuthorInput.value = savedAuthor;
+  }
+}
+
+async function openCommentsDrawer(parIndex, parText) {
+  if (!els.commentsDrawer) return;
+  activeCommentParagraphIndex = parIndex;
+  if (els.commentsDrawerTitle) els.commentsDrawerTitle.textContent = `Đoạn ${parIndex + 1}`;
+  if (els.commentsSnippet) els.commentsSnippet.textContent = `"${parText.slice(0, 100)}${parText.length > 100 ? "..." : ""}"`;
+
+  els.commentsDrawer.hidden = false;
+  if (els.commentsOverlay) els.commentsOverlay.hidden = false;
+
+  const bookId = state.mode === "cdn" ? bookIdFromState() : state.bookId;
+  const chIdx = state.currentIndex;
+  await renderCommentsListForParagraph(bookId, chIdx, parIndex);
+}
+
+function closeCommentsDrawer() {
+  if (els.commentsDrawer) els.commentsDrawer.hidden = true;
+  if (els.commentsOverlay) els.commentsOverlay.hidden = true;
+}
+
+async function renderCommentsListForParagraph(bookId, chIdx, parIdx) {
+  if (!els.commentsList) return;
+  const grouped = await fetchChapterComments({
+    supabaseUrl: SUPABASE_URL,
+    supabaseKey: SUPABASE_ANON_KEY,
+    bookId,
+    chapterIndex: chIdx
+  });
+
+  const list = grouped.get(parIdx) || [];
+  if (!list.length) {
+    els.commentsList.innerHTML = `<p class="comments-empty">Chưa có bình luận nào cho đoạn này. Hãy là người đầu tiên!</p>`;
+    return;
+  }
+
+  els.commentsList.innerHTML = "";
+  list.forEach((c) => {
+    const item = document.createElement("div");
+    item.className = "comment-item";
+    const timeStr = c.created_at ? new Date(c.created_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "";
+    item.innerHTML = `
+      <div class="comment-header">
+        <span class="comment-author">${escapeHtml(c.author_name || "Độc giả")}</span>
+        <span class="comment-time">${timeStr}</span>
+      </div>
+      <div class="comment-body">${escapeHtml(c.content)}</div>
+    `;
+    els.commentsList.appendChild(item);
+  });
+  els.commentsList.scrollTop = els.commentsList.scrollHeight;
+}
+
+async function attachCommentBubblesToChapter(bookId, chapterIndex) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return;
+  try {
+    const grouped = await fetchChapterComments({
+      supabaseUrl: SUPABASE_URL,
+      supabaseKey: SUPABASE_ANON_KEY,
+      bookId,
+      chapterIndex
+    });
+
+    const paragraphs = els.translationText.querySelectorAll(".tts-paragraph-highlight");
+    paragraphs.forEach((pEl, i) => {
+      pEl.querySelector(".paragraph-comment-bubble")?.remove();
+      const count = (grouped.get(i) || []).length;
+      if (count > 0) {
+        const bubble = document.createElement("span");
+        bubble.className = "paragraph-comment-bubble";
+        bubble.textContent = `💬 ${count}`;
+        bubble.title = `${count} bình luận`;
+        bubble.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openCommentsDrawer(i, pEl.textContent);
+        });
+        pEl.appendChild(bubble);
+      }
+    });
+  } catch (e) {
+    console.warn("Unable to attach comment bubbles:", e);
+  }
+}
+
+async function updateParagraphCommentBadge(parIdx) {
+  const pEl = els.translationText.querySelector(`.tts-paragraph-highlight[data-par-index="${parIdx}"]`);
+  if (!pEl) return;
+  const bookId = state.mode === "cdn" ? bookIdFromState() : state.bookId;
+  const grouped = await fetchChapterComments({
+    supabaseUrl: SUPABASE_URL,
+    supabaseKey: SUPABASE_ANON_KEY,
+    bookId,
+    chapterIndex: state.currentIndex
+  });
+  const count = (grouped.get(parIdx) || []).length;
+  pEl.querySelector(".paragraph-comment-bubble")?.remove();
+  if (count > 0) {
+    const bubble = document.createElement("span");
+    bubble.className = "paragraph-comment-bubble";
+    bubble.textContent = `💬 ${count}`;
+    bubble.title = `${count} bình luận`;
+    bubble.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openCommentsDrawer(parIdx, pEl.textContent);
+    });
+    pEl.appendChild(bubble);
+  }
+}
+
+function initStreakTracker() {
+  const STREAK_KEY = "epubTranslator.readingStreak";
+  const STREAK_DATE_KEY = "epubTranslator.lastStreakDate";
+
+  const today = new Date().toISOString().slice(0, 10);
+  const lastDate = localStorage.getItem(STREAK_DATE_KEY);
+  let streak = Number(localStorage.getItem(STREAK_KEY) || 1);
+
+  if (lastDate) {
+    const diffDays = Math.round((new Date(today) - new Date(lastDate)) / (1000 * 60 * 60 * 24));
+    if (diffDays === 1) {
+      streak += 1;
+      localStorage.setItem(STREAK_KEY, String(streak));
+      localStorage.setItem(STREAK_DATE_KEY, today);
+    } else if (diffDays > 1) {
+      streak = 1;
+      localStorage.setItem(STREAK_KEY, "1");
+      localStorage.setItem(STREAK_DATE_KEY, today);
+    }
+  } else {
+    localStorage.setItem(STREAK_KEY, "1");
+    localStorage.setItem(STREAK_DATE_KEY, today);
+  }
+
+  if (els.streakBadge && els.streakDays) {
+    els.streakBadge.hidden = false;
+    els.streakDays.textContent = `${streak} ngày`;
+  }
 }
 
 function registerServiceWorker() {
@@ -2095,6 +2412,7 @@ function renderTranslation(cached, index) {
       chapter.translatedTitle = extracted;
       syncChapterUiTitle(index);
     }
+    attachCommentBubblesToChapter(state.bookId, index);
   } else {
     els.translationText.textContent = "Chưa có bản dịch.";
     els.translationText.classList.add("empty");
@@ -2689,6 +3007,7 @@ function renderCdnChapter(chapter, index) {
       ttsEngine.loadText(chapter.text);
       ttsEngine.play(0);
     }
+    attachCommentBubblesToChapter(bookIdFromState(), index);
   } else {
     // Untranslated Chinese chapter
     els.translationText.innerHTML = `
