@@ -299,6 +299,9 @@ const els = {
   sponsorOpenBtn: document.getElementById("sponsorOpenBtn"),
   sponsorDialog: document.getElementById("sponsorDialog"),
   sponsorDialogClose: document.getElementById("sponsorDialogClose"),
+  dmcaOpenBtn: document.getElementById("dmcaOpenBtn"),
+  dmcaModal: document.getElementById("dmcaModal"),
+  dmcaCloseBtn: document.getElementById("dmcaCloseBtn"),
   chapterSponsorSlot: document.getElementById("chapterSponsorSlot"),
   sponsorSlotTriggerBtn: document.getElementById("sponsorSlotTriggerBtn"),
   sponsorSlotDismissBtn: document.getElementById("sponsorSlotDismissBtn"),
@@ -360,6 +363,7 @@ initGlossarySuggestionController();
 initCommentsController();
 initStreakTracker();
 initSponsorController();
+initDmcaController();
 initReaderRankController();
 initSecurityGuards();
 registerServiceWorker();
@@ -834,7 +838,7 @@ function isValidLibraryBook(book) {
 function applyLibrarySiteSettings() {
   const name = BRAND_NAME;
   const tagline = libraryState.site.tagline || "Thư viện truyện dịch cá nhân";
-  const email = libraryState.site.contactEmail || "minhphuc2308031@gmail.com";
+  const email = libraryState.site.contactEmail || "contact@tram-chu.online";
   els.libraryName.textContent = name;
   els.libraryTagline.textContent = tagline;
   els.contactEmail.textContent = email;
@@ -2705,6 +2709,20 @@ function initSponsorController() {
   }
 }
 
+function initDmcaController() {
+  function openDmca() {
+    els.dmcaModal?.showModal();
+  }
+  function closeDmca() {
+    els.dmcaModal?.close();
+  }
+  els.dmcaOpenBtn?.addEventListener("click", openDmca);
+  els.dmcaCloseBtn?.addEventListener("click", closeDmca);
+  els.dmcaModal?.addEventListener("click", (e) => {
+    if (e.target === els.dmcaModal) closeDmca();
+  });
+}
+
 function updateRankBadgeUI() {
   const profile = getReaderProfile();
   const nickname = getReaderNickname();
@@ -3781,6 +3799,25 @@ function renderCdnChapter(chapter, index) {
   if (extracted && chapter.translatedTitle !== extracted) {
     chapter.translatedTitle = extracted;
     syncChapterUiTitle(index);
+  }
+
+  // Update Page SEO metadata and Schema.org for this chapter
+  try {
+    const chapterTitle = displayChapterTitle(index);
+    const bookId = bookIdFromState();
+    const bookObj = libraryState.books.find((b) => b.id === bookId) || state.book || { id: bookId, title: state.title };
+    updatePageMeta({
+      title: `${chapterTitle} — ${state.title}`,
+      description: `Đọc truyện ${state.title} ${chapterTitle} bản dịch tiếng Việt chuẩn, đọc mượt không quảng cáo tại Trạm Chữ.`,
+      url: `${window.location.origin}/?book=${encodeURIComponent(bookId)}&chapter=${index + 1}`,
+      book: bookObj,
+      chapter: {
+        number: index + 1,
+        title: chapterTitle
+      }
+    });
+  } catch (err) {
+    console.warn("Unable to sync SEO metadata for chapter", err);
   }
 
   // Translation happened at ingest, so the reader has nothing to trigger.

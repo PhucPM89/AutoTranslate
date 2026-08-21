@@ -7677,6 +7677,196 @@ body.zen-mode .document-paper {
   margin-top: 0.35rem;
 }
 
+/* Anonymous Support & Channels */
+.support-anonymous-card {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.9));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+}
+
+.support-anon-icon {
+  font-size: 2.2rem;
+  background: rgba(255, 255, 255, 0.05);
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.support-anon-info strong {
+  display: block;
+  font-size: 1.05rem;
+  color: #f8fafc;
+  margin-bottom: 0.25rem;
+}
+
+.support-anon-info p {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  margin-bottom: 0.75rem;
+  line-height: 1.4;
+}
+
+.support-anon-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.anon-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 999px;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.anon-badge .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.telegram-badge, .sponsor-channel-btn.telegram {
+  background: rgba(0, 136, 204, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(0, 136, 204, 0.3);
+}
+
+.telegram-badge:hover, .sponsor-channel-btn.telegram:hover {
+  background: rgba(0, 136, 204, 0.3);
+  transform: translateY(-1px);
+}
+
+.email-badge {
+  background: rgba(255, 255, 255, 0.06);
+  color: #cbd5e1;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.email-badge:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+/* DMCA & Notice Dialog */
+.dmca-dialog {
+  padding: 0;
+  border: none;
+  background: transparent;
+  max-width: 620px;
+  width: 90vw;
+  margin: auto;
+  border-radius: 20px;
+}
+
+.dmca-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+}
+
+.dmca-card {
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
+  color: #f8fafc;
+}
+
+.dmca-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.dmca-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.dmca-icon {
+  font-size: 1.6rem;
+}
+
+.dmca-header h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0;
+  color: #f8fafc;
+}
+
+.dmca-subtitle {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin: 0.15rem 0 0;
+}
+
+.dmca-body {
+  padding: 1.5rem;
+  max-height: 70vh;
+  overflow-y: auto;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: #cbd5e1;
+}
+
+.dmca-section {
+  margin-bottom: 1.25rem;
+}
+
+.dmca-section h4 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #38bdf8;
+  margin: 0 0 0.4rem;
+}
+
+.dmca-section p {
+  margin: 0 0 0.5rem;
+}
+
+.dmca-contact-card {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  margin: 0.75rem 0;
+}
+
+.dmca-contact-card p {
+  margin: 0.25rem 0;
+  font-size: 0.85rem;
+}
+
+.dmca-contact-card a {
+  color: #38bdf8;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.dmca-contact-card a:hover {
+  text-decoration: underline;
+}
+
+
 
 
 
