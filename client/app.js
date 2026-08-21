@@ -251,6 +251,7 @@ const els = {
   commentAuthorInput: document.getElementById("commentAuthorInput"),
   commentContentInput: document.getElementById("commentContentInput"),
   commentSubmitBtn: document.getElementById("commentSubmitBtn"),
+  commentSelectionBtn: document.getElementById("commentSelectionBtn"),
   streakBadge: document.getElementById("streakBadge"),
   streakDays: document.getElementById("streakDays")
 };
@@ -630,7 +631,7 @@ async function loadCatalogSnapshot() {
   }
 }
 
-function applyLibraryManifest(manifest) {
+async function applyLibraryManifest(manifest) {
   libraryState.site = manifest?.site && typeof manifest.site === "object" ? manifest.site : {};
   libraryState.books = Array.isArray(manifest?.books) ? manifest.books.filter(isValidLibraryBook) : [];
   applyLibrarySiteSettings();
@@ -639,12 +640,13 @@ function applyLibraryManifest(manifest) {
   renderGenrePills();
   renderRankRail();
   renderCatalog();
-  // A shared #book/<id> link only resolves once the catalog has arrived.
-  if (!openDetailFromHash()) alignHashedSection();
+  // A shared link (#read/<id>/<ch>, ?book=<id>&ch=<n>, #book/<id>) resolves once the catalog has arrived.
+  const opened = await openFromUrl();
+  if (!opened) alignHashedSection();
 }
 
-function handleHashChange() {
-  if (openDetailFromHash()) return;
+async function handleHashChange() {
+  if (await openFromUrl()) return;
   if (!els.bookView.hidden) showLibrary();
   alignHashedSection();
 }
@@ -1270,6 +1272,49 @@ function updateBookViewBookmark(book) {
   }
 }
 
+async function openFromUrl() {
+  // 1. Check Hash: #read/<bookId>/<chapterNumber>
+  const readMatch = window.location.hash.match(/^#read\/([^/]+)(?:\/(\d+))?$/);
+  if (readMatch) {
+    const bookId = decodeURIComponent(readMatch[1]);
+    const chNum = Number(readMatch[2]) || 1;
+    const catalogBook = libraryState.books.find((item) => item.id === bookId);
+    if (catalogBook) {
+      const cover = catalogBook.cover || fallbackCoverForBook(catalogBook);
+      const opened = READER_CDN_ENABLED ? await openBookFromCdn(catalogBook, cover, { startAtFirstChapter: false }) : false;
+      if (opened) {
+        goToChapter(Math.max(0, chNum - 1));
+        return true;
+      }
+      await loadCatalogBook(catalogBook, cover);
+      goToChapter(Math.max(0, chNum - 1));
+      return true;
+    }
+  }
+
+  // 2. Check Query Params: ?book=<id>&ch=<n>
+  const urlParams = new URLSearchParams(window.location.search);
+  const paramBook = urlParams.get("book");
+  if (paramBook) {
+    const chNum = Number(urlParams.get("ch")) || 1;
+    const catalogBook = libraryState.books.find((item) => item.id === paramBook);
+    if (catalogBook) {
+      const cover = catalogBook.cover || fallbackCoverForBook(catalogBook);
+      const opened = READER_CDN_ENABLED ? await openBookFromCdn(catalogBook, cover, { startAtFirstChapter: false }) : false;
+      if (opened) {
+        goToChapter(Math.max(0, chNum - 1));
+        return true;
+      }
+      await loadCatalogBook(catalogBook, cover);
+      goToChapter(Math.max(0, chNum - 1));
+      return true;
+    }
+  }
+
+  // 3. Check Book Detail: #book/<id>
+  return openDetailFromHash();
+}
+
 function openDetailFromHash() {
   const match = window.location.hash.match(/^#book\/(.+)$/);
   if (!match) return false;
@@ -1760,6 +1805,21 @@ function initQuoteCardAndSelection() {
     hideSelectionTooltip();
   });
 
+  els.commentSelectionBtn?.addEventListener("click", () => {
+    if (!selectedQuoteText) return;
+    const selection = window.getSelection();
+    let parIdx = 0;
+    if (selection && selection.rangeCount > 0) {
+      const node = selection.getRangeAt(0).startContainer;
+      const parEl = node.nodeType === 1 ? node.closest(".tts-paragraph-highlight") : node.parentElement?.closest(".tts-paragraph-highlight");
+      if (parEl && parEl.dataset.parIndex !== undefined) {
+        parIdx = Number(parEl.dataset.parIndex) || 0;
+      }
+    }
+    openCommentsDrawer(parIdx, selectedQuoteText);
+    hideSelectionTooltip();
+  });
+
   els.quoteFormatPost?.addEventListener("click", () => {
     currentQuoteFormat = "post";
     els.quoteFormatPost.classList.add("is-active");
@@ -2086,14 +2146,13 @@ function initCrossDeviceQrController() {
     if (!els.crossDeviceQrCanvas || !els.crossDeviceQrDialog) return;
     const bookId = state.mode === "cdn" ? bookIdFromState() : state.bookId;
     const chNum = state.currentIndex + 1;
-    const url = `${window.location.origin}/?book=${encodeURIComponent(bookId)}&ch=${chNum}`;
+    const url = `${window.location.origin}/#read/${encodeURIComponent(bookId)}/${chNum}`;
 
     drawQRCodeToCanvas(els.crossDeviceQrCanvas, url, {
-      width: 220,
-      height: 220,
+      width: 240,
+      margin: 2,
       colorDark: "#130f24",
-      colorLight: "#ffffff",
-      padding: 12
+      colorLight: "#ffffff"
     });
 
     els.crossDeviceQrDialog.showModal();
@@ -2258,34 +2317,36 @@ async function renderCommentsListForParagraph(bookId, chIdx, parIdx) {
 }
 
 async function attachCommentBubblesToChapter(bookId, chapterIndex) {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return;
-  try {
-    const grouped = await fetchChapterComments({
-      supabaseUrl: SUPABASE_URL,
-      supabaseKey: SUPABASE_ANON_KEY,
-      bookId,
-      chapterIndex
-    });
+  const paragraphs = els.translationText.querySelectorAll(".tts-paragraph-highlight");
+  if (!paragraphs.length) return;
 
-    const paragraphs = els.translationText.querySelectorAll(".tts-paragraph-highlight");
-    paragraphs.forEach((pEl, i) => {
-      pEl.querySelector(".paragraph-comment-bubble")?.remove();
-      const count = (grouped.get(i) || []).length;
-      if (count > 0) {
-        const bubble = document.createElement("span");
-        bubble.className = "paragraph-comment-bubble";
-        bubble.textContent = `💬 ${count}`;
-        bubble.title = `${count} bình luận`;
-        bubble.addEventListener("click", (e) => {
-          e.stopPropagation();
-          openCommentsDrawer(i, pEl.textContent);
-        });
-        pEl.appendChild(bubble);
-      }
-    });
-  } catch (e) {
-    console.warn("Unable to attach comment bubbles:", e);
+  let grouped = new Map();
+  if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+    try {
+      grouped = await fetchChapterComments({
+        supabaseUrl: SUPABASE_URL,
+        supabaseKey: SUPABASE_ANON_KEY,
+        bookId,
+        chapterIndex
+      });
+    } catch (e) {
+      console.warn("Unable to attach comment bubbles:", e);
+    }
   }
+
+  paragraphs.forEach((pEl, i) => {
+    pEl.querySelector(".paragraph-comment-bubble")?.remove();
+    const count = (grouped.get(i) || []).length;
+    const bubble = document.createElement("span");
+    bubble.className = count > 0 ? "paragraph-comment-bubble" : "paragraph-comment-bubble is-empty";
+    bubble.textContent = count > 0 ? `💬 ${count}` : "💬";
+    bubble.title = count > 0 ? `${count} bình luận` : "Thêm bình luận cho đoạn này";
+    bubble.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openCommentsDrawer(i, pEl.textContent);
+    });
+    pEl.appendChild(bubble);
+  });
 }
 
 async function updateParagraphCommentBadge(parIdx) {
@@ -2300,17 +2361,15 @@ async function updateParagraphCommentBadge(parIdx) {
   });
   const count = (grouped.get(parIdx) || []).length;
   pEl.querySelector(".paragraph-comment-bubble")?.remove();
-  if (count > 0) {
-    const bubble = document.createElement("span");
-    bubble.className = "paragraph-comment-bubble";
-    bubble.textContent = `💬 ${count}`;
-    bubble.title = `${count} bình luận`;
-    bubble.addEventListener("click", (e) => {
-      e.stopPropagation();
-      openCommentsDrawer(parIdx, pEl.textContent);
-    });
-    pEl.appendChild(bubble);
-  }
+  const bubble = document.createElement("span");
+  bubble.className = count > 0 ? "paragraph-comment-bubble" : "paragraph-comment-bubble is-empty";
+  bubble.textContent = count > 0 ? `💬 ${count}` : "💬";
+  bubble.title = count > 0 ? `${count} bình luận` : "Thêm bình luận cho đoạn này";
+  bubble.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openCommentsDrawer(parIdx, pEl.textContent);
+  });
+  pEl.appendChild(bubble);
 }
 
 function initStreakTracker() {

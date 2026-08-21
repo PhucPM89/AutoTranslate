@@ -5442,23 +5442,47 @@ body.zen-mode .document-paper {
 .paragraph-comment-bubble {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  margin-left: 0.45rem;
-  padding: 0.1rem 0.4rem;
-  background: rgba(168, 85, 247, 0.18);
-  border: 1px solid rgba(168, 85, 247, 0.35);
+  gap: 3px;
+  margin-left: 0.55rem;
+  padding: 0.15rem 0.5rem;
+  background: rgba(168, 85, 247, 0.22);
+  border: 1px solid rgba(168, 85, 247, 0.45);
   border-radius: 999px;
-  color: #c084fc;
-  font-size: 0.68rem;
+  color: #e9d5ff;
+  font-size: 0.72rem;
   font-weight: 700;
   cursor: pointer;
   vertical-align: middle;
-  transition: all 0.15s ease;
+  transition: all 0.18s ease;
+  user-select: none;
 }
 
 .paragraph-comment-bubble:hover {
-  background: rgba(168, 85, 247, 0.35);
-  transform: scale(1.08);
+  background: rgba(168, 85, 247, 0.45);
+  border-color: var(--accent);
+  color: #ffffff;
+  transform: scale(1.1);
+}
+
+.paragraph-comment-bubble.is-empty {
+  opacity: 0.25;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.tts-paragraph-highlight:hover .paragraph-comment-bubble.is-empty {
+  opacity: 0.9;
+  background: rgba(168, 85, 247, 0.2);
+  border-color: rgba(168, 85, 247, 0.35);
+  color: #d8b4fe;
+}
+
+@media (hover: none) {
+  .paragraph-comment-bubble.is-empty {
+    opacity: 0.45;
+  }
 }
 
 
