@@ -5912,21 +5912,29 @@ body.zen-mode .document-paper {
 /* ==========================================================================
    Rank & School Selector Dialog
    ========================================================================== */
-.rank-school-dialog {
+.rank-school-dialog,
+.sponsor-dialog {
   border: 1px solid var(--border-light);
   border-radius: 16px;
-  background: rgba(19, 15, 36, 0.95);
+  background: rgba(19, 15, 36, 0.96);
   backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   color: var(--text);
   padding: 0;
   max-width: 540px;
-  width: 92vw;
+  width: min(540px, 94vw);
+  max-height: min(88vh, 88dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   box-shadow: 0 20px 45px rgba(0, 0, 0, 0.7);
+  margin: auto;
 }
 
-.rank-school-dialog::backdrop {
+.rank-school-dialog::backdrop,
+.sponsor-dialog::backdrop {
   background: rgba(0, 0, 0, 0.65);
   backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .rank-school-header {
@@ -6106,6 +6114,125 @@ body.zen-mode .document-paper {
   font-size: 0.74rem;
   color: var(--muted);
   line-height: 1.5;
+}
+
+.reader-top-rank-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  height: 32px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.reader-top-rank-btn:hover {
+  transform: translateY(-1px);
+}
+
+/* ==========================================================================
+   Mobile Responsive Refinements
+   ========================================================================== */
+@media (max-width: 640px) {
+  .library-actions {
+    gap: 0.35rem;
+  }
+
+  .reader-top-rank-btn #readerTopRankTitle {
+    display: none;
+  }
+
+  .reader-top-rank-btn {
+    padding: 0 0.45rem;
+    min-width: 32px;
+    justify-content: center;
+  }
+
+  .qr-device-button span:last-child {
+    display: none;
+  }
+
+  .qr-device-button {
+    padding: 0 0.45rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .library-actions {
+    gap: 0.25rem;
+  }
+
+  .reader-rank-badge {
+    padding: 0.15rem 0.45rem;
+    font-size: 0.7rem;
+  }
+
+  .reader-rank-badge #rankBadgeTitle {
+    display: none;
+  }
+
+  .streak-badge {
+    padding: 0.15rem 0.45rem;
+    font-size: 0.7rem;
+  }
+
+  .rank-school-header,
+  .sponsor-dialog-header {
+    padding: 1rem 1rem 0.75rem;
+  }
+
+  .rank-school-body,
+  .sponsor-dialog-body {
+    padding: 0.85rem 1rem 1.25rem;
+  }
+
+  .sponsor-stats-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+
+  .current-rank-card {
+    padding: 0.85rem;
+  }
+
+  .current-rank-icon {
+    font-size: 1.5rem;
+  }
+
+  .current-rank-title {
+    font-size: 1rem;
+  }
+
+  .school-card-path {
+    font-size: 0.68rem;
+  }
+
+  .sponsor-channel-btn {
+    font-size: 0.78rem;
+    padding: 0.5rem 0.65rem;
+  }
+
+  .comment-rank-trigger {
+    padding: 0.3rem 0.45rem;
+    font-size: 0.72rem;
+  }
+
+  .sponsor-slot-inner {
+    padding: 1rem 0.85rem;
+  }
+
+  .sponsor-slot-title {
+    font-size: 0.95rem;
+  }
+
+  .sponsor-slot-desc {
+    font-size: 0.78rem;
+  }
 }
 
 
