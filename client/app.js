@@ -253,7 +253,13 @@ const els = {
   commentSubmitBtn: document.getElementById("commentSubmitBtn"),
   commentSelectionBtn: document.getElementById("commentSelectionBtn"),
   streakBadge: document.getElementById("streakBadge"),
-  streakDays: document.getElementById("streakDays")
+  streakDays: document.getElementById("streakDays"),
+  sponsorOpenBtn: document.getElementById("sponsorOpenBtn"),
+  sponsorDialog: document.getElementById("sponsorDialog"),
+  sponsorDialogClose: document.getElementById("sponsorDialogClose"),
+  chapterSponsorSlot: document.getElementById("chapterSponsorSlot"),
+  sponsorSlotTriggerBtn: document.getElementById("sponsorSlotTriggerBtn"),
+  sponsorSlotDismissBtn: document.getElementById("sponsorSlotDismissBtn")
 };
 
 const parser = new DOMParser();
@@ -265,6 +271,7 @@ initCrossDeviceQrController();
 initGlossarySuggestionController();
 initCommentsController();
 initStreakTracker();
+initSponsorController();
 initSecurityGuards();
 registerServiceWorker();
 initTTSController();
@@ -2409,6 +2416,34 @@ function initStreakTracker() {
   if (els.streakBadge && els.streakDays) {
     els.streakBadge.hidden = false;
     els.streakDays.textContent = `${streak} ngày`;
+  }
+}
+
+function initSponsorController() {
+  const SPONSOR_DISMISSED_KEY = "epubTranslator.hideSponsorSlot";
+
+  function openSponsorModal() {
+    els.sponsorDialog?.showModal();
+  }
+
+  function closeSponsorModal() {
+    els.sponsorDialog?.close();
+  }
+
+  els.sponsorOpenBtn?.addEventListener("click", openSponsorModal);
+  els.sponsorSlotTriggerBtn?.addEventListener("click", openSponsorModal);
+  els.sponsorDialogClose?.addEventListener("click", closeSponsorModal);
+  els.sponsorDialog?.addEventListener("click", (e) => {
+    if (e.target === els.sponsorDialog) closeSponsorModal();
+  });
+
+  els.sponsorSlotDismissBtn?.addEventListener("click", () => {
+    if (els.chapterSponsorSlot) els.chapterSponsorSlot.hidden = true;
+    sessionStorage.setItem(SPONSOR_DISMISSED_KEY, "1");
+  });
+
+  if (sessionStorage.getItem(SPONSOR_DISMISSED_KEY) === "1") {
+    if (els.chapterSponsorSlot) els.chapterSponsorSlot.hidden = true;
   }
 }
 

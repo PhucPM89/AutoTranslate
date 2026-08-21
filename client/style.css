@@ -5485,5 +5485,289 @@ body.zen-mode .document-paper {
   }
 }
 
+/* ==========================================================================
+   Library Footer Links & Sponsor Button
+   ========================================================================== */
+.library-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem 1.25rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.88rem;
+}
+
+.footer-link,
+.footer-link-btn {
+  color: var(--muted);
+  text-decoration: none;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.88rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.footer-link:hover,
+.footer-link-btn:hover {
+  color: var(--accent);
+}
+
+.footer-link-btn {
+  color: #c084fc;
+  font-weight: 600;
+}
+
+.library-footer-sub {
+  font-size: 0.78rem;
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+/* ==========================================================================
+   Native Chapter End Sponsor Slot
+   ========================================================================== */
+.chapter-sponsor-slot {
+  margin: 2.5rem 0 1.5rem 0;
+  padding: 1px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.25), rgba(56, 189, 248, 0.15));
+  transition: all 0.2s ease;
+}
+
+.sponsor-slot-inner {
+  padding: 1.25rem 1.5rem;
+  background: rgba(19, 15, 36, 0.85);
+  backdrop-filter: blur(12px);
+  border-radius: 13px;
+  text-align: center;
+  border: 1px dashed rgba(168, 85, 247, 0.35);
+}
+
+.sponsor-slot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.sponsor-slot-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+  background: rgba(168, 85, 247, 0.15);
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+}
+
+.sponsor-slot-dismiss {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+
+.sponsor-slot-dismiss:hover {
+  opacity: 1;
+  color: #fff;
+}
+
+.sponsor-slot-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 0.25rem;
+}
+
+.sponsor-slot-desc {
+  font-size: 0.84rem;
+  color: var(--muted);
+  margin-bottom: 0.9rem;
+}
+
+.sponsor-slot-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1.2rem;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #000;
+  font-weight: 700;
+  font-size: 0.85rem;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sponsor-slot-cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(168, 85, 247, 0.35);
+}
+
+/* ==========================================================================
+   Sponsorship & Partnership Dialog Modal
+   ========================================================================== */
+.sponsor-dialog {
+  border: 1px solid var(--border-light);
+  border-radius: 16px;
+  background: rgba(19, 15, 36, 0.95);
+  backdrop-filter: blur(20px);
+  color: var(--text);
+  padding: 0;
+  max-width: 540px;
+  width: 92vw;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.7);
+}
+
+.sponsor-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+}
+
+.sponsor-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sponsor-dialog-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.sponsor-dialog-body {
+  padding: 1.25rem 1.5rem 1.75rem 1.5rem;
+}
+
+.sponsor-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.sponsor-stat-card {
+  padding: 0.75rem 0.5rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  text-align: center;
+}
+
+.sponsor-stat-card .stat-num {
+  display: block;
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.sponsor-stat-card .stat-lbl {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.sponsor-subhead {
+  font-size: 0.92rem;
+  margin: 1rem 0 0.65rem 0;
+  color: #e2e8f0;
+}
+
+.sponsor-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 1.25rem;
+}
+
+.sponsor-option-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+}
+
+.sponsor-option-icon {
+  font-size: 1.25rem;
+  line-height: 1.2;
+}
+
+.sponsor-option-info strong {
+  display: block;
+  font-size: 0.88rem;
+  color: #fff;
+  margin-bottom: 0.2rem;
+}
+
+.sponsor-option-info p {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.35;
+}
+
+.sponsor-contact-box {
+  padding: 1rem;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.12), rgba(56, 189, 248, 0.08));
+  border: 1px solid rgba(168, 85, 247, 0.25);
+  border-radius: 12px;
+}
+
+.sponsor-contact-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  margin-bottom: 0.65rem;
+}
+
+.sponsor-contact-channels {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sponsor-channel-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.85rem;
+  border-radius: 8px;
+  text-decoration: none;
+  font-size: 0.84rem;
+  font-weight: 600;
+  transition: transform 0.12s ease;
+}
+
+.sponsor-channel-btn.email {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+}
+
+.sponsor-channel-btn.telegram {
+  background: rgba(56, 189, 248, 0.18);
+  color: #38bdf8;
+}
+
+.sponsor-channel-btn:hover {
+  transform: translateX(4px);
+}
+
 
 
