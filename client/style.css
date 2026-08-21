@@ -2389,7 +2389,8 @@ body:not(.dark) .theme-moon {
   position: sticky;
   top: var(--topbar-h);
   z-index: 8;
-  margin: 0 0 var(--space-5);
+  margin: 0 calc(-1 * clamp(1rem, 3vw, 3rem)) var(--space-5);
+  padding: 0 clamp(1rem, 3vw, 3rem);
   background: color-mix(in srgb, var(--topbar) 92%, transparent);
   backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--border-soft);

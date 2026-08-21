@@ -31,7 +31,7 @@ const libraryState = {
 
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const BRAND_NAME = "Trạm Chữ";
-const CATALOG_PAGE_SIZE = 10;
+const CATALOG_PAGE_SIZE = 12;
 const CACHE_DB_NAME = "epubTranslator.cache";
 const CACHE_DB_VERSION = 2;
 const CACHE_STORE = "books";
