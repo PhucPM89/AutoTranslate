@@ -44,6 +44,15 @@ const els = {
   statsBooksEmpty: document.getElementById("adminStatsBooksEmpty"),
   statsNote: document.getElementById("adminStatsNote"),
   statsRefresh: document.getElementById("adminStatsRefresh"),
+  keysTab: document.getElementById("adminKeysTab"),
+  keysPanel: document.getElementById("adminKeysPanel"),
+  keysPingBtn: document.getElementById("adminKeysPingBtn"),
+  keysTotalCount: document.getElementById("keysTotalCount"),
+  keysActiveModel: document.getElementById("keysActiveModel"),
+  keysList: document.getElementById("adminKeysList"),
+  addKeyForm: document.getElementById("adminAddKeyForm"),
+  newApiKeyInput: document.getElementById("newApiKeyInput"),
+  addKeyBtn: document.getElementById("adminAddKeyBtn"),
   bookSelect: document.getElementById("adminBookSelect"),
   password: document.getElementById("adminPassword"),
   epub: document.getElementById("adminEpub"),
@@ -79,8 +88,11 @@ export function mountAdmin() {
     els.crawlerForm?.addEventListener("submit", saveCrawlerConfig);
     els.libraryTab?.addEventListener("click", () => selectAdminTab("library"));
     els.translateTab?.addEventListener("click", () => selectAdminTab("translate"));
+    els.keysTab?.addEventListener("click", () => selectAdminTab("keys"));
     els.crawlerTab?.addEventListener("click", () => selectAdminTab("crawler"));
     els.statsTab?.addEventListener("click", () => selectAdminTab("stats"));
+    els.keysPingBtn?.addEventListener("click", runKeysPingTest);
+    els.addKeyForm?.addEventListener("submit", handleAddKeySubmit);
     els.translateRefresh?.addEventListener("click", loadTranslateStatus);
     els.statsRefresh?.addEventListener("click", loadAnalytics);
     els.crawlerRefresh?.addEventListener("click", loadCrawlerConfig);
@@ -634,6 +646,7 @@ function renderCrawlerStatus(status = {}) {
 const ADMIN_TABS = [
   { key: "library", tab: "libraryTab", panel: "uploadForm" },
   { key: "translate", tab: "translateTab", panel: "translatePanel" },
+  { key: "keys", tab: "keysTab", panel: "keysPanel" },
   { key: "crawler", tab: "crawlerTab", panel: "crawlerForm" },
   { key: "stats", tab: "statsTab", panel: "statsPanel" }
 ];
@@ -649,9 +662,136 @@ function selectAdminTab(tab) {
   setStatus("");
   if (activeAdminTab === "translate") startTranslatePolling();
   else stopTranslatePolling();
+  if (activeAdminTab === "keys") loadAdminKeys();
   if (activeAdminTab === "stats") loadAnalytics();
   if (activeAdminTab === "crawler") startCrawlerPolling();
   else stopCrawlerPolling();
+}
+
+async function loadAdminKeys() {
+  if (!els.keysList) return;
+  els.keysList.innerHTML = '<p class="stats-empty">Đang nạp dữ liệu key...</p>';
+  try {
+    const data = await requestJson("/api/admin/keys");
+    if (els.keysTotalCount) els.keysTotalCount.textContent = `${data.totalKeys || 0} Keys`;
+    if (els.keysActiveModel) els.keysActiveModel.textContent = data.activeModel || "qwen/qwen3.6-27b";
+    renderKeysList(data.keys || []);
+  } catch (error) {
+    els.keysList.innerHTML = `<p class="stats-empty text-error">Không tải được thông tin key: ${error.message}</p>`;
+  }
+}
+
+async function runKeysPingTest() {
+  if (!els.keysPingBtn || !els.keysList) return;
+  const originalText = els.keysPingBtn.innerHTML;
+  els.keysPingBtn.disabled = true;
+  els.keysPingBtn.innerHTML = '<svg class="icon spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/></svg>Đang ping 7 keys...';
+  try {
+    const data = await requestJson("/api/admin/keys", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" }
+    });
+    renderKeysList(data.keys || [], true);
+    setStatus("Đã hoàn tất kiểm tra kết nối toàn bộ Key.");
+  } catch (error) {
+    setStatus(`Lỗi khi ping keys: ${error.message}`, true);
+  } finally {
+    els.keysPingBtn.disabled = false;
+    els.keysPingBtn.innerHTML = originalText;
+  }
+}
+
+async function handleAddKeySubmit(event) {
+  event.preventDefault();
+  const key = String(els.newApiKeyInput?.value || "").trim();
+  if (!key) return;
+
+  if (els.addKeyBtn) {
+    els.addKeyBtn.disabled = true;
+    els.addKeyBtn.innerHTML = '<svg class="icon spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/></svg><span>Đang lưu...</span>';
+  }
+
+  try {
+    const data = await requestJson("/api/admin/keys", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "add", key })
+    });
+    if (els.newApiKeyInput) els.newApiKeyInput.value = "";
+    if (els.keysTotalCount) els.keysTotalCount.textContent = `${data.totalKeys || 0} Keys`;
+    renderKeysList(data.keys || []);
+    setStatus("Đã thêm API Key mới thành công.");
+  } catch (error) {
+    setStatus(`Lỗi khi thêm key: ${error.message}`, true);
+  } finally {
+    if (els.addKeyBtn) {
+      els.addKeyBtn.disabled = false;
+      els.addKeyBtn.innerHTML = '<svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg><span>Thêm Key</span>';
+    }
+  }
+}
+
+async function handleDeleteKey(masked, index) {
+  if (!confirm(`Bạn có chắc chắn muốn xóa API Key [${masked}] khỏi hệ thống?`)) return;
+  setStatus("Đang xóa API Key...");
+  try {
+    const data = await requestJson("/api/admin/keys", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete", masked, index })
+    });
+    if (els.keysTotalCount) els.keysTotalCount.textContent = `${data.totalKeys || 0} Keys`;
+    renderKeysList(data.keys || []);
+    setStatus("Đã xóa API Key thành công.");
+  } catch (error) {
+    setStatus(`Lỗi khi xóa key: ${error.message}`, true);
+  }
+}
+
+function renderKeysList(keys, isPingResult = false) {
+  if (!els.keysList) return;
+  els.keysList.innerHTML = "";
+  if (!keys.length) {
+    els.keysList.innerHTML = '<p class="stats-empty">Chưa có API Key nào được cấu hình.</p>';
+    return;
+  }
+
+  keys.forEach((k, idx) => {
+    const card = document.createElement("div");
+    card.className = "key-card";
+    const latencyHtml = k.latencyMs != null
+      ? `<span class="ping-badge ${k.ok ? "ping-fast" : "ping-fail"}">${k.latencyMs}ms</span>`
+      : '<span class="ping-badge">Chưa ping</span>';
+
+    const statusBadge = k.ok !== false
+      ? '<span class="key-status-badge is-ready">🟢 Sẵn sàng</span>'
+      : '<span class="key-status-badge is-error">🔴 Lỗi</span>';
+
+    card.innerHTML = `
+      <div class="key-card-header">
+        <div class="key-card-info">
+          <span class="key-card-num">Key #${idx + 1}</span>
+          <strong class="key-card-masked">${k.masked || "gsk_..."}</strong>
+        </div>
+        <div class="key-card-header-actions">
+          ${statusBadge}
+          <button class="key-delete-btn" type="button" title="Xóa API Key này" aria-label="Xóa key">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 15H6L5 6M10 11v6M14 11v6"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="key-card-meta">
+        <span class="key-provider-tag">${k.provider || "Groq LPU"}</span>
+        ${latencyHtml}
+      </div>
+    `;
+
+    card.querySelector(".key-delete-btn")?.addEventListener("click", () => {
+      handleDeleteKey(k.masked, idx);
+    });
+
+    els.keysList.appendChild(card);
+  });
 }
 
 function renderBookOptions(selectedId = "") {

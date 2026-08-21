@@ -380,6 +380,7 @@
       <div id="adminTabs" class="admin-tabs" role="tablist" aria-label="Khu vực quản trị" hidden>
         <button id="adminLibraryTab" class="admin-tab active" type="button" role="tab" aria-selected="true" aria-controls="adminUploadForm"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2Z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7Z"></path></svg>Thư viện</button>
         <button id="adminTranslateTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminTranslatePanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>Tiến trình AI</button>
+        <button id="adminKeysTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminKeysPanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg>Sức khỏe 7 Keys</button>
         <button id="adminCrawlerTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminCrawlerForm"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path><circle cx="12" cy="12" r="4"></circle></svg>Crawler Fanqie</button>
         <button id="adminStatsTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminStatsPanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 3v18h18"></path><path d="M7 15v3M12 9v9M17 12v6"></path></svg>Số liệu độc giả</button>
       </div>
@@ -437,6 +438,48 @@
           <h4>Hàng đợi xoay vòng (Translation Queue)</h4>
           <div id="translateQueueList" class="translate-queue-list">
             <p class="stats-empty">Đang tải hàng đợi...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Groq API Key Pool & Health Monitor Panel -->
+      <section id="adminKeysPanel" class="admin-keys-panel" hidden aria-labelledby="adminKeysTitle">
+        <div class="crawler-overview">
+          <div><p class="eyebrow">Quản lý Cụm 7 API Key</p><h3 id="adminKeysTitle">Sức khỏe &amp; Độ trễ Groq LPU</h3></div>
+          <button id="adminKeysPingBtn" class="primary-action" type="button"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>Kiểm tra kết nối (Ping Test)</button>
+        </div>
+
+        <div class="keys-summary-card">
+          <div class="keys-summary-item">
+            <span>Tổng số Key</span>
+            <strong id="keysTotalCount">7 Keys</strong>
+          </div>
+          <div class="keys-summary-item">
+            <span>Model chính</span>
+            <strong id="keysActiveModel">qwen/qwen3.6-27b</strong>
+          </div>
+          <div class="keys-summary-item">
+            <span>Tổng hạn mức ngày</span>
+            <strong class="text-accent">~100.800 requests</strong>
+          </div>
+        </div>
+
+        <!-- Add New Key Form -->
+        <form id="adminAddKeyForm" class="add-key-form">
+          <label for="newApiKeyInput" class="add-key-label">Thêm Groq / AI API Key mới:</label>
+          <div class="add-key-input-row">
+            <input id="newApiKeyInput" class="add-key-input" type="password" placeholder="Nhập API Key mới (VD: gsk_...)" required autocomplete="off">
+            <button id="adminAddKeyBtn" class="primary-action add-key-submit-btn" type="submit">
+              <svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg>
+              <span>Thêm Key</span>
+            </button>
+          </div>
+        </form>
+
+        <div class="keys-list-wrap">
+          <h4>Danh sách Key &amp; Trạng thái</h4>
+          <div id="adminKeysList" class="admin-keys-grid">
+            <p class="stats-empty">Đang tải danh sách key...</p>
           </div>
         </div>
       </section>

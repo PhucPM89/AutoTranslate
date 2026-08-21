@@ -3764,17 +3764,30 @@ function renderCdnChapter(chapter, index) {
     }
     attachCommentBubblesToChapter(bookIdFromState(), index);
   } else {
-    // Untranslated Chinese chapter
+    // Untranslated Chinese chapter with Instant Translate Banner
     els.translationText.innerHTML = `
-      <div class="untranslated-notice">
-        <p><strong>⏳ Chương này đang trong hàng đợi dịch tự động.</strong></p>
-        <p>Hệ thống đang dịch lần lượt từng chương. Dưới đây là văn bản gốc tiếng Trung:</p>
+      <div class="instant-translate-banner">
+        <div class="instant-banner-header">
+          <div class="instant-banner-icon">⚡</div>
+          <div class="instant-banner-text">
+            <h4>Chương này đang ở bản raw tiếng Trung</h4>
+            <p>Hệ thống hỗ trợ kích hoạt AI Groq LPU dịch sang tiếng Việt tự nhiên chỉ trong 1-2 giây.</p>
+          </div>
+        </div>
+        <button id="instantTranslateBtn" class="primary-action instant-translate-btn" type="button">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+          <span>⚡ Kích hoạt AI Dịch Ngay (1-2s)</span>
+        </button>
       </div>
       <div class="raw-chinese-text">${escapeHtml(chapter.text || "Chưa có nội dung.")}</div>
     `;
     els.translationText.classList.remove("is-loading", "status-error");
     els.translationText.classList.add("empty");
     els.outputStatus.textContent = "Chưa dịch";
+
+    document.getElementById("instantTranslateBtn")?.addEventListener("click", () => {
+      triggerInstantTranslate(chapter, index);
+    });
   }
 
   const extracted = extractTitleFromContent(chapter.text);
@@ -3786,6 +3799,58 @@ function renderCdnChapter(chapter, index) {
   // Translation happened at ingest, so the reader has nothing to trigger.
   els.translateButton.hidden = true;
   els.retranslateButton.hidden = true;
+}
+
+async function triggerInstantTranslate(chapter, index) {
+  const btn = document.getElementById("instantTranslateBtn");
+  const banner = document.querySelector(".instant-translate-banner");
+  if (!btn || !chapter || !chapter.text) return;
+
+  btn.disabled = true;
+  btn.innerHTML = '<svg class="icon spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/></svg><span>Đang dịch tức thì bằng AI Groq...</span>';
+  if (banner) banner.classList.add("is-translating");
+
+  try {
+    const bookId = bookIdFromState();
+    const resp = await fetch("/api/instant-translate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        bookId,
+        chapterNumber: index + 1,
+        rawText: chapter.text,
+        bookTitle: state.book?.title || ""
+      })
+    });
+
+    const data = await resp.json();
+    if (!resp.ok || !data.translation) {
+      throw new Error(data.error || "Không thể dịch tức thì lúc này.");
+    }
+
+    // Save translation in memory
+    chapter.text = data.translation;
+    chapter.status = "completed";
+    chapter.translation = data.translation;
+
+    // Save locally so the reader keeps it across page refreshes
+    try {
+      if (bookId) {
+        localStorage.setItem(`trans_${bookId}_ch_${index + 1}`, data.translation);
+      }
+    } catch {}
+
+    // Re-render as translated chapter!
+    renderCdnChapter(chapter, index);
+    renderChapterList();
+
+    // Show toast
+    showToast(`⚡ Đã dịch xong Chương ${index + 1} bằng Groq AI (${((data.elapsedMs || 1500) / 1000).toFixed(1)}s)!`);
+  } catch (err) {
+    if (banner) banner.classList.remove("is-translating");
+    btn.disabled = false;
+    btn.innerHTML = '<span>❌ Lỗi: ' + escapeHtml(err.message || 'Thử lại') + '</span>';
+  }
 }
 
 function isChineseText(text) {

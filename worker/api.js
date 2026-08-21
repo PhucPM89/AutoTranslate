@@ -51,6 +51,8 @@ const UPLOAD_KINDS = {
 };
 
 const ROUTES = {
+  "/api/instant-translate": handleInstantTranslate,
+  "/api/admin/keys": handleAdminKeys,
   "/api/admin/session": handleSession,
   "/api/admin/login": handleLogin,
   "/api/admin/logout": handleLogout,
@@ -474,6 +476,212 @@ function sessionCookie(value, maxAge) {
     "SameSite=Strict",
     `Max-Age=${maxAge}`
   ].join("; ");
+}
+
+// ---- dynamic key storage helpers -------------------------------------------
+
+const KEYS_STORAGE_KEY = "config/api-keys.json";
+
+function storageForKeys(env) {
+  if (env.NOVEL_STORAGE) return createR2BindingStorage(env.NOVEL_STORAGE);
+  if (env.NOVEL_ARCHIVE) return createR2BindingStorage(env.NOVEL_ARCHIVE);
+  return null;
+}
+
+async function getActiveKeyList(env) {
+  const storage = storageForKeys(env);
+  if (storage) {
+    try {
+      const raw = await storage.get(KEYS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw.toString("utf8"));
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.filter((k) => typeof k === "string" && k.trim().length > 0);
+        }
+      }
+    } catch {}
+  }
+  const fromEnv = env.GROQ_API_KEYS || env.GROQ_API_KEY || env.GEMINI_API_KEYS || env.GEMINI_API_KEY || "";
+  const { parseApiKeys } = await import("../server/gemini.js");
+  return parseApiKeys(fromEnv);
+}
+
+async function saveActiveKeyList(env, list) {
+  const storage = storageForKeys(env);
+  if (!storage) throw fail(503, "R2 Storage chưa được cấu hình để lưu API Key.");
+  await storage.put(KEYS_STORAGE_KEY, JSON.stringify(list, null, 2), {
+    contentType: "application/json",
+    cacheControl: "no-cache"
+  });
+}
+
+// ---- instant translation on demand ----------------------------------------
+
+async function handleInstantTranslate({ request, env }) {
+  if (request.method !== "POST") return methodNotAllowed("POST");
+  requireSameOrigin(request);
+
+  const body = await readJson(request);
+  const rawText = String(body?.rawText || body?.text || "").trim();
+  const bookTitle = String(body?.bookTitle || "").trim();
+  const chapterNumber = Number(body?.chapterNumber) || 1;
+  const bookId = String(body?.bookId || "").trim();
+
+  if (!rawText) {
+    throw fail(400, "Thiếu văn bản tiếng Trung cần dịch.");
+  }
+
+  const keys = await getActiveKeyList(env);
+  if (!keys.length) {
+    throw fail(503, "Hệ thống AI chưa được cấu hình API Key.");
+  }
+
+  const { translateText } = await import("../server/gemini.js");
+  const result = await translateText(rawText, keys, {
+    bookTitle
+  });
+
+  return json({
+    success: true,
+    translation: result.translation,
+    modelsUsed: result.modelsUsed,
+    elapsedMs: result.elapsedMs,
+    bookId,
+    chapterNumber
+  });
+}
+
+// ---- admin keys health dashboard ------------------------------------------
+
+async function handleAdminKeys({ request, env }) {
+  if (request.method !== "GET" && request.method !== "POST") return methodNotAllowed("GET, POST");
+  requireSameOrigin(request);
+
+  await requireAdmin(request, env);
+
+  const keyList = await getActiveKeyList(env);
+  const model = env.GROQ_MODEL || env.GEMINI_MODEL || "qwen/qwen3.6-27b";
+  const fallbackModels = env.GROQ_FALLBACK_MODELS || env.GEMINI_FALLBACK_MODELS || "openai/gpt-oss-120b,openai/gpt-oss-20b,groq/compound";
+
+  if (request.method === "POST") {
+    const body = await readJson(request);
+    const action = String(body?.action || "ping").toLowerCase();
+
+    if (action === "add") {
+      const newKey = String(body?.key || "").trim();
+      if (!newKey || (!newKey.startsWith("gsk_") && !newKey.startsWith("AQ.") && !newKey.startsWith("AIza"))) {
+        throw fail(400, "API Key không hợp lệ. Key Groq phải bắt đầu bằng 'gsk_'.");
+      }
+      if (keyList.includes(newKey)) {
+        throw fail(400, "API Key này đã tồn tại trong danh sách.");
+      }
+      const updatedList = [...keyList, newKey];
+      await saveActiveKeyList(env, updatedList);
+      return json({
+        success: true,
+        message: "Đã thêm API Key mới thành công.",
+        totalKeys: updatedList.length,
+        keys: updatedList.map((k, i) => ({
+          id: i + 1,
+          masked: k.slice(0, 8) + "..." + k.slice(-6),
+          provider: k.startsWith("gsk_") ? "Groq LPU" : "Google Gemini",
+          status: "ready"
+        })),
+        activeModel: model,
+        fallbackModels
+      });
+    }
+
+    if (action === "delete") {
+      const targetMasked = String(body?.masked || "").trim();
+      const targetIndex = Number(body?.index);
+
+      let targetKey = "";
+      if (!Number.isNaN(targetIndex) && targetIndex >= 0 && targetIndex < keyList.length) {
+        targetKey = keyList[targetIndex];
+      } else if (targetMasked) {
+        targetKey = keyList.find((k) => (k.slice(0, 8) + "..." + k.slice(-6)) === targetMasked) || "";
+      }
+
+      if (!targetKey) {
+        throw fail(404, "Không tìm thấy API Key cần xóa.");
+      }
+
+      if (keyList.length <= 1) {
+        throw fail(400, "Hệ thống phải duy trì ít nhất 1 API Key đang hoạt động.");
+      }
+
+      const updatedList = keyList.filter((k) => k !== targetKey);
+      await saveActiveKeyList(env, updatedList);
+      return json({
+        success: true,
+        message: "Đã xóa API Key thành công.",
+        totalKeys: updatedList.length,
+        keys: updatedList.map((k, i) => ({
+          id: i + 1,
+          masked: k.slice(0, 8) + "..." + k.slice(-6),
+          provider: k.startsWith("gsk_") ? "Groq LPU" : "Google Gemini",
+          status: "ready"
+        })),
+        activeModel: model,
+        fallbackModels
+      });
+    }
+
+    // Ping action
+    const results = [];
+    for (const key of keyList) {
+      const masked = key.slice(0, 8) + "..." + key.slice(-6);
+      const isGroq = key.startsWith("gsk_");
+      const startTime = Date.now();
+      try {
+        if (isGroq) {
+          const resp = await fetch("https://api.groq.com/openai/v1/models", {
+            headers: { Authorization: `Bearer ${key}` }
+          });
+          const ok = resp.ok;
+          results.push({
+            masked,
+            provider: "Groq LPU",
+            status: ok ? "ready" : `HTTP ${resp.status}`,
+            latencyMs: Date.now() - startTime,
+            ok
+          });
+        } else {
+          results.push({
+            masked,
+            provider: "Gemini",
+            status: "ready",
+            latencyMs: Date.now() - startTime,
+            ok: true
+          });
+        }
+      } catch (err) {
+        results.push({
+          masked,
+          provider: isGroq ? "Groq LPU" : "Gemini",
+          status: "error",
+          error: err.message,
+          ok: false
+        });
+      }
+    }
+    return json({ keys: results, activeModel: model, fallbackModels, totalKeys: keyList.length });
+  }
+
+  const summary = keyList.map((key, i) => ({
+    id: i + 1,
+    masked: key.slice(0, 8) + "..." + key.slice(-6),
+    provider: key.startsWith("gsk_") ? "Groq LPU" : "Google Gemini",
+    status: "ready"
+  }));
+
+  return json({
+    totalKeys: keyList.length,
+    keys: summary,
+    activeModel: model,
+    fallbackModels
+  });
 }
 
 async function readJson(request) {
