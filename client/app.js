@@ -276,7 +276,10 @@ const els = {
   rankModalTotalExp: document.getElementById("rankModalTotalExp"),
   rankModalProgressFill: document.getElementById("rankModalProgressFill"),
   rankModalProgressLabel: document.getElementById("rankModalProgressLabel"),
-  rankModalNextTitle: document.getElementById("rankModalNextTitle")
+  rankModalNextTitle: document.getElementById("rankModalNextTitle"),
+  readerTopRankBtn: document.getElementById("readerTopRankBtn"),
+  readerTopRankIcon: document.getElementById("readerTopRankIcon"),
+  readerTopRankTitle: document.getElementById("readerTopRankTitle")
 };
 
 const parser = new DOMParser();
@@ -2505,6 +2508,13 @@ function updateRankBadgeUI() {
     els.readerRankBadge.className = `reader-rank-badge ${profile.badgeClass}`;
   }
 
+  // Reader topbar badge
+  if (els.readerTopRankIcon) els.readerTopRankIcon.textContent = profile.schoolIcon;
+  if (els.readerTopRankTitle) els.readerTopRankTitle.textContent = profile.title;
+  if (els.readerTopRankBtn) {
+    els.readerTopRankBtn.className = `tool-button reader-top-rank-btn ${profile.badgeClass}`;
+  }
+
   // Comment drawer trigger
   if (els.commentRankIcon) els.commentRankIcon.textContent = profile.schoolIcon;
   if (els.commentRankText) els.commentRankText.textContent = profile.title;
@@ -2546,6 +2556,7 @@ function initReaderRankController() {
   }
 
   els.readerRankBadge?.addEventListener("click", openRankModal);
+  els.readerTopRankBtn?.addEventListener("click", openRankModal);
   els.commentRankTriggerBtn?.addEventListener("click", openRankModal);
   els.rankSchoolClose?.addEventListener("click", closeRankModal);
   els.rankSchoolDialog?.addEventListener("click", (e) => {
