@@ -99,15 +99,21 @@ function nextBatchChapters(state, { now = Date.now(), maxAttempts = DEFAULT_MAX_
   if (!first) return [];
   if (batchSize <= 1) return [first];
 
-  const candidate = state.chapters.find(
-    (entry) =>
-      entry.n === first.n + 1 &&
-      entry.status !== "completed" &&
-      (entry.status !== "failed" || entry.attempts < maxAttempts) &&
-      (entry.nextAttemptAt || 0) <= now
-  );
+  const batch = [first];
+  for (let i = 1; i < batchSize; i++) {
+    const nextNum = first.n + i;
+    const candidate = state.chapters.find(
+      (entry) =>
+        entry.n === nextNum &&
+        entry.status !== "completed" &&
+        (entry.status !== "failed" || entry.attempts < maxAttempts) &&
+        (entry.nextAttemptAt || 0) <= now
+    );
+    if (!candidate) break;
+    batch.push(candidate);
+  }
 
-  return candidate ? [first, candidate] : [first];
+  return batch;
 }
 
 function backoffFor(attempts, base = DEFAULT_BACKOFF_MS) {

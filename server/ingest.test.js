@@ -495,4 +495,16 @@ test("nextBatchChapters groups consecutive pending chapters and runTranslationJo
   assert.equal(state.chapters[0].status, "completed");
   assert.equal(state.chapters[1].status, "completed");
   assert.equal(state.chapters[2].status, "pending");
+
+  // Test batchSize = 3
+  const state3 = createJobState({
+    bookId: "b-batch-3",
+    revision: 1,
+    chapters: [{ chapterNumber: 1 }, { chapterNumber: 2 }, { chapterNumber: 3 }, { chapterNumber: 4 }]
+  });
+  const batch3 = nextBatchChapters(state3, { batchSize: 3 });
+  assert.equal(batch3.length, 3);
+  assert.equal(batch3[0].n, 1);
+  assert.equal(batch3[1].n, 2);
+  assert.equal(batch3[2].n, 3);
 });

@@ -99,7 +99,11 @@ async function translateBatchChapters(chapters, apiKeys, options = {}) {
     const parsed = [];
     const raw = result.text || "";
     for (const ch of chapters) {
-      const regex = new RegExp(`===\\s*CHAPTER_START_${ch.chapterNumber}\\s*===([\\s\\S]*?)===\\s*CHAPTER_END_${ch.chapterNumber}\\s*===`, "i");
+      // Matches both with explicit closing delimiter or preceding next chapter start / end of string
+      const regex = new RegExp(
+        `===\\s*CHAPTER_START_${ch.chapterNumber}\\s*===([\\s\\S]*?)(?:===\\s*CHAPTER_END_${ch.chapterNumber}\\s*===|(?====\\s*CHAPTER_START_)|$)`,
+        "i"
+      );
       const match = raw.match(regex);
       if (match && match[1] && match[1].trim().length > 30) {
         const cleaned = engine.postProcessTranslation(match[1].trim(), glossary);

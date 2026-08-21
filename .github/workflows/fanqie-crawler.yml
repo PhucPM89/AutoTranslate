@@ -25,6 +25,7 @@ concurrency:
 permissions:
   contents: read
   id-token: write
+  actions: write
 
 jobs:
   crawl:
@@ -104,3 +105,24 @@ jobs:
         with:
           path: .crawler-data
           key: tomato-data-${{ github.run_id }}
+
+      - name: Trigger Translation Worker immediately
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'translate-worker.yml',
+                ref: 'main',
+                inputs: {
+                  budget: '5000'
+                }
+              });
+              console.log('✓ Successfully triggered Translation Worker cluster');
+            } catch (err) {
+              console.log('Workflow dispatch notice:', err.message);
+            }
+

@@ -1,8 +1,8 @@
 name: Translation worker
 
 # Deliberately separate from the crawler. The crawler detects and enqueues every
-# 15 minutes and must finish fast; this drains the Gemini queue on its own
-# schedule, checkpointing after each chapter so a run can stop any time.
+# 10-15 minutes; this drains the Gemini queue in parallel with 5 sharded workers.
+# Each worker processes a distinct shard of novels simultaneously (150-250 ch/min).
 on:
   schedule:
     - cron: "5,35 * * * *"
@@ -12,21 +12,25 @@ on:
         description: "Chỉ dịch một bookId (để trống = tất cả)"
         required: false
       budget:
-        description: "Số lượt gọi Gemini tối đa cho lượt này"
+        description: "Số lượt gọi Gemini tối đa cho mỗi worker lượt này"
         required: false
         default: "5000"
-
-concurrency:
-  group: translate-worker
-  cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
   translate:
+    name: Worker Shard ${{ matrix.shard + 1 }}/5
     runs-on: ubuntu-latest
     timeout-minutes: 330
+    strategy:
+      matrix:
+        shard: [0, 1, 2, 3, 4]
+      fail-fast: false
+    concurrency:
+      group: translate-worker-${{ matrix.shard }}
+      cancel-in-progress: false
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
@@ -55,9 +59,12 @@ jobs:
       - name: Check required secrets are present
         run: node scripts/check-env.js translate
 
-      - name: Drain the translation queue
+      - name: Drain the translation queue (Shard ${{ matrix.shard + 1 }}/5)
         run: >
           node scripts/translate-worker.js
           --minutes 300
           --budget ${{ github.event.inputs.budget || '5000' }}
+          --shard-index ${{ matrix.shard }}
+          --total-shards 5
+          --batch-size 3
           ${{ github.event.inputs.book && format('--book {0}', github.event.inputs.book) || '' }}

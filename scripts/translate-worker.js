@@ -34,12 +34,15 @@ const flag = (name, fallback) => {
 const REQUEST_BUDGET = Number(flag("--budget", process.env.TRANSLATE_BUDGET || 0)) || Infinity;
 const RUN_MINUTES = Number(flag("--minutes", process.env.TRANSLATE_RUN_MINUTES || 300));
 const ONLY_BOOK = flag("--book", "");
+const SHARD_INDEX = Number(flag("--shard-index", process.env.TRANSLATE_SHARD_INDEX || 0));
+const TOTAL_SHARDS = Math.max(1, Number(flag("--total-shards", process.env.TRANSLATE_TOTAL_SHARDS || 1)));
+const BATCH_SIZE = Math.max(1, Number(flag("--batch-size", process.env.TRANSLATE_BATCH_SIZE || 3)));
 // Measured on 19 real chapters: 17.8s average latency per chapter at 1.11 Gemini
 // requests each, i.e. about 3.7 requests per minute with zero quota errors. The
 // latency alone paces the worker well under any free-tier RPM, so the extra delay
 // is small on purpose - a 4s gap was adding ~22% wall clock for no benefit.
 // Raise it if 429s appear; do not lower it to zero.
-const SPACING_MS = Number(process.env.TRANSLATE_SPACING_MS || 1000);
+const SPACING_MS = Number(process.env.TRANSLATE_SPACING_MS || 200);
 const RESERVE_MS = 3 * 60 * 1000;
 // How often to republish index.json and resync Supabase mid-run. At the measured
 // 3.37 chapters/minute this is roughly every seven minutes: frequent enough that
@@ -120,8 +123,14 @@ async function main() {
     return a.bookId.localeCompare(b.bookId);
   });
 
-  console.log(`Có ${jobs.length} book trong hàng đợi, ${activeBookIds.size} book VIP có độc giả đọc:`);
-  for (const job of queue) {
+  let activeQueue = queue;
+  if (TOTAL_SHARDS > 1) {
+    activeQueue = queue.filter((job, idx) => (idx % TOTAL_SHARDS) === SHARD_INDEX);
+    console.log(`\n=== [SHARD ${SHARD_INDEX + 1}/${TOTAL_SHARDS}] Được phân bổ ${activeQueue.length}/${queue.length} bộ truyện ===`);
+  }
+
+  console.log(`Có ${activeQueue.length} book trong hàng đợi worker (Batch size: ${BATCH_SIZE}, ${activeBookIds.size} book VIP toàn hệ thống):`);
+  for (const job of activeQueue) {
     const vipTag = activeBookIds.has(job.bookId) ? " [VIP ĐỘC GIẢ]" : "";
     console.log(`  ${job.bookId} r${job.revision}: ${job.pending} chờ (${job.highPriority} ưu tiên)${vipTag} / ${job.total}`);
   }
@@ -148,7 +157,7 @@ async function main() {
     cycle += 1;
     let translatedThisCycle = 0;
 
-    for (const job of queue) {
+    for (const job of activeQueue) {
       if (spentTotal >= REQUEST_BUDGET || Date.now() >= deadlineAt) {
         stop = true;
         break;
@@ -173,7 +182,7 @@ async function main() {
         requestBudget: Math.min(remainingBudget, sliceSize),
         deadlineAt,
         spacingMs: SPACING_MS,
-        batchSize: 2,
+        batchSize: BATCH_SIZE,
         loadChapter: (n) => readJson(storage, originalKey(job.bookId, job.revision, n)),
         translateChapter: async (chapter) => {
           const existing = await readJson(storage, chapterKey(job.bookId, job.revision, chapter.chapterNumber));
