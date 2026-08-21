@@ -758,16 +758,40 @@ async function handleAdminKeys({ request, env }) {
       const startTime = Date.now();
       try {
         if (isGroq) {
-          const resp = await fetch("https://api.groq.com/openai/v1/models", {
-            headers: { Authorization: `Bearer ${key}` }
+          const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${key}`
+            },
+            body: JSON.stringify({
+              model,
+              messages: [{ role: "user", content: "hi" }],
+              max_tokens: 1
+            }),
+            signal: AbortSignal.timeout(6000)
           });
           const ok = resp.ok;
+          const status = ok ? "ready" : (resp.status === 429 ? "rate_limited" : `HTTP ${resp.status}`);
+          const remTokens = resp.headers.get("x-ratelimit-remaining-tokens");
+          const limTokens = resp.headers.get("x-ratelimit-limit-tokens");
+          const resetTokens = resp.headers.get("x-ratelimit-reset-tokens");
+          const remRequests = resp.headers.get("x-ratelimit-remaining-requests");
+          const limRequests = resp.headers.get("x-ratelimit-limit-requests");
+          const resetRequests = resp.headers.get("x-ratelimit-reset-requests");
+
           results.push({
             masked,
             provider: "Groq LPU",
-            status: ok ? "ready" : `HTTP ${resp.status}`,
+            status,
             latencyMs: Date.now() - startTime,
-            ok
+            ok,
+            remainingTokens: remTokens ? Number(remTokens) : null,
+            limitTokens: limTokens ? Number(limTokens) : 8000,
+            resetTokens: resetTokens || "0s",
+            remainingRequests: remRequests ? Number(remRequests) : null,
+            limitRequests: limRequests ? Number(limRequests) : 1000,
+            resetRequests: resetRequests || null
           });
         } else {
           results.push({
@@ -775,7 +799,10 @@ async function handleAdminKeys({ request, env }) {
             provider: "Gemini",
             status: "ready",
             latencyMs: Date.now() - startTime,
-            ok: true
+            ok: true,
+            limitTokens: 15000,
+            remainingTokens: 15000,
+            resetTokens: "0s"
           });
         }
       } catch (err) {

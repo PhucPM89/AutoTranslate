@@ -805,9 +805,21 @@ function renderKeysList(keys, isPingResult = false) {
       ? `<span class="ping-badge ${k.ok ? "ping-fast" : "ping-fail"}">${k.latencyMs}ms</span>`
       : '<span class="ping-badge">Chưa ping</span>';
 
-    const statusBadge = k.ok !== false
-      ? '<span class="key-status-badge is-ready">🟢 Sẵn sàng</span>'
-      : '<span class="key-status-badge is-error">🔴 Lỗi</span>';
+    const statusBadge = k.status === "rate_limited"
+      ? '<span class="key-status-badge is-warning">🟡 Đang chờ hồi TPM</span>'
+      : (k.ok !== false
+        ? '<span class="key-status-badge is-ready">🟢 Sẵn sàng</span>'
+        : '<span class="key-status-badge is-error">🔴 Lỗi</span>');
+
+    const quotaHtml = k.remainingTokens != null
+      ? `
+        <div class="key-quota-row">
+          <span class="key-quota-pill" title="Tokens Per Minute">⚡ ${Number(k.remainingTokens).toLocaleString("vi-VN")} / ${Number(k.limitTokens || 8000).toLocaleString("vi-VN")} TPM</span>
+          <span class="key-quota-pill recovery" title="Thời gian khôi phục quota">⏱ Hồi phục: ${escapeHtml(k.resetTokens || "0s")}</span>
+          ${k.remainingRequests != null ? `<span class="key-quota-pill daily" title="Requests hôm nay">📅 Còn: ${k.remainingRequests}/1.000 req</span>` : ""}
+        </div>
+      `
+      : "";
 
     card.innerHTML = `
       <div class="key-card-header">
@@ -826,6 +838,7 @@ function renderKeysList(keys, isPingResult = false) {
         <span class="key-provider-tag">${k.provider || "Groq LPU"}</span>
         ${latencyHtml}
       </div>
+      ${quotaHtml}
     `;
 
     card.querySelector(".key-delete-btn")?.addEventListener("click", () => {
