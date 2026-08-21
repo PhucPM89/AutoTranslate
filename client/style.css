@@ -900,7 +900,7 @@ body {
 
 .admin-tabs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 0.35rem;
   padding: 0.75rem 1.35rem 0;
 }
@@ -909,14 +909,14 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
+  gap: 0.35rem;
   min-height: 40px;
   border: 0;
   border-bottom: 2px solid transparent;
   border-radius: 0;
   background: transparent;
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-weight: 750;
 }
 
@@ -1563,6 +1563,112 @@ body {
   color: var(--muted);
   font-size: 0.7rem;
   line-height: 1.55;
+}
+
+.stats-book-rank {
+  font-weight: 800;
+  color: var(--accent-strong);
+  font-size: 0.75rem;
+  width: 24px;
+}
+
+/* ---- translate monitor panel ----------------------------------------------- */
+.admin-translate-panel {
+  padding: 1.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.translate-queue-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.translate-queue-section h4 {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+.translate-queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.translate-queue-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.queue-item-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.queue-item-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.queue-pct-badge {
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: rgba(168, 85, 247, 0.15);
+  color: #c084fc;
+  font-weight: 700;
+  font-size: 0.68rem;
+}
+
+.queue-pct-badge.is-done {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+}
+
+.queue-priority-badge {
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: rgba(249, 115, 22, 0.15);
+  color: #fb923c;
+  font-weight: 700;
+  font-size: 0.68rem;
+}
+
+.queue-item-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.queue-item-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.3s ease;
 }
 
 .library-intro {

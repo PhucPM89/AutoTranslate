@@ -355,8 +355,9 @@
 
       <div id="adminTabs" class="admin-tabs" role="tablist" aria-label="Khu vực quản trị" hidden>
         <button id="adminLibraryTab" class="admin-tab active" type="button" role="tab" aria-selected="true" aria-controls="adminUploadForm"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2Z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7Z"></path></svg>Thư viện</button>
+        <button id="adminTranslateTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminTranslatePanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>Tiến trình AI</button>
         <button id="adminCrawlerTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminCrawlerForm"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path><circle cx="12" cy="12" r="4"></circle></svg>Crawler Fanqie</button>
-        <button id="adminStatsTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminStatsPanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 3v18h18"></path><path d="M7 15v3M12 9v9M17 12v6"></path></svg>Số liệu</button>
+        <button id="adminStatsTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminStatsPanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 3v18h18"></path><path d="M7 15v3M12 9v9M17 12v6"></path></svg>Số liệu độc giả</button>
       </div>
 
       <form id="adminLoginForm" class="admin-login-form" method="post">
@@ -388,6 +389,33 @@
           </div>
         </div>
       </form>
+
+      <!-- Translation Engine Live Monitor Panel -->
+      <section id="adminTranslatePanel" class="admin-translate-panel" hidden aria-labelledby="translateMonitorTitle">
+        <div class="crawler-overview">
+          <div><p class="eyebrow">Dịch thuật AI Gemini</p><h3 id="translateMonitorTitle">Tiến trình Dịch Tự Động</h3></div>
+          <button id="adminTranslateRefresh" class="secondary-action" type="button"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v6h-6M4 18v-6h6"></path><path d="M18.49 9A7 7 0 0 0 5.64 6.64L4 9M20 15l-1.64 2.36A7 7 0 0 1 5.51 15"></path></svg>Làm mới</button>
+        </div>
+
+        <div class="crawler-state" aria-live="polite">
+          <span id="translateStateBadge" class="crawler-state-badge">Nghỉ</span>
+          <div class="crawler-state-body">
+            <strong id="translateStateMessage">Đang tải trạng thái dịch...</strong>
+            <small id="translateStateMeta"></small>
+            <div id="translateLiveProgress" class="crawler-progress" hidden>
+              <div class="crawler-progress-bar"><span id="translateProgressFill"></span></div>
+              <small id="translateProgressLabel"></small>
+            </div>
+          </div>
+        </div>
+
+        <div class="translate-queue-section">
+          <h4>Hàng đợi xoay vòng (Translation Queue)</h4>
+          <div id="translateQueueList" class="translate-queue-list">
+            <p class="stats-empty">Đang tải hàng đợi...</p>
+          </div>
+        </div>
+      </section>
 
       <form id="adminCrawlerForm" class="admin-crawler-form" hidden>
         <div class="crawler-overview">
@@ -430,16 +458,16 @@
 
       <section id="adminStatsPanel" class="admin-stats" hidden aria-labelledby="adminStatsTitle">
         <div class="crawler-overview">
-          <div><p class="eyebrow">Người đọc</p><h3 id="adminStatsTitle">Lượt truy cập &amp; đọc truyện</h3></div>
+          <div><p class="eyebrow">Thống kê Người dùng thật</p><h3 id="adminStatsTitle">Lượt truy cập &amp; Độc giả thực tế</h3></div>
+          <button id="adminStatsRefresh" class="secondary-action" type="button"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v6h-6M4 18v-6h6"></path><path d="M18.49 9A7 7 0 0 0 5.64 6.64L4 9M20 15l-1.64 2.36A7 7 0 0 1 5.51 15"></path></svg>Làm mới</button>
         </div>
         <div id="adminStatsGrid" class="stats-grid"></div>
         <div class="stats-books">
-          <h4>Truyện được mở nhiều nhất</h4>
+          <h4>Top 10 Truyện được đọc nhiều nhất</h4>
           <ol id="adminStatsBooks" class="stats-book-list"></ol>
-          <p id="adminStatsBooksEmpty" class="stats-empty" hidden>Chưa có truyện nào được mở.</p>
+          <p id="adminStatsBooksEmpty" class="stats-empty" hidden>Chưa có lượt đọc nào được ghi nhận.</p>
         </div>
         <p id="adminStatsNote" class="stats-note"></p>
-        <div class="admin-form-actions"><button id="adminStatsRefresh" class="secondary-action" type="button"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v6h-6M4 18v-6h6"></path><path d="M18.49 9A7 7 0 0 0 5.64 6.64L4 9M20 15l-1.64 2.36A7 7 0 0 1 5.51 15"></path></svg>Làm mới</button></div>
       </section>
       <p id="adminStatus" class="admin-status" role="status" aria-live="polite"></p>
     </dialog>

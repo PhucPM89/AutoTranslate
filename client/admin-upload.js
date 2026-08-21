@@ -27,6 +27,16 @@ const els = {
   crawlerRecentList: document.getElementById("crawlerRecentList"),
   crawlerWorkerWarning: document.getElementById("crawlerWorkerWarning"),
   crawlerRefresh: document.getElementById("crawlerRefresh"),
+  translateTab: document.getElementById("adminTranslateTab"),
+  translatePanel: document.getElementById("adminTranslatePanel"),
+  translateRefresh: document.getElementById("adminTranslateRefresh"),
+  translateStateBadge: document.getElementById("translateStateBadge"),
+  translateStateMessage: document.getElementById("translateStateMessage"),
+  translateStateMeta: document.getElementById("translateStateMeta"),
+  translateLiveProgress: document.getElementById("translateLiveProgress"),
+  translateProgressFill: document.getElementById("translateProgressFill"),
+  translateProgressLabel: document.getElementById("translateProgressLabel"),
+  translateQueueList: document.getElementById("translateQueueList"),
   statsTab: document.getElementById("adminStatsTab"),
   statsPanel: document.getElementById("adminStatsPanel"),
   statsGrid: document.getElementById("adminStatsGrid"),
@@ -52,6 +62,7 @@ const els = {
 let adminCatalog = { books: [] };
 let activeAdminTab = "library";
 let mounted = false;
+let translateTimer = null;
 
 // app.js imports this module the first time the lock button is pressed, so the
 // so the admin code never lands in a regular reader's bundle.
@@ -67,8 +78,10 @@ export function mountAdmin() {
     els.uploadForm?.addEventListener("submit", submitBook);
     els.crawlerForm?.addEventListener("submit", saveCrawlerConfig);
     els.libraryTab?.addEventListener("click", () => selectAdminTab("library"));
+    els.translateTab?.addEventListener("click", () => selectAdminTab("translate"));
     els.crawlerTab?.addEventListener("click", () => selectAdminTab("crawler"));
     els.statsTab?.addEventListener("click", () => selectAdminTab("stats"));
+    els.translateRefresh?.addEventListener("click", loadTranslateStatus);
     els.statsRefresh?.addEventListener("click", loadAnalytics);
     els.crawlerRefresh?.addEventListener("click", loadCrawlerConfig);
     els.crawlerWordCount?.addEventListener("change", describeCrawlerReach);
@@ -336,7 +349,7 @@ function describeCrawlerReach() {
 }
 
 async function loadAnalytics() {
-  setStatus("Đang tải số liệu truy cập...");
+  setStatus("Đang tải số liệu độc giả thực tế...");
   try {
     renderAnalytics(await requestJson("/api/admin/analytics"));
     setStatus("");
@@ -345,12 +358,33 @@ async function loadAnalytics() {
   }
 }
 
-function renderAnalytics(summary) {
+function renderAnalytics(data = {}) {
+  const summary = data.summary || data;
   const tiles = [
-    { label: "Hôm nay", data: summary.today },
-    { label: "7 ngày qua", data: summary.last7Days },
-    { label: "30 ngày qua", data: summary.last30Days },
-    { label: "Tổng cộng", data: summary.allTime }
+    {
+      label: "Hôm nay",
+      readers: summary.today?.sessions || summary.today?.visits || 0,
+      reads: summary.today?.reads || 0,
+      sub: "độc giả thật hôm nay"
+    },
+    {
+      label: "7 ngày qua",
+      readers: summary.last7?.sessions || summary.last7?.visits || 0,
+      reads: summary.last7?.reads || 0,
+      sub: "độc giả trong tuần"
+    },
+    {
+      label: "30 ngày qua",
+      readers: summary.last30?.sessions || summary.last30?.visits || 0,
+      reads: summary.last30?.reads || 0,
+      sub: "độc giả trong tháng"
+    },
+    {
+      label: "Tổng toàn thời gian",
+      readers: summary.allTime?.sessions || summary.allTime?.visits || 0,
+      reads: summary.allTime?.reads || 0,
+      sub: `${formatCount(summary.bookmarks || 0)} lượt lưu tủ truyện`
+    }
   ];
 
   const grid = document.createDocumentFragment();
@@ -358,26 +392,30 @@ function renderAnalytics(summary) {
     const card = document.createElement("div");
     card.className = "stats-card";
     appendText(card, "span", "stats-card-label", tile.label);
-    appendText(card, "strong", "stats-card-value", formatCount(tile.data?.visits));
-    appendText(card, "small", "stats-card-meta", `${formatCount(tile.data?.reads)} lượt mở truyện`);
+    appendText(card, "strong", "stats-card-value", `${formatCount(tile.readers)} độc giả`);
+    appendText(card, "small", "stats-card-meta", `${formatCount(tile.reads)} chương đã đọc · ${tile.sub}`);
     grid.appendChild(card);
   });
   els.statsGrid.replaceChildren(grid);
 
-  const books = Array.isArray(summary.topBooks) ? summary.topBooks : [];
+  const books = Array.isArray(data.books) ? data.books : [];
   const list = document.createDocumentFragment();
-  books.forEach((book) => {
+  books.forEach((book, idx) => {
     const item = document.createElement("li");
-    appendText(item, "span", "stats-book-title", book.title || book.bookId);
+    const matchedBook = (adminCatalog.books || []).find((b) => b.id === book.bookId);
+    const title = matchedBook ? matchedBook.title : (book.title || book.bookId);
+    
+    appendText(item, "span", "stats-book-rank", `#${idx + 1}`);
+    appendText(item, "span", "stats-book-title", title);
     appendText(item, "span", "stats-book-count", `${formatCount(book.reads)} lượt`);
     list.appendChild(item);
   });
   els.statsBooks.replaceChildren(list);
   els.statsBooksEmpty.hidden = books.length > 0;
 
-  const range = summary.firstDay ? `từ ${summary.firstDay}` : "chưa có dữ liệu";
+  const range = summary.firstDay ? `từ ${summary.firstDay}` : "hệ thống bắt đầu ghi nhận";
   els.statsNote.textContent = summary.storageReady
-    ? `Đếm theo phiên truy cập của trình duyệt (${range}, giữ 60 ngày gần nhất). Không lưu IP, cookie hay danh tính người đọc, nên con số là số phiên chứ không phải số người chính xác.`
+    ? `Thống kê theo số lượng độc giả thật (Unique Sessions) và số chương truyện thực đọc (${range}). Tuyệt đối không lưu IP hay thông tin cá nhân.`
     : "Chưa cấu hình Supabase cho phần quản trị nên chưa đọc được số liệu.";
 }
 
@@ -391,6 +429,101 @@ function appendText(parent, tagName, className, value) {
   element.textContent = value;
   parent.appendChild(element);
   return element;
+}
+
+// ---- translate monitor -----------------------------------------------------
+
+function startTranslatePolling() {
+  stopTranslatePolling();
+  loadTranslateStatus();
+  translateTimer = setInterval(loadTranslateStatus, 5000);
+}
+
+function stopTranslatePolling() {
+  if (translateTimer) {
+    clearInterval(translateTimer);
+    translateTimer = null;
+  }
+}
+
+async function loadTranslateStatus() {
+  try {
+    const res = await requestJson("/api/admin/translate");
+    renderTranslateStatus(res.status);
+  } catch (err) {
+    console.warn("Unable to load translate status:", err);
+  }
+}
+
+function renderTranslateStatus(status = {}) {
+  if (!els.translateStateBadge) return;
+  const labels = {
+    idle: "Tạm nghỉ",
+    running: "Đang dịch AI",
+    paused_quota: "Hết Quota Gemini",
+    completed: "Hoàn tất",
+    error: "Có lỗi"
+  };
+  els.translateStateBadge.textContent = labels[status.state] || labels.idle;
+  els.translateStateBadge.dataset.state = status.state || "idle";
+  els.translateStateMessage.textContent = status.message || "Chưa có tiến trình dịch nào.";
+
+  const beat = status.updatedAt || status.finishedAt;
+  const parts = [];
+  if (beat) parts.push(`Nhịp tim: ${describeAge(beat)}`);
+  if (status.spentRequests) parts.push(`${status.spentRequests} requests Gemini`);
+  if (status.translatedThisRun) parts.push(`đã dịch ${status.translatedThisRun} chương mới`);
+  els.translateStateMeta.textContent = parts.join(" · ");
+
+  // Live progress
+  const total = Number(status.currentTotalChapters || 0);
+  const saved = Number(status.currentCompleted || status.currentChapter || 0);
+  const showProgress = status.state === "running" && total > 0;
+  if (els.translateLiveProgress) {
+    els.translateLiveProgress.hidden = !showProgress;
+    if (showProgress) {
+      const percent = Math.min(100, Math.round((saved / total) * 100));
+      els.translateProgressFill.style.width = `${percent}%`;
+      const matched = (adminCatalog.books || []).find((b) => b.id === status.currentBookId);
+      const bookTitle = matched ? matched.title : status.currentBookId;
+      els.translateProgressLabel.textContent =
+        `Đang dịch: ${bookTitle} — Chương ${saved}/${total} (${percent}%)`;
+    }
+  }
+
+  // Queue List
+  const queue = Array.isArray(status.queue) ? status.queue : [];
+  if (els.translateQueueList) {
+    els.translateQueueList.innerHTML = "";
+    if (!queue.length) {
+      els.translateQueueList.innerHTML = `<p class="stats-empty">Hàng đợi trống. Tất cả truyện đã dịch xong hoặc chưa thêm truyện mới.</p>`;
+    } else {
+      for (const item of queue) {
+        const row = document.createElement("div");
+        row.className = "translate-queue-item";
+        const matched = (adminCatalog.books || []).find((b) => b.id === item.bookId);
+        const title = matched ? matched.title : item.bookId;
+        const totalCh = Number(item.total || 0);
+        const pendingCh = Number(item.pending || 0);
+        const doneCh = Math.max(0, totalCh - pendingCh);
+        const pct = totalCh ? Math.round((doneCh / totalCh) * 100) : 0;
+        const isCurrent = status.state === "running" && status.currentBookId === item.bookId;
+
+        row.innerHTML = `
+          <div class="queue-item-info">
+            <strong class="queue-item-title">${isCurrent ? "⚡ " : ""}${title}</strong>
+            <small class="queue-item-meta">
+              <span>${doneCh.toLocaleString("vi-VN")} / ${totalCh.toLocaleString("vi-VN")} chương</span>
+              <span class="queue-pct-badge ${pct === 100 ? 'is-done' : ''}">${pct}%</span>
+              ${item.highPriority ? '<span class="queue-priority-badge">Ưu tiên cao</span>' : ''}
+            </small>
+          </div>
+          <div class="queue-item-bar"><span style="width: ${pct}%"></span></div>
+        `;
+        els.translateQueueList.appendChild(row);
+      }
+    }
+  }
 }
 
 async function saveCrawlerConfig(event) {
@@ -485,6 +618,7 @@ function renderCrawlerStatus(status = {}) {
 
 const ADMIN_TABS = [
   { key: "library", tab: "libraryTab", panel: "uploadForm" },
+  { key: "translate", tab: "translateTab", panel: "translatePanel" },
   { key: "crawler", tab: "crawlerTab", panel: "crawlerForm" },
   { key: "stats", tab: "statsTab", panel: "statsPanel" }
 ];
@@ -498,6 +632,8 @@ function selectAdminTab(tab) {
     if (els[panel]) els[panel].hidden = !active;
   });
   setStatus("");
+  if (activeAdminTab === "translate") startTranslatePolling();
+  else stopTranslatePolling();
   if (activeAdminTab === "stats") loadAnalytics();
   if (activeAdminTab === "crawler") startCrawlerPolling();
   else stopCrawlerPolling();

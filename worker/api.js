@@ -56,6 +56,7 @@ const ROUTES = {
   "/api/admin/logout": handleLogout,
   "/api/admin/upload": handleUpload,
   "/api/admin/crawler": handleCrawler,
+  "/api/admin/translate": handleTranslateStatus,
   "/api/admin/catalog": handleCatalog,
   "/api/admin/analytics": handleAnalytics
 };
@@ -317,6 +318,46 @@ async function republish(env) {
 
 // ---- analytics -------------------------------------------------------------
 
+// ---- translation status ----------------------------------------------------
+
+async function handleTranslateStatus({ request, env }) {
+  await requireAdmin(request, env);
+  if (request.method !== "GET") return methodNotAllowed("GET");
+
+  let status = null;
+  try {
+    if (env.NOVEL_ARCHIVE) {
+      const storage = createR2BindingStorage(env.NOVEL_ARCHIVE);
+      const raw = await storage.get("jobs/translate-status.json").catch(() => null);
+      if (raw) status = JSON.parse(raw.toString("utf8"));
+    }
+  } catch {}
+
+  if (!status) {
+    status = {
+      state: "idle",
+      message: "Chưa có tiến trình dịch nào đang chạy.",
+      updatedAt: null,
+      translatedThisRun: 0,
+      spentRequests: 0,
+      queue: []
+    };
+  }
+
+  // Heartbeat timeout check: 6 minutes
+  if (status.state === "running" && status.updatedAt) {
+    const ageMs = Date.now() - new Date(status.updatedAt).getTime();
+    if (ageMs > 6 * 60 * 1000) {
+      status.state = "idle";
+      status.message = "Tiến trình dịch đã hoàn tất hoặc tạm dừng (không có nhịp tim mới).";
+    }
+  }
+
+  return json({ status });
+}
+
+// ---- analytics -------------------------------------------------------------
+
 // Reads the aggregated view, never raw events. RLS blocks the anon key from
 // reading analytics_events at all, so this needs the service role - which is why
 // it lives here and not in the browser.
@@ -326,40 +367,44 @@ async function handleAnalytics({ request, env }) {
 
   const db = createSupabase(env);
   if (!db) {
-    // Explicit rather than an empty chart: the admin should know the number is
-    // missing because a variable is unset, not because nobody visited.
     return json({ summary: { storageReady: false }, days: [], books: [] });
   }
 
-  const rows = await db.readAnalyticsDaily().catch((error) => {
-    console.error("Analytics read failed:", error.message);
-    return [];
-  });
+  const [rows, topBooks, bookmarks] = await Promise.all([
+    db.readAnalyticsDaily().catch((error) => {
+      console.error("Analytics read failed:", error.message);
+      return [];
+    }),
+    db.readTopBooks?.().catch(() => []) || [],
+    db.readUserBookmarkCount?.().catch(() => 0) || 0
+  ]);
 
-  return json(summarizeDaily(rows));
+  return json(summarizeDaily(rows, topBooks, bookmarks));
 }
 
-function summarizeDaily(rows) {
+function summarizeDaily(rows, topBooks = [], bookmarks = 0) {
   const days = (rows || []).map((row) => ({
     day: String(row.day || "").slice(0, 10),
     visits: Number(row.visits || 0),
-    reads: Number(row.reads || 0)
+    reads: Number(row.reads || 0),
+    sessions: Number(row.sessions || row.visits || 0)
   }));
-  const total = (field) => days.reduce((sum, day) => sum + day[field], 0);
-  const recent = (count, field) => days.slice(0, count).reduce((sum, day) => sum + day[field], 0);
-  const today = days[0] || { visits: 0, reads: 0 };
+  const total = (field) => days.reduce((sum, day) => sum + (day[field] || 0), 0);
+  const recent = (count, field) => days.slice(0, count).reduce((sum, day) => sum + (day[field] || 0), 0);
+  const today = days[0] || { visits: 0, reads: 0, sessions: 0 };
 
   return {
     summary: {
       storageReady: true,
-      today: { visits: today.visits, reads: today.reads },
-      last7: { visits: recent(7, "visits"), reads: recent(7, "reads") },
-      last30: { visits: recent(30, "visits"), reads: recent(30, "reads") },
-      allTime: { visits: total("visits"), reads: total("reads") },
+      today: { visits: today.visits, reads: today.reads, sessions: today.sessions },
+      last7: { visits: recent(7, "visits"), reads: recent(7, "reads"), sessions: recent(7, "sessions") },
+      last30: { visits: recent(30, "visits"), reads: recent(30, "reads"), sessions: recent(30, "sessions") },
+      allTime: { visits: total("visits"), reads: total("reads"), sessions: total("sessions") },
+      bookmarks,
       firstDay: days.length ? days[days.length - 1].day : ""
     },
     days,
-    books: []
+    books: topBooks
   };
 }
 

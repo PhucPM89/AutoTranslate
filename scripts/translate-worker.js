@@ -50,6 +50,18 @@ const PUBLISH_EVERY = Math.max(1, Number(process.env.TRANSLATE_PUBLISH_EVERY || 
 // is close to free.
 const CHAPTERS_PER_TURN = Math.max(1, Number(process.env.TRANSLATE_CHAPTERS_PER_TURN || 1));
 const ROTATION_KEY = "jobs/translate-rotation.json";
+const TRANSLATE_STATUS_KEY = "jobs/translate-status.json";
+
+async function writeTranslateStatus(storage, status) {
+  try {
+    await storage.put(TRANSLATE_STATUS_KEY, JSON.stringify({
+      updatedAt: new Date().toISOString(),
+      ...status
+    }));
+  } catch (err) {
+    console.warn("Unable to write translate status:", err.message);
+  }
+}
 
 async function main() {
   const apiKey = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY;
@@ -63,6 +75,11 @@ async function main() {
   const jobs = await listJobs(storage, ONLY_BOOK);
   if (!jobs.length) {
     console.log("Không có job dịch nào đang chờ.");
+    await writeTranslateStatus(storage, {
+      state: "idle",
+      finishedAt: new Date().toISOString(),
+      message: "Tất cả các bộ truyện đã được dịch đầy đủ. Không có job chờ."
+    });
     return;
   }
 
@@ -172,6 +189,24 @@ async function main() {
         saveState: (next) => storage.put(jobStateKey(job.bookId), JSON.stringify(next)),
         onProgress: async ({ chapter, status, completed, total }) => {
           console.log(`  [${job.bookId}] ch ${chapter}: ${status}  (${completed}/${total})`);
+          await writeTranslateStatus(storage, {
+            state: "running",
+            currentBookId: job.bookId,
+            currentChapter: chapter,
+            currentCompleted: completed,
+            currentTotalChapters: total,
+            translatedThisRun: translatedTotal,
+            spentRequests: spentTotal,
+            message: `Đang dịch [${job.bookId}] — Chương ${chapter} (${completed}/${total})`,
+            queue: queue.map((j) => ({
+              bookId: j.bookId,
+              revision: j.revision,
+              pending: j.pending,
+              highPriority: j.highPriority,
+              total: j.total,
+              translated: (j.total || 0) - (j.pending || 0)
+            }))
+          });
         }
       });
 
@@ -215,8 +250,27 @@ async function main() {
     if (!sincePublish.get(bookId)) continue;
     await publishBook(job);
   }
-  console.log(`
-Đã chạy ${cycle} vòng, ${touched.size} truyện có bản dịch mới.`);
+
+  await writeTranslateStatus(storage, {
+    state: stoppedForQuota ? "paused_quota" : "idle",
+    finishedAt: new Date().toISOString(),
+    currentBookId: "",
+    translatedThisRun: translatedTotal,
+    spentRequests: spentTotal,
+    message: stoppedForQuota
+      ? `Tạm dừng: Hết quota Gemini. Đã dịch ${translatedTotal} chương trong phiên.`
+      : `Phiên dịch hoàn tất: Đã dịch ${translatedTotal} chương mới trên ${touched.size} bộ truyện.`,
+    queue: queue.map((j) => ({
+      bookId: j.bookId,
+      revision: j.revision,
+      pending: j.pending,
+      highPriority: j.highPriority,
+      total: j.total,
+      translated: (j.total || 0) - (j.pending || 0)
+    }))
+  });
+
+  console.log(`\nĐã chạy ${cycle} vòng, ${touched.size} truyện có bản dịch mới.`);
 
   if (translatedTotal > 0) {
     await publishCatalogSnapshot({ storage, site: siteSettings(), log: (event) => console.log("  ", JSON.stringify(event)) });
