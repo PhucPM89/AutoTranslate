@@ -588,6 +588,13 @@ body > * {
     border-top: 1px solid var(--border-soft);
     background: var(--topbar);
     backdrop-filter: blur(22px) saturate(1.4);
+    -webkit-backdrop-filter: blur(22px) saturate(1.4);
+    transform: translate3d(0, 0, 0);
+    -webkit-transform: translate3d(0, 0, 0);
+    will-change: transform;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    contain: layout style paint;
   }
 
   .mobile-bar-item {
@@ -724,15 +731,19 @@ body > * {
 
 html {
   scrollbar-color: var(--border) transparent;
+  overscroll-behavior-y: none;
+  -webkit-overflow-scrolling: touch;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--app-bg);
   color: var(--text);
   font-family: var(--font-sans);
   letter-spacing: 0;
+  overscroll-behavior-y: none;
 }
 
 .sr-only {
@@ -767,6 +778,12 @@ body {
   border-bottom: 1px solid var(--border-soft);
   background: var(--topbar);
   backdrop-filter: blur(22px) saturate(1.4);
+  -webkit-backdrop-filter: blur(22px) saturate(1.4);
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 .library-brand {
@@ -1236,6 +1253,12 @@ body {
   border-bottom: 1px solid var(--border-soft);
   background: color-mix(in srgb, var(--bg) 88%, transparent);
   backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 .book-view-crumb {
@@ -2322,6 +2345,12 @@ button:disabled {
   border-bottom: 1px solid var(--border-soft);
   background: color-mix(in srgb, var(--topbar) 94%, transparent);
   backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 .brand-block {
@@ -6405,7 +6434,11 @@ body.zen-mode .document-paper {
   position: fixed;
   bottom: 1.25rem;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate3d(-50%, 0, 0);
+  -webkit-transform: translate3d(-50%, 0, 0);
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
   z-index: 999;
   width: min(540px, calc(100vw - 2rem));
   background: rgba(19, 15, 36, 0.96);
@@ -6423,8 +6456,8 @@ body.zen-mode .document-paper {
 }
 
 @keyframes audioBarSlideUp {
-  from { transform: translate(-50%, 100%); opacity: 0; }
-  to { transform: translate(-50%, 0); opacity: 1; }
+  from { transform: translate3d(-50%, 100%, 0); opacity: 0; }
+  to { transform: translate3d(-50%, 0, 0); opacity: 1; }
 }
 
 .audio-bar-info {
