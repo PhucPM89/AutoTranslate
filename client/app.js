@@ -603,7 +603,7 @@ async function loadLibraryManifest() {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       manifest = await response.json();
     }
-    applyLibraryManifest(manifest);
+    await applyLibraryManifest(manifest);
   } catch (error) {
     console.warn("Unable to load the source library.", error);
     els.catalogGrid.innerHTML = "";
@@ -1273,14 +1273,21 @@ function updateBookViewBookmark(book) {
 }
 
 async function openFromUrl() {
+  function findBookById(rawId) {
+    if (!rawId) return null;
+    const cleanId = String(rawId).replace(/^cdn:/, "").split(":")[0];
+    return libraryState.books.find((item) => item.id === rawId || item.id === cleanId || item.id.includes(cleanId));
+  }
+
   // 1. Check Hash: #read/<bookId>/<chapterNumber>
   const readMatch = window.location.hash.match(/^#read\/([^/]+)(?:\/(\d+))?$/);
   if (readMatch) {
     const bookId = decodeURIComponent(readMatch[1]);
     const chNum = Number(readMatch[2]) || 1;
-    const catalogBook = libraryState.books.find((item) => item.id === bookId);
+    const catalogBook = findBookById(bookId);
     if (catalogBook) {
       const cover = catalogBook.cover || fallbackCoverForBook(catalogBook);
+      showReader();
       const opened = READER_CDN_ENABLED ? await openBookFromCdn(catalogBook, cover, { startAtFirstChapter: false }) : false;
       if (opened) {
         goToChapter(Math.max(0, chNum - 1));
@@ -1297,9 +1304,10 @@ async function openFromUrl() {
   const paramBook = urlParams.get("book");
   if (paramBook) {
     const chNum = Number(urlParams.get("ch")) || 1;
-    const catalogBook = libraryState.books.find((item) => item.id === paramBook);
+    const catalogBook = findBookById(paramBook);
     if (catalogBook) {
       const cover = catalogBook.cover || fallbackCoverForBook(catalogBook);
+      showReader();
       const opened = READER_CDN_ENABLED ? await openBookFromCdn(catalogBook, cover, { startAtFirstChapter: false }) : false;
       if (opened) {
         goToChapter(Math.max(0, chNum - 1));
@@ -2991,6 +2999,7 @@ async function openBookFromCdn(book, cover, { startAtFirstChapter = false } = {}
     words: null
   }));
 
+  showReader();
   applyReaderHeader();
   els.bookMeta.textContent = `${BRAND_NAME} · ${index.totalChapters} chương · ${index.translatedChapters} đã dịch`;
   renderChapterControls();
