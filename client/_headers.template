@@ -45,8 +45,8 @@
 /library/covers/*
   Cache-Control: public, max-age=604800, stale-while-revalidate=2592000
 
-# The entry document must revalidate so a new build is picked up immediately.
+# The entry document must never cache so a new build is picked up immediately.
 /
-  Cache-Control: public, max-age=0, must-revalidate
+  Cache-Control: no-cache, no-store, must-revalidate
 /index.html
-  Cache-Control: public, max-age=0, must-revalidate
+  Cache-Control: no-cache, no-store, must-revalidate
