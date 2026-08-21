@@ -3549,15 +3549,17 @@ function chapterUrlFor(index, chapterNumber) {
 
 // Returns true when the book was opened from the CDN.
 async function openBookFromCdn(book, cover, { startAtFirstChapter = false } = {}) {
-  const index = await fetchBookIndex(book.id);
-  if (!index) return false;
+  const cleanId = cleanBookId(typeof book === "object" ? book.id : book);
+  if (!cleanId) return false;
+  const index = await fetchBookIndex(cleanId);
+  if (!index || !Array.isArray(index.chapters) || !index.chapters.length) return false;
 
   state.mode = "cdn";
   state.cdnTemplate = index.chapterUrlTemplate || "";
-  state.bookId = `cdn:${book.id}:r${index.revision}`;
+  state.bookId = `cdn:${cleanId}:r${index.revision || 1}`;
   state.fileName = "";
-  state.title = book.title || index.title || "Truyện";
-  state.cover = cover || index.cover || fallbackCoverForBook(book);
+  state.title = (typeof book === "object" ? book.title : "") || index.title || "Truyện";
+  state.cover = cover || index.cover || fallbackCoverForBook(typeof book === "object" ? book : { id: cleanId, title: state.title });
   state.translations = {};
   // Only titles live in memory. Bodies are fetched per chapter, so a
   // 4,000-chapter novel costs the same as a short one to open.
@@ -3571,12 +3573,12 @@ async function openBookFromCdn(book, cover, { startAtFirstChapter = false } = {}
 
   showReader();
   applyReaderHeader();
-  els.bookMeta.textContent = `${BRAND_NAME} · ${index.totalChapters} chương · ${index.translatedChapters} đã dịch`;
+  els.bookMeta.textContent = `${BRAND_NAME} · ${index.totalChapters || state.chapters.length} chương · ${index.translatedChapters || 0} đã dịch`;
   renderChapterControls();
 
   const savedProgress = startAtFirstChapter
     ? null
-    : ((await readProgress(state.bookId).catch(() => null)) || (await findProgressForBook(book)));
+    : ((await readProgress(state.bookId).catch(() => null)) || (await findProgressForBook(typeof book === "object" ? book : { id: cleanId })));
   goToChapter(startAtFirstChapter ? 0 : Number(savedProgress?.currentIndex) || 0);
   return true;
 }
