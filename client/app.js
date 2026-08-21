@@ -1,5 +1,25 @@
 "use strict";
 
+// Force clear old service workers and stale caches from previous builds
+(function forcePwaUpdate() {
+  if (typeof window === "undefined") return;
+  const BUILD_VERSION = "20260821-v4";
+  const stored = localStorage.getItem("app_build_epoch");
+  if (stored !== BUILD_VERSION) {
+    localStorage.setItem("app_build_epoch", BUILD_VERSION);
+    if ("caches" in window) {
+      caches.keys().then((names) => Promise.all(names.map((n) => caches.delete(n)))).catch(() => {});
+    }
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (const reg of registrations) {
+          reg.unregister().catch(() => {});
+        }
+      }).catch(() => {});
+    }
+  }
+})();
+
 // Reader accounts. Bundled rather than loaded on demand because the header has
 // to know on first paint whether anyone is signed in, and answering that costs
 // one localStorage read.
@@ -733,9 +753,12 @@ function alignHashedSection() {
 
 function renderFeaturedBook() {
   const sorted = [...libraryState.books].sort((a, b) =>
-    Number(Boolean(b.featured)) - Number(Boolean(a.featured)) || String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""))
+    Number(Boolean(b.featured)) - Number(Boolean(a.featured)) ||
+    Number(Number(b.translatedChapters || 0) > 0) - Number(Number(a.translatedChapters || 0) > 0) ||
+    Number(b.translatedChapters || 0) - Number(a.translatedChapters || 0) ||
+    String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""))
   );
-  const book = sorted.find((item) => item.cover) || sorted[0] || null;
+  const book = sorted.find((item) => Number(item.translatedChapters || 0) > 0 && item.cover) || sorted.find((item) => item.cover) || sorted[0] || null;
   libraryState.featuredBook = book;
   els.featuredStory.hidden = !book;
   els.featuredRead.disabled = !book;
@@ -961,8 +984,7 @@ function formatNumber(value) {
 }
 
 function renderCatalog() {
-  const books = getFilteredCatalogBooks()
-    .sort((a, b) => Number(Boolean(b.featured)) - Number(Boolean(a.featured)) || String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+  const books = getFilteredCatalogBooks();
 
   const totalPages = Math.max(1, Math.ceil(books.length / CATALOG_PAGE_SIZE));
   libraryState.catalogPage = Math.min(Math.max(1, libraryState.catalogPage), totalPages);
