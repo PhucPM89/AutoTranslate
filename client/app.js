@@ -1166,7 +1166,9 @@ function createBookCard(book, index = 0) {
   const meta = document.createElement("div");
   meta.className = "book-card-meta";
   appendTextElement(meta, "span", "genre-tag", book.genre || "Chưa phân loại");
-  appendTextElement(meta, "span", "book-status", book.status || "Có sẵn");
+  const isFull = book.status === "Hoàn thành" || book.status === "Đã hoàn thành" || book.status === "Full";
+  const statusLabel = isFull ? "Full" : "Đang ra";
+  appendTextElement(meta, "span", `book-status ${isFull ? "status-full" : "status-ongoing"}`, statusLabel);
   const title = appendTextElement(body, "h3", "", book.title);
   const author = appendTextElement(body, "p", "book-author", book.author ? `Tác giả: ${book.author}` : "Tác giả chưa cập nhật");
   const description = appendTextElement(body, "p", "book-description", book.description || "Mở truyện để xem mục lục và bắt đầu dịch theo chương.");
@@ -1289,7 +1291,9 @@ async function showBookDetail(book, { updateHash = true } = {}) {
   els.bookViewCover.addEventListener("error", () => { els.bookViewCover.src = fallbackCover; }, { once: true });
   els.bookViewBackdrop.src = book.cover || heroVariant(fallbackCover);
   els.bookViewGenre.textContent = book.genre || "Chưa phân loại";
-  els.bookViewStatus.textContent = book.status || "Có sẵn";
+  const isFullDetail = book.status === "Hoàn thành" || book.status === "Đã hoàn thành" || book.status === "Full";
+  els.bookViewStatus.textContent = isFullDetail ? "Đã hoàn thành (Full)" : "Đang ra (Chưa Full)";
+  els.bookViewStatus.className = `book-status ${isFullDetail ? "status-full" : "status-ongoing"}`;
   els.bookViewTitle.textContent = book.title;
   els.bookViewAuthor.textContent = book.author ? `Tác giả: ${book.author}` : "Tác giả chưa cập nhật";
   els.bookViewChapters.textContent = book.chapterCount ? `${book.chapterCount} chương` : "Định dạng EPUB";

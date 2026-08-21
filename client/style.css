@@ -4192,7 +4192,9 @@ body:not(.dark) .theme-moon {
 }
 
 .book-card .book-status {
-  display: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .book-card .genre-tag {
@@ -4210,13 +4212,25 @@ body:not(.dark) .theme-moon {
   font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
-/* Status is secondary to genre, so it reads as outline rather than fill. */
 .book-status {
   border: 1px solid var(--border);
   background: transparent;
   color: var(--muted);
+}
+
+.book-status.status-full {
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  color: #4ade80;
+}
+
+.book-status.status-ongoing {
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
 }
 
 .book-card h3 {
