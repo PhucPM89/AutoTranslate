@@ -29,6 +29,7 @@ const els = {
   crawlerRefresh: document.getElementById("crawlerRefresh"),
   translateTab: document.getElementById("adminTranslateTab"),
   translatePanel: document.getElementById("adminTranslatePanel"),
+  translateStartBtn: document.getElementById("adminTranslateStartBtn"),
   translateRefresh: document.getElementById("adminTranslateRefresh"),
   translateStateBadge: document.getElementById("translateStateBadge"),
   translateStateMessage: document.getElementById("translateStateMessage"),
@@ -106,6 +107,7 @@ export function mountAdmin() {
     els.usersTab?.addEventListener("click", () => selectAdminTab("users"));
     els.keysPingBtn?.addEventListener("click", runKeysPingTest);
     els.addKeyForm?.addEventListener("submit", handleAddKeySubmit);
+    els.translateStartBtn?.addEventListener("click", handleStartTranslate);
     els.translateRefresh?.addEventListener("click", loadTranslateStatus);
     els.statsRefresh?.addEventListener("click", loadAnalytics);
     els.usersRefresh?.addEventListener("click", loadAdminUsers);
@@ -471,6 +473,35 @@ function stopTranslatePolling() {
   if (translateTimer) {
     clearInterval(translateTimer);
     translateTimer = null;
+  }
+}
+
+async function handleStartTranslate() {
+  if (!els.translateStartBtn || els.translateStartBtn.disabled) return;
+  els.translateStartBtn.disabled = true;
+  const originalText = els.translateStartBtn.innerHTML;
+  els.translateStartBtn.innerHTML = "<span>⏳ Đang gọi Actions...</span>";
+  setStatus("Đang gửi lệnh kích hoạt tiến trình dịch lên GitHub Actions...");
+
+  try {
+    const res = await requestJson("/api/admin/translate", {
+      method: "POST",
+      body: JSON.stringify({ budget: "5000" })
+    });
+    setStatus(res.message || "Đã kích hoạt 5 Worker Shards dịch trên GitHub Actions thành công!");
+    if (els.translateStateBadge) {
+      els.translateStateBadge.textContent = "Khởi động";
+      els.translateStateBadge.dataset.state = "running";
+    }
+    if (els.translateStateMessage) {
+      els.translateStateMessage.textContent = "Đang kết nối 5 Worker Shards dịch tự động trên GitHub Actions...";
+    }
+    setTimeout(loadTranslateStatus, 3000);
+  } catch (err) {
+    setStatus(`Lỗi kích hoạt dịch: ${err.message}`, true);
+  } finally {
+    els.translateStartBtn.disabled = false;
+    els.translateStartBtn.innerHTML = originalText;
   }
 }
 

@@ -324,7 +324,46 @@ async function republish(env) {
 
 async function handleTranslateStatus({ request, env }) {
   await requireAdmin(request, env);
-  if (request.method !== "GET") return methodNotAllowed("GET");
+  if (request.method !== "GET" && request.method !== "POST") return methodNotAllowed("GET, POST");
+
+  if (request.method === "POST") {
+    requireSameOrigin(request);
+    if (!env.GITHUB_DISPATCH_TOKEN || !env.GITHUB_REPOSITORY) {
+      throw fail(503, "Chưa cấu hình GITHUB_DISPATCH_TOKEN / GITHUB_REPOSITORY.");
+    }
+    const body = await readJson(request).catch(() => ({}));
+    const book = String(body?.book || "").trim();
+    const budget = String(body?.budget || "5000").trim();
+
+    const response = await fetch(
+      `https://api.github.com/repos/${env.GITHUB_REPOSITORY}/actions/workflows/translate-worker.yml/dispatches`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.GITHUB_DISPATCH_TOKEN}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          "Content-Type": "application/json",
+          "User-Agent": "tram-chu-admin"
+        },
+        body: JSON.stringify({
+          ref: env.GITHUB_DISPATCH_REF || "main",
+          inputs: {
+            book,
+            budget
+          }
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+      console.error("Workflow dispatch translate-worker failed:", response.status, errText);
+      throw fail(502, `Không gọi được GitHub Actions translate worker (HTTP ${response.status}).`);
+    }
+
+    return json({ success: true, message: "Đã kích hoạt 5 Worker Shards dịch trên GitHub Actions thành công!" }, 202);
+  }
 
   let status = null;
   try {
