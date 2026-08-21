@@ -51,6 +51,7 @@ function updatePageMeta({
   setMetaTag('meta[property="og:title"]', "content", finalTitle);
   setMetaTag('meta[property="og:description"]', "content", finalDesc);
   setMetaTag('meta[property="og:image"]', "content", finalImage);
+  setMetaTag('meta[property="og:image:secure_url"]', "content", finalImage);
   setMetaTag('meta[property="og:url"]', "content", finalUrl);
   setMetaTag('meta[property="og:type"]', "content", book ? "book" : "website");
 

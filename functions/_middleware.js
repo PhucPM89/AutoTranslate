@@ -73,7 +73,7 @@ export async function onRequest(context) {
 
   const title = `${book.title} — ${SITE_NAME}`;
   const desc = cleanDescription(book.description || `Đọc truyện ${book.title} của tác giả ${book.author || "Khuyết danh"} trên Trạm Chữ.`);
-  const coverUrl = book.cover ? `${CDN_BASE}/${book.cover.replace(/^\//, "")}` : DEFAULT_COVER;
+  const coverUrl = normalizeCoverUrl(book.cover);
   const shareUrl = `${url.origin}/?book=${encodeURIComponent(bookId)}`;
 
   // Use HTMLRewriter on Cloudflare Edge to update meta tags with zero latency
@@ -108,6 +108,11 @@ export async function onRequest(context) {
         e.setAttribute("content", coverUrl);
       }
     })
+    .on('meta[property="og:image:secure_url"]', {
+      element(e) {
+        e.setAttribute("content", coverUrl);
+      }
+    })
     .on('meta[property="og:url"]', {
       element(e) {
         e.setAttribute("content", shareUrl);
@@ -134,6 +139,13 @@ export async function onRequest(context) {
       }
     })
     .transform(response);
+}
+
+function normalizeCoverUrl(cover) {
+  if (!cover) return DEFAULT_COVER;
+  if (cover.startsWith("http://") || cover.startsWith("https://")) return cover;
+  if (cover.startsWith("/")) return `https://tram-chu.online${cover}`;
+  return `${CDN_BASE}/${cover.replace(/^\//, "")}`;
 }
 
 function cleanDescription(text, maxLength = 200) {
