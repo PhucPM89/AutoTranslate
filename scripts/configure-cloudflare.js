@@ -27,7 +27,7 @@ const PLAIN = {
   R2_PUBLIC_BASE_URL: "https://cdn.tram-chu.online",
   GITHUB_REPOSITORY: "PhucPM89/AutoTranslate"
 };
-const PLAIN_FROM_ENV = ["SUPABASE_URL", "SUPABASE_ANON_KEY"];
+const PLAIN_FROM_ENV = ["SUPABASE_URL", "SUPABASE_ANON_KEY", "GROQ_MODEL", "GROQ_FALLBACK_MODELS"];
 const SECRETS = [
   "R2_ACCOUNT_ID",
   "R2_ACCESS_KEY_ID",
@@ -35,11 +35,11 @@ const SECRETS = [
   "SUPABASE_SERVICE_ROLE_KEY",
   "LIBRARY_SESSION_SECRET",
   "LIBRARY_UPLOAD_PASSWORD_HASH",
-  "GITHUB_DISPATCH_TOKEN"
+  "GITHUB_DISPATCH_TOKEN",
+  "GROQ_API_KEYS",
+  "GROQ_API_KEY"
 ];
 
-// GEMINI_API_KEY is never set here: translation happens in GitHub Actions, and
-// nothing served to a browser should be able to call Gemini.
 const NEVER_SET = ["GEMINI_API_KEY"];
 
 // READER_CDN_ENABLED switches real readers onto the CDN, so it takes an explicit

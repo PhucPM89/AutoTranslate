@@ -689,7 +689,8 @@ async function runKeysPingTest() {
   try {
     const data = await requestJson("/api/admin/keys", {
       method: "POST",
-      headers: { "Content-Type": "application/json" }
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "ping" })
     });
     renderKeysList(data.keys || [], true);
     setStatus("Đã hoàn tất kiểm tra kết nối toàn bộ Key.");

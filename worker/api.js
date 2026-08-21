@@ -686,9 +686,11 @@ async function handleAdminKeys({ request, env }) {
 
 async function readJson(request) {
   try {
-    return await request.json();
+    const text = await request.text();
+    if (!text || !text.trim()) return {};
+    return JSON.parse(text);
   } catch {
-    throw fail(400, "Body không hợp lệ.");
+    throw fail(400, "Body không đúng định dạng JSON.");
   }
 }
 
