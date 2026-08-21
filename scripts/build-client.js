@@ -10,6 +10,24 @@ const CLIENT_DIR = path.join(ROOT, "client");
 const PUBLIC_DIR = path.join(ROOT, "public");
 const VENDOR_DIR = path.join(PUBLIC_DIR, "vendor");
 
+function loadEnv(file) {
+  if (!fs.existsSync(file)) return {};
+  const values = {};
+  for (const line of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
+    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    if (!match) continue;
+    let value = match[2].trim();
+    if (/^".*"$/.test(value) || /^'.*'$/.test(value)) value = value.slice(1, -1);
+    values[match[1]] = value;
+  }
+  return values;
+}
+
+const loadedEnv = { ...loadEnv(path.join(ROOT, ".env")), ...loadEnv(path.join(ROOT, ".env.local")) };
+for (const [k, v] of Object.entries(loadedEnv)) {
+  if (process.env[k] === undefined) process.env[k] = v;
+}
+
 fs.mkdirSync(VENDOR_DIR, { recursive: true });
 
 const jszipUrl = copyVendor(
@@ -135,13 +153,20 @@ function copyFonts() {
 }
 
 function copyPwaFiles() {
+  const buildId = Date.now().toString(36) + "-" + crypto.randomBytes(3).toString("hex");
   const pwaFiles = ["manifest.webmanifest", "sw.js"];
   for (const name of pwaFiles) {
     const src = path.join(CLIENT_DIR, name);
     const dest = path.join(PUBLIC_DIR, name);
     if (fs.existsSync(src)) {
-      fs.copyFileSync(src, dest);
-      console.log(`/${name} ${formatKb(fs.statSync(dest).size)}`);
+      if (name === "sw.js") {
+        let content = fs.readFileSync(src, "utf8");
+        content = content.replaceAll("%BUILD_ID%", buildId);
+        fs.writeFileSync(dest, content);
+      } else {
+        fs.copyFileSync(src, dest);
+      }
+      console.log(`/${name} ${formatKb(fs.statSync(dest).size)} (build: ${buildId})`);
     }
   }
 }

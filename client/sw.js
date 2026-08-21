@@ -1,13 +1,12 @@
 "use strict";
 
 // Service Worker for Trạm Chữ — Offline shell and chapter caching.
+// Dynamic cache version generated at build time.
 
-const CACHE_NAME = "tramchu-cache-v2";
+const CACHE_NAME = "tramchu-%BUILD_ID%";
 const SHELL_ASSETS = [
   "/",
   "/index.html",
-  "/app.js",
-  "/style.css",
   "/favicon.svg",
   "/manifest.webmanifest",
   "/library/covers/night-temple.webp",
@@ -17,7 +16,10 @@ const SHELL_ASSETS = [
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_ASSETS)).then(() => self.skipWaiting())
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => cache.addAll(SHELL_ASSETS).catch(() => {}))
+      .then(() => self.skipWaiting())
   );
 });
 
@@ -34,6 +36,15 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+  if (event.data && event.data.type === "CLEAR_ALL_CACHES") {
+    caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))));
+  }
+});
+
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
@@ -42,7 +53,34 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Catalog or library manifest -> Network-First (always fetch latest novel list)
+  // 1. HTML Navigation or root -> Network-First (always get latest HTML & bundled assets)
+  if (event.request.mode === "navigate" || url.pathname === "/" || url.pathname === "/index.html") {
+    event.respondWith(
+      fetch(event.request)
+        .then((res) => {
+          if (res.ok) {
+            const clone = res.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, clone);
+              cache.put("/index.html", res.clone());
+            });
+          }
+          return res;
+        })
+        .catch(async () => {
+          const cached = await caches.match(event.request);
+          if (cached) return cached;
+          const rootCached = await caches.match("/index.html");
+          if (rootCached) return rootCached;
+          return new Response("Bạn đang ngoại tuyến. Vui lòng kết nối mạng để tải truyện.", {
+            headers: { "Content-Type": "text/html; charset=utf-8" }
+          });
+        })
+    );
+    return;
+  }
+
+  // 2. Catalog or library manifest -> Network-First (always fetch latest novel list)
   if (url.pathname.includes("/catalog/") || url.pathname.endsWith("library.json")) {
     event.respondWith(
       fetch(event.request)
@@ -58,7 +96,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Chapter content from CDN / R2 -> Cache-First (immutable chapters)
+  // 3. Chapter content from CDN / R2 -> Cache-First (immutable versioned chapters)
   if (url.pathname.includes("/ch/") || url.pathname.includes("/chapters/")) {
     event.respondWith(
       caches.open(CACHE_NAME).then(async (cache) => {
@@ -78,7 +116,24 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Shell assets -> Stale-While-Revalidate
+  // 4. Immutable hashed JS/CSS assets (e.g. /app.js?v=..., /style.css?v=...) -> Cache-First with Network fallback
+  if (url.searchParams.has("v") || url.pathname.startsWith("/vendor/") || url.pathname.startsWith("/fonts/")) {
+    event.respondWith(
+      caches.match(event.request).then((cached) => {
+        if (cached) return cached;
+        return fetch(event.request).then((res) => {
+          if (res.ok) {
+            const clone = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return res;
+        });
+      })
+    );
+    return;
+  }
+
+  // 5. Default -> Stale-While-Revalidate
   event.respondWith(
     caches.match(event.request).then((cached) => {
       const networked = fetch(event.request)

@@ -289,7 +289,8 @@ const els = {
   floatingAudioSpeed: document.getElementById("floatingAudioSpeed"),
   floatingAudioTimerBtn: document.getElementById("floatingAudioTimerBtn"),
   floatingAudioTimerLabel: document.getElementById("floatingAudioTimerLabel"),
-  floatingAudioClose: document.getElementById("floatingAudioClose")
+  floatingAudioClose: document.getElementById("floatingAudioClose"),
+  forceRefreshAppBtn: document.getElementById("forceRefreshAppBtn")
 };
 
 const parser = new DOMParser();
@@ -2638,9 +2639,50 @@ function initReaderRankController() {
 function registerServiceWorker() {
   if ("serviceWorker" in navigator && typeof window !== "undefined" && window.location.protocol.startsWith("http")) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
+      navigator.serviceWorker
+        .register("/sw.js")
+        .then((reg) => {
+          // Check for SW updates on window focus or visibilitychange
+          window.addEventListener("focus", () => reg.update().catch(() => {}));
+          document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible") {
+              reg.update().catch(() => {});
+            }
+          });
+
+          reg.addEventListener("updatefound", () => {
+            const newWorker = reg.installing;
+            if (!newWorker) return;
+            newWorker.addEventListener("statechange", () => {
+              if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+                newWorker.postMessage({ type: "SKIP_WAITING" });
+              }
+            });
+          });
+        })
+        .catch(() => {});
+
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        loadLibraryManifest().catch(() => {});
+      });
     });
   }
+
+  els.forceRefreshAppBtn?.addEventListener("click", async () => {
+    showToast("Đang làm mới dữ liệu & kiểm tra truyện mới...");
+    if ("caches" in window) {
+      try {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      } catch {}
+    }
+    if ("serviceWorker" in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) await reg.update().catch(() => {});
+    }
+    await loadLibraryManifest();
+    showToast("✓ Đã cập nhật truyện và giao diện mới nhất!");
+  });
 }
 
 // Translations live in their own object store, so switching chapters reads and
