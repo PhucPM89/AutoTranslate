@@ -125,8 +125,9 @@ async function main() {
 
   let activeQueue = queue;
   if (TOTAL_SHARDS > 1) {
-    activeQueue = queue.filter((job, idx) => (idx % TOTAL_SHARDS) === SHARD_INDEX);
-    console.log(`\n=== [SHARD ${SHARD_INDEX + 1}/${TOTAL_SHARDS}] Được phân bổ ${activeQueue.length}/${queue.length} bộ truyện ===`);
+    const normalizedShard = (SHARD_INDEX >= 1 && SHARD_INDEX <= TOTAL_SHARDS) ? (SHARD_INDEX - 1) : Math.max(0, SHARD_INDEX);
+    activeQueue = queue.filter((job, idx) => (idx % TOTAL_SHARDS) === normalizedShard);
+    console.log(`\n=== [SHARD ${normalizedShard + 1}/${TOTAL_SHARDS}] Được phân bổ ${activeQueue.length}/${queue.length} bộ truyện ===`);
   }
 
   console.log(`Có ${activeQueue.length} book trong hàng đợi worker (Batch size: ${BATCH_SIZE}, ${activeBookIds.size} book VIP toàn hệ thống):`);

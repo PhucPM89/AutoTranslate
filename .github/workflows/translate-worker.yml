@@ -21,12 +21,12 @@ permissions:
 
 jobs:
   translate:
-    name: Worker Shard ${{ matrix.shard + 1 }}/5
+    name: Worker Shard ${{ matrix.shard }}/5
     runs-on: ubuntu-latest
     timeout-minutes: 330
     strategy:
       matrix:
-        shard: [0, 1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5]
       fail-fast: false
     concurrency:
       group: translate-worker-${{ matrix.shard }}
@@ -59,7 +59,7 @@ jobs:
       - name: Check required secrets are present
         run: node scripts/check-env.js translate
 
-      - name: Drain the translation queue (Shard ${{ matrix.shard + 1 }}/5)
+      - name: Drain the translation queue (Shard ${{ matrix.shard }}/5)
         run: >
           node scripts/translate-worker.js
           --minutes 300
