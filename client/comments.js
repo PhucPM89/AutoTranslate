@@ -29,8 +29,8 @@ async function fetchChapterComments({ supabaseUrl, supabaseKey, bookId, chapterI
       }
     });
 
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const comments = await res.json();
+    if (!res.ok) return new Map();
+    const comments = (await res.json().catch(() => [])) || [];
 
     const grouped = new Map();
     for (const c of comments) {
@@ -41,8 +41,7 @@ async function fetchChapterComments({ supabaseUrl, supabaseKey, bookId, chapterI
 
     chapterCommentsCache.set(cacheKey, grouped);
     return grouped;
-  } catch (error) {
-    console.warn("Unable to fetch chapter comments:", error);
+  } catch {
     return new Map();
   }
 }

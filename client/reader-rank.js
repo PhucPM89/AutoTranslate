@@ -211,14 +211,13 @@ async function fetchLeaderboard({ supabaseUrl, supabaseKey, school = "all", limi
         Authorization: `Bearer ${supabaseKey}`
       }
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const rows = await res.json();
+    if (!res.ok) return [];
+    const rows = (await res.json().catch(() => [])) || [];
     if (!leaderboardCache) leaderboardCache = {};
     leaderboardCache[cacheKey] = rows;
     leaderboardCacheTime = now;
     return rows;
-  } catch (err) {
-    console.warn("Unable to fetch leaderboard:", err.message);
+  } catch {
     return [];
   }
 }
@@ -251,7 +250,7 @@ async function syncReaderLeaderboard({ supabaseUrl, supabaseKey, user = null, fo
   try {
     lastSyncTime = now;
     invalidateLeaderboardCache();
-    await fetch(`${supabaseUrl}/rest/v1/reader_leaderboard`, {
+    const res = await fetch(`${supabaseUrl}/rest/v1/reader_leaderboard`, {
       method: "POST",
       headers: {
         apikey: supabaseKey,
@@ -262,9 +261,8 @@ async function syncReaderLeaderboard({ supabaseUrl, supabaseKey, user = null, fo
       body: JSON.stringify([payload]),
       keepalive: true
     });
-    return true;
-  } catch (err) {
-    console.warn("Unable to sync leaderboard entry:", err.message);
+    return res.ok;
+  } catch {
     return false;
   }
 }
