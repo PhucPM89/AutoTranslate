@@ -203,38 +203,33 @@
         <button id="authClose" class="icon-button" type="button" aria-label="Đóng" title="Đóng"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"></path></svg></button>
       </div>
 
-      <div id="authTabs" class="auth-tabs" role="tablist" aria-label="Đăng nhập hoặc đăng ký">
-        <button id="authLoginTab" class="auth-tab active" type="button" role="tab" aria-selected="true" aria-controls="authLoginForm">Đăng nhập</button>
-        <button id="authRegisterTab" class="auth-tab" type="button" role="tab" aria-selected="false" aria-controls="authRegisterForm">Đăng ký</button>
+      <div id="authGuest" class="auth-guest">
+        <p class="auth-intro">Đăng nhập bằng tài khoản Google để lưu và đồng bộ tiến độ đọc truyện trên mọi thiết bị.</p>
+        <button id="authGoogleBtn" class="google-login-btn" type="button">
+          <svg class="google-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+          </svg>
+          <span>Đăng nhập với Google</span>
+        </button>
+        <span class="auth-note">Tài khoản chỉ dùng để lưu lịch sử và tiến độ đọc.</span>
       </div>
 
-      <form id="authLoginForm" class="auth-form" method="post">
-        <label class="auth-field"><span>Email</span><input id="authLoginEmail" name="email" type="email" autocomplete="email" required maxlength="254" placeholder="ban@example.com"></label>
-        <label class="auth-field"><span>Mật khẩu</span><input id="authLoginPassword" name="password" type="password" autocomplete="current-password" required maxlength="72"></label>
-        <div class="auth-form-actions">
-          <button id="authForgot" class="auth-link" type="button">Quên mật khẩu?</button>
-          <button class="primary-action" type="submit">Đăng nhập</button>
-        </div>
-      </form>
-
-      <form id="authRegisterForm" class="auth-form" method="post" hidden>
-        <label class="auth-field"><span>Email</span><input id="authRegisterEmail" name="email" type="email" autocomplete="email" required maxlength="254" placeholder="ban@example.com"></label>
-        <label class="auth-field"><span>Mật khẩu <small>ít nhất 6 ký tự</small></span><input id="authRegisterPassword" name="password" type="password" autocomplete="new-password" required minlength="6" maxlength="72"></label>
-        <label class="auth-field"><span>Nhập lại mật khẩu</span><input id="authRegisterConfirm" name="confirm" type="password" autocomplete="new-password" required minlength="6" maxlength="72"></label>
-        <div class="auth-form-actions">
-          <span class="auth-note">Tài khoản chỉ dùng để lưu tiến độ đọc.</span>
-          <button class="primary-action" type="submit">Tạo tài khoản</button>
-        </div>
-      </form>
-
       <div id="authAccount" class="auth-account" hidden>
-        <span id="authAccountInitial" class="auth-avatar" aria-hidden="true">?</span>
-        <div class="auth-account-copy"><strong id="authAccountEmail"></strong><small>Đang đăng nhập</small></div>
+        <div class="auth-avatar-wrap">
+          <img id="authAccountAvatar" class="auth-avatar-img" src="" alt="" hidden>
+          <span id="authAccountInitial" class="auth-avatar" aria-hidden="true">?</span>
+        </div>
+        <div class="auth-account-copy">
+          <strong id="authAccountName"></strong>
+          <small id="authAccountEmail">Đang đăng nhập</small>
+        </div>
         <button id="authSignOut" class="secondary-action" type="button">Đăng xuất</button>
       </div>
 
       <p id="authMessage" class="auth-message" role="status" aria-live="polite" hidden></p>
-      <button id="authResend" class="auth-link auth-resend" type="button" hidden>Gửi lại email xác nhận</button>
     </dialog>
 
     <dialog id="adminDialog" class="admin-dialog" aria-labelledby="adminTitle">

@@ -16,8 +16,6 @@ function fakeStorage(initial = {}) {
 }
 
 test("normalizeSession prefers the server clock over the local one", () => {
-  // A browser running five minutes fast would compute an expiry five minutes
-  // late from expires_in, and keep using a token the server has already retired.
   const session = core.normalizeSession(
     { access_token: "a", refresh_token: "r", expires_in: 3600, expires_at: 1_700_000_000 },
     5_000
@@ -35,18 +33,43 @@ test("normalizeSession rejects a payload with no access token", () => {
   assert.equal(core.normalizeSession(null), null);
 });
 
-test("normalizeSession keeps only the user fields the UI needs", () => {
+test("normalizeSession keeps the user fields the UI needs", () => {
   const session = core.normalizeSession({
     access_token: "a",
-    user: { id: "u1", email: "doc@gia.vn", phone: "0900", app_metadata: { provider: "email" } }
+    user: {
+      id: "u1",
+      email: "doc@gia.vn",
+      user_metadata: { full_name: "Độc Giả", avatar_url: "https://avatar.url/1.png" }
+    }
   });
-  assert.deepEqual(session.user, { id: "u1", email: "doc@gia.vn" });
+  assert.deepEqual(session.user, {
+    id: "u1",
+    email: "doc@gia.vn",
+    fullName: "Độc Giả",
+    avatarUrl: "https://avatar.url/1.png"
+  });
+});
+
+test("normalizeSession extracts user from JWT if payload user is missing", () => {
+  // Create a minimal fake JWT: header.payload.signature
+  const jwtPayload = Buffer.from(
+    JSON.stringify({
+      sub: "u-google-1",
+      email: "google.user@gmail.com",
+      user_metadata: { full_name: "Google User", avatar_url: "https://lh3.googleusercontent.com/a/1" }
+    })
+  ).toString("base64url");
+  const token = `header.${jwtPayload}.sig`;
+
+  const session = core.normalizeSession({ access_token: token, refresh_token: "r1" });
+  assert.equal(session.user.id, "u-google-1");
+  assert.equal(session.user.email, "google.user@gmail.com");
+  assert.equal(session.user.fullName, "Google User");
+  assert.equal(session.user.avatarUrl, "https://lh3.googleusercontent.com/a/1");
 });
 
 test("isExpired treats a token inside the refresh margin as expired", () => {
   const now = 1_000_000;
-  // 30s of life left: still valid to the server, but too close to spend on a
-  // request that might take longer than that.
   assert.equal(core.isExpired({ accessToken: "a", expiresAt: now + 30_000 }, now), true);
   assert.equal(core.isExpired({ accessToken: "a", expiresAt: now + 10 * 60_000 }, now), false);
 });
@@ -85,8 +108,6 @@ test("writeSession(null) removes the stored session", () => {
 });
 
 test("writeSession swallows a storage that refuses to write", () => {
-  // Safari in private mode exposes localStorage and throws on use. Losing
-  // persistence is acceptable; throwing would break the login just completed.
   const hostile = {
     getItem: () => null,
     setItem: () => {
@@ -100,34 +121,14 @@ test("writeSession swallows a storage that refuses to write", () => {
   assert.doesNotThrow(() => core.writeSession(hostile, null));
 });
 
-test("validateCredentials catches the mistakes worth catching before a request", () => {
-  assert.match(core.validateCredentials({ email: "khong-phai-email", password: "matkhau1" }), /định dạng/);
-  assert.match(core.validateCredentials({ email: "a@b.vn", password: "abc" }), /ít nhất 6/);
-  assert.equal(core.validateCredentials({ email: "a@b.vn", password: "matkhau1" }), "");
-});
+const DIACRITIC = /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i;
 
-test("validateCredentials measures the password in bytes, not characters", () => {
-  // bcrypt ignores everything past 72 bytes. Vietnamese characters cost three
-  // bytes each, so a 30-character password can cross the limit while looking
-  // comfortably short - and the part past 72 would silently not be checked.
-  const password = "mậtkhẩuruấtdàiđểkiểmtra".repeat(4);
-  assert.ok(password.length < 100, "vẫn ngắn khi đếm ký tự");
-  assert.ok(Buffer.byteLength(password, "utf8") > core.MAX_PASSWORD_BYTES);
-  assert.match(core.validateCredentials({ email: "a@b.vn", password }), /quá dài/);
-});
-
-// "Email" is a normal Vietnamese word, so scanning for latin letters proves
-// nothing. What matters is that the wording is ours and the English GoTrue sent
-// does not reach the reader.
-const DIACRITIC = /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i;
-
-test("every GoTrue code seen from the live project maps to Vietnamese", () => {
+test("every GoTrue code seen maps to Vietnamese", () => {
   const observed = [
     ["invalid_credentials", 400],
     ["email_not_confirmed", 400],
-    ["weak_password", 422],
     ["user_already_exists", 422],
-    ["over_email_send_rate_limit", 429],
+    ["over_request_rate_limit", 429],
     ["refresh_token_not_found", 400]
   ];
   const english = "Something went badly wrong upstream";
@@ -142,62 +143,11 @@ test("every GoTrue code seen from the live project maps to Vietnamese", () => {
 test("authErrorMessage falls back on status when there is no code", () => {
   assert.match(core.authErrorMessage(429, {}), /quá nhiều lần/);
   assert.match(core.authErrorMessage(503, {}), /Máy chủ/);
-  assert.match(core.authErrorMessage(400, {}), /Kiểm tra lại/);
+  assert.match(core.authErrorMessage(400, {}), /Không đăng nhập được/);
 });
 
-test("authErrorMessage keeps the number out of an English length complaint", () => {
-  const message = core.authErrorMessage(422, { msg: "Password should be at least 8 characters." });
-  assert.match(message, /ít nhất 8 ký tự/);
-});
-
-test("an unrecognised error still produces Vietnamese, not a passthrough", () => {
-  const samples = [
-    { error_code: "unheard_of_code", msg: "Something broke deep inside" },
-    { msg: "User already registered" },
-    {},
-    null
-  ];
-  for (const body of samples) {
-    const message = core.authErrorMessage(400, body);
-    assert.match(message, DIACRITIC, `không phải tiếng Việt: ${message}`);
-    if (body?.msg) assert.ok(!message.includes(body.msg), `lọt nguyên văn: ${message}`);
-  }
-});
-
-test("describeSignup reads the real confirmation-required response", () => {
-  // Captured verbatim from the live project: 200 OK, a bare user record, no
-  // session, and confirmed_at null. Note that is_anonymous is false and
-  // confirmed_at is null here too, so neither can stand in for access_token.
-  const probed = {
-    id: "eb094b41-73da-45cb-882a-66e4764f4817",
-    aud: "authenticated",
-    role: "authenticated",
-    email: "doc@gia.vn",
-    confirmation_sent_at: "2026-08-21T00:00:00Z",
-    confirmed_at: null,
-    identities: [],
-    is_anonymous: false
-  };
-  const outcome = core.describeSignup(probed);
-  assert.equal(outcome.needsConfirmation, true);
-  assert.equal(outcome.session, null);
-  assert.equal(outcome.email, "doc@gia.vn");
-});
-
-test("describeSignup logs the reader straight in when confirmation is off", () => {
-  const outcome = core.describeSignup({
-    access_token: "a",
-    refresh_token: "r",
-    expires_in: 3600,
-    user: { id: "u1", email: "doc@gia.vn" }
-  });
-  assert.equal(outcome.needsConfirmation, false);
-  assert.equal(outcome.session.accessToken, "a");
-  assert.equal(outcome.email, "doc@gia.vn");
-});
-
-test("sessionFromUrlHash picks up the tokens a confirmation link carries", () => {
-  const hash = "#access_token=abc&refresh_token=def&expires_in=3600&token_type=bearer&type=signup";
+test("sessionFromUrlHash picks up the tokens Google OAuth redirect carries", () => {
+  const hash = "#access_token=abc&refresh_token=def&expires_in=3600&token_type=bearer&type=recovery";
   const session = core.sessionFromUrlHash(hash, 1_000);
   assert.equal(session.accessToken, "abc");
   assert.equal(session.refreshToken, "def");
@@ -205,28 +155,24 @@ test("sessionFromUrlHash picks up the tokens a confirmation link carries", () =>
 });
 
 test("sessionFromUrlHash leaves the app's own hash routes alone", () => {
-  // These are real routes in this app. Mistaking one for a login callback would
-  // wipe it from the address bar and break navigation.
   for (const hash of ["", "#catalog", "#support", "#book/mieu-cuong-co-su"]) {
     assert.equal(core.sessionFromUrlHash(hash), null, hash);
   }
 });
 
-test("errorFromUrlHash explains an expired link instead of doing nothing", () => {
-  const hash = "#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired";
-  assert.match(core.errorFromUrlHash(hash), /hết hạn/);
+test("errorFromUrlHash explains an OAuth error clearly", () => {
+  const hash = "#error=access_denied&error_code=access_denied&error_description=User+denied";
+  assert.match(core.errorFromUrlHash(hash), /hủy/);
   assert.equal(core.errorFromUrlHash("#catalog"), "");
   assert.equal(core.errorFromUrlHash(""), "");
 });
 
-test("account label and initial come from the local part, never the domain", () => {
+test("account label and initial handle full names and emails", () => {
+  assert.equal(core.accountLabel({ fullName: "Phạm Minh Phúc", email: "phuc.pham@gmail.com" }), "Phạm Minh Phúc");
+  assert.equal(core.accountInitial({ fullName: "Phạm Minh Phúc" }), "P");
   assert.equal(core.accountLabel({ email: "phuc.pham@gmail.com" }), "phuc.pham");
   assert.equal(core.accountInitial({ email: "phuc.pham@gmail.com" }), "P");
-  // A leading symbol must not become the avatar, and a Vietnamese letter has to
-  // survive upper-casing with its diacritic intact.
   assert.equal(core.accountInitial({ email: "_ánh@gmail.com" }), "Á");
-  // An address whose local part is nothing but punctuation leaves no letter to
-  // show, which is the only case the placeholder exists for.
   assert.equal(core.accountInitial({ email: "+++@gmail.com" }), "?");
   assert.equal(core.accountLabel({}), "Tài khoản");
   assert.equal(core.accountInitial({}), "T");

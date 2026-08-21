@@ -2,7 +2,7 @@
 
 // Session bookkeeping and error wording for the reader login, kept free of DOM
 // and network so node can test it. These are the parts that fail quietly: a
-// token treated as fresh a second before it expires, or a GoTrue error code
+// token treated as fresh a second before it expires, or an error code
 // shown to a reader as raw English.
 
 // Refresh a minute early. A token that expires mid-flight looks exactly like a
@@ -10,11 +10,23 @@
 const EXPIRY_SKEW_MS = 60 * 1000;
 const SESSION_KEY = "tramChu.auth";
 
-// GoTrue rejects anything under 6 - verified against the live project, which
-// answered 422 weak_password. bcrypt ignores bytes past 72, so a longer password
-// would appear to be accepted and then not match on the next login.
-const MIN_PASSWORD = 6;
-const MAX_PASSWORD_BYTES = 72;
+function decodeJwt(token) {
+  try {
+    const part = String(token || "").split(".")[1];
+    if (!part) return null;
+    let base64 = part.replace(/-/g, "+").replace(/_/g, "/");
+    while (base64.length % 4) base64 += "=";
+    const json =
+      typeof atob === "function"
+        ? typeof decodeURIComponent === "function" && typeof escape === "function"
+          ? decodeURIComponent(escape(atob(base64)))
+          : atob(base64)
+        : Buffer.from(base64, "base64").toString("utf8");
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
 
 // GoTrue returns expires_in (seconds from now) and usually expires_at (absolute,
 // seconds). Prefer the absolute one: it comes from the server clock, and a
@@ -23,14 +35,27 @@ function normalizeSession(payload, now = Date.now()) {
   if (!payload || !payload.access_token) return null;
   const lifetimeMs = Number(payload.expires_in) > 0 ? Number(payload.expires_in) * 1000 : 3600 * 1000;
   const absolute = Number(payload.expires_at) > 0 ? Number(payload.expires_at) * 1000 : 0;
-  const user = payload.user || {};
+  let user = payload.user || {};
+  if (!user.id || !user.email) {
+    const jwt = decodeJwt(payload.access_token);
+    if (jwt) {
+      user = {
+        id: jwt.sub || user.id || "",
+        email: jwt.email || user.email || "",
+        user_metadata: jwt.user_metadata || user.user_metadata || {}
+      };
+    }
+  }
+  const meta = user.user_metadata || {};
   return {
     accessToken: String(payload.access_token),
     refreshToken: String(payload.refresh_token || ""),
     expiresAt: absolute || now + lifetimeMs,
     user: {
       id: String(user.id || ""),
-      email: String(user.email || "")
+      email: String(user.email || ""),
+      fullName: String(meta.full_name || meta.name || user.fullName || ""),
+      avatarUrl: String(meta.avatar_url || meta.picture || user.avatarUrl || "")
     }
   };
 }
@@ -57,7 +82,12 @@ function readSession(storage) {
       accessToken: String(parsed.accessToken),
       refreshToken: String(parsed.refreshToken || ""),
       expiresAt: Number(parsed.expiresAt) || 0,
-      user: { id: String(parsed.user?.id || ""), email: String(parsed.user?.email || "") }
+      user: {
+        id: String(parsed.user?.id || ""),
+        email: String(parsed.user?.email || ""),
+        fullName: String(parsed.user?.fullName || ""),
+        avatarUrl: String(parsed.user?.avatarUrl || "")
+      }
     };
   } catch {
     // Corrupt or foreign data under our key is not worth surfacing to a reader.
@@ -76,44 +106,14 @@ function writeSession(storage, session) {
   }
 }
 
-function isValidEmail(value) {
-  const email = String(value || "").trim();
-  // Deliberately loose. The server is the authority on what it accepts; this
-  // only catches an obvious typo before spending a request on it.
-  return email.length >= 5 && email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
-}
-
-function passwordByteLength(value) {
-  const text = String(value || "");
-  if (typeof TextEncoder === "function") return new TextEncoder().encode(text).length;
-  return Buffer.byteLength(text, "utf8");
-}
-
-// Local checks so a mistyped form costs no round trip, and so the byte limit is
-// explained rather than discovered.
-function validateCredentials({ email, password }) {
-  if (!isValidEmail(email)) return "Email chưa đúng định dạng.";
-  const value = String(password || "");
-  if (value.length < MIN_PASSWORD) return `Mật khẩu cần ít nhất ${MIN_PASSWORD} ký tự.`;
-  if (passwordByteLength(value) > MAX_PASSWORD_BYTES) {
-    return "Mật khẩu quá dài. Chữ có dấu tính nhiều hơn một ký tự, hãy đặt ngắn lại.";
-  }
-  return "";
-}
-
 // Every code below was observed against the live project, not copied from docs.
 const ERROR_MESSAGES = {
   invalid_credentials: "Email hoặc mật khẩu không đúng.",
   email_not_confirmed: "Email chưa được xác nhận. Mở hộp thư và bấm liên kết kích hoạt.",
-  weak_password: `Mật khẩu cần ít nhất ${MIN_PASSWORD} ký tự.`,
-  user_already_exists: "Email này đã có tài khoản. Hãy đăng nhập.",
-  email_exists: "Email này đã có tài khoản. Hãy đăng nhập.",
-  email_address_invalid: "Email chưa đúng định dạng.",
-  over_email_send_rate_limit: "Đã gửi quá nhiều email. Đợi vài phút rồi thử lại.",
+  user_already_exists: "Email này đã có tài khoản.",
+  email_exists: "Email này đã có tài khoản.",
   over_request_rate_limit: "Bạn thử quá nhiều lần. Đợi một chút rồi thử lại.",
-  signup_disabled: "Đăng ký đang tạm đóng.",
   user_banned: "Tài khoản này đang bị khóa.",
-  same_password: "Mật khẩu mới trùng mật khẩu cũ.",
   validation_failed: "Thông tin chưa hợp lệ.",
   refresh_token_not_found: "Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.",
   refresh_token_already_used: "Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại."
@@ -124,35 +124,15 @@ function authErrorMessage(status, body) {
   const code = String(payload.error_code || payload.code || "");
   if (ERROR_MESSAGES[code]) return ERROR_MESSAGES[code];
 
-  // Rate limiting arrives as 429 with free-text often enough that the status is
-  // the more reliable signal.
   if (status === 429) return ERROR_MESSAGES.over_request_rate_limit;
   if (status >= 500) return "Máy chủ đăng nhập đang lỗi. Thử lại sau ít phút.";
 
-  // Older GoTrue builds send only msg. Passing English straight through is worse
-  // than a generic Vietnamese line, except where the message carries a number a
-  // reader can actually act on.
   const message = String(payload.msg || payload.error_description || payload.message || "");
-  const minimum = message.match(/at least (\d+) characters/i);
-  if (minimum) return `Mật khẩu cần ít nhất ${minimum[1]} ký tự.`;
   if (/already registered|already been registered/i.test(message)) return ERROR_MESSAGES.user_already_exists;
-  return "Không đăng nhập được. Kiểm tra lại email và mật khẩu.";
+  return "Không đăng nhập được. Vui lòng thử lại.";
 }
 
-// Signup answers two different ways depending on one dashboard switch, and the
-// difference is the whole flow. With confirmation off the response carries a
-// session and the reader is simply logged in. With it on - how the project is
-// configured today - the response is a bare user record and the reader has to
-// open an email first. access_token is what tells them apart: confirmed_at is
-// null in both cases, so it cannot be used for this.
-function describeSignup(payload, now = Date.now()) {
-  const session = normalizeSession(payload, now);
-  if (session) return { session, needsConfirmation: false, email: session.user.email };
-  const email = String(payload?.email || payload?.user?.email || "");
-  return { session: null, needsConfirmation: true, email };
-}
-
-// The confirmation link lands back on the site with tokens in the URL fragment.
+// The OAuth redirect lands back on the site with tokens in the URL fragment.
 // They have to be consumed and wiped before anything else reads the hash, or
 // they sit in the address bar and travel into any link the reader shares.
 function sessionFromUrlHash(hash, now = Date.now()) {
@@ -170,21 +150,23 @@ function sessionFromUrlHash(hash, now = Date.now()) {
   );
 }
 
-// Supabase reports link failures in the fragment too, so an expired link should
-// say so instead of appearing to do nothing at all.
+// Supabase reports OAuth failures in the fragment too.
 function errorFromUrlHash(hash) {
   const raw = String(hash || "").replace(/^#/, "");
   if (!raw || !raw.includes("error")) return "";
   const params = new URLSearchParams(raw);
   if (!params.get("error") && !params.get("error_code")) return "";
   const detail = `${params.get("error_code") || ""} ${params.get("error_description") || ""}`;
-  if (/expired/i.test(detail)) return "Liên kết xác nhận đã hết hạn. Hãy yêu cầu gửi lại.";
-  return "Liên kết xác nhận không dùng được. Hãy yêu cầu gửi lại.";
+  if (/access_denied/i.test(detail)) return "Đã hủy đăng nhập Google.";
+  if (/expired/i.test(detail)) return "Phiên đăng nhập đã hết hạn. Hãy thử lại.";
+  return "Đăng nhập Google không thành công. Hãy thử lại.";
 }
 
-// Shown on the header button. The local part is usually a name; the domain never
-// is, and a full email in a 32px circle is unreadable anyway.
+// Shown on the header button and profile dialog.
 function accountLabel(user) {
+  if (user?.fullName && String(user.fullName).trim()) {
+    return String(user.fullName).trim();
+  }
   const email = String(user?.email || "").trim();
   if (!email) return "Tài khoản";
   return email.split("@")[0] || email;
@@ -199,17 +181,13 @@ function accountInitial(user) {
 module.exports = {
   SESSION_KEY,
   EXPIRY_SKEW_MS,
-  MIN_PASSWORD,
-  MAX_PASSWORD_BYTES,
+  decodeJwt,
   normalizeSession,
   isExpired,
   canRefresh,
   readSession,
   writeSession,
-  isValidEmail,
-  validateCredentials,
   authErrorMessage,
-  describeSignup,
   sessionFromUrlHash,
   errorFromUrlHash,
   accountLabel,
