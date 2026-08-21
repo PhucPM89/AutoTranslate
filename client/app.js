@@ -1483,15 +1483,15 @@ function updateContinueReading() {
 }
 
 async function loadCatalogBook(book, assignedFallbackCover = fallbackCoverForBook(book), { startAtFirstChapter = false } = {}) {
+  if (!book) return;
+  const cleanId = cleanBookId(typeof book === "object" ? book.id : book);
   showReader();
-  setBusy(`Đang tải ${book.title}...`);
-  els.bookTitle.textContent = book.title;
+  setBusy(`Đang tải ${book.title || "truyện"}...`);
+  els.bookTitle.textContent = book.title || "Trạm Chữ";
   els.bookMeta.textContent = "Đang chuẩn bị mục lục...";
-  els.readerBookCover.src = book.cover || assignedFallbackCover;
-
-  const bookId = `library:${book.id}:${book.updatedAt || "current"}`;
-  const cover = book.cover || assignedFallbackCover;
-  countBookOpened(book.id);
+  const cover = (typeof book === "object" ? book.cover : null) || assignedFallbackCover;
+  els.readerBookCover.src = cover;
+  countBookOpened(cleanId);
 
   // Preferred path: one small chapter JSON from the CDN.
   try {
@@ -1501,11 +1501,18 @@ async function loadCatalogBook(book, assignedFallbackCover = fallbackCoverForBoo
     console.error("Lỗi khi mở truyện từ CDN:", error);
   }
 
-  // Only a legacy book can go down the EPUB path
+  // Fallback for legacy standalone EPUB files
   if (typeof book.epub === "string" && book.epub) {
     state.mode = "epub";
     try {
       const bookId = `library:${cleanId}:${book.updatedAt || "current"}`;
+      const cachedBook = await readCachedBook(bookId).catch(() => null);
+      if (cachedBook?.chapters?.length) {
+        const savedProgress = startAtFirstChapter ? null : await readProgress(bookId).catch(() => null);
+        await openCachedBook(cachedBook, Number(savedProgress?.currentIndex) || 0);
+        return;
+      }
+
       const response = await fetch(book.epub);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const arrayBuffer = await response.arrayBuffer();
@@ -1522,32 +1529,7 @@ async function loadCatalogBook(book, assignedFallbackCover = fallbackCoverForBoo
     }
   }
 
-  resetReader("Chưa thể tải mục lục từ máy chủ. Hãy thử lại hoặc chọn truyện khác.");
-
-  state.mode = "epub";
-
-  try {
-    // A parsed copy on the device means no EPUB download and no re-parse at all.
-    const cachedBook = await readCachedBook(bookId).catch(() => null);
-    if (cachedBook?.chapters?.length) {
-      const savedProgress = startAtFirstChapter ? null : await readProgress(bookId).catch(() => null);
-      await openCachedBook(cachedBook, Number(savedProgress?.currentIndex) || 0);
-      return;
-    }
-
-    const response = await fetch(book.epub);
-    if (!response.ok) throw new Error(`Không tải được EPUB (HTTP ${response.status}).`);
-    const arrayBuffer = await response.arrayBuffer();
-    await applyLoadedEpub(arrayBuffer, {
-      bookId,
-      fileName: book.epub.split("/").pop() || `${book.id}.epub`,
-      displayTitle: book.title,
-      cover,
-      startAtFirstChapter
-    });
-  } catch (error) {
-    resetReader(`Không thể mở truyện: ${error.message}`);
-  }
+  resetReader("Chưa thể tải mục lục từ máy chủ CDN. Vui lòng thử lại sau.");
 }
 
 async function applyLoadedEpub(arrayBuffer, options) {
