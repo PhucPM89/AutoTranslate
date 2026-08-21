@@ -7,6 +7,7 @@ const { initAuth } = require("./auth.js");
 const { createUserSync } = require("./user-sync.js");
 const { renderQuoteCard } = require("./quote-card.js");
 const { applyInvisibleWatermark, initSecurityGuards } = require("./security.js");
+const { extractTitleFromContent, formatVietnameseChapterTitle } = require("./chapter-title.js");
 
 let activeShelfTab = "all";
 let userSync = null;
@@ -1691,6 +1692,12 @@ function renderTranslation(cached, index) {
     els.outputStatus.textContent = "Đã lưu";
     els.translateButton.hidden = true;
     els.retranslateButton.hidden = false;
+
+    const extracted = extractTitleFromContent(cached);
+    if (extracted && chapter && chapter.translatedTitle !== extracted) {
+      chapter.translatedTitle = extracted;
+      syncChapterUiTitle(index);
+    }
   } else {
     els.translationText.textContent = "Chưa có bản dịch.";
     els.translationText.classList.add("empty");
@@ -2068,7 +2075,21 @@ function makeBookId(file) {
 }
 
 function displayChapterTitle(index) {
-  return state.chapters[index]?.title || `Chương ${index + 1}`;
+  const chapter = state.chapters[index];
+  if (!chapter) return `Chương ${index + 1}`;
+
+  if (chapter.translatedTitle) return chapter.translatedTitle;
+
+  const content = state.translations[index] || (typeof chapter.text === "string" ? chapter.text : "");
+  if (content) {
+    const extracted = extractTitleFromContent(content);
+    if (extracted) {
+      chapter.translatedTitle = extracted;
+      return extracted;
+    }
+  }
+
+  return formatVietnameseChapterTitle(chapter.title, index + 1);
 }
 
 function formatWordCount(chapter) {
@@ -2245,12 +2266,33 @@ async function loadCdnChapter(index) {
 function renderCdnChapter(chapter, index) {
   if (index !== state.currentIndex) return;
   els.sourceText.textContent = chapter.text || "";
-  els.translationText.textContent = chapter.text || "";
+  els.translationText.textContent = applyInvisibleWatermark(chapter.text || "");
   els.translationText.classList.remove("empty", "is-loading", "status-error");
   els.outputStatus.textContent = chapter.status === "completed" ? "Đã dịch" : "Bản gốc";
+
+  const extracted = extractTitleFromContent(chapter.text);
+  if (extracted && chapter.translatedTitle !== extracted) {
+    chapter.translatedTitle = extracted;
+    syncChapterUiTitle(index);
+  }
+
   // Translation happened at ingest, so the reader has nothing to trigger.
   els.translateButton.hidden = true;
   els.retranslateButton.hidden = true;
+}
+
+function syncChapterUiTitle(index) {
+  const documentLabel = displayChapterTitle(index);
+  els.paperTitle.textContent = documentLabel;
+  const chapterLabel = `${documentLabel} · ${index + 1} / ${state.chapters.length}`;
+  els.chapterCounter.textContent = chapterLabel;
+  els.bottomChapterCounter.textContent = chapterLabel;
+
+  const itemEl = els.chapterList?.querySelector(`.document-item[data-index="${index}"] span:not(.document-index)`);
+  if (itemEl) itemEl.textContent = documentLabel;
+
+  const selectOpt = els.chapterSelect?.querySelector(`option[value="${index}"]`);
+  if (selectOpt) selectOpt.textContent = documentLabel;
 }
 
 function bookIdFromState() {
