@@ -246,6 +246,65 @@ body:not(.dark) {
   --glow-strong: 0 0 0 1px rgba(124, 58, 237, 0.32), 0 20px 56px rgba(124, 58, 237, 0.22);
 }
 
+/* Theme Sepia — Giấy ngà cổ điển êm dịu */
+body.theme-sepia {
+  color-scheme: light;
+  --bg: #f5eedb;
+  --app-bg: var(--bg);
+  --bg-sunken: #ede3cb;
+  --topbar: rgba(245, 238, 219, 0.92);
+  --sidebar: #eee5cf;
+  --surface: #faf5e8;
+  --surface-raised: #f3ebda;
+  --surface-hover: #e9e0cd;
+  --paper: #faf5e8;
+  --paper-text: #2d261e;
+  --text: #2d261e;
+  --text-soft: #4a3f33;
+  --muted: #786b5c;
+  --faint: #9c8e7e;
+  --border: rgba(120, 107, 92, 0.2);
+  --border-soft: rgba(120, 107, 92, 0.12);
+  --border-strong: rgba(120, 107, 92, 0.35);
+  --accent: #8b5cf6;
+  --accent-strong: #7c3aed;
+  --shadow-sm: 0 1px 2px rgba(60, 45, 25, 0.08);
+  --shadow-md: 0 8px 24px rgba(60, 45, 25, 0.12);
+}
+
+/* Theme OLED Black — Đen thuần 100% tiết kiệm pin */
+body.theme-oled {
+  color-scheme: dark;
+  --bg: #000000;
+  --app-bg: #000000;
+  --bg-sunken: #000000;
+  --topbar: rgba(0, 0, 0, 0.92);
+  --sidebar: #050505;
+  --surface: #0a0a0a;
+  --surface-raised: #121212;
+  --surface-hover: #1c1c1c;
+  --paper: #000000;
+  --paper-text: #e2e8f0;
+  --text: #f8fafc;
+  --text-soft: #cbd5e1;
+  --muted: #8892b0;
+  --faint: #64748b;
+  --border: rgba(255, 255, 255, 0.12);
+  --border-soft: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.22);
+}
+
+/* Font styles */
+body.font-serif .document-text,
+body.font-serif #paperTitle {
+  font-family: "Lora", "Merriweather", "Literata", "Georgia", "Times New Roman", serif;
+}
+
+body.font-sans .document-text,
+body.font-sans #paperTitle {
+  font-family: var(--font-sans);
+}
+
 /* =========================================================================
    Ambient light
    A flat fill is what makes a dark page feel like a document. Three large soft
@@ -1658,6 +1717,120 @@ body {
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--surface);
+  color: var(--text);
+}
+
+.catalog-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  margin: 1.1rem 0 1rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 60%, var(--app-bg));
+}
+
+.catalog-view-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem;
+  border-radius: 6px;
+  background: var(--app-bg);
+  border: 1px solid var(--border-soft);
+}
+
+.filter-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 32px;
+  padding: 0.3rem 0.85rem;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.filter-tab:hover {
+  color: var(--text);
+}
+
+.filter-tab.active {
+  background: var(--surface-raised);
+  color: var(--accent-strong);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.catalog-dropdown-filters {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.filter-select-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+}
+
+.filter-label {
+  color: var(--muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.filter-select {
+  min-height: 32px;
+  padding: 0.2rem 1.8rem 0.2rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.bookmark-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bookmark-button.is-bookmarked {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.bookmark-button.is-bookmarked .bookmark-icon {
+  fill: var(--gold);
+}
+
+.ghost-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.5rem 0.9rem;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.ghost-action:hover {
   color: var(--text);
 }
 

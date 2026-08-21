@@ -94,12 +94,49 @@
             </div>
           </header>
 
+          <div class="catalog-filter-bar">
+            <div class="catalog-view-tabs" role="tablist" aria-label="Xem danh mục">
+              <button id="viewAllBooks" class="filter-tab active" type="button" role="tab" aria-selected="true">Tất cả kho truyện</button>
+              <button id="viewMyShelf" class="filter-tab" type="button" role="tab" aria-selected="false"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg>Tủ truyện của tôi</button>
+            </div>
+
+            <div class="catalog-dropdown-filters">
+              <label class="filter-select-wrap">
+                <span class="filter-label">Tình trạng:</span>
+                <select id="statusFilter" class="filter-select">
+                  <option value="">Tất cả</option>
+                  <option value="Đang cập nhật">Đang cập nhật</option>
+                  <option value="Hoàn thành">Hoàn thành</option>
+                </select>
+              </label>
+
+              <label class="filter-select-wrap">
+                <span class="filter-label">Số chương:</span>
+                <select id="lengthFilter" class="filter-select">
+                  <option value="">Tất cả</option>
+                  <option value="under500">&lt; 500 chương</option>
+                  <option value="500to1000">500 – 1.000 chương</option>
+                  <option value="over1000">&gt; 1.000 chương</option>
+                </select>
+              </label>
+
+              <label class="filter-select-wrap">
+                <span class="filter-label">Sắp xếp:</span>
+                <select id="sortOrder" class="filter-select">
+                  <option value="latest">Mới cập nhật</option>
+                  <option value="chaptersDesc">Nhiều chương nhất</option>
+                  <option value="titleAsc">Tên truyện A–Z</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
           <div id="genrePills" class="genre-pills" role="group" aria-label="Lọc theo thể loại"></div>
 
           <div id="catalogGrid" class="catalog-grid" aria-live="polite"></div>
           <div id="catalogEmpty" class="catalog-empty" hidden>
             <img src="/library/covers/misty-pagoda.webp" alt="" aria-hidden="true" width="480" height="720" loading="lazy" decoding="async">
-            <div><p class="eyebrow">Kệ sách đang chờ</p><h3>Chưa có truyện phù hợp</h3><p>Gửi tên truyện hoặc link Fanqie để truyện được thêm vào thư viện.</p><a id="emptyContactLink" class="text-link" href="#request">Gửi yêu cầu truyện</a></div>
+            <div><p class="eyebrow">Kệ sách đang chờ</p><h3>Chưa có truyện phù hợp</h3><p id="catalogEmptyText">Thử đổi bộ lọc hoặc gửi tên truyện để được cập nhật lên thư viện.</p><a id="emptyContactLink" class="text-link" href="#request">Gửi yêu cầu truyện</a></div>
           </div>
           <nav id="catalogPagination" class="catalog-pagination" aria-label="Phân trang thư viện" hidden>
             <span id="catalogPaginationSummary" class="pagination-summary"></span>
@@ -171,7 +208,8 @@
             </dl>
             <div class="book-view-actions">
               <button id="bookViewRead" class="primary-action" type="button"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m5 3 14 9-14 9V3Z"></path></svg><span id="bookViewReadLabel">Đọc từ đầu</span></button>
-              <button id="bookViewRestart" class="secondary-action" type="button" hidden><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v6h-6M4 18v-6h6"></path><path d="M18.49 9A7 7 0 0 0 5.64 6.64L4 9M20 15l-1.64 2.36A7 7 0 0 1 5.51 15"></path></svg>Đọc lại từ chương 1</button>
+              <button id="bookViewBookmark" class="secondary-action bookmark-button" type="button" aria-label="Lưu vào tủ truyện"><svg class="icon bookmark-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg><span id="bookViewBookmarkLabel">Lưu vào tủ truyện</span></button>
+              <button id="bookViewRestart" class="ghost-action" type="button" hidden><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v6h-6M4 18v-6h6"></path><path d="M18.49 9A7 7 0 0 0 5.64 6.64L4 9M20 15l-1.64 2.36A7 7 0 0 1 5.51 15"></path></svg>Đọc lại từ đầu</button>
             </div>
             <p class="book-view-hint">Bản EPUB chỉ được tải về khi bạn bấm đọc, nên trang này không tốn dung lượng.</p>
           </div>
@@ -356,6 +394,8 @@
               <p class="reader-bar-position"><span id="chapterCounter">Chưa có mục lục</span><strong id="progressLabel">0%</strong></p>
               <div class="reader-bar-tools">
                 <div class="toolbar-group font-controls" aria-label="Cỡ chữ"><button id="fontDecrease" class="tool-button" type="button" aria-label="Giảm cỡ chữ" title="Giảm cỡ chữ">A−</button><span id="fontSizeLabel">20px</span><button id="fontIncrease" class="tool-button" type="button" aria-label="Tăng cỡ chữ" title="Tăng cỡ chữ">A＋</button></div>
+                <label class="toolbar-group font-family-control"><span class="sr-only">Kiểu chữ</span><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7V4h16v3M9 20h6M12 4v16"></path></svg><select id="readerFontFamily"><option value="sans">Không chân (Sans)</option><option value="serif">Có chân (Serif)</option></select></label>
+                <label class="toolbar-group theme-select-control"><span class="sr-only">Chủ đề đọc</span><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 0 20z"></path></svg><select id="readerThemeSelect"><option value="dark">Tối trầm</option><option value="light">Sáng</option><option value="sepia">Vàng Sepia</option><option value="oled">Đen OLED</option></select></label>
                 <label class="toolbar-group width-control"><span class="sr-only">Độ rộng nội dung</span><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"></path></svg><select id="widthPreset"><option value="comfortable">Tiêu chuẩn</option><option value="compact">Gọn</option><option value="wide">Rộng</option></select></label>
                 <div class="toolbar-group reader-bar-nav"><button id="prevChapter" class="tool-button" type="button" disabled aria-label="Chương trước" title="Chương trước"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"></path></svg></button><button id="nextChapter" class="tool-button" type="button" disabled aria-label="Chương sau" title="Chương sau"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg></button></div>
                 <button id="translateButton" class="primary-action" type="button" disabled><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m5 3 14 9-14 9V3Z"></path></svg>Dịch chương</button>

@@ -4,6 +4,10 @@
 // to know on first paint whether anyone is signed in, and answering that costs
 // one localStorage read.
 const { initAuth } = require("./auth.js");
+const { createUserSync } = require("./user-sync.js");
+
+let activeShelfTab = "all";
+let userSync = null;
 
 const state = {
   // "epub" is the legacy path (download the whole book, parse with JSZip).
@@ -120,8 +124,14 @@ const els = {
   supportDialog: document.getElementById("supportDialog"),
   librarySearch: document.getElementById("librarySearch"),
   libraryGenre: document.getElementById("libraryGenre"),
+  viewAllBooks: document.getElementById("viewAllBooks"),
+  viewMyShelf: document.getElementById("viewMyShelf"),
+  statusFilter: document.getElementById("statusFilter"),
+  lengthFilter: document.getElementById("lengthFilter"),
+  sortOrder: document.getElementById("sortOrder"),
   catalogGrid: document.getElementById("catalogGrid"),
   catalogEmpty: document.getElementById("catalogEmpty"),
+  catalogEmptyText: document.getElementById("catalogEmptyText"),
   catalogPagination: document.getElementById("catalogPagination"),
   catalogPaginationSummary: document.getElementById("catalogPaginationSummary"),
   catalogPageNumbers: document.getElementById("catalogPageNumbers"),
@@ -136,7 +146,11 @@ const els = {
   continueMeta: document.getElementById("continueMeta"),
   continueReading: document.getElementById("continueReading"),
   backToLibrary: document.getElementById("backToLibrary"),
+  bookViewBookmark: document.getElementById("bookViewBookmark"),
+  bookViewBookmarkLabel: document.getElementById("bookViewBookmarkLabel"),
   readerThemeToggle: document.getElementById("readerThemeToggle"),
+  readerThemeSelect: document.getElementById("readerThemeSelect"),
+  readerFontFamily: document.getElementById("readerFontFamily"),
   readerImportButton: document.getElementById("readerImportButton"),
   fileInput: document.getElementById("fileInput"),
   bookTitle: document.getElementById("bookTitle"),
@@ -175,7 +189,17 @@ bindEvents();
 // Before initializeLibrary, because a confirmation link comes back with tokens in
 // the URL fragment and they have to be consumed and wiped before anything else
 // reads the hash.
-initAuth({ url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY, els });
+const authClient = initAuth({ url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY, els });
+userSync = createUserSync({
+  url: SUPABASE_URL,
+  anonKey: SUPABASE_ANON_KEY,
+  authClient,
+  storage: typeof localStorage !== "undefined" ? localStorage : null
+});
+userSync.subscribe(() => {
+  if (activeShelfTab === "myShelf") renderCatalog();
+  if (libraryState.detailBook) updateBookViewBookmark(libraryState.detailBook);
+});
 initializeLibrary();
 
 function bindEvents() {
@@ -185,6 +209,35 @@ function bindEvents() {
   els.libraryBrand.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
   els.librarySearch.addEventListener("input", debounce(resetCatalogPage, SEARCH_DEBOUNCE_MS));
   els.libraryGenre.addEventListener("change", resetCatalogPage);
+  els.viewAllBooks?.addEventListener("click", () => {
+    activeShelfTab = "all";
+    els.viewAllBooks.classList.add("active");
+    els.viewAllBooks.setAttribute("aria-selected", "true");
+    els.viewMyShelf?.classList.remove("active");
+    els.viewMyShelf?.setAttribute("aria-selected", "false");
+    resetCatalogPage();
+  });
+  els.viewMyShelf?.addEventListener("click", () => {
+    activeShelfTab = "myShelf";
+    els.viewMyShelf.classList.add("active");
+    els.viewMyShelf.setAttribute("aria-selected", "true");
+    els.viewAllBooks?.classList.remove("active");
+    els.viewAllBooks?.setAttribute("aria-selected", "false");
+    resetCatalogPage();
+  });
+  els.statusFilter?.addEventListener("change", resetCatalogPage);
+  els.lengthFilter?.addEventListener("change", resetCatalogPage);
+  els.sortOrder?.addEventListener("change", resetCatalogPage);
+  els.bookViewBookmark?.addEventListener("click", () => {
+    const book = libraryState.detailBook;
+    if (book && userSync) {
+      userSync.toggleBookmark(book.id);
+      updateBookViewBookmark(book);
+      if (activeShelfTab === "myShelf") resetCatalogPage();
+    }
+  });
+  els.readerThemeSelect?.addEventListener("change", (event) => applyTheme(event.target.value));
+  els.readerFontFamily?.addEventListener("change", (event) => applyFont(event.target.value));
   els.adminOpen?.addEventListener("click", bootstrapAdminPanel);
   els.featuredRead.addEventListener("click", openFeaturedBook);
   els.supportQrOpen.addEventListener("click", () => els.supportDialog.showModal());
@@ -358,15 +411,38 @@ function debounce(callback, delay) {
 
 function initPreferences() {
   const theme = localStorage.getItem("epubTranslator.theme") || "dark";
-  document.body.classList.toggle("dark", theme === "dark");
-  els.themeLabel.textContent = theme === "dark" ? "Light" : "Dark";
+  applyTheme(theme);
+
+  const font = localStorage.getItem("epubTranslator.fontFamily") || "sans";
+  applyFont(font);
 
   localStorage.setItem(
     "epubTranslator.fontSize",
     localStorage.getItem("epubTranslator.fontSize") || "20"
   );
-  els.widthPreset.value = localStorage.getItem("epubTranslator.widthPreset") || "comfortable";
+  if (els.widthPreset) els.widthPreset.value = localStorage.getItem("epubTranslator.widthPreset") || "comfortable";
   updateReaderSettings();
+}
+
+function applyTheme(theme) {
+  document.body.classList.remove("dark", "theme-sepia", "theme-oled");
+  if (theme === "dark") {
+    document.body.classList.add("dark");
+  } else if (theme === "sepia") {
+    document.body.classList.add("theme-sepia");
+  } else if (theme === "oled") {
+    document.body.classList.add("dark", "theme-oled");
+  }
+  if (els.themeLabel) els.themeLabel.textContent = theme === "dark" || theme === "oled" ? "Light" : "Dark";
+  if (els.readerThemeSelect) els.readerThemeSelect.value = theme;
+  localStorage.setItem("epubTranslator.theme", theme);
+}
+
+function applyFont(font) {
+  document.body.classList.toggle("font-serif", font === "serif");
+  document.body.classList.toggle("font-sans", font !== "serif");
+  if (els.readerFontFamily) els.readerFontFamily.value = font;
+  localStorage.setItem("epubTranslator.fontFamily", font);
 }
 
 function updateReaderSettings() {
@@ -378,9 +454,9 @@ function updateReaderSettings() {
   };
 
   document.documentElement.style.setProperty("--content-font-size", `${fontSize}px`);
-  document.documentElement.style.setProperty("--document-width", widthMap[els.widthPreset.value] || widthMap.comfortable);
-  els.fontSizeLabel.textContent = `${fontSize}px`;
-  localStorage.setItem("epubTranslator.widthPreset", els.widthPreset.value);
+  document.documentElement.style.setProperty("--document-width", widthMap[els.widthPreset?.value] || widthMap.comfortable);
+  if (els.fontSizeLabel) els.fontSizeLabel.textContent = `${fontSize}px`;
+  if (els.widthPreset) localStorage.setItem("epubTranslator.widthPreset", els.widthPreset.value);
 }
 
 function changeFontSize(delta) {
@@ -391,9 +467,9 @@ function changeFontSize(delta) {
 }
 
 function toggleTheme() {
-  const isDark = document.body.classList.toggle("dark");
-  localStorage.setItem("epubTranslator.theme", isDark ? "dark" : "light");
-  els.themeLabel.textContent = isDark ? "Light" : "Dark";
+  const current = localStorage.getItem("epubTranslator.theme") || "dark";
+  const next = current === "dark" ? "light" : "dark";
+  applyTheme(next);
 }
 
 async function initializeLibrary() {
@@ -738,11 +814,45 @@ function changeCatalogPage(page) {
 }
 
 function getFilteredCatalogBooks() {
-  const query = normalizeSearch(els.librarySearch.value);
-  const genre = els.libraryGenre.value;
-  return libraryState.books
+  const query = normalizeSearch(els.librarySearch?.value || "");
+  const genre = els.libraryGenre?.value || "";
+  const status = els.statusFilter?.value || "";
+  const length = els.lengthFilter?.value || "";
+  const sort = els.sortOrder?.value || "latest";
+
+  let list = libraryState.books;
+
+  if (activeShelfTab === "myShelf") {
+    list = list.filter((book) => userSync && userSync.isBookmarked(book.id));
+  }
+
+  list = list
     .filter((book) => !genre || book.genre === genre)
+    .filter((book) => !status || (book.status || "Đang cập nhật") === status)
+    .filter((book) => {
+      if (!length) return true;
+      const count = Number(book.chapterCount || book.totalChapters || book.total_chapters || 0);
+      if (length === "under500") return count < 500;
+      if (length === "500to1000") return count >= 500 && count <= 1000;
+      if (length === "over1000") return count > 1000;
+      return true;
+    })
     .filter((book) => !query || normalizeSearch(`${book.title} ${book.author || ""} ${book.genre || ""}`).includes(query));
+
+  return list.sort((a, b) => {
+    if (sort === "chaptersDesc") {
+      const ca = Number(a.chapterCount || a.totalChapters || a.total_chapters || 0);
+      const cb = Number(b.chapterCount || b.totalChapters || b.total_chapters || 0);
+      return cb - ca;
+    }
+    if (sort === "titleAsc") {
+      return String(a.title || "").localeCompare(String(b.title || ""), "vi");
+    }
+    return (
+      Number(Boolean(b.featured)) - Number(Boolean(a.featured)) ||
+      String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""))
+    );
+  });
 }
 
 function renderCatalogPagination(totalBooks, totalPages, start, visibleCount) {
@@ -908,6 +1018,7 @@ async function showBookDetail(book, { updateHash = true } = {}) {
   els.bookViewUpdated.textContent = book.updatedAt || "Chưa rõ";
   renderBookDescription(book.description);
   renderRelatedBooks(book);
+  updateBookViewBookmark(book);
 
   els.bookViewProgress.textContent = "Đang kiểm tra...";
   els.bookViewReadLabel.textContent = "Đọc từ đầu";
@@ -969,6 +1080,15 @@ function renderRelatedBooks(book) {
 
   els.bookViewRelated.replaceChildren(fragment);
   els.bookViewRelatedEmpty.hidden = related.length > 0;
+}
+
+function updateBookViewBookmark(book) {
+  if (!els.bookViewBookmark || !book) return;
+  const bookmarked = userSync && userSync.isBookmarked(book.id);
+  els.bookViewBookmark.classList.toggle("is-bookmarked", Boolean(bookmarked));
+  if (els.bookViewBookmarkLabel) {
+    els.bookViewBookmarkLabel.textContent = bookmarked ? "Đã lưu vào tủ" : "Lưu vào tủ truyện";
+  }
 }
 
 function openDetailFromHash() {
@@ -1519,6 +1639,14 @@ function saveProgressSoon() {
   if (!state.bookId || !state.chapters.length) return;
   libraryState.recentProgress = buildProgressRecord();
   flushProgress();
+  if (userSync) {
+    const pct = state.chapters.length ? Math.round(((state.currentIndex + 1) / state.chapters.length) * 100) : 0;
+    userSync.saveProgress(state.bookId, {
+      chapterIndex: state.currentIndex,
+      chapterTitle: displayChapterTitle(state.currentIndex),
+      progressPct: pct
+    });
+  }
 }
 
 async function touchCachedBook(cachedBook) {
