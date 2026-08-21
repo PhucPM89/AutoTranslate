@@ -11,6 +11,26 @@
 //
 //   node scripts/translate-worker.js [--budget 200] [--minutes 300] [--book id]
 
+const fs = require("fs");
+const path = require("path");
+
+function loadEnvFile(file) {
+  if (fs.existsSync(file)) {
+    const content = fs.readFileSync(file, "utf8");
+    for (const line of content.split("\n")) {
+      const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+      if (match && !process.env[match[1]]) {
+        let val = match[2].trim();
+        if (/^".*"$/.test(val) || /^'.*'$/.test(val)) val = val.slice(1, -1);
+        process.env[match[1]] = val;
+      }
+    }
+  }
+}
+
+loadEnvFile(path.join(__dirname, "..", ".env"));
+loadEnvFile(path.join(__dirname, "..", ".env.local"));
+
 const { createStorage } = require("../server/storage");
 const { createSupabase } = require("../server/supabase");
 const { chapterKey, originalKey, buildChapterDocument } = require("../server/ingest/documents");
@@ -342,6 +362,22 @@ async function listJobs(storage, onlyBook) {
     const state = await readJson(storage, object.key);
     if (!state || !Array.isArray(state.chapters)) continue;
     if (onlyBook && state.bookId !== onlyBook) continue;
+
+    // Auto-heal any chapters that were stalled by previous disabled service accounts
+    let healed = false;
+    for (const entry of state.chapters) {
+      if (entry.status === "failed" && entry.lastError && (entry.lastError.includes("service account") || entry.lastError.includes("API key") || entry.lastError.includes("disabled") || entry.lastError.includes("401") || entry.lastError.includes("403"))) {
+        entry.status = "pending";
+        entry.attempts = 0;
+        entry.lastError = "";
+        entry.nextAttemptAt = 0;
+        healed = true;
+      }
+    }
+    if (healed) {
+      storage.put(object.key, JSON.stringify(state)).catch(() => {});
+    }
+
     const counts = summarize(state);
     if (counts.completed === counts.total) continue;
     jobs.push({
