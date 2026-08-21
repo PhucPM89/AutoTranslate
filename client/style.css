@@ -6577,5 +6577,550 @@ body.zen-mode .document-paper {
   }
 }
 
+/* ==========================================================================
+   TRUNG TÂM TU VI & PHONG THẦN (LEADERBOARD & RANK HUB)
+   ========================================================================== */
+
+.rank-school-dialog {
+  border: none;
+  background: transparent;
+  padding: 0;
+  max-width: 680px;
+  width: calc(100vw - 2rem);
+  color: #f1f5f9;
+  overflow: hidden;
+}
+
+.rank-school-dialog::backdrop {
+  background: rgba(4, 3, 10, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.rank-hub-card {
+  background: linear-gradient(180deg, #181328 0%, #0d0a18 100%);
+  border: 1px solid rgba(168, 85, 247, 0.25);
+  border-radius: 20px;
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.85), 0 0 40px rgba(168, 85, 247, 0.15);
+  display: flex;
+  flex-direction: column;
+  max-height: 88vh;
+  overflow: hidden;
+}
+
+.rank-hub-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.15rem 1.5rem 0.9rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.rank-hub-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.rank-hub-icon {
+  font-size: 1.6rem;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(99, 102, 241, 0.1));
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(168, 85, 247, 0.2);
+}
+
+.rank-hub-title-group h3 {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #fff;
+  margin: 0;
+  background: linear-gradient(135deg, #fff 40%, #c084fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.rank-hub-subtitle {
+  font-size: 0.76rem;
+  color: #94a3b8;
+  margin: 0.1rem 0 0 0;
+}
+
+/* 2 Main Tabs */
+.rank-hub-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.35rem 0.5rem;
+  gap: 0.35rem;
+}
+
+.rank-hub-tab {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-weight: 700;
+  font-size: 0.82rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  transition: all 0.2s ease;
+}
+
+.rank-hub-tab:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.rank-hub-tab.active {
+  background: linear-gradient(135deg, rgba(147, 51, 234, 0.25), rgba(79, 70, 229, 0.2));
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.rank-hub-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.rank-profile-body {
+  padding: 1.25rem 1.5rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+/* Nickname Setting Box */
+.nickname-box {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 0.85rem 1rem;
+}
+
+.nickname-label {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #cbd5e1;
+  display: block;
+  margin-bottom: 0.45rem;
+}
+
+.nickname-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.nickname-input {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  color: #fff;
+  font-size: 0.82rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.nickname-input:focus {
+  border-color: #a855f7;
+  box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.2);
+}
+
+.nickname-save-btn {
+  background: linear-gradient(135deg, #9333ea, #6366f1);
+  border: none;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.78rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.nickname-save-btn:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
+/* Filter Pills */
+.leaderboard-filter-pills {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.85rem 1.5rem 0.4rem;
+  overflow-x: auto;
+}
+
+.leaderboard-pill {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.leaderboard-pill:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.leaderboard-pill.active {
+  background: linear-gradient(135deg, #9333ea, #6366f1);
+  border-color: #a855f7;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(147, 51, 234, 0.35);
+}
+
+/* Top 3 Podium */
+.leaderboard-podium {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr 1fr;
+  align-items: flex-end;
+  gap: 0.75rem;
+  padding: 1.1rem 1.5rem 0.75rem;
+}
+
+.podium-slot {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 0.85rem 0.65rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  position: relative;
+  transition: transform 0.25s ease;
+}
+
+.podium-slot:hover {
+  transform: translateY(-2px);
+}
+
+.podium-rank-1 {
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.15) 0%, rgba(217, 119, 6, 0.04) 100%);
+  border-color: rgba(245, 158, 11, 0.4);
+  box-shadow: 0 8px 30px rgba(245, 158, 11, 0.18);
+  order: 2;
+  padding-top: 1.1rem;
+  margin-top: -0.4rem;
+}
+
+.podium-rank-2 {
+  background: linear-gradient(180deg, rgba(148, 163, 184, 0.12) 0%, rgba(100, 116, 139, 0.03) 100%);
+  border-color: rgba(148, 163, 184, 0.3);
+  order: 1;
+}
+
+.podium-rank-3 {
+  background: linear-gradient(180deg, rgba(217, 119, 6, 0.1) 0%, rgba(180, 83, 9, 0.02) 100%);
+  border-color: rgba(217, 119, 6, 0.25);
+  order: 3;
+}
+
+.podium-medal {
+  position: absolute;
+  top: -12px;
+  font-size: 1.35rem;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
+}
+
+.podium-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  background: #1e1b2e;
+  margin-bottom: 0.35rem;
+  overflow: hidden;
+}
+
+.podium-rank-1 .podium-avatar {
+  width: 56px;
+  height: 56px;
+  border-color: #f59e0b;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.4);
+}
+
+.podium-rank-2 .podium-avatar {
+  border-color: #cbd5e1;
+}
+
+.podium-rank-3 .podium-avatar {
+  border-color: #d97706;
+}
+
+.podium-name {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.podium-badge {
+  margin: 0.15rem 0;
+  font-size: 0.68rem;
+}
+
+.podium-exp {
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: #fbbf24;
+}
+
+.podium-chapters {
+  font-size: 0.65rem;
+  color: #94a3b8;
+}
+
+/* Scrollable List (Top 4 - 20) */
+.leaderboard-list-wrap {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 1.5rem;
+  min-height: 140px;
+}
+
+.leaderboard-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.leaderboard-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 0.5rem 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.leaderboard-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(168, 85, 247, 0.2);
+}
+
+.leaderboard-item.is-me {
+  background: rgba(147, 51, 234, 0.12);
+  border-color: rgba(168, 85, 247, 0.4);
+}
+
+.lb-rank {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #94a3b8;
+  width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.lb-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.lb-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.lb-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.lb-name {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lb-meta {
+  font-size: 0.68rem;
+  color: #94a3b8;
+  display: block;
+}
+
+.lb-score {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.lb-exp {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #fbbf24;
+  display: block;
+}
+
+.lb-chapters {
+  font-size: 0.65rem;
+  color: #64748b;
+}
+
+.leaderboard-empty {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: #94a3b8;
+  font-size: 0.82rem;
+}
+
+/* User Standing Card (Sticky Footer) */
+.leaderboard-my-standing {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.5rem;
+  background: rgba(147, 51, 234, 0.15);
+  border-top: 1px solid rgba(168, 85, 247, 0.25);
+}
+
+.my-standing-info {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.my-standing-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #9333ea, #4f46e5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+  box-shadow: 0 0 10px rgba(147, 51, 234, 0.4);
+}
+
+.my-standing-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.my-standing-name-row strong {
+  font-size: 0.82rem;
+  color: #fff;
+}
+
+.my-standing-edit-btn {
+  background: transparent;
+  border: none;
+  color: #a855f7;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s ease;
+}
+
+.my-standing-edit-btn:hover {
+  color: #c084fc;
+  text-decoration: underline;
+}
+
+.my-standing-info small {
+  font-size: 0.68rem;
+  color: #cbd5e1;
+  display: block;
+}
+
+.my-standing-rank {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.my-standing-label {
+  font-size: 0.62rem;
+  color: #94a3b8;
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.my-standing-rank strong {
+  font-size: 1.1rem;
+  font-weight: 900;
+  color: #fbbf24;
+}
+
+@media (max-width: 580px) {
+  .leaderboard-podium {
+    gap: 0.35rem;
+    padding: 0.75rem 0.65rem 0.55rem;
+  }
+  .podium-slot {
+    padding: 0.75rem 0.3rem 0.45rem;
+  }
+  .podium-name {
+    font-size: 0.72rem;
+  }
+  .leaderboard-list-wrap {
+    padding: 0 0.65rem;
+  }
+  .leaderboard-my-standing {
+    padding: 0.6rem 0.65rem;
+  }
+  .rank-profile-body {
+    padding: 0.85rem 0.75rem;
+  }
+}
+
+
 
 

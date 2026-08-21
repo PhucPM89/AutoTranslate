@@ -3,7 +3,7 @@
 // Service Worker for Trạm Chữ — Offline shell and chapter caching.
 // Dynamic cache version generated at build time.
 
-const CACHE_NAME = "tramchu-mt2r68aj-e773d4";
+const CACHE_NAME = "tramchu-mt2ro89o-580024";
 const SHELL_ASSETS = [
   "/",
   "/index.html",

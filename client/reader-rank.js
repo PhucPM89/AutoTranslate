@@ -2,6 +2,9 @@
 
 const RANK_EXP_KEY = "epubTranslator.readerExp";
 const RANK_SCHOOL_KEY = "epubTranslator.rankSchool";
+const RANK_NICKNAME_KEY = "epubTranslator.readerNickname";
+const RANK_CHAPTERS_COUNT_KEY = "epubTranslator.chaptersReadCount";
+const RANK_READER_ID_KEY = "epubTranslator.readerUid";
 
 const RANK_SCHOOLS = {
   cultivation: {
@@ -57,6 +60,45 @@ function getStoredSchool() {
   if (typeof localStorage === "undefined") return "cultivation";
   const school = localStorage.getItem(RANK_SCHOOL_KEY);
   return RANK_SCHOOLS[school] ? school : "cultivation";
+}
+
+function getReaderId() {
+  if (typeof localStorage === "undefined") return "anon-" + Date.now();
+  let id = localStorage.getItem(RANK_READER_ID_KEY);
+  if (!id) {
+    id = "dao-huu-" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+    localStorage.setItem(RANK_READER_ID_KEY, id);
+  }
+  return id;
+}
+
+function getReaderNickname() {
+  if (typeof localStorage === "undefined") return "Ẩn danh đạo hữu";
+  return localStorage.getItem(RANK_NICKNAME_KEY) || "";
+}
+
+function setReaderNickname(name) {
+  const clean = String(name || "").trim().slice(0, 24);
+  if (typeof localStorage !== "undefined") {
+    if (clean) {
+      localStorage.setItem(RANK_NICKNAME_KEY, clean);
+    } else {
+      localStorage.removeItem(RANK_NICKNAME_KEY);
+    }
+  }
+  return clean;
+}
+
+function getStoredChaptersRead() {
+  if (typeof localStorage === "undefined") return 0;
+  return Math.max(0, Number(localStorage.getItem(RANK_CHAPTERS_COUNT_KEY)) || 0);
+}
+
+function incrementChaptersRead() {
+  if (typeof localStorage === "undefined") return 1;
+  const next = getStoredChaptersRead() + 1;
+  localStorage.setItem(RANK_CHAPTERS_COUNT_KEY, String(next));
+  return next;
 }
 
 function calculateRank(exp, schoolId = "cultivation") {
@@ -135,6 +177,91 @@ function formatRankBadge(title, badgeClass = "rank-1") {
   return `<span class="reader-rank-badge ${badgeClass}">[${title}]</span>`;
 }
 
+// ------------------------------------------------------------- LEADERBOARD
+let leaderboardCache = null;
+let leaderboardCacheTime = 0;
+const LEADERBOARD_CACHE_TTL = 30000; // 30s cache
+
+async function fetchLeaderboard({ supabaseUrl, supabaseKey, school = "all", limit = 20 } = {}) {
+  if (!supabaseUrl || !supabaseKey) return [];
+  const now = Date.now();
+  const cacheKey = `${school}:${limit}`;
+  
+  if (leaderboardCache && leaderboardCache[cacheKey] && (now - leaderboardCacheTime < LEADERBOARD_CACHE_TTL)) {
+    return leaderboardCache[cacheKey];
+  }
+
+  try {
+    let query = `${supabaseUrl}/rest/v1/reader_leaderboard?select=id,display_name,school,exp,chapters_read,level_title,badge_class,avatar_url,updated_at&order=exp.desc,updated_at.desc&limit=${limit}`;
+    if (school && school !== "all") {
+      query += `&school=eq.${encodeURIComponent(school)}`;
+    }
+    const res = await fetch(query, {
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`
+      }
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const rows = await res.json();
+    if (!leaderboardCache) leaderboardCache = {};
+    leaderboardCache[cacheKey] = rows;
+    leaderboardCacheTime = now;
+    return rows;
+  } catch (err) {
+    console.warn("Unable to fetch leaderboard:", err.message);
+    return [];
+  }
+}
+
+let lastSyncTime = 0;
+async function syncReaderLeaderboard({ supabaseUrl, supabaseKey, user = null, force = false } = {}) {
+  if (!supabaseUrl || !supabaseKey) return false;
+  const now = Date.now();
+  if (!force && now - lastSyncTime < 20000) return false; // Throttled 20s
+
+  const exp = getStoredExp();
+  if (exp <= 0 && !user) return false;
+
+  const profile = getReaderProfile();
+  const id = user?.id || getReaderId();
+  const nickname = getReaderNickname();
+  const displayName = nickname || user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Đạo hữu ẩn danh";
+  const avatarUrl = user?.user_metadata?.avatar_url || "";
+  const chaptersRead = getStoredChaptersRead();
+
+  const payload = {
+    id,
+    display_name: displayName,
+    school: profile.school,
+    exp: profile.exp,
+    chapters_read: chaptersRead,
+    level_title: profile.title,
+    badge_class: profile.badgeClass,
+    avatar_url: avatarUrl || null,
+    updated_at: new Date().toISOString()
+  };
+
+  try {
+    lastSyncTime = now;
+    await fetch(`${supabaseUrl}/rest/v1/reader_leaderboard`, {
+      method: "POST",
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates"
+      },
+      body: JSON.stringify([payload]),
+      keepalive: true
+    });
+    return true;
+  } catch (err) {
+    console.warn("Unable to sync leaderboard entry:", err.message);
+    return false;
+  }
+}
+
 module.exports = {
   RANK_SCHOOLS,
   calculateRank,
@@ -142,5 +269,12 @@ module.exports = {
   addReaderExp,
   setRankSchool,
   getRankSchools,
-  formatRankBadge
+  formatRankBadge,
+  getReaderId,
+  getReaderNickname,
+  setReaderNickname,
+  getStoredChaptersRead,
+  incrementChaptersRead,
+  fetchLeaderboard,
+  syncReaderLeaderboard
 };

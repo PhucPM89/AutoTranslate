@@ -824,87 +824,163 @@
       </div>
     </dialog>
 
-    <!-- Reader Rank & School Selector Dialog -->
+    <!-- Reader Rank & Leaderboard Hub Dialog -->
     <dialog id="rankSchoolDialog" class="rank-school-dialog" aria-labelledby="rankSchoolTitle">
-      <div class="rank-school-header">
-        <div>
-          <p class="eyebrow">🎖️ Đẳng cấp độc giả</p>
-          <h3 id="rankSchoolTitle">Cảnh Giới & Trường Phái</h3>
-        </div>
-        <button id="rankSchoolClose" class="icon-button" type="button" aria-label="Đóng" title="Đóng">
-          <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"></path></svg>
-        </button>
-      </div>
-      <div class="rank-school-body">
-        <!-- Current Rank Card -->
-        <div class="current-rank-card" id="currentRankCard">
-          <div class="current-rank-header">
-            <span class="current-rank-icon" id="rankModalIcon">🔮</span>
-            <div class="current-rank-info">
-              <span class="current-rank-school" id="rankModalSchool">Trường phái Tu Tiên</span>
-              <h4 class="current-rank-title" id="rankModalTitle">Phàm Nhân (Cấp 1)</h4>
-            </div>
-            <span class="current-rank-exp" id="rankModalTotalExp">0 EXP</span>
-          </div>
-          <div class="current-rank-progress-wrap">
-            <div class="current-rank-bar">
-              <div class="current-rank-fill" id="rankModalProgressFill" style="width: 0%;"></div>
-            </div>
-            <div class="current-rank-sub">
-              <span id="rankModalProgressLabel">0 / 50 EXP để đột phá</span>
-              <span id="rankModalNextTitle">Cảnh giới kế: Luyện Khí</span>
+      <div class="rank-hub-card">
+        <!-- Header -->
+        <header class="rank-hub-header">
+          <div class="rank-hub-title-group">
+            <span class="rank-hub-icon" id="rankModalIcon">🔮</span>
+            <div>
+              <h3 id="rankSchoolTitle">Trung Tâm Tu Vi & Phong Thần</h3>
+              <p class="rank-hub-subtitle">Vinh danh đạo hữu & tu luyện cảnh giới</p>
             </div>
           </div>
+          <button id="rankSchoolClose" class="icon-button" type="button" aria-label="Đóng" title="Đóng">
+            <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+          </button>
+        </header>
+
+        <!-- Main 2 Tabs: Bảng Phong Thần | Tu Vi Của Bạn -->
+        <div class="rank-hub-tabs" role="tablist">
+          <button id="rankTabLeaderboard" class="rank-hub-tab active" type="button" role="tab" aria-selected="true">
+            <span>🏆 Bảng Phong Thần</span>
+          </button>
+          <button id="rankTabProfile" class="rank-hub-tab" type="button" role="tab" aria-selected="false">
+            <span>🔮 Tu Vi & Trường Phái</span>
+          </button>
         </div>
 
-        <h4 class="school-select-title">Chọn Trường Phái Danh Hiệu</h4>
-        <p class="school-select-desc">Danh hiệu của trường phái đã chọn sẽ hiển thị cạnh tên bạn khi bình luận từng đoạn văn:</p>
-
-        <div class="school-cards-grid" id="schoolCardsGrid">
-          <!-- Cultivation Card -->
-          <div class="school-card is-active" data-school="cultivation">
-            <div class="school-card-header">
-              <span class="school-card-icon">🔮</span>
-              <div>
-                <strong>Tu Tiên Cảnh Giới</strong>
-                <small>Phù hợp truyện Tiên hiệp, Huyền huyễn</small>
-              </div>
-            </div>
-            <p class="school-card-path">Phàm Nhân ➔ Luyện Khí ➔ Trúc Cơ ➔ Kim Đan ➔ Nguyên Anh ➔ Hóa Thần ➔ Tiên Tôn</p>
+        <!-- Panel 1: Bảng Phong Thần -->
+        <div id="rankPanelLeaderboard" class="rank-hub-panel">
+          <!-- School Filter Pills -->
+          <div class="leaderboard-filter-pills" role="tablist">
+            <button class="leaderboard-pill active" type="button" data-school="all">Tất cả</button>
+            <button class="leaderboard-pill" type="button" data-school="cultivation">🔮 Tu Tiên</button>
+            <button class="leaderboard-pill" type="button" data-school="scholarly">📜 Khoa Bảng</button>
+            <button class="leaderboard-pill" type="button" data-school="modern">⚡ Hiện Đại</button>
           </div>
 
-          <!-- Scholarly Card -->
-          <div class="school-card" data-school="scholarly">
-            <div class="school-card-header">
-              <span class="school-card-icon">📜</span>
-              <div>
-                <strong>Khoa Bảng Học Thức</strong>
-                <small>Phù hợp truyện Lịch sử, Cổ đại, Gia đấu</small>
-              </div>
-            </div>
-            <p class="school-card-path">Đồng Sinh ➔ Tú Tài ➔ Cử Nhân ➔ Thám Hoa ➔ Bảng Nhãn ➔ Trạng Nguyên ➔ Đại Học Sĩ</p>
+          <!-- Top 3 Podium -->
+          <div id="leaderboardPodium" class="leaderboard-podium">
+            <!-- Dynamic Podium -->
           </div>
 
-          <!-- Modern Card -->
-          <div class="school-card" data-school="modern">
-            <div class="school-card-header">
-              <span class="school-card-icon">⚡</span>
-              <div>
-                <strong>Cày Truyện Hiện Đại</strong>
-                <small>Phù hợp truyện Đô thị, Võng du, Hài hước</small>
+          <!-- Top 4-20 List -->
+          <div class="leaderboard-list-wrap">
+            <ul id="leaderboardList" class="leaderboard-list">
+              <!-- Dynamic List -->
+            </ul>
+            <div id="leaderboardEmpty" class="leaderboard-empty" hidden>
+              <p>Chưa có dữ liệu phong thần. Hãy là đạo hữu đầu tiên tích lũy tu vi!</p>
+            </div>
+          </div>
+
+          <!-- My Standing Footer -->
+          <div class="leaderboard-my-standing">
+            <div class="my-standing-info">
+              <div class="my-standing-avatar">
+                <span id="myStandingIcon">🔮</span>
+              </div>
+              <div class="my-standing-text">
+                <div class="my-standing-name-row">
+                  <strong id="myStandingName">Đạo hữu</strong>
+                  <span id="myStandingBadge" class="reader-rank-badge rank-1">[Phàm Nhân]</span>
+                  <button id="myStandingEditNameBtn" class="my-standing-edit-btn" type="button" title="Đổi đạo hiệu">✏️ Đổi tên</button>
+                </div>
+                <small id="myStandingMeta">Hạng #— · 0 Tu Vi · 0 chương</small>
               </div>
             </div>
-            <p class="school-card-path">Người Qua Đường ➔ Độc Giả Mới ➔ Mọt Sách ➔ Đọc Xuyên Đêm ➔ Cao Thủ ➔ Trùm Đọc ➔ Thần Thoại</p>
+            <div class="my-standing-rank">
+              <span class="my-standing-label">Vị trí của bạn</span>
+              <strong id="myStandingRankNumber">#—</strong>
+            </div>
           </div>
         </div>
 
-        <div class="exp-guide-box">
-          <p class="exp-guide-title">💡 Cách tích lũy Tu Vi / EXP:</p>
-          <ul>
-            <li><strong>Đọc 1 chương truyện</strong>: +10 EXP</li>
-            <li><strong>Duy trì chuỗi Streak mỗi ngày</strong>: +50 EXP</li>
-            <li><strong>Bình luận & Gợi ý thuật ngữ chuẩn</strong>: +20 EXP</li>
-          </ul>
+        <!-- Panel 2: Tu Vi & Trường Phái Của Bạn -->
+        <div id="rankPanelProfile" class="rank-hub-panel" hidden>
+          <div class="rank-profile-body">
+            <!-- Current Rank Card -->
+            <div class="current-rank-card" id="currentRankCard">
+              <div class="current-rank-header">
+                <span class="current-rank-icon" id="rankModalIconProfile">🔮</span>
+                <div class="current-rank-info">
+                  <span class="current-rank-school" id="rankModalSchool">Trường phái Tu Tiên</span>
+                  <h4 class="current-rank-title" id="rankModalTitle">Phàm Nhân (Cấp 1)</h4>
+                </div>
+                <span class="current-rank-exp" id="rankModalTotalExp">0 EXP</span>
+              </div>
+              <div class="current-rank-progress-wrap">
+                <div class="current-rank-bar">
+                  <div class="current-rank-fill" id="rankModalProgressFill" style="width: 0%;"></div>
+                </div>
+                <div class="current-rank-sub">
+                  <span id="rankModalProgressLabel">0 / 50 EXP để đột phá</span>
+                  <span id="rankModalNextTitle">Cảnh giới kế: Luyện Khí</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Nickname Setting Box -->
+            <div class="nickname-box">
+              <label for="readerNicknameInput" class="nickname-label">Đạo hiệu hiển thị trên Bảng Phong Thần & Bình luận:</label>
+              <div class="nickname-input-row">
+                <input id="readerNicknameInput" class="nickname-input" type="text" maxlength="24" placeholder="VD: Tiêu Dao Đạo Nhân, Hàn Thỏ Đế...">
+                <button id="saveNicknameBtn" class="nickname-save-btn" type="button">Lưu đạo hiệu</button>
+              </div>
+            </div>
+
+            <h4 class="school-select-title">Chọn Trường Phái Danh Hiệu</h4>
+            <p class="school-select-desc">Danh hiệu của trường phái đã chọn sẽ hiển thị cạnh tên bạn khi bình luận từng đoạn văn:</p>
+
+            <div class="school-cards-grid" id="schoolCardsGrid">
+              <!-- Cultivation Card -->
+              <div class="school-card is-active" data-school="cultivation">
+                <div class="school-card-header">
+                  <span class="school-card-icon">🔮</span>
+                  <div>
+                    <strong>Tu Tiên Cảnh Giới</strong>
+                    <small>Phù hợp truyện Tiên hiệp, Huyền huyễn</small>
+                  </div>
+                </div>
+                <p class="school-card-path">Phàm Nhân ➔ Luyện Khí ➔ Trúc Cơ ➔ Kim Đan ➔ Nguyên Anh ➔ Hóa Thần ➔ Tiên Tôn</p>
+              </div>
+
+              <!-- Scholarly Card -->
+              <div class="school-card" data-school="scholarly">
+                <div class="school-card-header">
+                  <span class="school-card-icon">📜</span>
+                  <div>
+                    <strong>Khoa Bảng Học Thức</strong>
+                    <small>Phù hợp truyện Lịch sử, Cổ đại, Gia đấu</small>
+                  </div>
+                </div>
+                <p class="school-card-path">Đồng Sinh ➔ Tú Tài ➔ Cử Nhân ➔ Thám Hoa ➔ Bảng Nhãn ➔ Trạng Nguyên ➔ Đại Học Sĩ</p>
+              </div>
+
+              <!-- Modern Card -->
+              <div class="school-card" data-school="modern">
+                <div class="school-card-header">
+                  <span class="school-card-icon">⚡</span>
+                  <div>
+                    <strong>Cày Truyện Hiện Đại</strong>
+                    <small>Phù hợp truyện Đô thị, Võng du, Hài hước</small>
+                  </div>
+                </div>
+                <p class="school-card-path">Người Qua Đường ➔ Độc Giả Mới ➔ Mọt Sách ➔ Đọc Xuyên Đêm ➔ Cao Thủ ➔ Trùm Đọc ➔ Thần Thoại</p>
+              </div>
+            </div>
+
+            <div class="exp-guide-box">
+              <p class="exp-guide-title">💡 Cách tích lũy Tu Vi / EXP:</p>
+              <ul>
+                <li><strong>Đọc 1 chương truyện</strong>: +10 EXP</li>
+                <li><strong>Duy trì chuỗi Streak mỗi ngày</strong>: +50 EXP</li>
+                <li><strong>Bình luận đoạn văn</strong>: +20 EXP</li>
+              </ul>
+            </div>
+          </div>
         </div>
       </div>
     </dialog>

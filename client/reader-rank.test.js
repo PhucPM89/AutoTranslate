@@ -5,7 +5,13 @@ const assert = require("node:assert/strict");
 const {
   RANK_SCHOOLS,
   calculateRank,
-  formatRankBadge
+  formatRankBadge,
+  getReaderNickname,
+  setReaderNickname,
+  getStoredChaptersRead,
+  incrementChaptersRead,
+  fetchLeaderboard,
+  syncReaderLeaderboard
 } = require("./reader-rank.js");
 
 test("reader-rank: calculateRank returns correct level for cultivation school", () => {
@@ -38,4 +44,17 @@ test("reader-rank: formatRankBadge outputs valid badge span", () => {
   const html = formatRankBadge("Kim Đan", "rank-4");
   assert.ok(html.includes("Kim Đan"));
   assert.ok(html.includes("rank-4"));
+});
+
+test("reader-rank: nickname and chapters read storage", () => {
+  const cleanName = setReaderNickname("Hàn Lão Ma");
+  assert.equal(cleanName, "Hàn Lão Ma");
+
+  const count = incrementChaptersRead();
+  assert.ok(count >= 1);
+});
+
+test("reader-rank: fetchLeaderboard returns empty array gracefully when missing keys", async () => {
+  const list = await fetchLeaderboard({ supabaseUrl: "", supabaseKey: "" });
+  assert.deepEqual(list, []);
 });

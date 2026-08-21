@@ -11,8 +11,20 @@ const { extractTitleFromContent, formatVietnameseChapterTitle } = require("./cha
 const { updatePageMeta, shareContent } = require("./seo.js");
 const { createTTS } = require("./tts.js");
 const { drawQRCodeToCanvas } = require("./qr-generator.js");
-const { fetchChapterComments, postComment } = require("./comments.js");
-const { getReaderProfile, addReaderExp, setRankSchool, getRankSchools, calculateRank } = require("./reader-rank.js");
+const {
+  getReaderProfile,
+  addReaderExp,
+  setRankSchool,
+  getRankSchools,
+  calculateRank,
+  getReaderId,
+  getReaderNickname,
+  setReaderNickname,
+  getStoredChaptersRead,
+  incrementChaptersRead,
+  fetchLeaderboard,
+  syncReaderLeaderboard
+} = require("./reader-rank.js");
 
 let activeShelfTab = "all";
 let userSync = null;
@@ -269,8 +281,24 @@ const els = {
   commentRankText: document.getElementById("commentRankText"),
   rankSchoolDialog: document.getElementById("rankSchoolDialog"),
   rankSchoolClose: document.getElementById("rankSchoolClose"),
+  rankTabLeaderboard: document.getElementById("rankTabLeaderboard"),
+  rankTabProfile: document.getElementById("rankTabProfile"),
+  rankPanelLeaderboard: document.getElementById("rankPanelLeaderboard"),
+  rankPanelProfile: document.getElementById("rankPanelProfile"),
+  leaderboardPodium: document.getElementById("leaderboardPodium"),
+  leaderboardList: document.getElementById("leaderboardList"),
+  leaderboardEmpty: document.getElementById("leaderboardEmpty"),
+  myStandingName: document.getElementById("myStandingName"),
+  myStandingBadge: document.getElementById("myStandingBadge"),
+  myStandingMeta: document.getElementById("myStandingMeta"),
+  myStandingRankNumber: document.getElementById("myStandingRankNumber"),
+  myStandingIcon: document.getElementById("myStandingIcon"),
+  myStandingEditNameBtn: document.getElementById("myStandingEditNameBtn"),
+  readerNicknameInput: document.getElementById("readerNicknameInput"),
+  saveNicknameBtn: document.getElementById("saveNicknameBtn"),
   schoolCardsGrid: document.getElementById("schoolCardsGrid"),
   rankModalIcon: document.getElementById("rankModalIcon"),
+  rankModalIconProfile: document.getElementById("rankModalIconProfile"),
   rankModalSchool: document.getElementById("rankModalSchool"),
   rankModalTitle: document.getElementById("rankModalTitle"),
   rankModalTotalExp: document.getElementById("rankModalTotalExp"),
@@ -1753,6 +1781,8 @@ function goToChapter(index) {
   els.chapterList.querySelector(`.document-item[data-index="${state.currentIndex}"]`)?.classList.add("active");
 
   const expResult = addReaderExp(10, "read_chapter");
+  incrementChaptersRead();
+  syncReaderLeaderboard({ supabaseUrl: SUPABASE_URL, supabaseKey: SUPABASE_ANON_KEY, user: authClient?.getUser() }).catch(() => {});
   if (expResult.leveledUp) {
     showToast(`🎉 CHÚC MỪNG! Đột phá cảnh giới: ${expResult.title}!`, 4000);
   }
@@ -2584,6 +2614,7 @@ function updateRankBadgeUI() {
 
   // Dialog current card
   if (els.rankModalIcon) els.rankModalIcon.textContent = profile.schoolIcon;
+  if (els.rankModalIconProfile) els.rankModalIconProfile.textContent = profile.schoolIcon;
   if (els.rankModalSchool) els.rankModalSchool.textContent = profile.schoolName;
   if (els.rankModalTitle) els.rankModalTitle.textContent = `${profile.title} (Cấp ${profile.levelNumber})`;
   if (els.rankModalTotalExp) els.rankModalTotalExp.textContent = `${profile.exp.toLocaleString("vi-VN")} EXP`;
@@ -2597,6 +2628,11 @@ function updateRankBadgeUI() {
     els.rankModalNextTitle.textContent = profile.nextTitle ? `Cảnh giới kế: ${profile.nextTitle}` : "Đỉnh phong tuyệt đối";
   }
 
+  // Nickname input in dialog
+  if (els.readerNicknameInput && !els.readerNicknameInput.value) {
+    els.readerNicknameInput.value = getReaderNickname();
+  }
+
   // Highlight active school card in dialog
   if (els.schoolCardsGrid) {
     els.schoolCardsGrid.querySelectorAll(".school-card").forEach((card) => {
@@ -2606,33 +2642,185 @@ function updateRankBadgeUI() {
   }
 }
 
+let currentLeaderboardSchool = "all";
+let activeRankHubTab = "leaderboard";
+
+function switchRankHubTab(tabName) {
+  activeRankHubTab = tabName;
+  const isLeaderboard = tabName === "leaderboard";
+
+  if (els.rankTabLeaderboard) {
+    els.rankTabLeaderboard.classList.toggle("active", isLeaderboard);
+    els.rankTabLeaderboard.setAttribute("aria-selected", String(isLeaderboard));
+  }
+  if (els.rankTabProfile) {
+    els.rankTabProfile.classList.toggle("active", !isLeaderboard);
+    els.rankTabProfile.setAttribute("aria-selected", String(!isLeaderboard));
+  }
+
+  if (els.rankPanelLeaderboard) els.rankPanelLeaderboard.hidden = !isLeaderboard;
+  if (els.rankPanelProfile) els.rankPanelProfile.hidden = isLeaderboard;
+
+  if (isLeaderboard) {
+    renderLeaderboardData(currentLeaderboardSchool);
+  } else {
+    updateRankBadgeUI();
+  }
+}
+
+async function renderLeaderboardData(school = "all") {
+  currentLeaderboardSchool = school;
+
+  if (els.rankPanelLeaderboard) {
+    els.rankPanelLeaderboard.querySelectorAll(".leaderboard-pill").forEach((pill) => {
+      pill.classList.toggle("active", pill.dataset.school === school);
+    });
+  }
+
+  const profile = getReaderProfile();
+  const myUid = authClient?.getUser()?.id || getReaderId();
+  const myExp = profile.exp;
+  const myNickname = getReaderNickname() || authClient?.getUser()?.user_metadata?.full_name || authClient?.getUser()?.email?.split("@")[0] || "Ẩn danh đạo hữu";
+
+  // Render bottom user standing
+  if (els.myStandingName) els.myStandingName.textContent = myNickname;
+  if (els.myStandingBadge) {
+    els.myStandingBadge.textContent = `[${profile.title}]`;
+    els.myStandingBadge.className = `reader-rank-badge ${profile.badgeClass}`;
+  }
+  if (els.myStandingIcon) els.myStandingIcon.textContent = profile.schoolIcon;
+  const chaptersRead = getStoredChaptersRead();
+  if (els.myStandingMeta) {
+    els.myStandingMeta.textContent = `${myExp.toLocaleString("vi-VN")} Tu Vi · ${chaptersRead} chương`;
+  }
+  if (els.readerNicknameInput) els.readerNicknameInput.value = getReaderNickname();
+
+  const items = await fetchLeaderboard({
+    supabaseUrl: SUPABASE_URL,
+    supabaseKey: SUPABASE_ANON_KEY,
+    school,
+    limit: 20
+  });
+
+  const myIdx = items.findIndex((item) => item.id === myUid);
+  const rankStr = myIdx >= 0 ? `#${myIdx + 1}` : items.length > 0 ? `> #${items.length}` : "#1";
+  if (els.myStandingRankNumber) els.myStandingRankNumber.textContent = rankStr;
+
+  // Render Podium (Top 3)
+  if (els.leaderboardPodium) {
+    els.leaderboardPodium.innerHTML = "";
+    if (items.length > 0) {
+      const top3 = items.slice(0, 3);
+      const podiumSlots = [
+        { rank: 2, medal: "🥈", cls: "podium-rank-2", item: top3[1] },
+        { rank: 1, medal: "🥇", cls: "podium-rank-1", item: top3[0] },
+        { rank: 3, medal: "🥉", cls: "podium-rank-3", item: top3[2] }
+      ];
+
+      podiumSlots.forEach(({ rank, medal, cls, item }) => {
+        if (!item) return;
+        const slot = document.createElement("div");
+        slot.className = `podium-slot ${cls}`;
+        const avatarLetter = (item.display_name || "Đ")[0].toUpperCase();
+        slot.innerHTML = `
+          <span class="podium-medal">${medal}</span>
+          <div class="podium-avatar">
+            ${item.avatar_url ? `<img src="${item.avatar_url}" alt="" style="width:100%;height:100%;object-fit:cover;">` : `<span>${avatarLetter}</span>`}
+          </div>
+          <strong class="podium-name">${escapeHtml(item.display_name || "Ẩn danh")}</strong>
+          <span class="reader-rank-badge ${item.badge_class || 'rank-1'} podium-badge">[${item.level_title || 'Phàm Nhân'}]</span>
+          <span class="podium-exp">${Number(item.exp || 0).toLocaleString("vi-VN")} Tu Vi</span>
+          <small class="podium-chapters">${Number(item.chapters_read || 0)} chương</small>
+        `;
+        els.leaderboardPodium.appendChild(slot);
+      });
+    }
+  }
+
+  // Render Top 4-20 List
+  if (els.leaderboardList) {
+    els.leaderboardList.innerHTML = "";
+    const rest = items.slice(3);
+    if (els.leaderboardEmpty) els.leaderboardEmpty.hidden = items.length > 0;
+
+    rest.forEach((item, idx) => {
+      const rank = idx + 4;
+      const li = document.createElement("li");
+      li.className = `leaderboard-item ${item.id === myUid ? 'is-me' : ''}`;
+      const avatarLetter = (item.display_name || "Đ")[0].toUpperCase();
+      li.innerHTML = `
+        <span class="lb-rank">#${rank}</span>
+        <div class="lb-avatar">
+          ${item.avatar_url ? `<img src="${item.avatar_url}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">` : `<span>${avatarLetter}</span>`}
+        </div>
+        <div class="lb-info">
+          <div class="lb-name-row">
+            <strong class="lb-name">${escapeHtml(item.display_name || "Ẩn danh")}</strong>
+            <span class="reader-rank-badge ${item.badge_class || 'rank-1'}">[${item.level_title || 'Phàm Nhân'}]</span>
+          </div>
+          <small class="lb-meta">${Number(item.chapters_read || 0)} chương đã luyện</small>
+        </div>
+        <div class="lb-score">
+          <strong class="lb-exp">${Number(item.exp || 0).toLocaleString("vi-VN")}</strong>
+          <small class="lb-chapters">Tu Vi</small>
+        </div>
+      `;
+      els.leaderboardList.appendChild(li);
+    });
+  }
+}
+
 function initReaderRankController() {
   updateRankBadgeUI();
 
-  function openRankModal() {
-    updateRankBadgeUI();
+  function openRankModal(defaultTab = "leaderboard") {
+    switchRankHubTab(defaultTab);
     els.rankSchoolDialog?.showModal();
+    syncReaderLeaderboard({ supabaseUrl: SUPABASE_URL, supabaseKey: SUPABASE_ANON_KEY, user: authClient?.getUser() }).catch(() => {});
   }
 
   function closeRankModal() {
     els.rankSchoolDialog?.close();
   }
 
-  els.readerRankBadge?.addEventListener("click", openRankModal);
-  els.readerTopRankBtn?.addEventListener("click", openRankModal);
-  els.commentRankTriggerBtn?.addEventListener("click", openRankModal);
+  els.readerRankBadge?.addEventListener("click", () => openRankModal("leaderboard"));
+  els.readerTopRankBtn?.addEventListener("click", () => openRankModal("leaderboard"));
+  els.commentRankTriggerBtn?.addEventListener("click", () => openRankModal("profile"));
   els.rankSchoolClose?.addEventListener("click", closeRankModal);
   els.rankSchoolDialog?.addEventListener("click", (e) => {
     if (e.target === els.rankSchoolDialog) closeRankModal();
   });
 
-  els.schoolCardsGrid?.addEventListener("click", (e) => {
+  els.rankTabLeaderboard?.addEventListener("click", () => switchRankHubTab("leaderboard"));
+  els.rankTabProfile?.addEventListener("click", () => switchRankHubTab("profile"));
+
+  els.myStandingEditNameBtn?.addEventListener("click", () => {
+    switchRankHubTab("profile");
+    setTimeout(() => els.readerNicknameInput?.focus(), 150);
+  });
+
+  els.saveNicknameBtn?.addEventListener("click", async () => {
+    const raw = els.readerNicknameInput?.value || "";
+    const clean = setReaderNickname(raw);
+    showToast(clean ? `✓ Đã lưu đạo hiệu: ${clean}` : "✓ Đã đặt lại đạo hiệu mặc định", 2500);
+    await syncReaderLeaderboard({ supabaseUrl: SUPABASE_URL, supabaseKey: SUPABASE_ANON_KEY, user: authClient?.getUser(), force: true });
+    updateRankBadgeUI();
+  });
+
+  els.rankPanelLeaderboard?.addEventListener("click", (e) => {
+    const pill = e.target.closest(".leaderboard-pill");
+    if (!pill || !pill.dataset.school) return;
+    renderLeaderboardData(pill.dataset.school);
+  });
+
+  els.schoolCardsGrid?.addEventListener("click", async (e) => {
     const card = e.target.closest(".school-card");
     if (!card || !card.dataset.school) return;
     const schoolId = card.dataset.school;
     const newProfile = setRankSchool(schoolId);
     updateRankBadgeUI();
     showToast(`✓ Đã chuyển sang ${newProfile.schoolName}: [${newProfile.title}]`, 3000);
+    await syncReaderLeaderboard({ supabaseUrl: SUPABASE_URL, supabaseKey: SUPABASE_ANON_KEY, user: authClient?.getUser(), force: true });
   });
 }
 
