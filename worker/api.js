@@ -326,9 +326,14 @@ async function handleTranslateStatus({ request, env }) {
 
   let status = null;
   try {
-    if (env.NOVEL_ARCHIVE) {
-      const storage = createR2BindingStorage(env.NOVEL_ARCHIVE);
+    if (env.NOVEL_STORAGE) {
+      const storage = createR2BindingStorage(env.NOVEL_STORAGE);
       const raw = await storage.get("jobs/translate-status.json").catch(() => null);
+      if (raw) status = JSON.parse(raw.toString("utf8"));
+    }
+    if (!status && env.NOVEL_ARCHIVE) {
+      const archive = createR2BindingStorage(env.NOVEL_ARCHIVE);
+      const raw = await archive.get("jobs/translate-status.json").catch(() => null);
       if (raw) status = JSON.parse(raw.toString("utf8"));
     }
   } catch {}
@@ -336,7 +341,7 @@ async function handleTranslateStatus({ request, env }) {
   if (!status) {
     status = {
       state: "idle",
-      message: "Chưa có tiến trình dịch nào đang chạy.",
+      message: "Chưa có dữ liệu từ worker dịch (đang chờ phiên chạy tiếp theo hoặc worker vừa khởi động).",
       updatedAt: null,
       translatedThisRun: 0,
       spentRequests: 0,
@@ -349,7 +354,7 @@ async function handleTranslateStatus({ request, env }) {
     const ageMs = Date.now() - new Date(status.updatedAt).getTime();
     if (ageMs > 6 * 60 * 1000) {
       status.state = "idle";
-      status.message = "Tiến trình dịch đã hoàn tất hoặc tạm dừng (không có nhịp tim mới).";
+      status.message = "Tiến trình dịch đã hoàn tất lượt chạy (chờ lượt xoay vòng tiếp theo).";
     }
   }
 

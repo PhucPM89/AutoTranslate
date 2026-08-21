@@ -492,7 +492,22 @@ function renderTranslateStatus(status = {}) {
   }
 
   // Queue List
-  const queue = Array.isArray(status.queue) ? status.queue : [];
+  let queue = Array.isArray(status.queue) && status.queue.length ? status.queue : [];
+  if (!queue.length && Array.isArray(adminCatalog.books) && adminCatalog.books.length) {
+    queue = adminCatalog.books
+      .map((b) => {
+        const total = Number(b.chapterCount || b.totalChapters || 0);
+        const done = Number(b.translatedChapters || 0);
+        return {
+          bookId: b.id,
+          total,
+          pending: Math.max(0, total - done),
+          highPriority: false
+        };
+      })
+      .filter((b) => b.total > 0);
+  }
+
   if (els.translateQueueList) {
     els.translateQueueList.innerHTML = "";
     if (!queue.length) {
