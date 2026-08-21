@@ -1650,9 +1650,7 @@ body {
 
 .catalog-grid {
   display: grid;
-  /* Smaller tiles than before: the cover is the content, so more of them fit and
-     the eye scans art rather than paragraphs. */
-  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: var(--space-5) var(--space-4);
 }
 
@@ -2901,7 +2899,7 @@ body:not(.dark) .theme-moon {
   }
 
   .catalog-grid {
-    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .request-band {
@@ -3485,9 +3483,8 @@ body:not(.dark) .theme-moon {
 }
 
 .catalog-grid {
-  /* auto-fill rather than a fixed five: a wide screen shows more posters and a
-     narrow one fewer, without a media query for every step. */
-  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+  /* 6 columns on desktop so 12 books per page form 2 complete rows (6x2) */
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: var(--space-6) clamp(1rem, 1.5vw, 1.4rem);
 }
 
