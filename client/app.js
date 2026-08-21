@@ -6,6 +6,7 @@
 const { initAuth } = require("./auth.js");
 const { createUserSync } = require("./user-sync.js");
 const { renderQuoteCard } = require("./quote-card.js");
+const { applyInvisibleWatermark, initSecurityGuards } = require("./security.js");
 
 let activeShelfTab = "all";
 let userSync = null;
@@ -203,6 +204,7 @@ const parser = new DOMParser();
 initPreferences();
 bindEvents();
 initQuoteCardAndSelection();
+initSecurityGuards();
 registerServiceWorker();
 // Before initializeLibrary, because a confirmation link comes back with tokens in
 // the URL fragment and they have to be consumed and wiped before anything else
@@ -1684,7 +1686,7 @@ function renderTranslation(cached, index) {
   }
 
   if (cached) {
-    els.translationText.textContent = cached;
+    els.translationText.textContent = applyInvisibleWatermark(cached);
     els.translationText.classList.remove("empty", "status-error", "is-loading");
     els.outputStatus.textContent = "Đã lưu";
     els.translateButton.hidden = true;
