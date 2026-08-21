@@ -50,18 +50,26 @@ const appUrl = bundle({
   }
 });
 
-copyFonts();
-copyPwaFiles();
+async function main() {
+  copyFonts();
+  copyPwaFiles();
 
-const styleUrl = minifyCss({
-  entry: path.join(CLIENT_DIR, "style.css"),
-  outfile: path.join(PUBLIC_DIR, "style.css"),
-  publicPath: "/style.css"
+  const styleUrl = minifyCss({
+    entry: path.join(CLIENT_DIR, "style.css"),
+    outfile: path.join(PUBLIC_DIR, "style.css"),
+    publicPath: "/style.css"
+  });
+
+  writeHtml({ appUrl, styleUrl });
+  writeHeaders();
+  await writeSitemapAndRobots();
+  reportReaderMode();
+}
+
+main().catch((err) => {
+  console.error("Build failed:", err);
+  process.exit(1);
 });
-
-writeHtml({ appUrl, styleUrl });
-writeHeaders();
-reportReaderMode();
 
 // The CDN reader is a one-line flag with a large effect, and it is inlined into
 // the bundle, so nothing about the built files shows which way it went. Printing
@@ -196,6 +204,60 @@ function writeHtml({ appUrl, styleUrl }) {
   console.log(`/index.html ${formatKb(Buffer.byteLength(html))}`);
 }
 
+async function writeSitemapAndRobots() {
+  const siteUrl = "https://tram-chu.online";
+  const now = new Date().toISOString().split("T")[0];
+
+  let books = [];
+  try {
+    const cdnUrl = (process.env.R2_PUBLIC_BASE_URL || "https://cdn.tram-chu.online").replace(/\/$/, "");
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(`${cdnUrl}/catalog/latest.json`, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.books)) books = data.books;
+    }
+  } catch {
+    // fallback
+  }
+
+  if (!books.length) {
+    try {
+      const libPath = path.join(PUBLIC_DIR, "library.json");
+      if (fs.existsSync(libPath)) {
+        const parsed = JSON.parse(fs.readFileSync(libPath, "utf8"));
+        books = Array.isArray(parsed.books) ? parsed.books : [];
+      }
+    } catch {
+      books = [];
+    }
+  }
+
+  // Generate sitemap.xml
+  let sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
+  sitemapXml += `  <url>\n    <loc>${siteUrl}/</loc>\n    <lastmod>${now}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n`;
+  sitemapXml += `  <url>\n    <loc>${siteUrl}/#catalog</loc>\n    <lastmod>${now}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.8</priority>\n  </url>\n`;
+
+  for (const book of books) {
+    if (book.id) {
+      const bookDate = book.updatedAt ? String(book.updatedAt).split("T")[0] : now;
+      sitemapXml += `  <url>\n    <loc>${siteUrl}/?book=${encodeURIComponent(book.id)}</loc>\n    <lastmod>${bookDate}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.8</priority>\n  </url>\n`;
+    }
+  }
+  sitemapXml += `</urlset>\n`;
+
+  fs.writeFileSync(path.join(PUBLIC_DIR, "sitemap.xml"), sitemapXml);
+  console.log(`/sitemap.xml ${books.length + 2} URLs, ${formatKb(Buffer.byteLength(sitemapXml))}`);
+
+  // Generate robots.txt
+  const robotsTxt = `User-agent: *\nAllow: /\n\nSitemap: ${siteUrl}/sitemap.xml\n`;
+  fs.writeFileSync(path.join(PUBLIC_DIR, "robots.txt"), robotsTxt);
+  console.log(`/robots.txt ${formatKb(Buffer.byteLength(robotsTxt))}`);
+}
+
 function formatKb(bytes) {
   return `${(bytes / 1024).toFixed(1)} KB`;
 }
+

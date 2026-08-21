@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://tram-chu.online/sitemap.xml

@@ -1,10 +1,51 @@
 <!doctype html>
-<html lang="vi">
+<html lang="vi" prefix="og: https://ogp.me/ns#">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Thư viện truyện dịch chọn lọc: đọc EPUB và dịch từng chương sang tiếng Việt.">
-    <title>Trạm Chữ</title>
+    <title id="pageTitle">Trạm Chữ — Thư viện đọc & dịch truyện tiếng Việt</title>
+    <meta id="metaDesc" name="description" content="Thư viện truyện dịch chọn lọc: đọc và dịch tự động từng chương tiểu thuyết Trung Quốc sang tiếng Việt chất lượng cao.">
+    <meta name="keywords" content="đọc truyện, truyện dịch, dịch truyện trung, tiểu thuyết mạng, tiên hiệp, mạt thế, huyền huyễn, đô thị, trạm chữ">
+    <meta name="author" content="Trạm Chữ">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <link id="canonicalUrl" rel="canonical" href="https://tram-chu.online/">
+
+    <!-- OpenGraph / Facebook / Zalo / Telegram -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Trạm Chữ">
+    <meta id="ogTitle" property="og:title" content="Trạm Chữ — Thư viện đọc & dịch truyện tiếng Việt">
+    <meta id="ogDesc" property="og:description" content="Thư viện truyện dịch chọn lọc: đọc và dịch tự động từng chương tiểu thuyết Trung Quốc sang tiếng Việt chất lượng cao.">
+    <meta id="ogUrl" property="og:url" content="https://tram-chu.online/">
+    <meta id="ogImage" property="og:image" content="https://tram-chu.online/library/covers/misty-pagoda-hero.webp">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Trạm Chữ — Thư viện truyện dịch">
+    <meta property="og:locale" content="vi_VN">
+
+    <!-- Twitter / X Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta id="twitterTitle" name="twitter:title" content="Trạm Chữ — Thư viện đọc & dịch truyện tiếng Việt">
+    <meta id="twitterDesc" name="twitter:description" content="Thư viện truyện dịch chọn lọc: đọc và dịch tự động từng chương tiểu thuyết Trung Quốc sang tiếng Việt chất lượng cao.">
+    <meta id="twitterImage" name="twitter:image" content="https://tram-chu.online/library/covers/misty-pagoda-hero.webp">
+
+    <!-- Schema.org JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Trạm Chữ",
+      "alternateName": ["Tram Chu", "TramChu"],
+      "url": "https://tram-chu.online/",
+      "description": "Thư viện truyện dịch chọn lọc: đọc và dịch tự động từng chương tiểu thuyết Trung Quốc sang tiếng Việt.",
+      "inLanguage": "vi",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": "https://tram-chu.online/?q={search_term_string}",
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
+
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="manifest" href="/manifest.webmanifest">
     <meta name="theme-color" content="#08060f">
@@ -214,6 +255,7 @@
             <div class="book-view-actions">
               <button id="bookViewRead" class="primary-action" type="button"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m5 3 14 9-14 9V3Z"></path></svg><span id="bookViewReadLabel">Đọc từ đầu</span></button>
               <button id="bookViewBookmark" class="secondary-action bookmark-button" type="button" aria-label="Lưu vào tủ truyện"><svg class="icon bookmark-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg><span id="bookViewBookmarkLabel">Lưu vào tủ truyện</span></button>
+              <button id="bookViewShare" class="secondary-action share-button" type="button" aria-label="Chia sẻ truyện" title="Chia sẻ truyện"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg><span>Chia sẻ</span></button>
               <button id="bookViewRestart" class="ghost-action" type="button" hidden><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v6h-6M4 18v-6h6"></path><path d="M18.49 9A7 7 0 0 0 5.64 6.64L4 9M20 15l-1.64 2.36A7 7 0 0 1 5.51 15"></path></svg>Đọc lại từ đầu</button>
             </div>
             <p class="book-view-hint">Bản EPUB chỉ được tải về khi bạn bấm đọc, nên trang này không tốn dung lượng.</p>
@@ -381,6 +423,7 @@
         </div>
         <label class="command-search"><svg class="icon search-icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><input id="globalSearch" type="search" placeholder="Tìm trong mục lục..." autocomplete="off"></label>
         <div class="topbar-actions">
+          <button id="readerShareBtn" class="icon-button" type="button" aria-label="Chia sẻ chương" title="Chia sẻ chương"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg></button>
           <button id="readerThemeToggle" class="icon-button" type="button" aria-label="Đổi giao diện" title="Đổi giao diện"><svg class="icon theme-sun" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path></svg><svg class="icon theme-moon" aria-hidden="true" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"></path></svg></button>
         </div>
       </header>

@@ -8,6 +8,7 @@ const { createUserSync } = require("./user-sync.js");
 const { renderQuoteCard } = require("./quote-card.js");
 const { applyInvisibleWatermark, initSecurityGuards } = require("./security.js");
 const { extractTitleFromContent, formatVietnameseChapterTitle } = require("./chapter-title.js");
+const { updatePageMeta, shareContent } = require("./seo.js");
 
 let activeShelfTab = "all";
 let userSync = null;
@@ -197,7 +198,9 @@ const els = {
   fontDecrease: document.getElementById("fontDecrease"),
   fontIncrease: document.getElementById("fontIncrease"),
   fontSizeLabel: document.getElementById("fontSizeLabel"),
-  widthPreset: document.getElementById("widthPreset")
+  widthPreset: document.getElementById("widthPreset"),
+  bookViewShare: document.getElementById("bookViewShare"),
+  readerShareBtn: document.getElementById("readerShareBtn")
 };
 
 const parser = new DOMParser();
@@ -256,6 +259,23 @@ function bindEvents() {
       updateBookViewBookmark(book);
       if (activeShelfTab === "myShelf") resetCatalogPage();
     }
+  });
+  els.bookViewShare?.addEventListener("click", () => {
+    const book = libraryState.detailBook;
+    if (!book) return;
+    shareContent({
+      title: book.title,
+      text: `Đọc truyện "${book.title}" (${book.genre || "Tiểu thuyết"}) của tác giả ${book.author || "Khuyết danh"} trên Trạm Chữ`,
+      url: `${window.location.origin}/?book=${encodeURIComponent(book.id)}`
+    }, showToast);
+  });
+  els.readerShareBtn?.addEventListener("click", () => {
+    const chapterTitle = displayChapterTitle(state.currentIndex);
+    shareContent({
+      title: `${chapterTitle} — ${state.title}`,
+      text: `Đang đọc "${chapterTitle}" trong bộ truyện "${state.title}" trên Trạm Chữ`,
+      url: `${window.location.origin}/?book=${encodeURIComponent(state.bookId)}&ch=${state.currentIndex + 1}`
+    }, showToast);
   });
   els.readerThemeSelect?.addEventListener("change", (event) => applyTheme(event.target.value));
   els.readerFontFamily?.addEventListener("change", (event) => applyFont(event.target.value));
@@ -1011,12 +1031,28 @@ function showLibrary() {
   els.readerView.hidden = true;
   els.bookView.hidden = true;
   els.libraryView.hidden = false;
-  document.title = BRAND_NAME;
   libraryState.detailBook = null;
+  updatePageMeta();
   if (window.location.hash.startsWith("#book/")) {
     history.replaceState(null, "", `${window.location.pathname}#catalog`);
   }
   window.scrollTo({ top: 0 });
+}
+
+function showToast(message, duration = 2500) {
+  let toast = document.getElementById("appToast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "appToast";
+    toast.className = "app-toast";
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.classList.add("visible");
+  clearTimeout(toast._timeout);
+  toast._timeout = setTimeout(() => {
+    toast.classList.remove("visible");
+  }, duration);
 }
 
 // A preview step between the catalog and the reader: everything here comes from
@@ -1027,11 +1063,19 @@ async function showBookDetail(book, { updateHash = true } = {}) {
   els.readerView.hidden = true;
   els.bookView.hidden = false;
   if (updateHash) history.replaceState(null, "", `${window.location.pathname}#book/${encodeURIComponent(book.id)}`);
-  document.title = `${book.title} | ${BRAND_NAME}`;
-  window.scrollTo({ top: 0 });
-
+  
   const fallbackCover = fallbackCoverForBook(book);
   const cover = book.cover || fallbackCover;
+  const fullCoverUrl = cover.startsWith("http") ? cover : (cover.startsWith("/") ? `${window.location.origin}${cover}` : `${CDN_BASE}/${cover}`);
+  updatePageMeta({
+    title: book.title,
+    description: book.description,
+    image: fullCoverUrl,
+    url: `${window.location.origin}/?book=${encodeURIComponent(book.id)}`,
+    book
+  });
+  window.scrollTo({ top: 0 });
+
   els.bookViewCover.src = cover;
   els.bookViewCover.alt = `Bìa truyện ${book.title}`;
   els.bookViewCover.addEventListener("error", () => { els.bookViewCover.src = fallbackCover; }, { once: true });
@@ -1459,6 +1503,17 @@ function goToChapter(index) {
   els.chapterCounter.textContent = chapterLabel;
   els.bottomChapterCounter.textContent = chapterLabel;
   els.chapterSelect.value = String(state.currentIndex);
+
+  if (state.title) {
+    const coverUrl = state.cover ? (state.cover.startsWith("http") ? state.cover : (state.cover.startsWith("/") ? `${window.location.origin}${state.cover}` : `${CDN_BASE}/${state.cover}`)) : null;
+    updatePageMeta({
+      title: `${documentLabel} — ${state.title}`,
+      description: `Đọc ${documentLabel} truyện ${state.title} (${state.author || "Khuyết danh"}) trên Trạm Chữ`,
+      image: coverUrl,
+      url: `${window.location.origin}/?book=${encodeURIComponent(state.bookId)}&ch=${state.currentIndex + 1}`,
+      book: { title: state.title, author: state.author, genre: state.genre }
+    });
+  }
 
   const isFirstChapter = state.currentIndex === 0;
   const isLastChapter = state.currentIndex === state.chapters.length - 1;
