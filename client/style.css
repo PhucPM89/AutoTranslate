@@ -5046,4 +5046,35 @@ body.zen-mode .document-paper {
   }
 }
 
+/* Untranslated chapter notice */
+.untranslated-notice {
+  padding: 1rem 1.25rem;
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid rgba(234, 179, 8, 0.25);
+  border-radius: 12px;
+  color: #fef08a;
+  margin-bottom: 1.5rem;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.untranslated-notice p {
+  margin: 0.25rem 0;
+}
+
+.untranslated-raw-title {
+  margin-top: 0.75rem !important;
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.raw-chinese-text {
+  color: var(--muted);
+  opacity: 0.6;
+  white-space: pre-wrap;
+  line-height: 1.8;
+}
+
 

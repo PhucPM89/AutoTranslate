@@ -1817,8 +1817,9 @@ function initTTSController() {
   };
 
   function startTTSFromCurrent() {
-    const text = state.translations[state.currentIndex] || els.translationText.textContent;
-    if (!text || els.translationText.classList.contains("empty") || text.includes("Chưa có bản dịch") || text.includes("Đang tải")) {
+    const chapter = state.chapters[state.currentIndex];
+    const text = state.translations[state.currentIndex] || (chapter && chapter.text ? chapter.text : "");
+    if (!text || isChineseText(text) || els.translationText.classList.contains("empty") || text.includes("Chưa có bản dịch") || text.includes("Đang tải")) {
       showToast("Chương này chưa có bản dịch tiếng Việt để đọc");
       return;
     }
@@ -2584,9 +2585,45 @@ async function loadCdnChapter(index) {
 function renderCdnChapter(chapter, index) {
   if (index !== state.currentIndex) return;
   els.sourceText.textContent = chapter.text || "";
-  els.translationText.textContent = applyInvisibleWatermark(chapter.text || "");
-  els.translationText.classList.remove("empty", "is-loading", "status-error");
-  els.outputStatus.textContent = chapter.status === "completed" ? "Đã dịch" : "Bản gốc";
+
+  const isTranslated = chapter.status === "completed" || !isChineseText(chapter.text);
+
+  if (isTranslated && chapter.text) {
+    const watermarked = applyInvisibleWatermark(chapter.text);
+    const rawParagraphs = watermarked.split(/\n+/).map((p) => p.trim()).filter(Boolean);
+    els.translationText.innerHTML = "";
+    rawParagraphs.forEach((pText, i) => {
+      const pEl = document.createElement("p");
+      pEl.className = "tts-paragraph-highlight";
+      pEl.dataset.parIndex = String(i);
+      pEl.textContent = pText;
+      pEl.addEventListener("click", () => {
+        if (ttsEngine && ttsEngine.isPlaying) {
+          ttsEngine.speakParagraph(i);
+        }
+      });
+      els.translationText.appendChild(pEl);
+    });
+    els.translationText.classList.remove("empty", "is-loading", "status-error");
+    els.outputStatus.textContent = "Đã dịch";
+
+    if (ttsEngine && ttsEngine.isPlaying && !ttsEngine.isPaused) {
+      ttsEngine.loadText(chapter.text);
+      ttsEngine.play(0);
+    }
+  } else {
+    // Untranslated Chinese chapter
+    els.translationText.innerHTML = `
+      <div class="untranslated-notice">
+        <p><strong>⏳ Chương này đang trong hàng đợi dịch tự động.</strong></p>
+        <p>Hệ thống đang dịch lần lượt từng chương. Dưới đây là văn bản gốc tiếng Trung:</p>
+      </div>
+      <div class="raw-chinese-text">${escapeHtml(chapter.text || "Chưa có nội dung.")}</div>
+    `;
+    els.translationText.classList.remove("is-loading", "status-error");
+    els.translationText.classList.add("empty");
+    els.outputStatus.textContent = "Chưa dịch";
+  }
 
   const extracted = extractTitleFromContent(chapter.text);
   if (extracted && chapter.translatedTitle !== extracted) {
@@ -2597,6 +2634,20 @@ function renderCdnChapter(chapter, index) {
   // Translation happened at ingest, so the reader has nothing to trigger.
   els.translateButton.hidden = true;
   els.retranslateButton.hidden = true;
+}
+
+function isChineseText(text) {
+  if (!text) return false;
+  const chineseMatches = text.match(/[\u4e00-\u9fa5]/g) || [];
+  return chineseMatches.length > 20 && (chineseMatches.length / text.length) > 0.15;
+}
+
+function escapeHtml(str) {
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function syncChapterUiTitle(index) {
