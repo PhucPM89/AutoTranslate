@@ -838,7 +838,7 @@ function isValidLibraryBook(book) {
 function applyLibrarySiteSettings() {
   const name = BRAND_NAME;
   const tagline = libraryState.site.tagline || "Thư viện truyện dịch cá nhân";
-  const email = libraryState.site.contactEmail || "contact@tram-chu.online";
+  const email = libraryState.site.contactEmail || "rynx0203@gmail.com";
   els.libraryName.textContent = name;
   els.libraryTagline.textContent = tagline;
   els.contactEmail.textContent = email;
