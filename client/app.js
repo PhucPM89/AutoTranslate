@@ -1027,6 +1027,8 @@ function getFilteredCatalogBooks() {
     }
     return (
       Number(Boolean(b.featured)) - Number(Boolean(a.featured)) ||
+      Number(Number(b.translatedChapters || 0) > 0) - Number(Number(a.translatedChapters || 0) > 0) ||
+      Number(b.translatedChapters || 0) - Number(a.translatedChapters || 0) ||
       String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""))
     );
   });
@@ -1348,8 +1350,8 @@ function updateBookViewBookmark(book) {
 async function openFromUrl() {
   function findBookById(rawId) {
     if (!rawId) return null;
-    const cleanId = String(rawId).replace(/^cdn:/, "").split(":")[0];
-    return libraryState.books.find((item) => item.id === rawId || item.id === cleanId || item.id.includes(cleanId));
+    const cleanId = cleanBookId(rawId);
+    return libraryState.books.find((item) => cleanBookId(item.id) === cleanId || item.id === rawId);
   }
 
   // 1. Check Hash: #read/<bookId>/<chapterNumber>
@@ -1813,14 +1815,15 @@ function preloadNextChapter(nextIndex) {
   if (!state.bookId || nextIndex >= state.chapters.length) return;
   if (typeof state.translations[nextIndex] === "string") return;
 
-  if (state.mode === "cdn" && state.cdnTemplate) {
-    const url = state.cdnTemplate.replace("{index}", String(nextIndex));
+  const nextChapter = state.chapters[nextIndex];
+  if (state.mode === "cdn" && state.cdnTemplate && nextChapter) {
+    const url = chapterUrlFor({ bookId: bookIdFromState(), revision: revisionFromState(), chapterUrlTemplate: state.cdnTemplate }, nextChapter.chapterNumber);
     fetch(url)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data?.translated) {
-          state.translations[nextIndex] = data.translated;
-          putTranslation(state.bookId, nextIndex, data.translated).catch(() => {});
+        if (data?.content && data.translationStatus === "completed") {
+          nextChapter.text = data.content;
+          nextChapter.status = data.translationStatus;
         }
       })
       .catch(() => {});
@@ -3521,8 +3524,10 @@ function cdnUrl(pathname) {
 
 async function fetchBookIndex(bookId) {
   if (!READER_CDN_ENABLED) return null;
+  const clean = cleanBookId(bookId);
+  if (!clean) return null;
   try {
-    const response = await fetch(cdnUrl(`books/${bookId}/index.json`), { cache: "no-cache" });
+    const response = await fetch(cdnUrl(`books/${clean}/index.json`), { cache: "no-cache" });
     if (!response.ok) return null;
     const index = await response.json();
     if (!index || !Array.isArray(index.chapters) || !index.chapters.length) return null;
@@ -3694,8 +3699,13 @@ function syncChapterUiTitle(index) {
   if (selectOpt) selectOpt.textContent = documentLabel;
 }
 
+function cleanBookId(rawId) {
+  if (!rawId) return "";
+  return String(rawId).replace(/^(cdn|library):/, "").split(":")[0];
+}
+
 function bookIdFromState() {
-  return String(state.bookId || "").split(":")[1] || "";
+  return cleanBookId(state.bookId);
 }
 
 function revisionFromState() {
