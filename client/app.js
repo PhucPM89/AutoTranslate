@@ -1874,20 +1874,35 @@ function initTTSController() {
       return;
     }
     const savedVoice = localStorage.getItem("epubTranslator.ttsVoice");
+    const viVoices = ttsEngine.getVietnameseVoices();
+    let hasViSelected = false;
+
     available.forEach((v) => {
       const opt = document.createElement("option");
       const uri = v.voiceURI || v.name;
       opt.value = uri;
       const isVi = ttsEngine.isVietnameseVoice(v);
-      const prefix = isVi ? "🇻🇳 " : "🌐 ";
-      opt.textContent = `${prefix}${v.name.replace(/(Microsoft|Google|Apple)\s*/i, "").slice(0, 18)}`;
+      const langCode = (v.lang || "").split("-")[0].toUpperCase();
+      const langLabel = isVi ? "VI" : langCode;
+      // Clean up voice name: remove vendor prefix, keep just the voice name
+      const cleanName = v.name
+        .replace(/^(Microsoft|Google|Apple)\s+/i, "")
+        .replace(/\s+Online\s*\(Natural\)/i, " ★")
+        .replace(/\s*-\s*[A-Za-z\-]+\s*\(.*?\)$/i, "");
+      opt.textContent = `[${langLabel}] ${cleanName}`;
       if (savedVoice ? savedVoice === uri : (currentSelected && (currentSelected.voiceURI === uri || currentSelected.name === uri))) {
         opt.selected = true;
+        hasViSelected = isVi;
       }
       els.ttsVoiceSelect.appendChild(opt);
     });
+
     if (savedVoice) {
       ttsEngine.setVoice(savedVoice);
+    }
+
+    if (viVoices.length === 0) {
+      showToast("⚠ Máy bạn chưa cài giọng Tiếng Việt. Vào Settings > Language > Tiếng Việt > Text‑to‑Speech để cài.", 8000);
     }
   }
 

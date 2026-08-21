@@ -4870,6 +4870,33 @@ body.zen-mode .document-paper {
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23fff'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.4rem center;
+  padding-right: 1.2rem;
+}
+
+.tts-select option {
+  background: #1a1625;
+  color: #e2e0ea;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.82rem;
+}
+
+.tts-select option:checked {
+  background: #7c3aed;
+  color: #fff;
+}
+
+.tts-voice-select {
+  max-width: 130px;
+  min-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tts-timer-btn {
