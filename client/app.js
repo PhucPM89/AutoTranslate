@@ -1252,6 +1252,29 @@ async function resumeCachedBook() {
     showReader();
     setBusy(`Đang mở ${progress.title || "truyện đã lưu"}...`);
     try {
+      // CDN books have bookId like "cdn:fanqie-xxx:rN" or "library:fanqie-xxx:..."
+      const isCdnBook = progress.id && (progress.id.startsWith("cdn:") || progress.id.startsWith("library:"));
+      if (isCdnBook) {
+        // Extract the real book ID from the progress key
+        const parts = progress.id.split(":");
+        const realBookId = parts[1] || "";
+        const catalogBook = libraryState.books.find((b) => b.id === realBookId);
+        if (catalogBook) {
+          const cover = catalogBook.cover || fallbackCoverForBook(catalogBook);
+          const opened = READER_CDN_ENABLED
+            ? await openBookFromCdn(catalogBook, cover, { startAtFirstChapter: false })
+            : false;
+          if (opened) {
+            goToChapter(progress.currentIndex || 0);
+            return;
+          }
+          // Fall through to legacy EPUB if CDN open failed
+          await loadCatalogBook(catalogBook, cover);
+          return;
+        }
+        // Book not in catalog anymore — try cached EPUB as last resort
+      }
+
       const cachedBook = await readCachedBook(progress.id);
       if (!cachedBook) throw new Error("Bản lưu trên thiết bị đã hết hạn.");
       await openCachedBook(cachedBook, progress.currentIndex || 0);
