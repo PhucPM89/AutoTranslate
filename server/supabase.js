@@ -190,6 +190,33 @@ function createSupabase(env = process.env, { role = "service" } = {}) {
     async readAnalyticsDaily({ days = 30 } = {}) {
       const params = new URLSearchParams({ select: "*", order: "day.desc", limit: String(days) });
       return request("analytics_daily", { query: `?${params}` });
+    },
+
+    async readTopBooks({ limit = 10 } = {}) {
+      try {
+        const rows = await request("analytics_events", {
+          query: "?select=book_id&event_type=eq.read&book_id=not.is.null&limit=2000"
+        });
+        const counts = {};
+        for (const row of rows || []) {
+          if (row.book_id) counts[row.book_id] = (counts[row.book_id] || 0) + 1;
+        }
+        return Object.entries(counts)
+          .map(([bookId, reads]) => ({ bookId, reads }))
+          .sort((a, b) => b.reads - a.reads)
+          .slice(0, limit);
+      } catch {
+        return [];
+      }
+    },
+
+    async readUserBookmarkCount() {
+      try {
+        const rows = await request("user_bookmarks", { query: "?select=book_id&limit=2000" });
+        return Array.isArray(rows) ? rows.length : 0;
+      } catch {
+        return 0;
+      }
     }
   };
 }
