@@ -55,8 +55,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Trạm Chữ">
     <link rel="preload" href="/library/covers/misty-pagoda-hero.webp" as="image" fetchpriority="high">
-    <link rel="stylesheet" href="/style.css?v=6f2f971a1717">
-    <script src="/app.js?v=72dd797f4bc3" defer></script>
+    <link rel="stylesheet" href="/style.css?v=8fd84b98410c">
+    <script src="/app.js?v=7d4a72e59a84" defer></script>
   </head>
   <body class="dark">
     <section id="libraryView" class="library-view">
@@ -879,5 +879,40 @@
         </div>
       </div>
     </dialog>
+
+    <!-- Floating Mini Audio Player Bar -->
+    <div id="floatingAudioBar" class="floating-audio-bar" hidden>
+      <div class="audio-bar-info">
+        <button id="floatingAudioPlayPause" class="audio-bar-play-btn" type="button" aria-label="Phát hoặc tạm dừng">
+          <svg class="icon audio-icon-play" aria-hidden="true" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          <svg class="icon audio-icon-pause" aria-hidden="true" viewBox="0 0 24 24" hidden><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+        </button>
+        <div class="audio-bar-text">
+          <span id="floatingAudioTitle" class="audio-bar-title">Đang đọc giọng AI</span>
+          <span id="floatingAudioProgress" class="audio-bar-progress-text">Đoạn 1</span>
+        </div>
+      </div>
+      <div class="audio-bar-controls">
+        <button id="floatingAudioPrev" class="icon-button audio-bar-btn" type="button" aria-label="Đoạn trước" title="Đoạn trước">
+          <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
+        </button>
+        <button id="floatingAudioNext" class="icon-button audio-bar-btn" type="button" aria-label="Đoạn kế" title="Đoạn kế">
+          <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
+        </button>
+        <select id="floatingAudioSpeed" class="audio-bar-speed" title="Tốc độ đọc">
+          <option value="0.8">0.8x</option>
+          <option value="1" selected>1.0x</option>
+          <option value="1.2">1.2x</option>
+          <option value="1.5">1.5x</option>
+        </select>
+        <button id="floatingAudioTimerBtn" class="audio-bar-timer-btn" type="button" title="Hẹn giờ tắt (Sleep timer)">
+          <span>⏱</span>
+          <small id="floatingAudioTimerLabel">Tắt</small>
+        </button>
+        <button id="floatingAudioClose" class="icon-button audio-bar-close" type="button" aria-label="Đóng trình phát" title="Dừng đọc">
+          <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+        </button>
+      </div>
+    </div>
   </body>
 </html>

@@ -29,7 +29,45 @@ class TTSEngine {
     this.onFinished = null;
     this.onVoicesLoaded = null;
 
+    this.mediaMetadata = { title: "Trạm Chữ", artist: "Đọc truyện", album: "Trạm Chữ", coverUrl: "" };
     this.initVoices();
+  }
+
+  updateMediaSession(metadata = {}) {
+    this.mediaMetadata = { ...this.mediaMetadata, ...metadata };
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+
+    try {
+      const { title = "Trạm Chữ", artist = "Đọc truyện", album = "Trạm Chữ", coverUrl = "" } = this.mediaMetadata;
+      const artwork = coverUrl ? [{ src: coverUrl, sizes: "512x512", type: "image/webp" }] : [];
+
+      if (typeof MediaMetadata !== "undefined") {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title,
+          artist,
+          album,
+          artwork
+        });
+      }
+
+      navigator.mediaSession.setActionHandler("play", () => this.resume());
+      navigator.mediaSession.setActionHandler("pause", () => this.pause());
+      navigator.mediaSession.setActionHandler("previoustrack", () => this.previous());
+      navigator.mediaSession.setActionHandler("nexttrack", () => this.next());
+      navigator.mediaSession.setActionHandler("seekbackward", () => this.previous());
+      navigator.mediaSession.setActionHandler("seekforward", () => this.next());
+      navigator.mediaSession.setActionHandler("stop", () => this.stop());
+    } catch (e) {
+      console.warn("Unable to setup MediaSession:", e);
+    }
+  }
+
+  setMediaPlaybackState(state = "none") {
+    if (typeof navigator !== "undefined" && "mediaSession" in navigator) {
+      try {
+        navigator.mediaSession.playbackState = state;
+      } catch {}
+    }
   }
 
   isSupported() {
@@ -148,6 +186,7 @@ class TTSEngine {
     this.currentIndex = Math.min(Math.max(0, startIndex), this.paragraphs.length - 1);
     this.isPlaying = true;
     this.isPaused = false;
+    this.setMediaPlaybackState("playing");
     this.notifyState();
     this.speakParagraph(this.currentIndex);
     return true;
@@ -156,6 +195,7 @@ class TTSEngine {
   pause() {
     if (!this.isPlaying || this.isPaused) return;
     this.isPaused = true;
+    this.setMediaPlaybackState("paused");
     if (this.synth) this.synth.pause();
     this.notifyState();
   }
@@ -163,6 +203,7 @@ class TTSEngine {
   resume() {
     if (!this.isPlaying || !this.isPaused) return;
     this.isPaused = false;
+    this.setMediaPlaybackState("playing");
     if (this.synth && this.synth.paused) {
       this.synth.resume();
     } else {
@@ -174,6 +215,7 @@ class TTSEngine {
   stop() {
     this.isPlaying = false;
     this.isPaused = false;
+    this.setMediaPlaybackState("none");
     if (this.synth) {
       this.synth.cancel();
     }

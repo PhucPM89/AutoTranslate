@@ -279,7 +279,17 @@ const els = {
   rankModalNextTitle: document.getElementById("rankModalNextTitle"),
   readerTopRankBtn: document.getElementById("readerTopRankBtn"),
   readerTopRankIcon: document.getElementById("readerTopRankIcon"),
-  readerTopRankTitle: document.getElementById("readerTopRankTitle")
+  readerTopRankTitle: document.getElementById("readerTopRankTitle"),
+  floatingAudioBar: document.getElementById("floatingAudioBar"),
+  floatingAudioPlayPause: document.getElementById("floatingAudioPlayPause"),
+  floatingAudioTitle: document.getElementById("floatingAudioTitle"),
+  floatingAudioProgress: document.getElementById("floatingAudioProgress"),
+  floatingAudioPrev: document.getElementById("floatingAudioPrev"),
+  floatingAudioNext: document.getElementById("floatingAudioNext"),
+  floatingAudioSpeed: document.getElementById("floatingAudioSpeed"),
+  floatingAudioTimerBtn: document.getElementById("floatingAudioTimerBtn"),
+  floatingAudioTimerLabel: document.getElementById("floatingAudioTimerLabel"),
+  floatingAudioClose: document.getElementById("floatingAudioClose")
 };
 
 const parser = new DOMParser();
@@ -1753,7 +1763,18 @@ function goToChapter(index) {
   setTimeout(() => preloadNextChapter(state.currentIndex + 1), 600);
 }
 
+function shouldPreloadNext() {
+  if (typeof navigator === "undefined") return true;
+  const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  if (conn) {
+    if (conn.saveData) return false;
+    if (conn.effectiveType === "slow-2g" || conn.effectiveType === "2g") return false;
+  }
+  return true;
+}
+
 function preloadNextChapter(nextIndex) {
+  if (!shouldPreloadNext()) return;
   if (!state.bookId || nextIndex >= state.chapters.length) return;
   if (typeof state.translations[nextIndex] === "string") return;
 
@@ -1952,15 +1973,32 @@ function initTTSController() {
         p.classList.remove("tts-active");
       }
     });
+
+    if (els.floatingAudioProgress && ttsEngine.paragraphs.length) {
+      els.floatingAudioProgress.textContent = `Đoạn ${index + 1} / ${ttsEngine.paragraphs.length}`;
+    }
   };
 
-  ttsEngine.onStateChange = ({ isPlaying, isPaused, hasTimer, timerLabel }) => {
+  ttsEngine.onStateChange = ({ isPlaying, isPaused, hasTimer, timerLabel, currentIndex, totalParagraphs }) => {
+    const active = isPlaying || isPaused;
+    
     if (els.ttsAudioBar) {
-      els.ttsAudioBar.hidden = !isPlaying && !isPaused;
+      els.ttsAudioBar.hidden = !active;
       els.ttsAudioBar.classList.toggle("is-paused", isPaused);
     }
+    if (els.floatingAudioBar) {
+      els.floatingAudioBar.hidden = !active;
+      if (els.floatingAudioTitle) els.floatingAudioTitle.textContent = displayChapterTitle(state.currentIndex);
+      if (els.floatingAudioProgress) {
+        els.floatingAudioProgress.textContent = totalParagraphs ? `Đoạn ${currentIndex + 1} / ${totalParagraphs}` : "Đang phát...";
+      }
+      const fPlayIcon = els.floatingAudioPlayPause?.querySelector(".audio-icon-play");
+      const fPauseIcon = els.floatingAudioPlayPause?.querySelector(".audio-icon-pause");
+      if (fPlayIcon) fPlayIcon.hidden = isPlaying && !isPaused;
+      if (fPauseIcon) fPauseIcon.hidden = !isPlaying || isPaused;
+    }
     if (els.ttsToggleBtn) {
-      els.ttsToggleBtn.classList.toggle("is-active", isPlaying || isPaused);
+      els.ttsToggleBtn.classList.toggle("is-active", active);
     }
     if (els.ttsToggleLabel) {
       els.ttsToggleLabel.textContent = isPlaying ? (isPaused ? "Đang dừng" : "Đang đọc") : "Nghe đọc";
@@ -1979,10 +2017,14 @@ function initTTSController() {
     if (els.ttsTimerLabel) {
       els.ttsTimerLabel.textContent = timerLabel || "Hẹn giờ";
     }
+    if (els.floatingAudioTimerLabel) {
+      els.floatingAudioTimerLabel.textContent = timerLabel || "Tắt";
+    }
   };
 
   ttsEngine.onTimerTick = (timeStr) => {
     if (els.ttsTimerLabel) els.ttsTimerLabel.textContent = timeStr || "Hẹn giờ";
+    if (els.floatingAudioTimerLabel) els.floatingAudioTimerLabel.textContent = timeStr || "Tắt";
   };
 
   ttsEngine.onFinished = () => {
@@ -2021,6 +2063,14 @@ function initTTSController() {
       els.translationText.appendChild(pEl);
     });
 
+    const coverUrl = state.cover ? (state.cover.startsWith("http") ? state.cover : (state.cover.startsWith("/") ? `${window.location.origin}${state.cover}` : `${CDN_BASE}/${state.cover}`)) : "";
+    ttsEngine.updateMediaSession({
+      title: displayChapterTitle(state.currentIndex),
+      artist: state.title || "Trạm Chữ",
+      album: "Trạm Chữ Audio",
+      coverUrl
+    });
+
     ttsEngine.loadText(text);
     ttsEngine.play(0);
   }
@@ -2033,6 +2083,18 @@ function initTTSController() {
       startTTSFromCurrent();
     }
   });
+
+  els.floatingAudioPlayPause?.addEventListener("click", () => {
+    if (ttsEngine.isPaused) ttsEngine.resume();
+    else if (ttsEngine.isPlaying) ttsEngine.pause();
+    else startTTSFromCurrent();
+  });
+
+  els.floatingAudioPrev?.addEventListener("click", () => ttsEngine.previous());
+  els.floatingAudioNext?.addEventListener("click", () => ttsEngine.next());
+  els.floatingAudioSpeed?.addEventListener("change", (e) => ttsEngine.setSpeed(Number(e.target.value)));
+  els.floatingAudioTimerBtn?.addEventListener("click", () => els.sleepTimerDialog?.showModal());
+  els.floatingAudioClose?.addEventListener("click", () => ttsEngine.stop());
 
   els.ttsPlayPauseBtn?.addEventListener("click", () => {
     if (ttsEngine.isPaused) ttsEngine.resume();
