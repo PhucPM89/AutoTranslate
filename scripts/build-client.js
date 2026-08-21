@@ -265,16 +265,19 @@ async function writeSitemapAndRobots() {
   sitemapXml += `  <url>\n    <loc>${siteUrl}/</loc>\n    <lastmod>${now}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n`;
   sitemapXml += `  <url>\n    <loc>${siteUrl}/#catalog</loc>\n    <lastmod>${now}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.8</priority>\n  </url>\n`;
 
+  let urlCount = 2;
   for (const book of books) {
     if (book.id) {
       const bookDate = book.updatedAt ? String(book.updatedAt).split("T")[0] : now;
-      sitemapXml += `  <url>\n    <loc>${siteUrl}/?book=${encodeURIComponent(book.id)}</loc>\n    <lastmod>${bookDate}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.8</priority>\n  </url>\n`;
+      sitemapXml += `  <url>\n    <loc>${siteUrl}/?book=${encodeURIComponent(book.id)}</loc>\n    <lastmod>${bookDate}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.9</priority>\n  </url>\n`;
+      sitemapXml += `  <url>\n    <loc>${siteUrl}/?book=${encodeURIComponent(book.id)}&amp;ch=1</loc>\n    <lastmod>${bookDate}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
+      urlCount += 2;
     }
   }
   sitemapXml += `</urlset>\n`;
 
   fs.writeFileSync(path.join(PUBLIC_DIR, "sitemap.xml"), sitemapXml);
-  console.log(`/sitemap.xml ${books.length + 2} URLs, ${formatKb(Buffer.byteLength(sitemapXml))}`);
+  console.log(`/sitemap.xml ${urlCount} URLs, ${formatKb(Buffer.byteLength(sitemapXml))}`);
 
   // Generate robots.txt
   const robotsTxt = `User-agent: *\nAllow: /\n\nSitemap: ${siteUrl}/sitemap.xml\n`;

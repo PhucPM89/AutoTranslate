@@ -32,6 +32,8 @@ let autoScrollRaf = null;
 let isAutoScrolling = false;
 let selectedQuoteText = "";
 let currentQuoteFormat = "post";
+let currentQuoteTheme = "nebula";
+let activeQuoteText = "";
 let activeCommentParagraphIndex = 0;
 let ttsEngine = null;
 let isZenMode = false;
@@ -186,10 +188,12 @@ const els = {
   quoteCardBtn: document.getElementById("quoteCardBtn"),
   quoteDialog: document.getElementById("quoteDialog"),
   quoteDialogClose: document.getElementById("quoteDialogClose"),
+  quoteThemeBar: document.getElementById("quoteThemeBar"),
   quoteCanvas: document.getElementById("quoteCanvas"),
   quotePreviewImg: document.getElementById("quotePreviewImg"),
   quoteDownloadBtn: document.getElementById("quoteDownloadBtn"),
   quoteCopyImgBtn: document.getElementById("quoteCopyImgBtn"),
+  quoteShareLinkBtn: document.getElementById("quoteShareLinkBtn"),
   readerImportButton: document.getElementById("readerImportButton"),
   fileInput: document.getElementById("fileInput"),
   bookTitle: document.getElementById("bookTitle"),
@@ -1916,44 +1920,73 @@ function initQuoteCardAndSelection() {
     hideSelectionTooltip();
   });
 
-  els.quoteFormatPost?.addEventListener("click", () => {
-    currentQuoteFormat = "post";
-    els.quoteFormatPost.classList.add("is-active");
-    els.quoteFormatStory?.classList.remove("is-active");
-    if (selectedQuoteText) openQuoteCardModal(selectedQuoteText);
+  els.quoteThemeBar?.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".quote-theme-btn");
+    if (!btn || !btn.dataset.theme) return;
+    currentQuoteTheme = btn.dataset.theme;
+    els.quoteThemeBar.querySelectorAll(".quote-theme-btn").forEach((b) => {
+      b.classList.toggle("is-active", b.dataset.theme === currentQuoteTheme);
+    });
+    await refreshQuoteCard();
   });
 
-  els.quoteFormatStory?.addEventListener("click", () => {
+  els.quoteFormatPost?.addEventListener("click", async () => {
+    currentQuoteFormat = "post";
+    els.quoteFormatPost?.classList.add("is-active");
+    els.quoteFormatStory?.classList.remove("is-active");
+    await refreshQuoteCard();
+  });
+
+  els.quoteFormatStory?.addEventListener("click", async () => {
     currentQuoteFormat = "story";
-    els.quoteFormatStory.classList.add("is-active");
+    els.quoteFormatStory?.classList.add("is-active");
     els.quoteFormatPost?.classList.remove("is-active");
-    if (selectedQuoteText) openQuoteCardModal(selectedQuoteText);
+    await refreshQuoteCard();
   });
 
   els.quoteDialogClose?.addEventListener("click", () => els.quoteDialog?.close());
   els.quoteDialog?.addEventListener("click", (e) => {
-    if (e.target === els.quoteDialog) els.quoteDialog.close();
+    if (e.target === els.quoteDialog) els.quoteDialog?.close();
   });
 
   els.quoteDownloadBtn?.addEventListener("click", () => {
     if (!els.quoteCanvas) return;
     const link = document.createElement("a");
-    link.download = `trich-dan-${currentQuoteFormat}-${Date.now()}.png`;
+    link.download = `tram-chu-quote-${currentQuoteTheme}-${currentQuoteFormat}-${Date.now()}.png`;
     link.href = els.quoteCanvas.toDataURL("image/png");
     link.click();
+    showToast("✓ Đã tải ảnh trích dẫn HD về máy!");
   });
 
   els.quoteCopyImgBtn?.addEventListener("click", () => {
     if (!els.quoteCanvas || !navigator.clipboard) return;
     els.quoteCanvas.toBlob((blob) => {
       if (blob) {
-        navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]).catch(() => {});
-        if (els.quoteCopyImgBtn) {
-          els.quoteCopyImgBtn.textContent = "✓ Đã sao chép";
-          setTimeout(() => { if (els.quoteCopyImgBtn) els.quoteCopyImgBtn.textContent = "Sao chép ảnh"; }, 2000);
-        }
+        navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]).then(() => {
+          showToast("✓ Đã sao chép ảnh trích dẫn vào bộ nhớ tạm!");
+          if (els.quoteCopyImgBtn) {
+            els.quoteCopyImgBtn.textContent = "✓ Đã sao chép";
+            setTimeout(() => { if (els.quoteCopyImgBtn) els.quoteCopyImgBtn.textContent = "Sao chép ảnh"; }, 2000);
+          }
+        }).catch(() => {
+          showToast("Trình duyệt không cho phép sao chép ảnh trực tiếp, hãy bấm Tải ảnh về máy!");
+        });
       }
     });
+  });
+
+  els.quoteShareLinkBtn?.addEventListener("click", () => {
+    const bookTitle = state.title || libraryState.detailBook?.title || "Trạm Chữ";
+    const chapterTitle = displayChapterTitle(state.currentIndex);
+    const bookId = state.mode === "cdn" ? bookIdFromState() : state.bookId;
+    const chNum = state.currentIndex + 1;
+    const shareUrl = bookId ? `${window.location.origin}/?book=${encodeURIComponent(bookId)}&ch=${chNum}` : window.location.origin;
+
+    shareContent({
+      title: `${bookTitle} — ${chapterTitle}`,
+      text: `“${activeQuoteText.slice(0, 100)}...” — Đọc trọn bộ "${bookTitle}" trên Trạm Chữ`,
+      url: shareUrl
+    }, showToast);
   });
 }
 
@@ -2257,24 +2290,39 @@ function hideSelectionTooltip() {
   if (els.selectionTooltip) els.selectionTooltip.hidden = true;
 }
 
-function openQuoteCardModal(text) {
-  if (!els.quoteCanvas || !els.quoteDialog) return;
-  const theme = localStorage.getItem("epubTranslator.theme") || "dark";
+async function refreshQuoteCard() {
+  if (!els.quoteCanvas || !activeQuoteText) return;
   const bookTitle = state.title || libraryState.detailBook?.title || "Trạm Chữ";
   const author = libraryState.detailBook?.author || "";
+  const chapterTitle = displayChapterTitle(state.currentIndex);
+  const profile = getReaderProfile();
+  const nickname = getReaderNickname();
+  const bookId = state.mode === "cdn" ? bookIdFromState() : state.bookId;
+  const chNum = state.currentIndex + 1;
+  const shareUrl = bookId ? `${window.location.origin}/?book=${encodeURIComponent(bookId)}&ch=${chNum}` : window.location.origin;
 
-  renderQuoteCard({
+  await renderQuoteCard({
     canvas: els.quoteCanvas,
-    quote: text,
+    quote: activeQuoteText,
     bookTitle,
     author,
-    theme,
-    format: currentQuoteFormat
+    chapterTitle,
+    readerNickname: nickname,
+    readerRankTitle: profile.title,
+    theme: currentQuoteTheme,
+    format: currentQuoteFormat,
+    shareUrl
   });
 
   if (els.quotePreviewImg) {
     els.quotePreviewImg.src = els.quoteCanvas.toDataURL("image/png");
   }
+}
+
+async function openQuoteCardModal(text) {
+  if (!els.quoteCanvas || !els.quoteDialog) return;
+  activeQuoteText = text;
+  await refreshQuoteCard();
   els.quoteDialog.showModal();
 }
 

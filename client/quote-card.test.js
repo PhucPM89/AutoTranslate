@@ -3,7 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { wrapText } = require("./quote-card.js");
+const { wrapText, THEMES, renderQuoteCard } = require("./quote-card.js");
 
 test("wrapText splits words into multiple lines according to measureText width", () => {
   const fakeCtx = {
@@ -23,4 +23,18 @@ test("wrapText handles empty or short text cleanly", () => {
   };
   assert.deepEqual(wrapText(fakeCtx, "", 200), []);
   assert.deepEqual(wrapText(fakeCtx, "Ngắn gọn", 200), ["Ngắn gọn"]);
+});
+
+test("THEMES has nebula, ink, and gold presets", () => {
+  assert.ok(THEMES.nebula);
+  assert.ok(THEMES.ink);
+  assert.ok(THEMES.gold);
+  assert.equal(THEMES.nebula.name, "Tử Kim Huyễn Cảnh");
+  assert.equal(THEMES.ink.name, "Mặc Trúc Giang Hồ");
+  assert.equal(THEMES.gold.name, "Hoàng Kim Bá Khí");
+});
+
+test("renderQuoteCard handles null canvas gracefully", async () => {
+  const res = await renderQuoteCard({ canvas: null });
+  assert.equal(res, null);
 });

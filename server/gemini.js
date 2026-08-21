@@ -14,7 +14,7 @@ function parseApiKeys(keys) {
   if (Array.isArray(keys)) {
     return keys
       .flatMap((k) => parseApiKeys(String(k)))
-      .filter((k) => k.length > 10);
+      .filter((k) => k.length > 0);
   }
   if (typeof keys !== "string") return [];
 
@@ -33,7 +33,7 @@ function parseApiKeys(keys) {
     }
   }
 
-  return result.filter((k) => k.length > 10);
+  return result.filter((k) => k.length > 0);
 }
 
 async function translateText(text, apiKeys, options = {}) {

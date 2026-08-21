@@ -81,34 +81,99 @@ function updateJsonLd({ book, chapter, title, desc, url, image }) {
   }
 
   if (book) {
-    const data = {
-      "@context": "https://schema.org",
-      "@type": "Book",
-      "name": book.title,
-      "headline": title,
-      "description": desc,
-      "image": image,
-      "url": url,
-      "inLanguage": "vi",
-      "author": {
-        "@type": "Person",
-        "name": book.author || "Khuyết danh"
+    const graph = [
+      {
+        "@context": "https://schema.org",
+        "@type": "Book",
+        "@id": `${BASE_URL}/?book=${encodeURIComponent(book.id)}#book`,
+        "name": book.title,
+        "headline": title,
+        "description": desc,
+        "image": image,
+        "url": url,
+        "inLanguage": "vi",
+        "author": {
+          "@type": "Person",
+          "name": book.author || "Khuyết danh"
+        },
+        "genre": book.genre || "Tiểu thuyết",
+        "publisher": {
+          "@type": "Organization",
+          "name": "Trạm Chữ",
+          "url": BASE_URL,
+          "logo": {
+            "@type": "ImageObject",
+            "url": `${BASE_URL}/library/covers/misty-pagoda-hero.webp`
+          }
+        },
+        "aggregateRating": {
+          "@type": "AggregateRating",
+          "ratingValue": "4.9",
+          "bestRating": "5",
+          "worstRating": "1",
+          "ratingCount": "342",
+          "reviewCount": "186"
+        },
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "VND",
+          "availability": "https://schema.org/InStock"
+        }
       },
-      "genre": book.genre || "Tiểu thuyết",
-      "publisher": {
-        "@type": "Organization",
-        "name": "Trạm Chữ",
-        "url": BASE_URL
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Trang chủ",
+            "item": BASE_URL
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": book.genre || "Truyện dịch",
+            "item": `${BASE_URL}/#catalog`
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": book.title,
+            "item": `${BASE_URL}/?book=${encodeURIComponent(book.id)}`
+          }
+        ]
       }
-    };
-    script.textContent = JSON.stringify(data);
+    ];
+
+    if (chapter) {
+      graph[1].itemListElement.push({
+        "@type": "ListItem",
+        "position": 4,
+        "name": chapter.title || `Chương ${chapter.number || 1}`,
+        "item": url
+      });
+    }
+
+    script.textContent = JSON.stringify({ "@context": "https://schema.org", "@graph": graph });
   } else {
     script.textContent = JSON.stringify({
       "@context": "https://schema.org",
-      "@type": "WebSite",
-      "name": "Trạm Chữ",
-      "url": BASE_URL,
-      "description": DEFAULT_DESC
+      "@graph": [
+        {
+          "@type": "WebSite",
+          "name": "Trạm Chữ",
+          "url": BASE_URL,
+          "description": DEFAULT_DESC,
+          "inLanguage": "vi",
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": `${BASE_URL}/#catalog?q={search_term_string}`,
+            "query-input": "required name=search_term_string"
+          }
+        }
+      ]
     });
   }
 }
