@@ -45,6 +45,11 @@ const {
   fetchLeaderboard,
   syncReaderLeaderboard
 } = require("./reader-rank.js");
+const {
+  fetchChapterComments,
+  submitChapterComment,
+  clearCommentsCache
+} = require("./comments.js");
 
 let activeShelfTab = "all";
 let userSync = null;
