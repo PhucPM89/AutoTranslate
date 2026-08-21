@@ -6,9 +6,14 @@
     <meta name="description" content="Thư viện truyện dịch chọn lọc: đọc EPUB và dịch từng chương sang tiếng Việt.">
     <title>Trạm Chữ</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="theme-color" content="#08060f">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Trạm Chữ">
     <link rel="preload" href="/library/covers/misty-pagoda-hero.webp" as="image" fetchpriority="high">
-    <link rel="stylesheet" href="/style.css?v=cf1af43aa3d9">
-    <script src="/app.js?v=ee8b50005999" defer></script>
+    <link rel="stylesheet" href="/style.css?v=2458932dadca">
+    <script src="/app.js?v=4de8fb558616" defer></script>
   </head>
   <body class="dark">
     <section id="libraryView" class="library-view">
@@ -397,6 +402,13 @@
                 <label class="toolbar-group font-family-control"><span class="sr-only">Kiểu chữ</span><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7V4h16v3M9 20h6M12 4v16"></path></svg><select id="readerFontFamily"><option value="sans">Không chân (Sans)</option><option value="serif">Có chân (Serif)</option></select></label>
                 <label class="toolbar-group theme-select-control"><span class="sr-only">Chủ đề đọc</span><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 0 20z"></path></svg><select id="readerThemeSelect"><option value="dark">Tối trầm</option><option value="light">Sáng</option><option value="sepia">Vàng Sepia</option><option value="oled">Đen OLED</option></select></label>
                 <label class="toolbar-group width-control"><span class="sr-only">Độ rộng nội dung</span><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"></path></svg><select id="widthPreset"><option value="comfortable">Tiêu chuẩn</option><option value="compact">Gọn</option><option value="wide">Rộng</option></select></label>
+                <div class="toolbar-group auto-scroll-group">
+                  <button id="autoScrollBtn" class="tool-button auto-scroll-button" type="button" aria-label="Cuộn tự động" title="Bật/Tắt cuộn rảnh tay">
+                    <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    <span id="autoScrollLabel">Cuộn</span>
+                  </button>
+                  <label class="auto-scroll-speed-wrap"><span class="sr-only">Tốc độ cuộn</span><select id="autoScrollSpeed" class="auto-scroll-speed-select" title="Tốc độ cuộn"><option value="1">1x</option><option value="2">2x</option><option value="3">3x</option></select></label>
+                </div>
                 <div class="toolbar-group reader-bar-nav"><button id="prevChapter" class="tool-button" type="button" disabled aria-label="Chương trước" title="Chương trước"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"></path></svg></button><button id="nextChapter" class="tool-button" type="button" disabled aria-label="Chương sau" title="Chương sau"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg></button></div>
                 <button id="translateButton" class="primary-action" type="button" disabled><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m5 3 14 9-14 9V3Z"></path></svg>Dịch chương</button>
                 <button id="retranslateButton" class="secondary-action" type="button" hidden><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v6h-6M4 18v-6h6"></path><path d="M18.49 9A7 7 0 0 0 5.64 6.64L4 9M20 15l-1.64 2.36A7 7 0 0 1 5.51 15"></path></svg>Dịch lại</button>
@@ -420,5 +432,45 @@
       </main>
     </div>
 
+    <!-- Floating selection tooltip -->
+    <div id="selectionTooltip" class="selection-tooltip" hidden>
+      <button id="quoteCopyBtn" class="selection-btn" type="button" title="Sao chép văn bản">
+        <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+        Sao chép
+      </button>
+      <button id="quoteCardBtn" class="selection-btn primary" type="button" title="Tạo ảnh trích dẫn">
+        <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+        Tạo ảnh trích dẫn
+      </button>
+    </div>
+
+    <!-- Quote Card Modal -->
+    <dialog id="quoteDialog" class="quote-dialog" aria-labelledby="quoteDialogTitle">
+      <div class="quote-dialog-header">
+        <div>
+          <p class="eyebrow">Chia sẻ đoạn văn</p>
+          <h2 id="quoteDialogTitle">Ảnh trích dẫn</h2>
+        </div>
+        <button id="quoteDialogClose" class="icon-button" type="button" aria-label="Đóng" title="Đóng">
+          <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+        </button>
+      </div>
+      <div class="quote-dialog-body">
+        <canvas id="quoteCanvas" hidden></canvas>
+        <div class="quote-preview-wrap">
+          <img id="quotePreviewImg" class="quote-preview-img" alt="Ảnh trích dẫn truyện">
+        </div>
+        <div class="quote-dialog-actions">
+          <button id="quoteDownloadBtn" class="primary-action" type="button">
+            <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"></path></svg>
+            Tải ảnh về máy
+          </button>
+          <button id="quoteCopyImgBtn" class="secondary-action" type="button">
+            <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg>
+            Sao chép ảnh
+          </button>
+        </div>
+      </div>
+    </dialog>
   </body>
 </html>

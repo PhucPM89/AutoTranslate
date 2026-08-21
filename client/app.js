@@ -5,9 +5,13 @@
 // one localStorage read.
 const { initAuth } = require("./auth.js");
 const { createUserSync } = require("./user-sync.js");
+const { renderQuoteCard } = require("./quote-card.js");
 
 let activeShelfTab = "all";
 let userSync = null;
+let autoScrollRaf = null;
+let isAutoScrolling = false;
+let selectedQuoteText = "";
 
 const state = {
   // "epub" is the legacy path (download the whole book, parse with JSZip).
@@ -151,6 +155,18 @@ const els = {
   readerThemeToggle: document.getElementById("readerThemeToggle"),
   readerThemeSelect: document.getElementById("readerThemeSelect"),
   readerFontFamily: document.getElementById("readerFontFamily"),
+  autoScrollBtn: document.getElementById("autoScrollBtn"),
+  autoScrollLabel: document.getElementById("autoScrollLabel"),
+  autoScrollSpeed: document.getElementById("autoScrollSpeed"),
+  selectionTooltip: document.getElementById("selectionTooltip"),
+  quoteCopyBtn: document.getElementById("quoteCopyBtn"),
+  quoteCardBtn: document.getElementById("quoteCardBtn"),
+  quoteDialog: document.getElementById("quoteDialog"),
+  quoteDialogClose: document.getElementById("quoteDialogClose"),
+  quoteCanvas: document.getElementById("quoteCanvas"),
+  quotePreviewImg: document.getElementById("quotePreviewImg"),
+  quoteDownloadBtn: document.getElementById("quoteDownloadBtn"),
+  quoteCopyImgBtn: document.getElementById("quoteCopyImgBtn"),
   readerImportButton: document.getElementById("readerImportButton"),
   fileInput: document.getElementById("fileInput"),
   bookTitle: document.getElementById("bookTitle"),
@@ -186,6 +202,8 @@ const parser = new DOMParser();
 
 initPreferences();
 bindEvents();
+initQuoteCardAndSelection();
+registerServiceWorker();
 // Before initializeLibrary, because a confirmation link comes back with tokens in
 // the URL fragment and they have to be consumed and wiped before anything else
 // reads the hash.
@@ -238,6 +256,11 @@ function bindEvents() {
   });
   els.readerThemeSelect?.addEventListener("change", (event) => applyTheme(event.target.value));
   els.readerFontFamily?.addEventListener("change", (event) => applyFont(event.target.value));
+  els.autoScrollBtn?.addEventListener("click", toggleAutoScroll);
+  window.addEventListener("wheel", () => { if (isAutoScrolling) stopAutoScroll(); }, { passive: true });
+  window.addEventListener("touchstart", (e) => {
+    if (isAutoScrolling && !e.target.closest("#autoScrollBtn")) stopAutoScroll();
+  }, { passive: true });
   els.adminOpen?.addEventListener("click", bootstrapAdminPanel);
   els.featuredRead.addEventListener("click", openFeaturedBook);
   els.supportQrOpen.addEventListener("click", () => els.supportDialog.showModal());
@@ -1448,6 +1471,187 @@ function goToChapter(index) {
   saveProgressSoon();
   if (state.mode === "cdn") loadCdnChapter(state.currentIndex);
   else loadCachedTranslation();
+  setTimeout(() => preloadNextChapter(state.currentIndex + 1), 600);
+}
+
+function preloadNextChapter(nextIndex) {
+  if (!state.bookId || nextIndex >= state.chapters.length) return;
+  if (typeof state.translations[nextIndex] === "string") return;
+
+  if (state.mode === "cdn" && state.cdnTemplate) {
+    const url = state.cdnTemplate.replace("{index}", String(nextIndex));
+    fetch(url)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.translated) {
+          state.translations[nextIndex] = data.translated;
+          putTranslation(state.bookId, nextIndex, data.translated).catch(() => {});
+        }
+      })
+      .catch(() => {});
+  } else {
+    readTranslation(state.bookId, nextIndex)
+      .then((cached) => {
+        if (cached) state.translations[nextIndex] = cached;
+      })
+      .catch(() => {});
+  }
+}
+
+function toggleAutoScroll() {
+  if (isAutoScrolling) stopAutoScroll();
+  else startAutoScroll();
+}
+
+function startAutoScroll() {
+  if (isAutoScrolling) return;
+  isAutoScrolling = true;
+  els.autoScrollBtn?.classList.add("is-active");
+  if (els.autoScrollLabel) els.autoScrollLabel.textContent = "Dừng";
+
+  let lastTimestamp = performance.now();
+
+  function scrollStep(now) {
+    if (!isAutoScrolling) return;
+    const delta = now - lastTimestamp;
+    lastTimestamp = now;
+
+    const speedMultiplier = Number(els.autoScrollSpeed?.value || 1);
+    const pixelsPerSecond = 40 * speedMultiplier;
+    const scrollAmount = (pixelsPerSecond * delta) / 1000;
+
+    window.scrollBy({ top: scrollAmount, behavior: "auto" });
+
+    // When reaching the bottom of the page, smoothly transition to next chapter
+    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 30) {
+      if (state.currentIndex < state.chapters.length - 1) {
+        goToChapter(state.currentIndex + 1);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        stopAutoScroll();
+        return;
+      }
+    }
+
+    autoScrollRaf = requestAnimationFrame(scrollStep);
+  }
+
+  autoScrollRaf = requestAnimationFrame(scrollStep);
+}
+
+function stopAutoScroll() {
+  isAutoScrolling = false;
+  if (autoScrollRaf) {
+    cancelAnimationFrame(autoScrollRaf);
+    autoScrollRaf = null;
+  }
+  els.autoScrollBtn?.classList.remove("is-active");
+  if (els.autoScrollLabel) els.autoScrollLabel.textContent = "Cuộn";
+}
+
+function initQuoteCardAndSelection() {
+  document.addEventListener("selectionchange", debounce(handleSelectionChange, 120));
+
+  els.quoteCopyBtn?.addEventListener("click", () => {
+    if (!selectedQuoteText) return;
+    navigator.clipboard?.writeText(selectedQuoteText);
+    hideSelectionTooltip();
+  });
+
+  els.quoteCardBtn?.addEventListener("click", () => {
+    if (!selectedQuoteText) return;
+    openQuoteCardModal(selectedQuoteText);
+    hideSelectionTooltip();
+  });
+
+  els.quoteDialogClose?.addEventListener("click", () => els.quoteDialog?.close());
+  els.quoteDialog?.addEventListener("click", (e) => {
+    if (e.target === els.quoteDialog) els.quoteDialog.close();
+  });
+
+  els.quoteDownloadBtn?.addEventListener("click", () => {
+    if (!els.quoteCanvas) return;
+    const link = document.createElement("a");
+    link.download = `trich-dan-${Date.now()}.png`;
+    link.href = els.quoteCanvas.toDataURL("image/png");
+    link.click();
+  });
+
+  els.quoteCopyImgBtn?.addEventListener("click", () => {
+    if (!els.quoteCanvas || !navigator.clipboard) return;
+    els.quoteCanvas.toBlob((blob) => {
+      if (blob) {
+        navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]).catch(() => {});
+        if (els.quoteCopyImgBtn) {
+          els.quoteCopyImgBtn.textContent = "✓ Đã sao chép";
+          setTimeout(() => { if (els.quoteCopyImgBtn) els.quoteCopyImgBtn.textContent = "Sao chép ảnh"; }, 2000);
+        }
+      }
+    });
+  });
+}
+
+function handleSelectionChange() {
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed) {
+    hideSelectionTooltip();
+    return;
+  }
+
+  const text = selection.toString().trim();
+  if (text.length < 5 || text.length > 500) {
+    hideSelectionTooltip();
+    return;
+  }
+
+  const range = selection.getRangeAt(0);
+  const container = range.commonAncestorContainer;
+  const isInsideReader = els.translationText?.contains(container) || els.sourceText?.contains(container);
+
+  if (!isInsideReader) {
+    hideSelectionTooltip();
+    return;
+  }
+
+  selectedQuoteText = text;
+  const rect = range.getBoundingClientRect();
+  if (els.selectionTooltip) {
+    els.selectionTooltip.style.top = `${rect.top + window.scrollY}px`;
+    els.selectionTooltip.style.left = `${rect.left + rect.width / 2 + window.scrollX}px`;
+    els.selectionTooltip.hidden = false;
+  }
+}
+
+function hideSelectionTooltip() {
+  if (els.selectionTooltip) els.selectionTooltip.hidden = true;
+}
+
+function openQuoteCardModal(text) {
+  if (!els.quoteCanvas || !els.quoteDialog) return;
+  const theme = localStorage.getItem("epubTranslator.theme") || "dark";
+  const bookTitle = state.title || libraryState.detailBook?.title || "Trạm Chữ";
+  const author = libraryState.detailBook?.author || "";
+
+  renderQuoteCard({
+    canvas: els.quoteCanvas,
+    quote: text,
+    bookTitle,
+    author,
+    theme
+  });
+
+  if (els.quotePreviewImg) {
+    els.quotePreviewImg.src = els.quoteCanvas.toDataURL("image/png");
+  }
+  els.quoteDialog.showModal();
+}
+
+function registerServiceWorker() {
+  if ("serviceWorker" in navigator && typeof window !== "undefined" && window.location.protocol.startsWith("http")) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    });
+  }
 }
 
 // Translations live in their own object store, so switching chapters reads and

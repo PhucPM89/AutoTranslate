@@ -1,0 +1,19 @@
+{
+  "name": "Trạm Chữ - Đọc truyện dịch AI",
+  "short_name": "Trạm Chữ",
+  "description": "Kho truyện dịch AI chất lượng cao, tối ưu đọc mượt mà trên mọi thiết bị.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#08060f",
+  "theme_color": "#08060f",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "64x64 128x128 256x256 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -2701,6 +2701,138 @@ body:not(.dark) .theme-moon {
   padding: clamp(1.25rem, 2.5vw, 2.25rem) 0 1rem;
 }
 
+/* Auto-scroll */
+.auto-scroll-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.auto-scroll-button.is-active {
+  background: var(--accent);
+  color: #ffffff;
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.4);
+}
+
+.auto-scroll-button.is-active svg {
+  animation: pulse-icon 1.2s infinite ease-in-out;
+}
+
+@keyframes pulse-icon {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.85; }
+}
+
+.auto-scroll-speed-select {
+  min-height: 32px;
+  padding: 0 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* Selection Tooltip */
+.selection-tooltip {
+  position: absolute;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  transform: translate(-50%, -100%) translateY(-10px);
+  pointer-events: auto;
+}
+
+.selection-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 30px;
+  padding: 0.25rem 0.65rem;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.selection-btn:hover {
+  background: var(--surface-hover);
+}
+
+.selection-btn.primary {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.selection-btn.primary:hover {
+  background: var(--accent-strong);
+}
+
+/* Quote Dialog */
+.quote-dialog {
+  width: min(92vw, 560px);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-lg);
+  margin: auto;
+}
+
+.quote-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+}
+
+.quote-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.quote-preview-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  margin-bottom: 1.25rem;
+}
+
+.quote-preview-img {
+  max-width: 100%;
+  max-height: 440px;
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.quote-dialog-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
 /* The sheet used to be a bordered card with a 470px floor, so an untranslated
    chapter showed as a huge empty box. It is now the page itself: no frame, no
    minimum height, and it collapses to just the heading when there is nothing yet. */

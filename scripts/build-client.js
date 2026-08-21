@@ -51,6 +51,7 @@ const appUrl = bundle({
 });
 
 copyFonts();
+copyPwaFiles();
 
 const styleUrl = minifyCss({
   entry: path.join(CLIENT_DIR, "style.css"),
@@ -123,6 +124,18 @@ function copyFonts() {
   // Only the subsets a page actually uses are downloaded, so the total on disk is
   // not what a reader pays.
   console.log(`/fonts ${files.length} file, ${formatKb(bytes)} trên đĩa`);
+}
+
+function copyPwaFiles() {
+  const pwaFiles = ["manifest.webmanifest", "sw.js"];
+  for (const name of pwaFiles) {
+    const src = path.join(CLIENT_DIR, name);
+    const dest = path.join(PUBLIC_DIR, name);
+    if (fs.existsSync(src)) {
+      fs.copyFileSync(src, dest);
+      console.log(`/${name} ${formatKb(fs.statSync(dest).size)}`);
+    }
+  }
 }
 
 // Hashed query strings let every static asset ship with a one-year immutable
