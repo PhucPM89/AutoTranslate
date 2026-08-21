@@ -38,14 +38,13 @@ class TTSEngine {
   initVoices() {
     if (!this.synth) return;
     const load = () => {
-      this.voices = this.synth.getVoices();
-      const viVoice = this.voices.find(
-        (v) => (v.lang && v.lang.toLowerCase().includes("vi")) || (v.name && v.name.toLowerCase().includes("vietnam"))
-      );
-      if (viVoice) {
-        this.selectedVoice = viVoice;
-      } else if (this.voices.length > 0) {
-        this.selectedVoice = this.voices[0];
+      this.voices = this.synth.getVoices() || [];
+      const viVoices = this.getVietnameseVoices();
+      if (viVoices.length > 0) {
+        this.selectedVoice = viVoices[0];
+      } else {
+        // Do not assign non-Vietnamese voice; leave null so utterance.lang = "vi-VN" works
+        this.selectedVoice = null;
       }
     };
 
@@ -55,11 +54,16 @@ class TTSEngine {
     }
   }
 
+  isVietnameseVoice(v) {
+    if (!v) return false;
+    const lang = (v.lang || "").toLowerCase().replace("_", "-");
+    const name = (v.name || "").toLowerCase();
+    return lang.startsWith("vi") || name.includes("vietnam") || name.includes("tiếng việt") || name.includes("tieng viet");
+  }
+
   getVietnameseVoices() {
-    if (!this.voices.length && this.synth) this.voices = this.synth.getVoices();
-    return this.voices.filter(
-      (v) => (v.lang && v.lang.toLowerCase().includes("vi")) || (v.name && v.name.toLowerCase().includes("vietnam"))
-    );
+    if (!this.voices.length && this.synth) this.voices = this.synth.getVoices() || [];
+    return this.voices.filter((v) => this.isVietnameseVoice(v));
   }
 
   setVoice(voiceURI) {
@@ -159,11 +163,21 @@ class TTSEngine {
     const textToSpeak = this.paragraphs[index];
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
 
-    if (this.selectedVoice) {
+    // Strictly enforce Vietnamese
+    utterance.lang = "vi-VN";
+
+    if (this.selectedVoice && this.isVietnameseVoice(this.selectedVoice)) {
       utterance.voice = this.selectedVoice;
       utterance.lang = this.selectedVoice.lang || "vi-VN";
     } else {
-      utterance.lang = "vi-VN";
+      const viVoices = this.getVietnameseVoices();
+      if (viVoices.length > 0) {
+        this.selectedVoice = viVoices[0];
+        utterance.voice = viVoices[0];
+        utterance.lang = viVoices[0].lang || "vi-VN";
+      } else {
+        utterance.voice = null;
+      }
     }
 
     utterance.rate = this.speed;

@@ -1797,9 +1797,9 @@ function initTTSController() {
   };
 
   function startTTSFromCurrent() {
-    const text = els.translationText.textContent;
-    if (!text || els.translationText.classList.contains("empty")) {
-      showToast("Chưa có bản dịch để đọc");
+    const text = state.translations[state.currentIndex] || els.translationText.textContent;
+    if (!text || els.translationText.classList.contains("empty") || text.includes("Chưa có bản dịch") || text.includes("Đang tải")) {
+      showToast("Chương này chưa có bản dịch tiếng Việt để đọc");
       return;
     }
 

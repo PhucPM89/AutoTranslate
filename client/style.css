@@ -4964,12 +4964,86 @@ body.zen-mode .document-paper {
   border-radius: 6px;
   padding: 0.15rem 0.35rem;
   margin: -0.15rem -0.35rem;
+  cursor: pointer;
+}
+
+.tts-paragraph-highlight:hover {
+  background: rgba(168, 85, 247, 0.08);
 }
 
 .tts-paragraph-highlight.tts-active {
-  background: rgba(168, 85, 247, 0.15);
-  box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.35);
+  background: rgba(168, 85, 247, 0.18);
+  box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.45);
   color: #fff;
+}
+
+/* Mobile Responsive Adjustments for TTS and Reader */
+@media (max-width: 640px) {
+  .tts-audio-bar {
+    bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+    left: 0.5rem;
+    right: 0.5rem;
+    transform: none;
+    max-width: none;
+    padding: 0.45rem 0.65rem;
+    gap: 0.35rem;
+    justify-content: space-between;
+    border-radius: 16px;
+  }
+
+  .tts-soundwave {
+    display: none;
+  }
+
+  .tts-info {
+    min-width: 0;
+    max-width: 70px;
+  }
+
+  .tts-badge {
+    font-size: 0.58rem;
+  }
+
+  .tts-status {
+    font-size: 0.7rem;
+  }
+
+  .tts-btn {
+    width: 28px;
+    height: 28px;
+  }
+
+  .tts-btn-primary {
+    width: 32px;
+    height: 32px;
+  }
+
+  .tts-select {
+    padding: 0.15rem 0.35rem;
+    font-size: 0.72rem;
+  }
+
+  .tts-timer-btn {
+    padding: 0 0.4rem;
+    font-size: 0.7rem;
+  }
+
+  .tts-timer-btn span {
+    max-width: 48px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .reader-bar-tools {
+    gap: 0.35rem;
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .tts-zen-group {
+    flex-wrap: nowrap;
+  }
 }
 
 
