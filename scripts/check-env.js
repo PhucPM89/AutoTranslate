@@ -23,6 +23,10 @@ const PROFILES = {
       "R2_ARCHIVE_BUCKET",
       "SUPABASE_URL",
       "SUPABASE_SERVICE_ROLE_KEY",
+      "GROQ_API_KEY",
+      "GROQ_API_KEYS",
+      "GROQ_MODEL",
+      "GROQ_FALLBACK_MODELS",
       "GEMINI_API_KEY",
       "GEMINI_MODEL",
       "GEMINI_FALLBACK_MODELS",
@@ -38,8 +42,21 @@ const PROFILES = {
       "R2_BUCKET",
       "R2_PUBLIC_BASE_URL"
     ],
-    anyOf: [["GEMINI_API_KEY", "GEMINI_API_KEYS"]],
-    optional: ["GEMINI_API_KEY", "GEMINI_API_KEYS", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "GEMINI_MODEL", "GEMINI_CHUNK_SIZE", "GEMINI_FALLBACK_MODELS", "TRANSLATE_SPACING_MS"]
+    anyOf: [["GROQ_API_KEY", "GROQ_API_KEYS", "GEMINI_API_KEY", "GEMINI_API_KEYS"]],
+    optional: [
+      "GROQ_API_KEY",
+      "GROQ_API_KEYS",
+      "GROQ_MODEL",
+      "GROQ_FALLBACK_MODELS",
+      "GEMINI_API_KEY",
+      "GEMINI_API_KEYS",
+      "SUPABASE_URL",
+      "SUPABASE_SERVICE_ROLE_KEY",
+      "GEMINI_MODEL",
+      "GEMINI_CHUNK_SIZE",
+      "GEMINI_FALLBACK_MODELS",
+      "TRANSLATE_SPACING_MS"
+    ]
   },
   keepalive: {
     required: ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"],
@@ -58,14 +75,16 @@ if (!profile) {
 const missing = [];
 console.log(`Kiểm tra biến môi trường cho profile "${profileName}" (chỉ báo có/không, không in giá trị):`);
 
-for (const name of profile.required) {
-  const value = process.env[name];
-  const ok = typeof value === "string" && value.trim().length > 0;
-  console.log(`  ${ok ? "OK     " : "MISSING"}  ${name}${ok ? `  (${value.trim().length} ký tự)` : ""}`);
-  if (!ok) missing.push(name);
+if (profile.required) {
+  for (const name of profile.required) {
+    const value = process.env[name];
+    const ok = typeof value === "string" && value.trim().length > 0;
+    console.log(`  ${ok ? "OK     " : "MISSING"}  ${name}${ok ? `  (${value.trim().length} ký tự)` : ""}`);
+    if (!ok) missing.push(name);
+  }
 }
 
-if (Array.isArray(profile.anyOf)) {
+if (profile.anyOf) {
   for (const group of profile.anyOf) {
     const present = group.filter((name) => typeof process.env[name] === "string" && process.env[name].trim().length > 0);
     const ok = present.length > 0;
@@ -80,10 +99,10 @@ for (const name of profile.optional) {
   console.log(`  ${ok ? "OK     " : "-      "}  ${name} (tùy chọn)${ok ? `  (${value.trim().length} ký tự)` : ""}`);
 }
 
-const rawKeys = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY;
+const rawKeys = process.env.GROQ_API_KEYS || process.env.GROQ_API_KEY || process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY;
 if (rawKeys) {
   const parsed = String(rawKeys).split(/[\r\n,;]+/).map((k) => k.trim()).filter((k) => k.length > 5);
-  console.log(`  INFO     Key pool: Tìm thấy ${parsed.length} Gemini API Key hợp lệ sẵn sàng sử dụng.`);
+  console.log(`  INFO     Key pool: Tìm thấy ${parsed.length} API Key hợp lệ sẵn sàng sử dụng.`);
 }
 
 // A public base URL that is not a URL is a configuration error worth catching

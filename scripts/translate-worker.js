@@ -67,8 +67,8 @@ async function writeTranslateStatus(storage, status) {
 }
 
 async function main() {
-  const apiKey = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("Thiếu GEMINI_API_KEY.");
+  const apiKey = process.env.GROQ_API_KEYS || process.env.GROQ_API_KEY || process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("Thiếu GROQ_API_KEY / GEMINI_API_KEY.");
 
   const storage = createStorage();
   const db = createSupabase();

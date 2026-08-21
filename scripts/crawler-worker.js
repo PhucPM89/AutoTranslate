@@ -707,13 +707,11 @@ async function downloadAndPublish(candidate, status, wordCountBucket = -1) {
 // Title, author and description are the only things translated here; chapter
 // bodies are the translation worker's job.
 async function translateBookMetadata(source) {
-  if (!process.env.GEMINI_API_KEY) {
-    // There is no server to fall back to any more, and the workflow always
-    // supplies this key, so a missing one is a configuration error worth failing
-    // on rather than working around.
-    throw new Error("Không dịch được metadata: thiếu GEMINI_API_KEY.");
+  const apiKey = process.env.GROQ_API_KEY || process.env.GROQ_API_KEYS || process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYS;
+  if (!apiKey) {
+    throw new Error("Không dịch được metadata: thiếu GROQ_API_KEY / GEMINI_API_KEY.");
   }
-  return translateMetadata(source, process.env.GEMINI_API_KEY);
+  return translateMetadata(source, apiKey);
 }
 
 async function waitForJob(jobId, status) {

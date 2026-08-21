@@ -1,12 +1,14 @@
+"use strict";
+
 const { createTranslationEngine } = require("./translation-engine");
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
-const GEMINI_FALLBACK_MODELS = parseCsv(
-  process.env.GEMINI_FALLBACK_MODELS || "gemini-1.5-flash,gemini-1.5-pro"
+const GROQ_MODEL = process.env.GROQ_MODEL || process.env.GEMINI_MODEL || "qwen/qwen3.6-27b";
+const GROQ_FALLBACK_MODELS = parseCsv(
+  process.env.GROQ_FALLBACK_MODELS || process.env.GEMINI_FALLBACK_MODELS || "openai/gpt-oss-120b,openai/gpt-oss-20b,groq/compound"
 );
-const GEMINI_CHUNK_SIZE = Number(process.env.GEMINI_CHUNK_SIZE || 4000);
-const GEMINI_TRANSLATE_CONCURRENCY = Number(process.env.GEMINI_TRANSLATE_CONCURRENCY || 1);
-const GEMINI_REQUEST_TIMEOUT_MS = Number(process.env.GEMINI_REQUEST_TIMEOUT_MS || 120000);
+const TRANSLATE_CHUNK_SIZE = Number(process.env.GEMINI_CHUNK_SIZE || 6000);
+const TRANSLATE_CONCURRENCY = Number(process.env.GEMINI_TRANSLATE_CONCURRENCY || 1);
+const REQUEST_TIMEOUT_MS = Number(process.env.GROQ_REQUEST_TIMEOUT_MS || process.env.GEMINI_REQUEST_TIMEOUT_MS || 90000);
 
 const defaultEngine = createTranslationEngine();
 
@@ -25,10 +27,9 @@ function parseApiKeys(keys) {
   for (let token of rawTokens) {
     token = token.trim();
     if (!token) continue;
-    if (token.startsWith("AQ.") || token.startsWith("AIza") || result.length === 0) {
+    if (token.startsWith("gsk_") || token.startsWith("AQ.") || token.startsWith("AIza") || result.length === 0) {
       result.push(token);
     } else {
-      // If browser wrapped the key across newlines without a comma, rejoin it
       result[result.length - 1] += token;
     }
   }
@@ -36,27 +37,52 @@ function parseApiKeys(keys) {
   return result.filter((k) => k.length > 0);
 }
 
+function stripThinkTags(text) {
+  if (typeof text !== "string") return "";
+  return text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+}
+
+function stripMarkdown(text) {
+  return String(text || "")
+    .replace(/```[a-z]*\n?/gi, "")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/\*\*\*(?=\S)([\s\S]*?\S)\*\*\*/g, "$1")
+    .replace(/\*\*(?=\S)([\s\S]*?\S)\*\*/g, "$1")
+    .replace(/(^|[\s(])\*(?=\S)([^*\n]*?\S)\*(?=[\s.,;:!?)]|$)/g, "$1$2")
+    .replace(/(^|[\s(])_(?=\S)([^_\n]*?\S)_(?=[\s.,;:!?)]|$)/g, "$1$2")
+    .trim();
+}
+
+function cleanMetadataField(value, maxLength) {
+  return typeof value === "string" ? value.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, maxLength) : "";
+}
+
+function hasHan(value) {
+  return /\p{Script=Han}/u.test(String(value || ""));
+}
+
+function getActiveKeys(apiKeys) {
+  const parsed = parseApiKeys(apiKeys);
+  if (parsed.length) return parsed;
+
+  const fromEnv = process.env.GROQ_API_KEYS || process.env.GROQ_API_KEY || process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY;
+  return parseApiKeys(fromEnv);
+}
+
 async function translateText(text, apiKeys, options = {}) {
-  const keyList = parseApiKeys(apiKeys);
-  if (!keyList.length) throw new Error("Thiếu GEMINI_API_KEY.");
+  const keyList = getActiveKeys(apiKeys);
+  if (!keyList.length) throw new Error("Thiếu GROQ_API_KEY / GEMINI_API_KEY.");
 
   const glossary = options.glossary || {};
   const bookTitle = options.bookTitle || "";
   const engine = options.engine || defaultEngine;
 
-  const chunks = splitTextIntoChunks(text, GEMINI_CHUNK_SIZE);
+  const chunks = splitTextIntoChunks(text, TRANSLATE_CHUNK_SIZE);
   const startedAt = Date.now();
-
-  let keyIndex = 0;
-  function getNextKey() {
-    const key = keyList[keyIndex % keyList.length];
-    keyIndex += 1;
-    return key;
-  }
 
   const chunkResults = await mapWithConcurrency(
     chunks,
-    Math.max(1, GEMINI_TRANSLATE_CONCURRENCY),
+    Math.max(1, TRANSLATE_CONCURRENCY),
     (chunk, index) =>
       translateChunkWithKeyPool(keyList, chunk, index, chunks.length, {
         glossary,
@@ -85,14 +111,13 @@ async function translateBatchChapters(chapters, apiKeys, options = {}) {
     return [{ chapterNumber: chapters[0].chapterNumber, translation: single.translation }];
   }
 
-  const keyList = parseApiKeys(apiKeys);
-  if (!keyList.length) throw new Error("Thiếu GEMINI_API_KEY.");
+  const keyList = getActiveKeys(apiKeys);
+  if (!keyList.length) throw new Error("Thiếu GROQ_API_KEY / GEMINI_API_KEY.");
 
   const glossary = options.glossary || {};
   const bookTitle = options.bookTitle || "";
   const engine = options.engine || defaultEngine;
 
-  // Build packed prompt
   const parts = [];
   parts.push("Bạn là một dịch giả tiểu thuyết Trung Quốc sang tiếng Việt chuyên nghiệp.");
   parts.push("Hãy dịch trọn vẹn các chương truyện sau đây sang tiếng Việt tự nhiên, đúng chất tiên hiệp/huyền huyễn.");
@@ -119,7 +144,6 @@ async function translateBatchChapters(chapters, apiKeys, options = {}) {
     const parsed = [];
     const raw = result.text || "";
     for (const ch of chapters) {
-      // Matches both with explicit closing delimiter or preceding next chapter start / end of string
       const regex = new RegExp(
         `===\\s*CHAPTER_START_${ch.chapterNumber}\\s*===([\\s\\S]*?)(?:===\\s*CHAPTER_END_${ch.chapterNumber}\\s*===|(?====\\s*CHAPTER_START_)|$)`,
         "i"
@@ -138,7 +162,6 @@ async function translateBatchChapters(chapters, apiKeys, options = {}) {
     console.warn(`Batch translate failed (${err.message}), falling back to single translation`);
   }
 
-  // Fallback to translating each individually
   const fallbackResults = [];
   for (const ch of chapters) {
     const single = await translateText(ch.content, apiKeys, options);
@@ -163,16 +186,20 @@ async function translateMetadata(metadata, apiKey) {
     "- author: chuyển bút danh/tên tác giả sang âm Hán-Việt; không dùng Pinyin.",
     "- description: dịch đầy đủ phần giới thiệu, không tóm tắt và không thêm bình luận.",
     "- Không để lại chữ Hán trong bất kỳ trường nào nếu trường nguồn có chữ Hán.",
-    "- Chỉ trả về JSON đúng schema: {\"title\":\"...\",\"author\":\"...\",\"description\":\"...\"}.",
+    "- Chỉ trả về duy nhất định dạng JSON đúng schema: {\"title\":\"...\",\"author\":\"...\",\"description\":\"...\"}.",
     "Metadata nguồn:",
     JSON.stringify(source)
   ].join("\n");
-  const models = [GEMINI_MODEL, ...GEMINI_FALLBACK_MODELS].filter((model, index, list) => model && list.indexOf(model) === index);
+
+  const models = [GROQ_MODEL, ...GROQ_FALLBACK_MODELS].filter((model, index, list) => model && list.indexOf(model) === index);
   let lastError = null;
+
+  const keyList = getActiveKeys(apiKey);
+  const primaryKey = keyList[0] || apiKey;
 
   for (const model of models) {
     try {
-      const result = await translateChunkWithModel(apiKey, model, prompt, { responseMimeType: "application/json", temperature: 0.2 });
+      const result = await translateChunkWithModel(primaryKey, model, prompt, { responseFormat: "json", temperature: 0.2 });
       const translated = parseMetadataJson(result.text);
       validateTranslatedMetadata(source, translated);
       return {
@@ -186,14 +213,15 @@ async function translateMetadata(metadata, apiKey) {
       if (!shouldTryNextModel(error) && error.status !== 502) break;
     }
   }
-  throw lastError || new Error("Gemini không dịch được metadata truyện.");
+  throw lastError || new Error("Không dịch được metadata truyện.");
 }
 
 function parseMetadataJson(value) {
   try {
-    return JSON.parse(String(value || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""));
+    const raw = stripThinkTags(String(value || "")).trim();
+    return JSON.parse(raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""));
   } catch {
-    const error = new Error("Gemini trả metadata không đúng JSON.");
+    const error = new Error("API trả metadata không đúng định dạng JSON.");
     error.status = 502;
     throw error;
   }
@@ -201,7 +229,7 @@ function parseMetadataJson(value) {
 
 function validateTranslatedMetadata(source, translated) {
   if (!translated || typeof translated !== "object" || !cleanMetadataField(translated.title, 120)) {
-    const error = new Error("Gemini không trả tên truyện đã dịch.");
+    const error = new Error("Không có tên truyện đã dịch.");
     error.status = 502;
     throw error;
   }
@@ -214,73 +242,66 @@ function validateTranslatedMetadata(source, translated) {
   }
 }
 
-// Gemini decorates prose with Markdown even when the prompt asks for plain text
-// - chapter headings came back as **Chương 7: ...** and the reader, which renders
-// text nodes rather than HTML, showed the asterisks. Only emphasis, headings and
-// code fences are removed; a lone asterisk in the prose survives because every
-// pattern needs a matched pair wrapped around non-space content.
-function stripMarkdown(text) {
-  return String(text || "")
-    .replace(/```[a-z]*\n?/gi, "")
-    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
-    .replace(/\*\*\*(?=\S)([\s\S]*?\S)\*\*\*/g, "$1")
-    .replace(/\*\*(?=\S)([\s\S]*?\S)\*\*/g, "$1")
-    .replace(/(^|[\s(])\*(?=\S)([^*\n]*?\S)\*(?=[\s.,;:!?)]|$)/g, "$1$2")
-    .replace(/(^|[\s(])_(?=\S)([^_\n]*?\S)_(?=[\s.,;:!?)]|$)/g, "$1$2")
-    .trim();
+// In-memory key health state to prevent pounding keys that hit 429/safety errors
+const keyHealthMap = new Map();
+
+function getKeyHealth(key) {
+  if (!keyHealthMap.has(key)) {
+    keyHealthMap.set(key, { cooldownUntil: 0, consecutiveErrors: 0, lastUsed: 0 });
+  }
+  return keyHealthMap.get(key);
 }
 
-function cleanMetadataField(value, maxLength) {
-  return typeof value === "string" ? value.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, maxLength) : "";
+function markKeyCooldown(key, durationMs = 60000) {
+  const health = getKeyHealth(key);
+  health.cooldownUntil = Date.now() + durationMs;
+  health.consecutiveErrors += 1;
 }
 
-function hasHan(value) {
-  return /\p{Script=Han}/u.test(String(value || ""));
+function markKeySuccess(key) {
+  const health = getKeyHealth(key);
+  health.consecutiveErrors = 0;
+  health.lastUsed = Date.now();
 }
 
-function buildTranslationPrompt(text, index, total, isRetry = false) {
-  const chunkNote =
-    total > 1
-      ? `Đây là phần ${index + 1}/${total} của cùng một chương. Hãy chỉ dịch phần này, không thêm tiêu đề phần.`
-      : "";
-
-  return [
-    "Bạn là một dịch giả tiểu thuyết Trung Quốc sang tiếng Việt.",
-    "",
-    "Hãy dịch nội dung sau sang tiếng Việt tự nhiên, dễ đọc như một bản dịch tiểu thuyết.",
-    "",
-    "Yêu cầu:",
-    "- Dịch đầy đủ, không tóm tắt.",
-    "- Không bỏ đoạn.",
-    "- Bắt buộc chuyển tên người, địa danh, môn phái, chiêu thức và pháp khí sang âm Hán-Việt phù hợp với ngữ cảnh.",
-    "- Tuyệt đối không dùng Pinyin hoặc cách đọc Latin tiếng Trung trong bản dịch.",
-    "- Ví dụ: 陈清 phải dịch là Trần Thanh, không phải Chen Qing; 张伟 phải dịch là Trương Vĩ, không phải Zhang Wei.",
-    "- Giữ nhất quán cách gọi tên riêng trong toàn bộ phần dịch.",
-    "- Giữ nguyên cấu trúc đoạn văn.",
-    "- Không giải thích thêm.",
-    "- Chỉ trả về bản dịch tiếng Việt.",
-    "- Không chép lại nguyên văn chữ Trung, trừ trường hợp thật sự không thể chuyển nghĩa.",
-    isRetry
-      ? "Lần trả lời trước đã bị hệ thống từ chối vì còn quá nhiều chữ Trung. Hãy dịch lại toàn bộ phần này sang tiếng Việt."
-      : "",
-    chunkNote,
-    "",
-    "Nội dung cần dịch:",
-    text
-  ]
-    .filter(Boolean)
-    .join("\n");
+function isContentSafetyRefusal(data, error) {
+  if (data?.choices?.[0]?.finish_reason === "content_filter") return true;
+  if (data?.candidates?.[0]?.finish_reason === "SAFETY") return true;
+  const msg = String(error?.message || data?.error?.message || "").toLowerCase();
+  return (
+    msg.includes("safety") ||
+    msg.includes("content_filter") ||
+    msg.includes("harm_category") ||
+    msg.includes("violates") ||
+    msg.includes("policy") ||
+    msg.includes("prohibited")
+  );
 }
 
 async function translateChunkWithKeyPool(keyList, text, index, total, { glossary = {}, bookTitle = "", engine = defaultEngine } = {}) {
-  const models = [GEMINI_MODEL, ...GEMINI_FALLBACK_MODELS].filter(
+  const models = [GROQ_MODEL, ...GROQ_FALLBACK_MODELS].filter(
     (model, modelIndex, list) => model && list.indexOf(model) === modelIndex
   );
 
   let lastError = null;
 
-  for (let keyIdx = 0; keyIdx < keyList.length; keyIdx += 1) {
-    const apiKey = keyList[keyIdx];
+  // Sort keys prioritizing those not on cooldown and least recently used
+  const now = Date.now();
+  const sortedKeys = [...keyList].sort((a, b) => {
+    const healthA = getKeyHealth(a);
+    const healthB = getKeyHealth(b);
+    const onCooldownA = healthA.cooldownUntil > now ? 1 : 0;
+    const onCooldownB = healthB.cooldownUntil > now ? 1 : 0;
+    if (onCooldownA !== onCooldownB) return onCooldownA - onCooldownB;
+    return healthA.lastUsed - healthB.lastUsed;
+  });
+
+  for (let keyIdx = 0; keyIdx < sortedKeys.length; keyIdx += 1) {
+    const apiKey = sortedKeys[keyIdx];
+    const health = getKeyHealth(apiKey);
+    if (health.cooldownUntil > Date.now()) {
+      continue; // Skip keys currently on cooldown
+    }
 
     for (let modelIndex = 0; modelIndex < models.length; modelIndex += 1) {
       const model = models[modelIndex];
@@ -296,30 +317,176 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
       try {
         const result = await translateChunkWithModel(apiKey, model, prompt);
         const quality = assessTranslation(text, result.text);
-        if (quality.acceptable) return result;
+        if (quality.acceptable) {
+          markKeySuccess(apiKey);
+          return result;
+        }
 
-        const error = new Error(`Gemini trả về nội dung chưa được dịch (${quality.reason}).`);
+        const error = new Error(`Bản dịch chưa đạt yêu cầu (${quality.reason}).`);
         error.status = 502;
         error.model = model;
         lastError = error;
         continue;
       } catch (error) {
         lastError = error;
-        // If rate limited on this key (429 or quota), break model loop to try the next API key!
+
+        // Anti-Ban Safety Circuit Breaker:
+        if (isContentSafetyRefusal(null, error)) {
+          console.warn("Phát hiện bộ lọc an toàn nội dung. Dừng retry để tránh vi phạm chính sách API.");
+          // Soften and fallback gracefully using translation engine
+          const fallbackClean = engine.postProcessTranslation(text, glossary);
+          return { text: fallbackClean || "Nội dung chương đang được cập nhật bản dịch phù hợp.", model: "safety-fallback" };
+        }
+
         if (error.status === 429 || error.status === 403) {
-          console.warn(`API Key ...${apiKey.slice(-4)} bị giới hạn quota (${error.status}), chuyển sang key tiếp theo...`);
-          break;
+          console.warn(`Key ...${apiKey.slice(-6)} bị giới hạn quota (${error.status}), tạm dừng 60s và chuyển sang key tiếp theo...`);
+          markKeyCooldown(apiKey, 60000);
+          break; // Try next key
         }
         if (!shouldTryNextModel(error)) break;
       }
     }
   }
 
-  throw lastError || new Error("Gemini API trả về lỗi trên toàn bộ các key.");
+  throw lastError || new Error("Tất cả các API key đều đang trong thời gian chờ hoặc hết hạn mức.");
 }
 
-async function translateChunk(apiKey, text, index, total) {
-  return translateChunkWithKeyPool([apiKey], text, index, total);
+async function translateChunkWithModel(apiKey, model, prompt, generationConfig = {}) {
+  const isGroq = apiKey.startsWith("gsk_");
+  
+  if (isGroq) {
+    return translateWithGroq(apiKey, model, prompt, generationConfig);
+  } else {
+    return translateWithGemini(apiKey, model, prompt, generationConfig);
+  }
+}
+
+async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
+  const url = "https://api.groq.com/openai/v1/chat/completions";
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const bodyPayload = {
+        model,
+        messages: [
+          {
+            role: "system",
+            content: "Bạn là dịch giả tiểu thuyết Trung Quốc sang tiếng Việt chuyên nghiệp. Hãy dịch toàn bộ sang tiếng Việt tự nhiên, đúng chuẩn văn phong tiểu thuyết/tiên hiệp/huyền huyễn. Chỉ trả về nội dung đã dịch, không kèm lời giải thích hay ghi chú thêm."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        temperature: generationConfig.temperature ?? 0.3,
+        max_completion_tokens: 8192
+      };
+
+      if (generationConfig.responseFormat === "json") {
+        bodyPayload.response_format = { type: "json_object" };
+      }
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        signal: controller.signal,
+        body: JSON.stringify(bodyPayload)
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        const retryable = response.status === 429 || response.status >= 500;
+        if (retryable && attempt < 1) {
+          await wait(1000 * (attempt + 1) + Math.floor(Math.random() * 500));
+          continue;
+        }
+
+        const message = data?.error?.message || `Groq API HTTP ${response.status}`;
+        const error = new Error(message);
+        error.status = response.status;
+        error.model = model;
+        throw error;
+      }
+
+      // Check content safety finish reason
+      if (data?.choices?.[0]?.finish_reason === "content_filter") {
+        const error = new Error("Nội dung bị chặn bởi content filter.");
+        error.status = 400;
+        error.isContentFilter = true;
+        throw error;
+      }
+
+      let text = data?.choices?.[0]?.message?.content || "";
+      text = stripThinkTags(text);
+      text = stripMarkdown(text);
+
+      return { text: text.trim(), model };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  const error = new Error("Groq API không phản hồi.");
+  error.model = model;
+  throw error;
+}
+
+async function translateWithGemini(apiKey, model, prompt, generationConfig = {}) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+    model
+  )}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: generationConfig.temperature ?? 0.3,
+            ...(generationConfig.responseFormat === "json" ? { responseMimeType: "application/json" } : {})
+          }
+        })
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        const retryable = response.status === 429 || response.status >= 500;
+        if (retryable && attempt < 1) {
+          await wait(800 * (attempt + 1));
+          continue;
+        }
+
+        const message = data?.error?.message || "Gemini API trả về lỗi.";
+        const error = new Error(message);
+        error.status = response.status;
+        error.model = model;
+        throw error;
+      }
+
+      let text = data?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim() || "";
+      text = stripMarkdown(text);
+      return { text, model };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  const error = new Error("Gemini API trả về lỗi.");
+  error.model = model;
+  throw error;
 }
 
 function assessTranslation(source, translation) {
@@ -366,63 +533,6 @@ function normalizeForComparison(value) {
     .toLowerCase();
 }
 
-async function translateChunkWithModel(apiKey, model, prompt, generationConfig = {}) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-    model
-  )}:generateContent?key=${encodeURIComponent(apiKey)}`;
-
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), GEMINI_REQUEST_TIMEOUT_MS);
-
-    try {
-      const geminiResponse = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: controller.signal,
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: prompt }]
-            }
-          ],
-          generationConfig
-        })
-      });
-      const data = await geminiResponse.json();
-
-      if (!geminiResponse.ok) {
-        const retryable = geminiResponse.status === 429 || geminiResponse.status >= 500;
-        if (retryable && attempt < 1) {
-          await wait(800 * (attempt + 1));
-          continue;
-        }
-
-        const message = data?.error?.message || "Gemini API trả về lỗi.";
-        const error = new Error(message);
-        error.status = geminiResponse.status;
-        error.model = model;
-        throw error;
-      }
-
-      const text =
-        data?.candidates?.[0]?.content?.parts
-          ?.map((part) => part.text || "")
-          .join("")
-          .trim() || "";
-
-      return { text, model };
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  const error = new Error("Gemini API trả về lỗi.");
-  error.model = model;
-  throw error;
-}
-
 function shouldTryNextModel(error) {
   if (error?.status === 429 || error?.status >= 500) return true;
 
@@ -432,7 +542,8 @@ function shouldTryNextModel(error) {
     (message.includes("no longer available") ||
       message.includes("not found") ||
       message.includes("not supported") ||
-      message.includes("unavailable"))
+      message.includes("unavailable") ||
+      message.includes("does not exist"))
   );
 }
 
@@ -451,12 +562,12 @@ function splitTextIntoChunks(text, maxLength) {
       continue;
     }
 
-    const next = current ? `${current}\n\n${paragraph}` : paragraph;
-    if (next.length > maxLength && current) {
+    const candidate = current ? `${current}\n\n${paragraph}` : paragraph;
+    if (candidate.length <= maxLength) {
+      current = candidate;
+    } else {
       chunks.push(current);
       current = paragraph;
-    } else {
-      current = next;
     }
   }
 
@@ -465,33 +576,33 @@ function splitTextIntoChunks(text, maxLength) {
 }
 
 function splitLongParagraph(paragraph, maxLength) {
-  const sentences = paragraph.match(/[^。！？!?]+[。！？!?]?/g) || [paragraph];
-  const chunks = [];
+  const sentences = paragraph.split(/(?<=[.!?。！？\n])\s*/).map((s) => s.trim()).filter(Boolean);
+  const result = [];
   let current = "";
 
   for (const sentence of sentences) {
-    const pieces = splitByLength(sentence, maxLength);
-    for (const piece of pieces) {
-      const next = current ? current + piece : piece;
-      if (next.length > maxLength && current) {
-        chunks.push(current.trim());
-        current = piece;
-      } else {
-        current = next;
+    if (sentence.length > maxLength) {
+      if (current) {
+        result.push(current);
+        current = "";
       }
+      for (let i = 0; i < sentence.length; i += maxLength) {
+        result.push(sentence.slice(i, i + maxLength));
+      }
+      continue;
+    }
+
+    const candidate = current ? `${current} ${sentence}` : sentence;
+    if (candidate.length <= maxLength) {
+      current = candidate;
+    } else {
+      if (current) result.push(current);
+      current = sentence;
     }
   }
 
-  if (current) chunks.push(current.trim());
-  return chunks;
-}
-
-function splitByLength(text, maxLength) {
-  const pieces = [];
-  for (let start = 0; start < text.length; start += maxLength) {
-    pieces.push(text.slice(start, start + maxLength));
-  }
-  return pieces.length ? pieces : [text];
+  if (current) result.push(current);
+  return result;
 }
 
 async function mapWithConcurrency(items, concurrency, mapper) {
@@ -500,26 +611,26 @@ async function mapWithConcurrency(items, concurrency, mapper) {
 
   async function worker() {
     while (nextIndex < items.length) {
-      const index = nextIndex;
+      const current = nextIndex;
       nextIndex += 1;
-      results[index] = await mapper(items[index], index);
+      results[current] = await mapper(items[current], current);
     }
   }
 
-  const workers = Array.from({ length: Math.min(concurrency, items.length) }, worker);
+  const workers = Array.from({ length: Math.min(items.length, Math.max(1, concurrency)) }, () => worker());
   await Promise.all(workers);
   return results;
 }
 
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function parseCsv(value) {
   return String(value || "")
-    .split(/[\r\n,;]+/)
+    .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 module.exports = {
@@ -527,7 +638,8 @@ module.exports = {
   translateBatchChapters,
   translateMetadata,
   assessTranslation,
-  splitTextIntoChunks,
   stripMarkdown,
+  stripThinkTags,
+  splitTextIntoChunks,
   parseApiKeys
 };

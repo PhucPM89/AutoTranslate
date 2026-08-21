@@ -32,6 +32,10 @@ jobs:
       group: translate-worker-${{ matrix.shard }}
       cancel-in-progress: false
     env:
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GROQ_API_KEYS: ${{ secrets.GROQ_API_KEYS }}
+      GROQ_MODEL: ${{ secrets.GROQ_MODEL }}
+      GROQ_FALLBACK_MODELS: ${{ secrets.GROQ_FALLBACK_MODELS }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
       GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}

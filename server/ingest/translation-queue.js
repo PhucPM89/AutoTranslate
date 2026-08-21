@@ -238,7 +238,10 @@ async function runTranslationJobs({
         await onProgress({ chapter: entry.n, status: entry.status, ...summarize(state) });
       }
     }
-    if (spacingMs) await sleep(spacingMs);
+    if (spacingMs) {
+      const jitter = Math.floor(Math.random() * 500);
+      await sleep(spacingMs + jitter);
+    }
   }
 
   return { translated, failed, quotaExhausted, spent, summary: summarize(state), done: isDone(state) };

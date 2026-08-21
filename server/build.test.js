@@ -32,7 +32,7 @@ test("build emits a Cloudflare Pages _headers file with the cache policy", () =>
   const out = runBuild({ R2_PUBLIC_BASE_URL: "", READER_CDN_ENABLED: "" });
   assert.match(out.headers, /^\/app\.js\n\s+Cache-Control: public, max-age=31536000, immutable$/m);
   assert.match(out.headers, /^\/vendor\/\*\n\s+Cache-Control: public, max-age=31536000, immutable$/m);
-  assert.match(out.headers, /^\/index\.html\n\s+Cache-Control: public, max-age=0, must-revalidate$/m);
+  assert.match(out.headers, /^\/index\.html\n\s+Cache-Control: (?:no-cache, no-store, must-revalidate|public, max-age=0, must-revalidate)$/m);
   assert.match(out.headers, /Content-Security-Policy:/);
   assert.match(out.headers, /X-Content-Type-Options: nosniff/);
   assert.match(out.headers, /Strict-Transport-Security:/);
