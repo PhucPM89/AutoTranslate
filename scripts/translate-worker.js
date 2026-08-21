@@ -22,7 +22,7 @@ const {
   summarize,
   isDone
 } = require("../server/ingest/translation-queue");
-const { translateText } = require("../server/gemini");
+const { translateText, translateBatchChapters } = require("../server/gemini");
 const { createTranslationEngine } = require("../server/translation-engine");
 
 const args = process.argv.slice(2);
@@ -95,19 +95,35 @@ async function main() {
   // Ordered by id rather than size so the cycle is stable between runs, and
   // rotated to resume after whichever book was served last - otherwise a day that
   // runs out of quota part-way keeps favouring the same few books tomorrow.
+  // Ordered by id rather than size so the cycle is stable between runs, and
+  // rotated to resume after whichever book was served last - otherwise a day that
+  // runs out of quota part-way keeps favouring the same few books tomorrow.
   const ordered = [...jobs].sort((a, b) => a.bookId.localeCompare(b.bookId));
   const rotation = (await readJson(storage, ROTATION_KEY)) || {};
   const resumeAfter = ordered.findIndex((job) => job.bookId === rotation.lastBookId);
   const queue =
     resumeAfter >= 0 ? [...ordered.slice(resumeAfter + 1), ...ordered.slice(0, resumeAfter + 1)] : ordered;
 
-  // Books that just gained chapters still go first: catching an ongoing novel up
-  // matters more than another slice of a backlog.
-  queue.sort((a, b) => b.highPriority - a.highPriority);
+  // Active readers & top read books from Supabase analytics
+  const activeReadBooks = await (db?.readTopBooks?.({ limit: 20 }).catch(() => [])) || [];
+  const activeBookIds = new Set(activeReadBooks.map((b) => b.bookId));
 
-  console.log(`Có ${jobs.length} book trong hàng đợi, xoay vòng ${CHAPTERS_PER_TURN} chương mỗi lượt:`);
+  // Sort queue:
+  // 1. VIP Active Books (currently being read by real readers)
+  // 2. High priority newly discovered chapters
+  // 3. Stable rotation order
+  queue.sort((a, b) => {
+    const aIsActive = activeBookIds.has(a.bookId);
+    const bIsActive = activeBookIds.has(b.bookId);
+    if (aIsActive !== bIsActive) return bIsActive ? 1 : -1;
+    if (b.highPriority !== a.highPriority) return b.highPriority - a.highPriority;
+    return a.bookId.localeCompare(b.bookId);
+  });
+
+  console.log(`Có ${jobs.length} book trong hàng đợi, ${activeBookIds.size} book VIP có độc giả đọc:`);
   for (const job of queue) {
-    console.log(`  ${job.bookId} r${job.revision}: ${job.pending} chờ (${job.highPriority} ưu tiên cao) / ${job.total}`);
+    const vipTag = activeBookIds.has(job.bookId) ? " [VIP ĐỘC GIẢ]" : "";
+    console.log(`  ${job.bookId} r${job.revision}: ${job.pending} chờ (${job.highPriority} ưu tiên)${vipTag} / ${job.total}`);
   }
   if (rotation.lastBookId) console.log(`  (lượt trước dừng ở ${rotation.lastBookId}; vòng này bắt đầu sau đó)`);
 
@@ -146,18 +162,20 @@ async function main() {
         rowChecked.add(job.bookId);
       }
 
+      const isVip = activeBookIds.has(job.bookId);
+      const sliceSize = isVip
+        ? Math.max(10, Number(process.env.TRANSLATE_CHAPTERS_PER_TURN_VIP || 10))
+        : CHAPTERS_PER_TURN;
+
       const remainingBudget = REQUEST_BUDGET === Infinity ? Infinity : REQUEST_BUDGET - spentTotal;
       const result = await runTranslationJobs({
         state: job.state,
-        // The slice. runTranslationJobs counts Gemini calls and a chapter is
-        // almost always one call, so in practice this is a chapter count.
-        requestBudget: Math.min(remainingBudget, CHAPTERS_PER_TURN),
+        requestBudget: Math.min(remainingBudget, sliceSize),
         deadlineAt,
         spacingMs: SPACING_MS,
+        batchSize: 2,
         loadChapter: (n) => readJson(storage, originalKey(job.bookId, job.revision, n)),
         translateChapter: async (chapter) => {
-          // Never spend a Gemini call on work that is already durable. This is
-          // the guard that makes a worker restart free rather than expensive.
           const existing = await readJson(storage, chapterKey(job.bookId, job.revision, chapter.chapterNumber));
           if (existing && existing.translationStatus === "completed" && existing.content) {
             console.log(`  ch ${chapter.chapterNumber}: đã có bản dịch trên R2, bỏ qua Gemini`);
@@ -171,6 +189,14 @@ async function main() {
           });
           if (!output || !output.translation) throw new Error("Gemini không trả bản dịch.");
           return output.translation;
+        },
+        translateBatch: async (chapters) => {
+          const glossary = await engine.loadGlossary(job.bookId);
+          return translateBatchChapters(chapters, apiKey, {
+            bookId: job.bookId,
+            glossary,
+            engine
+          });
         },
         publishChapter: async (chapter, translation) => {
           await storage.put(
@@ -202,7 +228,7 @@ async function main() {
               bookId: j.bookId,
               revision: j.revision,
               pending: j.pending,
-              highPriority: j.highPriority,
+              highPriority: j.highPriority || activeBookIds.has(j.bookId),
               total: j.total,
               translated: (j.total || 0) - (j.pending || 0)
             }))

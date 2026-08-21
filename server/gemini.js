@@ -58,6 +58,71 @@ async function translateText(text, apiKeys, options = {}) {
   };
 }
 
+async function translateBatchChapters(chapters, apiKeys, options = {}) {
+  if (!Array.isArray(chapters) || !chapters.length) return [];
+  if (chapters.length === 1) {
+    const single = await translateText(chapters[0].content, apiKeys, options);
+    return [{ chapterNumber: chapters[0].chapterNumber, translation: single.translation }];
+  }
+
+  const keyList = parseApiKeys(apiKeys);
+  if (!keyList.length) throw new Error("Thiếu GEMINI_API_KEY.");
+
+  const glossary = options.glossary || {};
+  const bookTitle = options.bookTitle || "";
+  const engine = options.engine || defaultEngine;
+
+  // Build packed prompt
+  const parts = [];
+  parts.push("Bạn là một dịch giả tiểu thuyết Trung Quốc sang tiếng Việt chuyên nghiệp.");
+  parts.push("Hãy dịch trọn vẹn các chương truyện sau đây sang tiếng Việt tự nhiên, đúng chất tiên hiệp/huyền huyễn.");
+  parts.push("Yêu cầu bắt buộc:");
+  parts.push("- Chuyển toàn bộ tên người, địa danh, môn phái, cảnh giới sang âm Hán-Việt phù hợp.");
+  parts.push("- Tuyệt đối không dùng Pinyin hoặc chữ Hán.");
+  parts.push("- Giữ nguyên cấu trúc các phân tách chương dạng: === CHAPTER_START_{n} === và === CHAPTER_END_{n} ===");
+  parts.push("");
+  for (const ch of chapters) {
+    parts.push(`=== CHAPTER_START_${ch.chapterNumber} ===`);
+    parts.push(ch.content || "");
+    parts.push(`=== CHAPTER_END_${ch.chapterNumber} ===`);
+    parts.push("");
+  }
+
+  const packedPrompt = parts.join("\n");
+  try {
+    const result = await translateChunkWithKeyPool(keyList, packedPrompt, 0, 1, {
+      glossary,
+      bookTitle,
+      engine
+    });
+
+    const parsed = [];
+    const raw = result.text || "";
+    for (const ch of chapters) {
+      const regex = new RegExp(`===\\s*CHAPTER_START_${ch.chapterNumber}\\s*===([\\s\\S]*?)===\\s*CHAPTER_END_${ch.chapterNumber}\\s*===`, "i");
+      const match = raw.match(regex);
+      if (match && match[1] && match[1].trim().length > 30) {
+        const cleaned = engine.postProcessTranslation(match[1].trim(), glossary);
+        parsed.push({ chapterNumber: ch.chapterNumber, translation: cleaned });
+      }
+    }
+
+    if (parsed.length === chapters.length) {
+      return parsed;
+    }
+  } catch (err) {
+    console.warn(`Batch translate failed (${err.message}), falling back to single translation`);
+  }
+
+  // Fallback to translating each individually
+  const fallbackResults = [];
+  for (const ch of chapters) {
+    const single = await translateText(ch.content, apiKeys, options);
+    fallbackResults.push({ chapterNumber: ch.chapterNumber, translation: single.translation });
+  }
+  return fallbackResults;
+}
+
 async function translateMetadata(metadata, apiKey) {
   const source = {
     title: cleanMetadataField(metadata?.title, 120),
@@ -433,4 +498,11 @@ function parseCsv(value) {
     .filter(Boolean);
 }
 
-module.exports = { translateText, translateMetadata, assessTranslation, splitTextIntoChunks, stripMarkdown };
+module.exports = {
+  translateText,
+  translateBatchChapters,
+  translateMetadata,
+  assessTranslation,
+  splitTextIntoChunks,
+  stripMarkdown
+};

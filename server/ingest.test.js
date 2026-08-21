@@ -15,6 +15,7 @@ const {
   createJobState,
   mergeJobState,
   nextChapter,
+  nextBatchChapters,
   backoffFor,
   runTranslationJobs,
   isQuotaError,
@@ -453,4 +454,45 @@ test("listJobs skips fully translated books and reports the high-priority count"
   assert.deepEqual(jobs.map((job) => job.bookId), ["b-busy"]);
   assert.equal(jobs[0].pending, 2);
   assert.equal(jobs[0].highPriority, 1);
+});
+
+test("nextBatchChapters groups consecutive pending chapters and runTranslationJobs executes batch", async () => {
+  const state = createJobState({
+    bookId: "b-batch",
+    revision: 1,
+    chapters: [
+      { chapterNumber: 1 },
+      { chapterNumber: 2 },
+      { chapterNumber: 3 }
+    ]
+  });
+
+  const batch = nextBatchChapters(state, { batchSize: 2 });
+  assert.equal(batch.length, 2);
+  assert.equal(batch[0].n, 1);
+  assert.equal(batch[1].n, 2);
+
+  const published = [];
+  const result = await runTranslationJobs({
+    state,
+    batchSize: 2,
+    requestBudget: 1,
+    loadChapter: async (n) => ({ chapterNumber: n, title: `Ch ${n}`, content: `Noi dung ${n}` }),
+    translateBatch: async (chapters) => {
+      return chapters.map((c) => ({ chapterNumber: c.chapterNumber, translation: `Dich ${c.chapterNumber}` }));
+    },
+    publishChapter: async (chapter, translation) => {
+      published.push({ n: chapter.chapterNumber, translation });
+    },
+    saveState: async () => {}
+  });
+
+  assert.equal(result.translated, 2);
+  assert.equal(result.spent, 1, "1 batch translation call translated 2 chapters");
+  assert.equal(published.length, 2);
+  assert.equal(published[0].n, 1);
+  assert.equal(published[1].n, 2);
+  assert.equal(state.chapters[0].status, "completed");
+  assert.equal(state.chapters[1].status, "completed");
+  assert.equal(state.chapters[2].status, "pending");
 });

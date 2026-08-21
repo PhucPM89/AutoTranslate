@@ -94,6 +94,22 @@ function nextChapter(state, { now = Date.now(), maxAttempts = DEFAULT_MAX_ATTEMP
   return normal[0] || high[0] || null;
 }
 
+function nextBatchChapters(state, { now = Date.now(), maxAttempts = DEFAULT_MAX_ATTEMPTS, batchSize = 2, picked = 0 } = {}) {
+  const first = nextChapter(state, { now, maxAttempts, picked });
+  if (!first) return [];
+  if (batchSize <= 1) return [first];
+
+  const candidate = state.chapters.find(
+    (entry) =>
+      entry.n === first.n + 1 &&
+      entry.status !== "completed" &&
+      (entry.status !== "failed" || entry.attempts < maxAttempts) &&
+      (entry.nextAttemptAt || 0) <= now
+  );
+
+  return candidate ? [first, candidate] : [first];
+}
+
 function backoffFor(attempts, base = DEFAULT_BACKOFF_MS) {
   return base * Math.pow(2, Math.max(0, attempts - 1));
 }
@@ -102,6 +118,7 @@ function backoffFor(attempts, base = DEFAULT_BACKOFF_MS) {
  * Drives the queue until it runs out of work, budget or time.
  *
  * translateChapter(chapter)  -> translated text  (throws on failure)
+ * translateBatch(chapters)   -> [{ chapterNumber, translation }]
  * publishChapter(chapter, translation) -> uploads and returns when durable
  * loadChapter(n)             -> the source chapter for that number
  */
@@ -109,6 +126,7 @@ async function runTranslationJobs({
   state,
   loadChapter,
   translateChapter,
+  translateBatch,
   publishChapter,
   saveState,
   now = () => Date.now(),
@@ -118,6 +136,7 @@ async function runTranslationJobs({
   requestBudget = Infinity,
   deadlineAt = Infinity,
   spacingMs = 0,
+  batchSize = 1,
   onProgress = null
 }) {
   let translated = 0;
@@ -129,57 +148,90 @@ async function runTranslationJobs({
     if (spent >= requestBudget) break;
     if (now() >= deadlineAt) break;
 
-    const entry = nextChapter(state, { now: now(), maxAttempts, picked: spent });
-    if (!entry) break;
+    const entries = (typeof translateBatch === "function" && batchSize > 1)
+      ? nextBatchChapters(state, { now: now(), maxAttempts, batchSize, picked: spent })
+      : [nextChapter(state, { now: now(), maxAttempts, picked: spent })].filter(Boolean);
 
-    entry.status = "processing";
-    entry.attempts += 1;
+    if (!entries.length) break;
+
+    for (const entry of entries) {
+      entry.status = "processing";
+      entry.attempts += 1;
+    }
     state.updatedAt = new Date(now()).toISOString();
     await saveState(state);
 
     try {
-      const chapter = await loadChapter(entry.n);
-      if (!chapter) throw new Error(`Không tìm thấy nội dung chương ${entry.n}.`);
+      if (entries.length > 1 && typeof translateBatch === "function") {
+        const chapters = await Promise.all(entries.map((e) => loadChapter(e.n)));
+        const batchResults = await translateBatch(chapters);
+        spent += 1;
 
-      const translation = await translateChapter(chapter);
-      spent += 1;
+        for (const res of batchResults) {
+          const entry = entries.find((e) => e.n === res.chapterNumber);
+          const ch = chapters.find((c) => c && c.chapterNumber === res.chapterNumber);
+          if (entry && ch && res.translation) {
+            await publishChapter(ch, res.translation);
+            entry.status = "completed";
+            entry.lastError = "";
+            entry.nextAttemptAt = 0;
+            entry.completedAt = new Date(now()).toISOString();
+            translated += 1;
+          }
+        }
+      } else {
+        const entry = entries[0];
+        const chapter = await loadChapter(entry.n);
+        if (!chapter) throw new Error(`Không tìm thấy nội dung chương ${entry.n}.`);
 
-      // Upload first, mark completed second. Never the other way round.
-      await publishChapter(chapter, translation);
+        const translation = await translateChapter(chapter);
+        spent += 1;
 
-      entry.status = "completed";
-      entry.lastError = "";
-      entry.nextAttemptAt = 0;
-      entry.completedAt = new Date(now()).toISOString();
-      translated += 1;
+        // Upload first, mark completed second. Never the other way round.
+        await publishChapter(chapter, translation);
+
+        entry.status = "completed";
+        entry.lastError = "";
+        entry.nextAttemptAt = 0;
+        entry.completedAt = new Date(now()).toISOString();
+        translated += 1;
+      }
     } catch (error) {
       spent += 1;
-      entry.lastError = String(error && error.message ? error.message : error).slice(0, 300);
+      const errMsg = String(error && error.message ? error.message : error).slice(0, 300);
 
-      if (isQuotaError(error)) {
-        // Quota is not this chapter's fault: put it back without burning an
-        // attempt, and stop the run instead of hammering a closed door.
-        entry.attempts = Math.max(0, entry.attempts - 1);
-        entry.status = "pending";
-        entry.nextAttemptAt = now() + backoffFor(1, backoffBaseMs);
-        quotaExhausted = true;
+      for (const entry of entries) {
+        if (entry.status === "completed") continue;
+        entry.lastError = errMsg;
+
+        if (isQuotaError(error)) {
+          entry.attempts = Math.max(0, entry.attempts - 1);
+          entry.status = "pending";
+          entry.nextAttemptAt = now() + backoffFor(1, backoffBaseMs);
+          quotaExhausted = true;
+        } else if (entry.attempts >= maxAttempts) {
+          entry.status = "failed";
+          failed += 1;
+        } else {
+          entry.status = "retrying";
+          entry.nextAttemptAt = now() + backoffFor(entry.attempts, backoffBaseMs);
+        }
+      }
+
+      if (quotaExhausted) {
         state.updatedAt = new Date(now()).toISOString();
         await saveState(state);
         break;
-      }
-
-      if (entry.attempts >= maxAttempts) {
-        entry.status = "failed";
-        failed += 1;
-      } else {
-        entry.status = "retrying";
-        entry.nextAttemptAt = now() + backoffFor(entry.attempts, backoffBaseMs);
       }
     }
 
     state.updatedAt = new Date(now()).toISOString();
     await saveState(state);
-    if (onProgress) await onProgress({ chapter: entry.n, status: entry.status, ...summarize(state) });
+    if (onProgress) {
+      for (const entry of entries) {
+        await onProgress({ chapter: entry.n, status: entry.status, ...summarize(state) });
+      }
+    }
     if (spacingMs) await sleep(spacingMs);
   }
 
@@ -206,6 +258,7 @@ module.exports = {
   summarize,
   isDone,
   nextChapter,
+  nextBatchChapters,
   backoffFor,
   runTranslationJobs,
   isQuotaError
