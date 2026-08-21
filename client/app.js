@@ -80,13 +80,13 @@ const JSZIP_URL = __ASSET_JSZIP__;
 const ADMIN_MODULE_URL = __ASSET_ADMIN__;
 // Reader CDN path. Chapter JSON is fetched straight from R2 through the CDN:
 // no Worker invocation, no Supabase query, no Gemini call on the read path.
-const CDN_BASE = String(__CDN_BASE__ || "").replace(/\/$/, "");
+const CDN_BASE = String(__CDN_BASE__ || "https://cdn.tram-chu.online").replace(/\/$/, "");
 // Analytics goes straight to Supabase so a page view costs no serverless
 // invocation. The anon key is public by design: RLS lets it insert events and
 // nothing else - verified against the live project.
-const SUPABASE_URL = String(__SUPABASE_URL__ || "").replace(/\/$/, "");
-const SUPABASE_ANON_KEY = String(__SUPABASE_ANON_KEY__ || "");
-const READER_CDN_ENABLED = Boolean(__READER_CDN_ENABLED__) && Boolean(CDN_BASE);
+const SUPABASE_URL = String(__SUPABASE_URL__ || "https://bckwrfucultwxirorglv.supabase.co").replace(/\/$/, "");
+const SUPABASE_ANON_KEY = String(__SUPABASE_ANON_KEY__ || "sb_publishable_S2l6AfkJg1ehDzY0GmnZxg_7jGI0vCq");
+const READER_CDN_ENABLED = typeof __READER_CDN_ENABLED__ !== "undefined" ? Boolean(__READER_CDN_ENABLED__) : Boolean(CDN_BASE);
 const FALLBACK_BOOK_COVERS = [
   "/library/covers/night-temple.webp",
   "/library/covers/misty-pagoda.webp",

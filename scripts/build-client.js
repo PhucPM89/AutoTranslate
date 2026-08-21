@@ -37,6 +37,11 @@ const jszipUrl = copyVendor(
 );
 
 // The admin bundle is only useful to the site owner, so it ships as a separate
+const cdnBase = (process.env.R2_PUBLIC_BASE_URL || "https://cdn.tram-chu.online").replace(/\/$/, "");
+const readerCdnEnabled = process.env.READER_CDN_ENABLED !== undefined ? process.env.READER_CDN_ENABLED === "true" : true;
+const supabaseUrl = (process.env.SUPABASE_URL || "https://bckwrfucultwxirorglv.supabase.co").replace(/\/$/, "");
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || "sb_publishable_S2l6AfkJg1ehDzY0GmnZxg_7jGI0vCq";
+
 // module that app.js imports on demand rather than sitting in every reader's
 // download.
 const adminUrl = bundle({
@@ -44,10 +49,8 @@ const adminUrl = bundle({
   outfile: path.join(PUBLIC_DIR, "admin-upload.js"),
   publicPath: "/admin-upload.js",
   format: "esm",
-  // The admin page reads the published catalogue straight from the CDN, so it
-  // needs the same base URL the reader bundle gets. Still only the public value.
   define: {
-    __CDN_BASE__: JSON.stringify(process.env.R2_PUBLIC_BASE_URL || "")
+    __CDN_BASE__: JSON.stringify(cdnBase)
   }
 });
 
@@ -59,12 +62,10 @@ const appUrl = bundle({
   define: {
     __ASSET_JSZIP__: JSON.stringify(jszipUrl),
     __ASSET_ADMIN__: JSON.stringify(adminUrl),
-    // Reader CDN path. Only the public base URL reaches the browser bundle; no
-    // R2 or Supabase secret is ever inlined here.
-    __CDN_BASE__: JSON.stringify(process.env.R2_PUBLIC_BASE_URL || ""),
-    __READER_CDN_ENABLED__: JSON.stringify(process.env.READER_CDN_ENABLED === "true"),
-    __SUPABASE_URL__: JSON.stringify(process.env.SUPABASE_URL || ""),
-    __SUPABASE_ANON_KEY__: JSON.stringify(process.env.SUPABASE_ANON_KEY || "")
+    __CDN_BASE__: JSON.stringify(cdnBase),
+    __READER_CDN_ENABLED__: JSON.stringify(readerCdnEnabled),
+    __SUPABASE_URL__: JSON.stringify(supabaseUrl),
+    __SUPABASE_ANON_KEY__: JSON.stringify(supabaseAnonKey)
   }
 });
 
