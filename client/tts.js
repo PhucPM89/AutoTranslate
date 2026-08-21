@@ -30,6 +30,7 @@ class TTSEngine {
     this.onVoicesLoaded = null;
 
     this.mediaMetadata = { title: "Trạm Chữ", artist: "Đọc truyện", album: "Trạm Chữ", coverUrl: "" };
+    this._utterances = new Set();
     this.initVoices();
   }
 
@@ -238,28 +239,30 @@ class TTSEngine {
 
   previous() {
     if (!this.paragraphs.length) return;
+    if (this.synth) this.synth.cancel();
     const target = Math.max(0, this.currentIndex - 1);
-    this.speakParagraph(target);
+    this.speakParagraph(target, true);
   }
 
   next() {
     if (!this.paragraphs.length) return;
+    if (this.synth) this.synth.cancel();
     const target = this.currentIndex + 1;
     if (target < this.paragraphs.length) {
-      this.speakParagraph(target);
+      this.speakParagraph(target, true);
     } else {
       this.handleChapterFinished();
     }
   }
 
-  speakParagraph(index) {
+  speakParagraph(index, isUserAction = false) {
     if (!this.isSupported() || !this.isPlaying) return;
     if (index >= this.paragraphs.length) {
       this.handleChapterFinished();
       return;
     }
 
-    if (this.synth) {
+    if (isUserAction && this.synth) {
       this.synth.cancel();
     }
 
@@ -282,7 +285,7 @@ class TTSEngine {
     if (!chosenVoice || this.isChineseVoice(chosenVoice)) {
       if (viVoices.length > 0) {
         chosenVoice = viVoices.find(
-          (v) => v.name.includes("Natural") || v.name.includes("Google") || v.name.includes("HoaiMy") || v.name.includes("NamMinh")
+          (v) => v.name.includes("Natural") || v.name.includes("Google") || v.name.includes("HoaiMy") || v.name.includes("NamMinh") || v.name.includes("Linh") || v.name.includes("An")
         ) || viVoices[0];
         this.selectedVoice = chosenVoice;
       } else {
@@ -304,20 +307,40 @@ class TTSEngine {
     utterance.rate = this.speed;
     utterance.pitch = 1.0;
 
+    // Safari iOS GC Bug Fix: retain reference in persistent Set and global window object
+    this._utterances.add(utterance);
+    if (typeof window !== "undefined") {
+      window._safariActiveUtterance = utterance;
+    }
+
     utterance.onend = () => {
+      this._utterances.delete(utterance);
+      if (typeof window !== "undefined" && window._safariActiveUtterance === utterance) {
+        window._safariActiveUtterance = null;
+      }
       if (!this.isPlaying || this.isPaused) return;
+
       if (this.currentIndex + 1 < this.paragraphs.length) {
-        this.speakParagraph(this.currentIndex + 1);
+        // Asynchronous transition allows Safari WebKit audio pipeline to recycle cleanly
+        setTimeout(() => {
+          if (this.isPlaying && !this.isPaused) {
+            this.speakParagraph(this.currentIndex + 1);
+          }
+        }, 50);
       } else {
         this.handleChapterFinished();
       }
     };
 
     utterance.onerror = (event) => {
+      this._utterances.delete(utterance);
+      if (typeof window !== "undefined" && window._safariActiveUtterance === utterance) {
+        window._safariActiveUtterance = null;
+      }
       if (event.error === "canceled" || event.error === "interrupted") return;
       console.warn("TTS utterance error:", event.error);
       if (this.isPlaying && !this.isPaused) {
-        setTimeout(() => this.speakParagraph(this.currentIndex + 1), 200);
+        setTimeout(() => this.speakParagraph(this.currentIndex + 1), 150);
       }
     };
 
