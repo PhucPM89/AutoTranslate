@@ -5760,13 +5760,33 @@ body.zen-mode .document-paper {
   color: #f8fafc;
 }
 
-.sponsor-channel-btn.telegram {
+.sponsor-channel-btn.phone {
+  background: rgba(34, 197, 94, 0.16);
+  color: #4ade80;
+}
+
+.sponsor-channel-btn.zalo {
   background: rgba(56, 189, 248, 0.18);
   color: #38bdf8;
 }
 
 .sponsor-channel-btn:hover {
   transform: translateX(4px);
+}
+
+.request-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.contact-link.phone {
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.contact-link.phone:hover {
+  border-color: #4ade80;
 }
 
 
