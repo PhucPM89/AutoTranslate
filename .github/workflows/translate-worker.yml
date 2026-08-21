@@ -29,6 +29,7 @@ jobs:
     timeout-minutes: 330
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
       GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
       GEMINI_CHUNK_SIZE: ${{ secrets.GEMINI_CHUNK_SIZE }}
       GEMINI_FALLBACK_MODELS: ${{ secrets.GEMINI_FALLBACK_MODELS }}
