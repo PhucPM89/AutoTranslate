@@ -217,6 +217,7 @@ const els = {
   ttsPlayPauseBtn: document.getElementById("ttsPlayPauseBtn"),
   ttsNextParBtn: document.getElementById("ttsNextParBtn"),
   ttsSpeedSelect: document.getElementById("ttsSpeedSelect"),
+  ttsVoiceSelect: document.getElementById("ttsVoiceSelect"),
   ttsTimerBtn: document.getElementById("ttsTimerBtn"),
   ttsTimerLabel: document.getElementById("ttsTimerLabel"),
   ttsStopCloseBtn: document.getElementById("ttsStopCloseBtn"),
@@ -1860,6 +1861,45 @@ function initTTSController() {
 
   els.ttsPrevParBtn?.addEventListener("click", () => ttsEngine.previous());
   els.ttsNextParBtn?.addEventListener("click", () => ttsEngine.next());
+
+  function populateVoiceSelect(voices, currentSelected) {
+    if (!els.ttsVoiceSelect) return;
+    const available = ttsEngine.getAvailableVoices();
+    els.ttsVoiceSelect.innerHTML = "";
+    if (!available.length) {
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "Giọng mặc định";
+      els.ttsVoiceSelect.appendChild(opt);
+      return;
+    }
+    const savedVoice = localStorage.getItem("epubTranslator.ttsVoice");
+    available.forEach((v) => {
+      const opt = document.createElement("option");
+      const uri = v.voiceURI || v.name;
+      opt.value = uri;
+      const isVi = ttsEngine.isVietnameseVoice(v);
+      const prefix = isVi ? "🇻🇳 " : "🌐 ";
+      opt.textContent = `${prefix}${v.name.replace(/(Microsoft|Google|Apple)\s*/i, "").slice(0, 18)}`;
+      if (savedVoice ? savedVoice === uri : (currentSelected && (currentSelected.voiceURI === uri || currentSelected.name === uri))) {
+        opt.selected = true;
+      }
+      els.ttsVoiceSelect.appendChild(opt);
+    });
+    if (savedVoice) {
+      ttsEngine.setVoice(savedVoice);
+    }
+  }
+
+  ttsEngine.onVoicesLoaded = (voices, selected) => {
+    populateVoiceSelect(voices, selected);
+  };
+
+  els.ttsVoiceSelect?.addEventListener("change", (e) => {
+    ttsEngine.setVoice(e.target.value);
+    localStorage.setItem("epubTranslator.ttsVoice", e.target.value);
+    showToast("Đã đổi giọng đọc");
+  });
 
   els.ttsSpeedSelect?.addEventListener("change", (e) => {
     ttsEngine.setSpeed(Number(e.target.value));

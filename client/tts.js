@@ -27,6 +27,7 @@ class TTSEngine {
     this.onStateChange = null;
     this.onTimerTick = null;
     this.onFinished = null;
+    this.onVoicesLoaded = null;
 
     this.initVoices();
   }
@@ -41,10 +42,18 @@ class TTSEngine {
       this.voices = this.synth.getVoices() || [];
       const viVoices = this.getVietnameseVoices();
       if (viVoices.length > 0) {
-        this.selectedVoice = viVoices[0];
+        // Prefer natural / online / Google / Microsoft Vietnamese voices
+        const preferredVi = viVoices.find(
+          (v) => v.name.includes("Natural") || v.name.includes("Google") || v.name.includes("HoaiMy") || v.name.includes("NamMinh") || v.name.includes("An") || v.name.includes("Linh")
+        ) || viVoices[0];
+        this.selectedVoice = preferredVi;
       } else {
-        // Do not assign non-Vietnamese voice; leave null so utterance.lang = "vi-VN" works
-        this.selectedVoice = null;
+        // If no Vietnamese voice is available, pick first non-Chinese voice (e.g. English) as fallback
+        const nonChinese = this.voices.filter((v) => !this.isChineseVoice(v));
+        this.selectedVoice = nonChinese.length > 0 ? nonChinese[0] : null;
+      }
+      if (this.onVoicesLoaded) {
+        this.onVoicesLoaded(this.voices, this.selectedVoice);
       }
     };
 
@@ -52,13 +61,42 @@ class TTSEngine {
     if (typeof this.synth.onvoiceschanged !== "undefined") {
       this.synth.onvoiceschanged = load;
     }
+    // Chromium / iOS WebKit populate voices asynchronously
+    setTimeout(load, 400);
+    setTimeout(load, 1200);
+    setTimeout(load, 3000);
   }
 
   isVietnameseVoice(v) {
     if (!v) return false;
     const lang = (v.lang || "").toLowerCase().replace("_", "-");
     const name = (v.name || "").toLowerCase();
-    return lang.startsWith("vi") || name.includes("vietnam") || name.includes("tiếng việt") || name.includes("tieng viet");
+    return (
+      lang.startsWith("vi") ||
+      name.includes("vietnam") ||
+      name.includes("tiếng việt") ||
+      name.includes("tieng viet") ||
+      name.includes("hoaimy") ||
+      name.includes("namminh")
+    );
+  }
+
+  isChineseVoice(v) {
+    if (!v) return false;
+    const lang = (v.lang || "").toLowerCase().replace("_", "-");
+    const name = (v.name || "").toLowerCase();
+    return (
+      lang.startsWith("zh") ||
+      lang.startsWith("cmn") ||
+      lang.startsWith("yue") ||
+      name.includes("chinese") ||
+      name.includes("huihui") ||
+      name.includes("yahei") ||
+      name.includes("hanhan") ||
+      name.includes("kangkang") ||
+      name.includes("taiwan") ||
+      name.includes("mandarin")
+    );
   }
 
   getVietnameseVoices() {
@@ -66,15 +104,28 @@ class TTSEngine {
     return this.voices.filter((v) => this.isVietnameseVoice(v));
   }
 
+  getAvailableVoices() {
+    if (!this.voices.length && this.synth) this.voices = this.synth.getVoices() || [];
+    // Sort Vietnamese voices first, then other non-Chinese voices
+    const vi = this.voices.filter((v) => this.isVietnameseVoice(v));
+    const nonVi = this.voices.filter((v) => !this.isVietnameseVoice(v) && !this.isChineseVoice(v));
+    return [...vi, ...nonVi];
+  }
+
   setVoice(voiceURI) {
-    const v = this.voices.find((item) => item.voiceURI === voiceURI);
-    if (v) this.selectedVoice = v;
+    if (!this.voices.length && this.synth) this.voices = this.synth.getVoices() || [];
+    const v = this.voices.find((item) => item.voiceURI === voiceURI || item.name === voiceURI);
+    if (v) {
+      this.selectedVoice = v;
+      if (this.isPlaying && !this.isPaused) {
+        this.speakParagraph(this.currentIndex);
+      }
+    }
   }
 
   setSpeed(speed) {
     this.speed = Math.max(0.5, Math.min(2.5, Number(speed) || 1.0));
     if (this.isPlaying && !this.isPaused) {
-      // Re-speak current paragraph with new speed
       this.speakParagraph(this.currentIndex);
     }
   }
@@ -85,7 +136,6 @@ class TTSEngine {
       this.paragraphs = [];
       return;
     }
-    // Clean text and split by paragraphs / sentence blocks
     this.paragraphs = String(text)
       .split(/\n+/)
       .map((p) => p.trim())
@@ -155,29 +205,46 @@ class TTSEngine {
       return;
     }
 
-    if (this.synth) this.synth.cancel();
+    if (this.synth) {
+      this.synth.cancel();
+    }
 
     this.currentIndex = index;
     if (this.onParagraphChange) this.onParagraphChange(index);
 
     const textToSpeak = this.paragraphs[index];
+    if (!textToSpeak) {
+      this.speakParagraph(index + 1);
+      return;
+    }
+
+    if (!this.voices.length && this.synth) {
+      this.voices = this.synth.getVoices() || [];
+    }
+
+    const viVoices = this.getVietnameseVoices();
+    let chosenVoice = this.selectedVoice;
+
+    if (!chosenVoice || this.isChineseVoice(chosenVoice)) {
+      if (viVoices.length > 0) {
+        chosenVoice = viVoices.find(
+          (v) => v.name.includes("Natural") || v.name.includes("Google") || v.name.includes("HoaiMy") || v.name.includes("NamMinh")
+        ) || viVoices[0];
+        this.selectedVoice = chosenVoice;
+      } else {
+        const nonChinese = this.voices.filter((v) => !this.isChineseVoice(v));
+        chosenVoice = nonChinese.length > 0 ? nonChinese[0] : null;
+        this.selectedVoice = chosenVoice;
+      }
+    }
+
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
 
-    // Strictly enforce Vietnamese
-    utterance.lang = "vi-VN";
-
-    if (this.selectedVoice && this.isVietnameseVoice(this.selectedVoice)) {
-      utterance.voice = this.selectedVoice;
-      utterance.lang = this.selectedVoice.lang || "vi-VN";
+    if (chosenVoice) {
+      utterance.voice = chosenVoice;
+      utterance.lang = chosenVoice.lang || (this.isVietnameseVoice(chosenVoice) ? "vi-VN" : "en-US");
     } else {
-      const viVoices = this.getVietnameseVoices();
-      if (viVoices.length > 0) {
-        this.selectedVoice = viVoices[0];
-        utterance.voice = viVoices[0];
-        utterance.lang = viVoices[0].lang || "vi-VN";
-      } else {
-        utterance.voice = null;
-      }
+      utterance.lang = "vi-VN";
     }
 
     utterance.rate = this.speed;
@@ -196,7 +263,6 @@ class TTSEngine {
       if (event.error === "canceled" || event.error === "interrupted") return;
       console.warn("TTS utterance error:", event.error);
       if (this.isPlaying && !this.isPaused) {
-        // Try skipping to next paragraph on error
         setTimeout(() => this.speakParagraph(this.currentIndex + 1), 200);
       }
     };
@@ -225,7 +291,6 @@ class TTSEngine {
     this.stopAtChapterEnd = false;
 
     if (minutes === -1) {
-      // Stop at chapter end
       this.stopAtChapterEnd = true;
       this.timerRemainingSeconds = 0;
       if (this.onTimerTick) this.onTimerTick("Hết chương");
