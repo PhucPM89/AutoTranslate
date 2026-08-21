@@ -77,6 +77,10 @@
             <span class="streak-flame">🔥</span>
             <span id="streakDays">1 ngày</span>
           </div>
+          <button id="readerRankBadge" class="reader-rank-badge rank-1" type="button" title="Cảnh giới tu vi / Danh hiệu độc giả (Nhấp để xem & đổi trường phái)">
+            <span id="rankBadgeIcon">🔮</span>
+            <span id="rankBadgeTitle">Phàm Nhân</span>
+          </button>
           <button id="accountOpen" class="icon-button account-button" type="button" aria-label="Đăng nhập" title="Đăng nhập">
             <span id="accountIcon" class="account-glyph"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"></circle><path d="M4.5 21a7.5 7.5 0 0 1 15 0"></path></svg></span>
             <span id="accountInitial" class="account-initial" aria-hidden="true" hidden></span>
@@ -699,7 +703,13 @@
         <p class="comments-empty">Chưa có bình luận nào. Hãy để lại cảm nghĩ đầu tiên!</p>
       </div>
       <form id="commentForm" class="comment-form">
-        <input type="text" id="commentAuthorInput" class="comment-author-input" placeholder="Tên hiển thị" maxlength="24" value="Độc giả">
+        <div class="comment-author-bar">
+          <input type="text" id="commentAuthorInput" class="comment-author-input" placeholder="Tên hiển thị" maxlength="24" value="Độc giả">
+          <button type="button" id="commentRankTriggerBtn" class="comment-rank-trigger" title="Xem & đổi trường phái cảnh giới">
+            <span id="commentRankIcon">🔮</span>
+            <span id="commentRankText">Phàm Nhân</span>
+          </button>
+        </div>
         <div class="comment-input-wrap">
           <input type="text" id="commentContentInput" class="comment-content-input" placeholder="Viết cảm nghĩ (Enter để gửi)..." maxlength="280" required>
           <button type="submit" id="commentSubmitBtn" class="comment-submit-btn" aria-label="Gửi bình luận">
@@ -777,6 +787,91 @@
               <span>Zalo: 0867.082.467 (Nhắn ngay)</span>
             </a>
           </div>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Reader Rank & School Selector Dialog -->
+    <dialog id="rankSchoolDialog" class="rank-school-dialog" aria-labelledby="rankSchoolTitle">
+      <div class="rank-school-header">
+        <div>
+          <p class="eyebrow">🎖️ Đẳng cấp độc giả</p>
+          <h3 id="rankSchoolTitle">Cảnh Giới & Trường Phái</h3>
+        </div>
+        <button id="rankSchoolClose" class="icon-button" type="button" aria-label="Đóng" title="Đóng">
+          <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+        </button>
+      </div>
+      <div class="rank-school-body">
+        <!-- Current Rank Card -->
+        <div class="current-rank-card" id="currentRankCard">
+          <div class="current-rank-header">
+            <span class="current-rank-icon" id="rankModalIcon">🔮</span>
+            <div class="current-rank-info">
+              <span class="current-rank-school" id="rankModalSchool">Trường phái Tu Tiên</span>
+              <h4 class="current-rank-title" id="rankModalTitle">Phàm Nhân (Cấp 1)</h4>
+            </div>
+            <span class="current-rank-exp" id="rankModalTotalExp">0 EXP</span>
+          </div>
+          <div class="current-rank-progress-wrap">
+            <div class="current-rank-bar">
+              <div class="current-rank-fill" id="rankModalProgressFill" style="width: 0%;"></div>
+            </div>
+            <div class="current-rank-sub">
+              <span id="rankModalProgressLabel">0 / 50 EXP để đột phá</span>
+              <span id="rankModalNextTitle">Cảnh giới kế: Luyện Khí</span>
+            </div>
+          </div>
+        </div>
+
+        <h4 class="school-select-title">Chọn Trường Phái Danh Hiệu</h4>
+        <p class="school-select-desc">Danh hiệu của trường phái đã chọn sẽ hiển thị cạnh tên bạn khi bình luận từng đoạn văn:</p>
+
+        <div class="school-cards-grid" id="schoolCardsGrid">
+          <!-- Cultivation Card -->
+          <div class="school-card is-active" data-school="cultivation">
+            <div class="school-card-header">
+              <span class="school-card-icon">🔮</span>
+              <div>
+                <strong>Tu Tiên Cảnh Giới</strong>
+                <small>Phù hợp truyện Tiên hiệp, Huyền huyễn</small>
+              </div>
+            </div>
+            <p class="school-card-path">Phàm Nhân ➔ Luyện Khí ➔ Trúc Cơ ➔ Kim Đan ➔ Nguyên Anh ➔ Hóa Thần ➔ Tiên Tôn</p>
+          </div>
+
+          <!-- Scholarly Card -->
+          <div class="school-card" data-school="scholarly">
+            <div class="school-card-header">
+              <span class="school-card-icon">📜</span>
+              <div>
+                <strong>Khoa Bảng Học Thức</strong>
+                <small>Phù hợp truyện Lịch sử, Cổ đại, Gia đấu</small>
+              </div>
+            </div>
+            <p class="school-card-path">Đồng Sinh ➔ Tú Tài ➔ Cử Nhân ➔ Thám Hoa ➔ Bảng Nhãn ➔ Trạng Nguyên ➔ Đại Học Sĩ</p>
+          </div>
+
+          <!-- Modern Card -->
+          <div class="school-card" data-school="modern">
+            <div class="school-card-header">
+              <span class="school-card-icon">⚡</span>
+              <div>
+                <strong>Cày Truyện Hiện Đại</strong>
+                <small>Phù hợp truyện Đô thị, Võng du, Hài hước</small>
+              </div>
+            </div>
+            <p class="school-card-path">Người Qua Đường ➔ Độc Giả Mới ➔ Mọt Sách ➔ Đọc Xuyên Đêm ➔ Cao Thủ ➔ Trùm Đọc ➔ Thần Thoại</p>
+          </div>
+        </div>
+
+        <div class="exp-guide-box">
+          <p class="exp-guide-title">💡 Cách tích lũy Tu Vi / EXP:</p>
+          <ul>
+            <li><strong>Đọc 1 chương truyện</strong>: +10 EXP</li>
+            <li><strong>Duy trì chuỗi Streak mỗi ngày</strong>: +50 EXP</li>
+            <li><strong>Bình luận & Gợi ý thuật ngữ chuẩn</strong>: +20 EXP</li>
+          </ul>
         </div>
       </div>
     </dialog>

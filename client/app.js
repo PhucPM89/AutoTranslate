@@ -12,6 +12,7 @@ const { updatePageMeta, shareContent } = require("./seo.js");
 const { createTTS } = require("./tts.js");
 const { drawQRCodeToCanvas } = require("./qr-generator.js");
 const { fetchChapterComments, postComment } = require("./comments.js");
+const { getReaderProfile, addReaderExp, setRankSchool, getRankSchools, calculateRank } = require("./reader-rank.js");
 
 let activeShelfTab = "all";
 let userSync = null;
@@ -259,7 +260,23 @@ const els = {
   sponsorDialogClose: document.getElementById("sponsorDialogClose"),
   chapterSponsorSlot: document.getElementById("chapterSponsorSlot"),
   sponsorSlotTriggerBtn: document.getElementById("sponsorSlotTriggerBtn"),
-  sponsorSlotDismissBtn: document.getElementById("sponsorSlotDismissBtn")
+  sponsorSlotDismissBtn: document.getElementById("sponsorSlotDismissBtn"),
+  readerRankBadge: document.getElementById("readerRankBadge"),
+  rankBadgeIcon: document.getElementById("rankBadgeIcon"),
+  rankBadgeTitle: document.getElementById("rankBadgeTitle"),
+  commentRankTriggerBtn: document.getElementById("commentRankTriggerBtn"),
+  commentRankIcon: document.getElementById("commentRankIcon"),
+  commentRankText: document.getElementById("commentRankText"),
+  rankSchoolDialog: document.getElementById("rankSchoolDialog"),
+  rankSchoolClose: document.getElementById("rankSchoolClose"),
+  schoolCardsGrid: document.getElementById("schoolCardsGrid"),
+  rankModalIcon: document.getElementById("rankModalIcon"),
+  rankModalSchool: document.getElementById("rankModalSchool"),
+  rankModalTitle: document.getElementById("rankModalTitle"),
+  rankModalTotalExp: document.getElementById("rankModalTotalExp"),
+  rankModalProgressFill: document.getElementById("rankModalProgressFill"),
+  rankModalProgressLabel: document.getElementById("rankModalProgressLabel"),
+  rankModalNextTitle: document.getElementById("rankModalNextTitle")
 };
 
 const parser = new DOMParser();
@@ -272,6 +289,7 @@ initGlossarySuggestionController();
 initCommentsController();
 initStreakTracker();
 initSponsorController();
+initReaderRankController();
 initSecurityGuards();
 registerServiceWorker();
 initTTSController();
@@ -1720,6 +1738,12 @@ function goToChapter(index) {
   els.chapterList.querySelector(".document-item.active")?.classList.remove("active");
   els.chapterList.querySelector(`.document-item[data-index="${state.currentIndex}"]`)?.classList.add("active");
 
+  const expResult = addReaderExp(10, "read_chapter");
+  if (expResult.leveledUp) {
+    showToast(`🎉 CHÚC MỪNG! Đột phá cảnh giới: ${expResult.title}!`, 4000);
+  }
+  updateRankBadgeUI();
+
   saveProgressSoon();
   if (state.mode === "cdn") loadCdnChapter(state.currentIndex);
   else loadCachedTranslation();
@@ -2250,6 +2274,8 @@ function initCommentsController() {
     const bookId = state.mode === "cdn" ? bookIdFromState() : state.bookId;
     const chIdx = state.currentIndex;
     const parIdx = activeCommentParagraphIndex;
+    const profile = getReaderProfile();
+    const authorWithRank = `[${profile.title}] ${author}`;
 
     try {
       if (els.commentSubmitBtn) els.commentSubmitBtn.disabled = true;
@@ -2259,13 +2285,19 @@ function initCommentsController() {
         bookId,
         chapterIndex: chIdx,
         paragraphIndex: parIdx,
-        authorName: author,
+        authorName: authorWithRank,
         content
       });
 
       if (els.commentContentInput) els.commentContentInput.value = "";
       localStorage.setItem("epubTranslator.commentAuthor", author);
-      showToast("✓ Đã đăng bình luận");
+      
+      const expResult = addReaderExp(20, "comment");
+      if (expResult.leveledUp) {
+        showToast(`🎉 CHÚC MỪNG! Bạn đã thăng cấp: ${expResult.title}!`, 4000);
+      }
+      updateRankBadgeUI();
+      showToast("✓ Đã đăng bình luận (+20 EXP)");
 
       await renderCommentsListForParagraph(bookId, chIdx, parIdx);
       await updateParagraphCommentBadge(parIdx);
@@ -2288,6 +2320,7 @@ async function openCommentsDrawer(parIndex, parText) {
   if (els.commentsDrawerTitle) els.commentsDrawerTitle.textContent = `Đoạn ${parIndex + 1}`;
   if (els.commentsSnippet) els.commentsSnippet.textContent = `"${parText.slice(0, 100)}${parText.length > 100 ? "..." : ""}"`;
 
+  updateRankBadgeUI();
   els.commentsDrawer.hidden = false;
   if (els.commentsOverlay) els.commentsOverlay.hidden = false;
 
@@ -2321,9 +2354,21 @@ async function renderCommentsListForParagraph(bookId, chIdx, parIdx) {
     const item = document.createElement("div");
     item.className = "comment-item";
     const timeStr = c.created_at ? new Date(c.created_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "";
+    
+    const rawName = String(c.author_name || "Độc giả");
+    const rankMatch = rawName.match(/^\[(.*?)\]\s*(.*)$/);
+    let authorDisplay = "";
+    if (rankMatch) {
+      const badgeTitle = escapeHtml(rankMatch[1]);
+      const cleanName = escapeHtml(rankMatch[2] || "Độc giả");
+      authorDisplay = `<span class="comment-rank-badge rank-4">[${badgeTitle}]</span><span class="comment-author-name">${cleanName}</span>`;
+    } else {
+      authorDisplay = `<span class="comment-author-name">${escapeHtml(rawName)}</span>`;
+    }
+
     item.innerHTML = `
       <div class="comment-header">
-        <span class="comment-author">${escapeHtml(c.author_name || "Độc giả")}</span>
+        <span class="comment-author">${authorDisplay}</span>
         <span class="comment-time">${timeStr}</span>
       </div>
       <div class="comment-body">${escapeHtml(c.content)}</div>
@@ -2403,6 +2448,7 @@ function initStreakTracker() {
       streak += 1;
       localStorage.setItem(STREAK_KEY, String(streak));
       localStorage.setItem(STREAK_DATE_KEY, today);
+      addReaderExp(50, "streak");
     } else if (diffDays > 1) {
       streak = 1;
       localStorage.setItem(STREAK_KEY, "1");
@@ -2411,12 +2457,14 @@ function initStreakTracker() {
   } else {
     localStorage.setItem(STREAK_KEY, "1");
     localStorage.setItem(STREAK_DATE_KEY, today);
+    addReaderExp(50, "streak_first");
   }
 
   if (els.streakBadge && els.streakDays) {
     els.streakBadge.hidden = false;
     els.streakDays.textContent = `${streak} ngày`;
   }
+  updateRankBadgeUI();
 }
 
 function initSponsorController() {
@@ -2445,6 +2493,73 @@ function initSponsorController() {
   if (sessionStorage.getItem(SPONSOR_DISMISSED_KEY) === "1") {
     if (els.chapterSponsorSlot) els.chapterSponsorSlot.hidden = true;
   }
+}
+
+function updateRankBadgeUI() {
+  const profile = getReaderProfile();
+
+  // Topbar badge
+  if (els.rankBadgeIcon) els.rankBadgeIcon.textContent = profile.schoolIcon;
+  if (els.rankBadgeTitle) els.rankBadgeTitle.textContent = profile.title;
+  if (els.readerRankBadge) {
+    els.readerRankBadge.className = `reader-rank-badge ${profile.badgeClass}`;
+  }
+
+  // Comment drawer trigger
+  if (els.commentRankIcon) els.commentRankIcon.textContent = profile.schoolIcon;
+  if (els.commentRankText) els.commentRankText.textContent = profile.title;
+
+  // Dialog current card
+  if (els.rankModalIcon) els.rankModalIcon.textContent = profile.schoolIcon;
+  if (els.rankModalSchool) els.rankModalSchool.textContent = profile.schoolName;
+  if (els.rankModalTitle) els.rankModalTitle.textContent = `${profile.title} (Cấp ${profile.levelNumber})`;
+  if (els.rankModalTotalExp) els.rankModalTotalExp.textContent = `${profile.exp.toLocaleString("vi-VN")} EXP`;
+  if (els.rankModalProgressFill) els.rankModalProgressFill.style.width = `${profile.progressPct}%`;
+  if (els.rankModalProgressLabel) {
+    els.rankModalProgressLabel.textContent = profile.nextMinExp
+      ? `${profile.exp.toLocaleString("vi-VN")} / ${profile.nextMinExp.toLocaleString("vi-VN")} EXP để đột phá`
+      : "Đã đạt cảnh giới tối cao";
+  }
+  if (els.rankModalNextTitle) {
+    els.rankModalNextTitle.textContent = profile.nextTitle ? `Cảnh giới kế: ${profile.nextTitle}` : "Đỉnh phong tuyệt đối";
+  }
+
+  // Highlight active school card in dialog
+  if (els.schoolCardsGrid) {
+    els.schoolCardsGrid.querySelectorAll(".school-card").forEach((card) => {
+      const isCurrent = card.dataset.school === profile.school;
+      card.classList.toggle("is-active", isCurrent);
+    });
+  }
+}
+
+function initReaderRankController() {
+  updateRankBadgeUI();
+
+  function openRankModal() {
+    updateRankBadgeUI();
+    els.rankSchoolDialog?.showModal();
+  }
+
+  function closeRankModal() {
+    els.rankSchoolDialog?.close();
+  }
+
+  els.readerRankBadge?.addEventListener("click", openRankModal);
+  els.commentRankTriggerBtn?.addEventListener("click", openRankModal);
+  els.rankSchoolClose?.addEventListener("click", closeRankModal);
+  els.rankSchoolDialog?.addEventListener("click", (e) => {
+    if (e.target === els.rankSchoolDialog) closeRankModal();
+  });
+
+  els.schoolCardsGrid?.addEventListener("click", (e) => {
+    const card = e.target.closest(".school-card");
+    if (!card || !card.dataset.school) return;
+    const schoolId = card.dataset.school;
+    const newProfile = setRankSchool(schoolId);
+    updateRankBadgeUI();
+    showToast(`✓ Đã chuyển sang ${newProfile.schoolName}: [${newProfile.title}]`, 3000);
+  });
 }
 
 function registerServiceWorker() {
