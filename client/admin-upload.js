@@ -525,7 +525,21 @@ function renderTranslateStatus(status = {}) {
     if (!queue.length) {
       els.translateQueueList.innerHTML = `<p class="stats-empty">Hàng đợi trống. Tất cả truyện đã dịch xong hoặc chưa thêm truyện mới.</p>`;
     } else {
-      for (const item of queue) {
+      // Sort: current translating book first, then high-priority books, then pending > 0
+      const sortedQueue = [...queue].sort((a, b) => {
+        const isCurrentA = status.state === "running" && status.currentBookId === a.bookId ? 1 : 0;
+        const isCurrentB = status.state === "running" && status.currentBookId === b.bookId ? 1 : 0;
+        if (isCurrentA !== isCurrentB) return isCurrentB - isCurrentA;
+        if (a.highPriority !== b.highPriority) return (b.highPriority ? 1 : 0) - (a.highPriority ? 1 : 0);
+        return (b.pending || 0) - (a.pending || 0);
+      });
+
+      // Show top 5 active items to keep UI lightweight and lightning-fast
+      const MAX_VISIBLE = 5;
+      const visibleItems = sortedQueue.slice(0, MAX_VISIBLE);
+      const remainingCount = sortedQueue.length - visibleItems.length;
+
+      for (const item of visibleItems) {
         const row = document.createElement("div");
         row.className = "translate-queue-item";
         const matched = (adminCatalog.books || []).find((b) => b.id === item.bookId);
@@ -548,6 +562,13 @@ function renderTranslateStatus(status = {}) {
           <div class="queue-item-bar"><span style="width: ${pct}%"></span></div>
         `;
         els.translateQueueList.appendChild(row);
+      }
+
+      if (remainingCount > 0) {
+        const moreNote = document.createElement("div");
+        moreNote.className = "queue-more-note";
+        moreNote.textContent = `... và ${remainingCount} bộ truyện khác đang xếp hàng xoay vòng`;
+        els.translateQueueList.appendChild(moreNote);
       }
     }
   }

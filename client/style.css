@@ -7666,6 +7666,18 @@ body.zen-mode .document-paper {
   height: 15px;
 }
 
+.queue-more-note {
+  text-align: center;
+  font-size: 0.8rem;
+  color: #94a3b8;
+  padding: 0.6rem 0.8rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  margin-top: 0.35rem;
+}
+
+
 
 
 
