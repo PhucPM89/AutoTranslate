@@ -9,12 +9,15 @@ const { renderQuoteCard } = require("./quote-card.js");
 const { applyInvisibleWatermark, initSecurityGuards } = require("./security.js");
 const { extractTitleFromContent, formatVietnameseChapterTitle } = require("./chapter-title.js");
 const { updatePageMeta, shareContent } = require("./seo.js");
+const { createTTS } = require("./tts.js");
 
 let activeShelfTab = "all";
 let userSync = null;
 let autoScrollRaf = null;
 let isAutoScrolling = false;
 let selectedQuoteText = "";
+let ttsEngine = null;
+let isZenMode = false;
 
 const state = {
   // "epub" is the legacy path (download the whole book, parse with JSZip).
@@ -200,7 +203,25 @@ const els = {
   fontSizeLabel: document.getElementById("fontSizeLabel"),
   widthPreset: document.getElementById("widthPreset"),
   bookViewShare: document.getElementById("bookViewShare"),
-  readerShareBtn: document.getElementById("readerShareBtn")
+  readerShareBtn: document.getElementById("readerShareBtn"),
+  bookViewTranslateProgress: document.getElementById("bookViewTranslateProgress"),
+  bookViewTranslatePercent: document.getElementById("bookViewTranslatePercent"),
+  bookViewTranslateFill: document.getElementById("bookViewTranslateFill"),
+  ttsToggleBtn: document.getElementById("ttsToggleBtn"),
+  ttsToggleLabel: document.getElementById("ttsToggleLabel"),
+  zenModeBtn: document.getElementById("zenModeBtn"),
+  zenExitBtn: document.getElementById("zenExitBtn"),
+  ttsAudioBar: document.getElementById("ttsAudioBar"),
+  ttsStatusText: document.getElementById("ttsStatusText"),
+  ttsPrevParBtn: document.getElementById("ttsPrevParBtn"),
+  ttsPlayPauseBtn: document.getElementById("ttsPlayPauseBtn"),
+  ttsNextParBtn: document.getElementById("ttsNextParBtn"),
+  ttsSpeedSelect: document.getElementById("ttsSpeedSelect"),
+  ttsTimerBtn: document.getElementById("ttsTimerBtn"),
+  ttsTimerLabel: document.getElementById("ttsTimerLabel"),
+  ttsStopCloseBtn: document.getElementById("ttsStopCloseBtn"),
+  sleepTimerDialog: document.getElementById("sleepTimerDialog"),
+  sleepTimerClose: document.getElementById("sleepTimerClose")
 };
 
 const parser = new DOMParser();
@@ -210,6 +231,8 @@ bindEvents();
 initQuoteCardAndSelection();
 initSecurityGuards();
 registerServiceWorker();
+initTTSController();
+initZenModeController();
 // Before initializeLibrary, because a confirmation link comes back with tokens in
 // the URL fragment and they have to be consumed and wiped before anything else
 // reads the hash.
@@ -983,7 +1006,16 @@ function createBookCard(book, index = 0) {
   const description = appendTextElement(body, "p", "book-description", book.description || "Mở truyện để xem mục lục và bắt đầu dịch theo chương.");
   const footer = document.createElement("div");
   footer.className = "book-card-footer";
-  appendTextElement(footer, "span", "", book.chapterCount ? `${book.chapterCount} chương` : "EPUB");
+  const translated = Number(book.translatedChapters || 0);
+  const total = Number(book.chapterCount || 0);
+  if (translated > 0) {
+    const badge = document.createElement("span");
+    badge.className = "catalog-translate-badge";
+    badge.innerHTML = `<svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px;display:inline"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Dịch ${translated} ch`;
+    footer.appendChild(badge);
+  } else {
+    appendTextElement(footer, "span", "", total ? `${total} chương` : "EPUB");
+  }
   const readButton = document.createElement("button");
   readButton.type = "button";
   readButton.className = "book-read-button";
@@ -1028,6 +1060,13 @@ function showReader() {
 
 function showLibrary() {
   updateContinueReading();
+  if (ttsEngine) ttsEngine.stop();
+  if (isZenMode) {
+    isZenMode = false;
+    document.body.classList.remove("zen-mode");
+    if (els.zenExitBtn) els.zenExitBtn.hidden = true;
+    if (els.zenModeBtn) els.zenModeBtn.classList.remove("is-active");
+  }
   els.readerView.hidden = true;
   els.bookView.hidden = true;
   els.libraryView.hidden = false;
@@ -1086,6 +1125,21 @@ async function showBookDetail(book, { updateHash = true } = {}) {
   els.bookViewAuthor.textContent = book.author ? `Tác giả: ${book.author}` : "Tác giả chưa cập nhật";
   els.bookViewChapters.textContent = book.chapterCount ? `${book.chapterCount} chương` : "Định dạng EPUB";
   els.bookViewUpdated.textContent = book.updatedAt || "Chưa rõ";
+
+  const totalCh = Number(book.chapterCount || book.totalChapters || 0);
+  const transCh = Number(book.translatedChapters || 0);
+  const transPct = totalCh > 0 ? Math.min(100, Math.round((transCh / totalCh) * 100)) : (transCh > 0 ? 100 : 0);
+
+  if (els.bookViewTranslateProgress) {
+    els.bookViewTranslateProgress.textContent = transCh > 0 ? `${transCh.toLocaleString("vi-VN")} / ${totalCh.toLocaleString("vi-VN")} chương` : (book.status === "Hoàn thành" ? "Hoàn tất" : "Đang dịch");
+  }
+  if (els.bookViewTranslatePercent) {
+    els.bookViewTranslatePercent.textContent = `${transPct}%`;
+  }
+  if (els.bookViewTranslateFill) {
+    els.bookViewTranslateFill.style.width = `${transPct}%`;
+  }
+
   renderBookDescription(book.description);
   renderRelatedBooks(book);
   updateBookViewBookmark(book);
@@ -1649,6 +1703,175 @@ function initQuoteCardAndSelection() {
   });
 }
 
+function initZenModeController() {
+  function toggleZenMode() {
+    isZenMode = !isZenMode;
+    document.body.classList.toggle("zen-mode", isZenMode);
+    if (els.zenExitBtn) els.zenExitBtn.hidden = !isZenMode;
+    if (els.zenModeBtn) els.zenModeBtn.classList.toggle("is-active", isZenMode);
+
+    if (isZenMode) {
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+      showToast("Chế độ Zen: Bấm Esc hoặc Z để thoát");
+    } else {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+  }
+
+  els.zenModeBtn?.addEventListener("click", toggleZenMode);
+  els.zenExitBtn?.addEventListener("click", toggleZenMode);
+
+  window.addEventListener("keydown", (e) => {
+    if (els.readerView.hidden) return;
+    if (e.target.matches("input, textarea, select")) return;
+    if (e.key === "z" || e.key === "Z" || e.key === "f" || e.key === "F") {
+      e.preventDefault();
+      toggleZenMode();
+    } else if (e.key === "Escape" && isZenMode) {
+      toggleZenMode();
+    }
+  });
+}
+
+function initTTSController() {
+  ttsEngine = createTTS();
+
+  ttsEngine.onParagraphChange = (index) => {
+    const paragraphs = els.translationText.querySelectorAll(".tts-paragraph-highlight");
+    paragraphs.forEach((p, idx) => {
+      if (idx === index) {
+        p.classList.add("tts-active");
+        p.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else {
+        p.classList.remove("tts-active");
+      }
+    });
+  };
+
+  ttsEngine.onStateChange = ({ isPlaying, isPaused, hasTimer, timerLabel }) => {
+    if (els.ttsAudioBar) {
+      els.ttsAudioBar.hidden = !isPlaying && !isPaused;
+      els.ttsAudioBar.classList.toggle("is-paused", isPaused);
+    }
+    if (els.ttsToggleBtn) {
+      els.ttsToggleBtn.classList.toggle("is-active", isPlaying || isPaused);
+    }
+    if (els.ttsToggleLabel) {
+      els.ttsToggleLabel.textContent = isPlaying ? (isPaused ? "Đang dừng" : "Đang đọc") : "Nghe đọc";
+    }
+    if (els.ttsStatusText) {
+      els.ttsStatusText.textContent = isPaused ? "Tạm dừng" : "Đang phát...";
+    }
+    const playIcon = els.ttsPlayPauseBtn?.querySelector(".tts-icon-play");
+    const pauseIcon = els.ttsPlayPauseBtn?.querySelector(".tts-icon-pause");
+    if (playIcon) playIcon.hidden = isPlaying && !isPaused;
+    if (pauseIcon) pauseIcon.hidden = !isPlaying || isPaused;
+
+    if (els.ttsTimerBtn) {
+      els.ttsTimerBtn.classList.toggle("has-timer", hasTimer);
+    }
+    if (els.ttsTimerLabel) {
+      els.ttsTimerLabel.textContent = timerLabel || "Hẹn giờ";
+    }
+  };
+
+  ttsEngine.onTimerTick = (timeStr) => {
+    if (els.ttsTimerLabel) els.ttsTimerLabel.textContent = timeStr || "Hẹn giờ";
+  };
+
+  ttsEngine.onFinished = () => {
+    if (state.currentIndex < state.chapters.length - 1) {
+      showToast("Chuyển sang chương tiếp theo...");
+      goToChapter(state.currentIndex + 1);
+      setTimeout(() => {
+        startTTSFromCurrent();
+      }, 1000);
+    } else {
+      ttsEngine.stop();
+      showToast("Đã đọc hết bộ truyện.");
+    }
+  };
+
+  function startTTSFromCurrent() {
+    const text = els.translationText.textContent;
+    if (!text || els.translationText.classList.contains("empty")) {
+      showToast("Chưa có bản dịch để đọc");
+      return;
+    }
+
+    const rawParagraphs = text.split(/\n+/).map((p) => p.trim()).filter(Boolean);
+    els.translationText.innerHTML = "";
+    rawParagraphs.forEach((pText, i) => {
+      const pEl = document.createElement("p");
+      pEl.className = "tts-paragraph-highlight";
+      pEl.dataset.parIndex = String(i);
+      pEl.textContent = pText;
+      pEl.addEventListener("click", () => {
+        if (ttsEngine.isPlaying) {
+          ttsEngine.speakParagraph(i);
+        }
+      });
+      els.translationText.appendChild(pEl);
+    });
+
+    ttsEngine.loadText(text);
+    ttsEngine.play(0);
+  }
+
+  els.ttsToggleBtn?.addEventListener("click", () => {
+    if (ttsEngine.isPlaying || ttsEngine.isPaused) {
+      if (ttsEngine.isPaused) ttsEngine.resume();
+      else ttsEngine.pause();
+    } else {
+      startTTSFromCurrent();
+    }
+  });
+
+  els.ttsPlayPauseBtn?.addEventListener("click", () => {
+    if (ttsEngine.isPaused) ttsEngine.resume();
+    else if (ttsEngine.isPlaying) ttsEngine.pause();
+    else startTTSFromCurrent();
+  });
+
+  els.ttsPrevParBtn?.addEventListener("click", () => ttsEngine.previous());
+  els.ttsNextParBtn?.addEventListener("click", () => ttsEngine.next());
+
+  els.ttsSpeedSelect?.addEventListener("change", (e) => {
+    ttsEngine.setSpeed(Number(e.target.value));
+  });
+
+  els.ttsTimerBtn?.addEventListener("click", () => {
+    els.sleepTimerDialog?.showModal();
+  });
+
+  els.sleepTimerClose?.addEventListener("click", () => {
+    els.sleepTimerDialog?.close();
+  });
+
+  els.sleepTimerDialog?.addEventListener("click", (e) => {
+    if (e.target === els.sleepTimerDialog) els.sleepTimerDialog.close();
+  });
+
+  document.querySelectorAll(".sleep-option-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const mins = Number(btn.dataset.minutes);
+      ttsEngine.setSleepTimer(mins);
+      els.sleepTimerDialog?.close();
+      if (mins === 0) showToast("Đã tắt hẹn giờ");
+      else if (mins === -1) showToast("Sẽ dừng sau khi đọc xong chương này");
+      else showToast(`Sẽ tự động tắt sau ${mins} phút`);
+    });
+  });
+
+  els.ttsStopCloseBtn?.addEventListener("click", () => {
+    ttsEngine.stop();
+  });
+}
+
 function handleSelectionChange() {
   const selection = window.getSelection();
   if (!selection || selection.isCollapsed) {
@@ -1742,11 +1965,31 @@ function renderTranslation(cached, index) {
   }
 
   if (cached) {
-    els.translationText.textContent = applyInvisibleWatermark(cached);
+    const watermarked = applyInvisibleWatermark(cached);
+    const rawParagraphs = watermarked.split(/\n+/).map((p) => p.trim()).filter(Boolean);
+    els.translationText.innerHTML = "";
+    rawParagraphs.forEach((pText, i) => {
+      const pEl = document.createElement("p");
+      pEl.className = "tts-paragraph-highlight";
+      pEl.dataset.parIndex = String(i);
+      pEl.textContent = pText;
+      pEl.addEventListener("click", () => {
+        if (ttsEngine && ttsEngine.isPlaying) {
+          ttsEngine.speakParagraph(i);
+        }
+      });
+      els.translationText.appendChild(pEl);
+    });
+
     els.translationText.classList.remove("empty", "status-error", "is-loading");
     els.outputStatus.textContent = "Đã lưu";
     els.translateButton.hidden = true;
     els.retranslateButton.hidden = false;
+
+    if (ttsEngine && ttsEngine.isPlaying && !ttsEngine.isPaused) {
+      ttsEngine.loadText(cached);
+      ttsEngine.play(0);
+    }
 
     const extracted = extractTitleFromContent(cached);
     if (extracted && chapter && chapter.translatedTitle !== extracted) {

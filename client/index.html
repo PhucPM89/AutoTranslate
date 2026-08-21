@@ -251,9 +251,13 @@
             <p id="bookViewAuthor" class="book-view-author"></p>
             <dl class="book-view-facts">
               <div><dt>Số chương</dt><dd id="bookViewChapters">—</dd></div>
-              <div><dt>Cập nhật</dt><dd id="bookViewUpdated">—</dd></div>
+              <div><dt>Tiến độ dịch</dt><dd id="bookViewTranslateProgress">Đang cập nhật</dd></div>
               <div><dt>Tiến độ của bạn</dt><dd id="bookViewProgress">Chưa đọc</dd></div>
             </dl>
+            <div class="translate-bar-container" title="Tiến độ dịch thuật tiếng Việt">
+              <div class="translate-bar-label"><span>Tiến độ dịch:</span><strong id="bookViewTranslatePercent">0%</strong></div>
+              <div class="translate-bar-track"><div id="bookViewTranslateFill" class="translate-bar-fill" style="width: 0%"></div></div>
+            </div>
             <div class="book-view-actions">
               <button id="bookViewRead" class="primary-action" type="button"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m5 3 14 9-14 9V3Z"></path></svg><span id="bookViewReadLabel">Đọc từ đầu</span></button>
               <button id="bookViewBookmark" class="secondary-action bookmark-button" type="button" aria-label="Lưu vào tủ truyện"><svg class="icon bookmark-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg><span id="bookViewBookmarkLabel">Lưu vào tủ truyện</span></button>
@@ -454,6 +458,16 @@
                   </button>
                   <label class="auto-scroll-speed-wrap"><span class="sr-only">Tốc độ cuộn</span><select id="autoScrollSpeed" class="auto-scroll-speed-select" title="Tốc độ cuộn"><option value="1">1x</option><option value="2">2x</option><option value="3">3x</option></select></label>
                 </div>
+                <div class="toolbar-group tts-zen-group">
+                  <button id="ttsToggleBtn" class="tool-button tts-toggle-button" type="button" aria-label="Nghe đọc giọng AI" title="Nghe đọc giọng AI (Text-to-Speech)">
+                    <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path></svg>
+                    <span id="ttsToggleLabel">Nghe đọc</span>
+                  </button>
+                  <button id="zenModeBtn" class="tool-button zen-mode-button" type="button" aria-label="Chế độ đọc tập trung (Zen Mode)" title="Đọc tập trung (Phím Z hoặc F)">
+                    <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
+                    <span>Zen</span>
+                  </button>
+                </div>
                 <div class="toolbar-group reader-bar-nav"><button id="prevChapter" class="tool-button" type="button" disabled aria-label="Chương trước" title="Chương trước"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"></path></svg></button><button id="nextChapter" class="tool-button" type="button" disabled aria-label="Chương sau" title="Chương sau"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg></button></div>
                 <button id="translateButton" class="primary-action" type="button" disabled><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m5 3 14 9-14 9V3Z"></path></svg>Dịch chương</button>
                 <button id="retranslateButton" class="secondary-action" type="button" hidden><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v6h-6M4 18v-6h6"></path><path d="M18.49 9A7 7 0 0 0 5.64 6.64L4 9M20 15l-1.64 2.36A7 7 0 0 1 5.51 15"></path></svg>Dịch lại</button>
@@ -476,6 +490,58 @@
         </section>
       </main>
     </div>
+
+    <!-- Floating Zen Mode Exit Button -->
+    <button id="zenExitBtn" class="zen-exit-btn" type="button" title="Thoát chế độ tập trung (Esc)" hidden>
+      <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path></svg>
+      <span>Thoát Zen</span>
+    </button>
+
+    <!-- Floating Audio TTS Player Bar -->
+    <div id="ttsAudioBar" class="tts-audio-bar" hidden>
+      <div class="tts-soundwave" aria-hidden="true">
+        <span></span><span></span><span></span><span></span>
+      </div>
+      <div class="tts-info">
+        <span class="tts-badge">Giọng AI</span>
+        <span id="ttsStatusText" class="tts-status">Đang phát...</span>
+      </div>
+      <div class="tts-controls">
+        <button id="ttsPrevParBtn" class="tts-btn" type="button" aria-label="Đoạn trước" title="Đoạn trước"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"></path></svg></button>
+        <button id="ttsPlayPauseBtn" class="tts-btn tts-btn-primary" type="button" aria-label="Tạm dừng/Phát" title="Tạm dừng / Phát"><svg class="icon tts-icon-play" aria-hidden="true" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg><svg class="icon tts-icon-pause" aria-hidden="true" viewBox="0 0 24 24" hidden><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg></button>
+        <button id="ttsNextParBtn" class="tts-btn" type="button" aria-label="Đoạn kế tiếp" title="Đoạn kế tiếp"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg></button>
+      </div>
+      <div class="tts-settings">
+        <select id="ttsSpeedSelect" class="tts-select" title="Tốc độ đọc">
+          <option value="0.75">0.75x</option>
+          <option value="1.0" selected>1.0x</option>
+          <option value="1.25">1.25x</option>
+          <option value="1.5">1.5x</option>
+          <option value="2.0">2.0x</option>
+        </select>
+        <button id="ttsTimerBtn" class="tts-btn tts-timer-btn" type="button" aria-label="Hẹn giờ tắt" title="Hẹn giờ tắt">
+          <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <span id="ttsTimerLabel">Hẹn giờ</span>
+        </button>
+        <button id="ttsStopCloseBtn" class="tts-btn tts-close-btn" type="button" aria-label="Dừng và đóng" title="Dừng đọc"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"></path></svg></button>
+      </div>
+    </div>
+
+    <!-- Sleep Timer Dialog -->
+    <dialog id="sleepTimerDialog" class="sleep-timer-dialog" aria-labelledby="sleepTimerTitle">
+      <div class="sleep-timer-header">
+        <div><p class="eyebrow">Hẹn giờ tự động tắt</p><h3 id="sleepTimerTitle">Dừng đọc sau</h3></div>
+        <button id="sleepTimerClose" class="icon-button" type="button" aria-label="Đóng" title="Đóng"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"></path></svg></button>
+      </div>
+      <div class="sleep-timer-options">
+        <button class="sleep-option-btn" type="button" data-minutes="15">15 phút</button>
+        <button class="sleep-option-btn" type="button" data-minutes="30">30 phút</button>
+        <button class="sleep-option-btn" type="button" data-minutes="45">45 phút</button>
+        <button class="sleep-option-btn" type="button" data-minutes="60">60 phút</button>
+        <button class="sleep-option-btn" type="button" data-minutes="-1">Hết chương hiện tại</button>
+        <button class="sleep-option-btn sleep-cancel-btn" type="button" data-minutes="0">Tắt hẹn giờ</button>
+      </div>
+    </dialog>
 
     <!-- Floating selection tooltip -->
     <div id="selectionTooltip" class="selection-tooltip" hidden>
