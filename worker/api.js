@@ -51,7 +51,6 @@ const UPLOAD_KINDS = {
 };
 
 const ROUTES = {
-  "/api/instant-translate": handleInstantTranslate,
   "/api/admin/keys": handleAdminKeys,
   "/api/admin/session": handleSession,
   "/api/admin/login": handleLogin,
@@ -512,42 +511,6 @@ async function saveActiveKeyList(env, list) {
   await storage.put(KEYS_STORAGE_KEY, JSON.stringify(list, null, 2), {
     contentType: "application/json",
     cacheControl: "no-cache"
-  });
-}
-
-// ---- instant translation on demand ----------------------------------------
-
-async function handleInstantTranslate({ request, env }) {
-  if (request.method !== "POST") return methodNotAllowed("POST");
-  requireSameOrigin(request);
-
-  const body = await readJson(request);
-  const rawText = String(body?.rawText || body?.text || "").trim();
-  const bookTitle = String(body?.bookTitle || "").trim();
-  const chapterNumber = Number(body?.chapterNumber) || 1;
-  const bookId = String(body?.bookId || "").trim();
-
-  if (!rawText) {
-    throw fail(400, "Thiếu văn bản tiếng Trung cần dịch.");
-  }
-
-  const keys = await getActiveKeyList(env);
-  if (!keys.length) {
-    throw fail(503, "Hệ thống AI chưa được cấu hình API Key.");
-  }
-
-  const { translateText } = await import("../server/gemini.js");
-  const result = await translateText(rawText, keys, {
-    bookTitle
-  });
-
-  return json({
-    success: true,
-    translation: result.translation,
-    modelsUsed: result.modelsUsed,
-    elapsedMs: result.elapsedMs,
-    bookId,
-    chapterNumber
   });
 }
 
