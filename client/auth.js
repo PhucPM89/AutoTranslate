@@ -122,6 +122,7 @@ function createAuthClient({ url, anonKey, storage, fetchImpl = fetch, now = () =
 
   return {
     getSession: () => session,
+    getUser: () => session?.user || null,
     getOAuthUrl,
     signInWithGoogle,
     signOut,

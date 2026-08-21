@@ -374,6 +374,13 @@ userSync.subscribe(() => {
   if (activeShelfTab === "myShelf") renderCatalog();
   if (libraryState.detailBook) updateBookViewBookmark(libraryState.detailBook);
 });
+function getAuthUser() {
+  if (!authClient) return null;
+  if (typeof authClient.getUser === "function") return authClient.getUser();
+  if (typeof authClient.getSession === "function") return authClient.getSession()?.user || null;
+  return null;
+}
+
 initializeLibrary();
 
 function bindEvents() {
@@ -1806,7 +1813,7 @@ function goToChapter(index) {
 
   const expResult = addReaderExp(10, "read_chapter");
   incrementChaptersRead();
-  syncReaderLeaderboard({ supabaseUrl: SUPABASE_URL, supabaseKey: SUPABASE_ANON_KEY, user: authClient?.getUser() }).catch(() => {});
+  syncReaderLeaderboard({ supabaseUrl: SUPABASE_URL, supabaseKey: SUPABASE_ANON_KEY, user: getAuthUser() }).catch(() => {});
   if (expResult.leveledUp) {
     showToast(`🎉 CHÚC MỪNG! Đột phá cảnh giới: ${expResult.title}!`, 4000);
   }
@@ -2659,7 +2666,7 @@ function initSponsorController() {
 function updateRankBadgeUI() {
   const profile = getReaderProfile();
   const nickname = getReaderNickname();
-  const myNickname = nickname || authClient?.getUser()?.user_metadata?.full_name || authClient?.getUser()?.email?.split("@")[0] || "Ẩn danh đạo hữu";
+  const myNickname = nickname || getAuthUser()?.user_metadata?.full_name || getAuthUser()?.fullName || getAuthUser()?.email?.split("@")[0] || "Ẩn danh đạo hữu";
 
   // Topbar badge
   if (els.rankBadgeIcon) els.rankBadgeIcon.textContent = profile.schoolIcon;
@@ -2757,10 +2764,10 @@ async function renderLeaderboardData(school = "all") {
   }
 
   const profile = getReaderProfile();
-  const myUid = authClient?.getUser()?.id || getReaderId();
+  const myUid = getAuthUser()?.id || getReaderId();
   const myExp = profile.exp;
   const nickname = getReaderNickname();
-  const myNickname = nickname || authClient?.getUser()?.user_metadata?.full_name || authClient?.getUser()?.email?.split("@")[0] || "Ẩn danh đạo hữu";
+  const myNickname = nickname || getAuthUser()?.user_metadata?.full_name || getAuthUser()?.fullName || getAuthUser()?.email?.split("@")[0] || "Ẩn danh đạo hữu";
 
   // Render bottom user standing
   if (els.myStandingName) els.myStandingName.textContent = myNickname;
@@ -2857,7 +2864,7 @@ function initReaderRankController() {
     updateRankBadgeUI();
     switchRankHubTab(defaultTab);
     els.rankSchoolDialog?.showModal();
-    syncReaderLeaderboard({ supabaseUrl: SUPABASE_URL, supabaseKey: SUPABASE_ANON_KEY, user: authClient?.getUser() }).catch(() => {});
+    syncReaderLeaderboard({ supabaseUrl: SUPABASE_URL, supabaseKey: SUPABASE_ANON_KEY, user: getAuthUser() }).catch(() => {});
   }
 
   function closeRankModal() {
@@ -2889,7 +2896,7 @@ function initReaderRankController() {
     if (els.commentAuthorInput) els.commentAuthorInput.value = clean;
     updateRankBadgeUI();
     showToast(clean ? `✓ Đã lưu đạo hiệu: ${clean}` : "✓ Đã đặt lại đạo hiệu mặc định", 2500);
-    await syncReaderLeaderboard({ supabaseUrl: SUPABASE_URL, supabaseKey: SUPABASE_ANON_KEY, user: authClient?.getUser(), force: true });
+    await syncReaderLeaderboard({ supabaseUrl: SUPABASE_URL, supabaseKey: SUPABASE_ANON_KEY, user: getAuthUser(), force: true });
   }
 
   els.saveNicknameBtn?.addEventListener("click", handleSaveNickname);
@@ -2913,7 +2920,7 @@ function initReaderRankController() {
     const newProfile = setRankSchool(schoolId);
     updateRankBadgeUI();
     showToast(`✓ Đã chuyển sang ${newProfile.schoolName}: [${newProfile.title}]`, 3000);
-    await syncReaderLeaderboard({ supabaseUrl: SUPABASE_URL, supabaseKey: SUPABASE_ANON_KEY, user: authClient?.getUser(), force: true });
+    await syncReaderLeaderboard({ supabaseUrl: SUPABASE_URL, supabaseKey: SUPABASE_ANON_KEY, user: getAuthUser(), force: true });
   });
 }
 
