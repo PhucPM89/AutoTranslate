@@ -59,7 +59,8 @@ const ROUTES = {
   "/api/admin/crawler": handleCrawler,
   "/api/admin/translate": handleTranslateStatus,
   "/api/admin/catalog": handleCatalog,
-  "/api/admin/analytics": handleAnalytics
+  "/api/admin/analytics": handleAnalytics,
+  "/api/admin/users": handleAdminUsers
 };
 
 // Returns a Response for an API path, or null when the request is for something
@@ -412,6 +413,164 @@ function summarizeDaily(rows, topBooks = [], bookmarks = 0) {
     days,
     books: topBooks
   };
+}
+
+// ---- admin users -----------------------------------------------------------
+
+async function handleAdminUsers({ request, env }) {
+  if (request.method !== "GET") return methodNotAllowed("GET");
+  await requireAdmin(request, env);
+
+  const url = String(env.SUPABASE_URL || "").replace(/\/$/, "");
+  const key = env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !key) {
+    return json({
+      totalUsers: 0,
+      active7Days: 0,
+      totalChaptersRead: 0,
+      totalExp: 0,
+      users: []
+    });
+  }
+
+  // 1. Fetch Auth Users, Leaderboard profiles & Bookmarks concurrently
+  const [authUsersRes, profilesRes, bookmarksRes] = await Promise.all([
+    fetch(`${url}/auth/v1/admin/users`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(10000)
+    }).catch(() => null),
+    fetch(`${url}/rest/v1/reader_leaderboard?select=*`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(10000)
+    }).catch(() => null),
+    fetch(`${url}/rest/v1/user_bookmarks?select=user_id,book_id`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(10000)
+    }).catch(() => null)
+  ]);
+
+  let authUsers = [];
+  if (authUsersRes && authUsersRes.ok) {
+    const data = await authUsersRes.json().catch(() => ({}));
+    authUsers = Array.isArray(data.users) ? data.users : (Array.isArray(data) ? data : []);
+  }
+
+  let profiles = [];
+  if (profilesRes && profilesRes.ok) {
+    profiles = await profilesRes.json().catch(() => []);
+    if (!Array.isArray(profiles)) profiles = [];
+  }
+
+  let bookmarks = [];
+  if (bookmarksRes && bookmarksRes.ok) {
+    bookmarks = await bookmarksRes.json().catch(() => []);
+    if (!Array.isArray(bookmarks)) bookmarks = [];
+  }
+
+  // Map bookmarks by user_id
+  const bookmarkCounts = {};
+  for (const bm of bookmarks) {
+    if (bm.user_id) {
+      bookmarkCounts[bm.user_id] = (bookmarkCounts[bm.user_id] || 0) + 1;
+    }
+  }
+
+  // Map profiles by id
+  const profileMap = new Map();
+  for (const p of profiles) {
+    if (p.id) profileMap.set(p.id, p);
+  }
+
+  // Set of processed user IDs
+  const processedIds = new Set();
+  const mergedUsers = [];
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  let active7DaysCount = 0;
+  let totalChaptersRead = 0;
+  let totalExp = 0;
+
+  for (const u of authUsers) {
+    processedIds.add(u.id);
+    const p = profileMap.get(u.id) || {};
+    const meta = u.user_metadata || {};
+    const email = u.email || meta.email || "";
+    const fullName = meta.full_name || meta.name || "";
+    const avatarUrl = p.avatar_url || meta.avatar_url || meta.picture || "";
+    const displayName = p.display_name || fullName || (email ? email.split("@")[0] : "Đạo hữu");
+    const exp = Number(p.exp) || 0;
+    const chaptersRead = Number(p.chapters_read) || 0;
+    const lastActive = u.last_sign_in_at || p.updated_at || u.created_at;
+    const isRecentlyActive = lastActive && new Date(lastActive).getTime() > sevenDaysAgo;
+    if (isRecentlyActive) active7DaysCount++;
+
+    totalChaptersRead += chaptersRead;
+    totalExp += exp;
+
+    mergedUsers.push({
+      id: u.id,
+      email,
+      fullName,
+      displayName,
+      avatarUrl,
+      school: p.school || "cultivation",
+      levelTitle: p.level_title || "Phàm Nhân",
+      badgeClass: p.badge_class || "rank-1",
+      exp,
+      chaptersRead,
+      bookmarkCount: bookmarkCounts[u.id] || 0,
+      createdAt: u.created_at,
+      lastSignInAt: u.last_sign_in_at,
+      lastActiveAt: lastActive,
+      isGuest: false
+    });
+  }
+
+  // Also include anonymous leaderboard users who haven't logged in with Google yet
+  for (const p of profiles) {
+    if (!processedIds.has(p.id)) {
+      const exp = Number(p.exp) || 0;
+      const chaptersRead = Number(p.chapters_read) || 0;
+      const lastActive = p.updated_at;
+      const isRecentlyActive = lastActive && new Date(lastActive).getTime() > sevenDaysAgo;
+      if (isRecentlyActive) active7DaysCount++;
+
+      totalChaptersRead += chaptersRead;
+      totalExp += exp;
+
+      mergedUsers.push({
+        id: p.id,
+        email: "(Chưa liên kết Google)",
+        fullName: "",
+        displayName: p.display_name || "Ẩn danh đạo hữu",
+        avatarUrl: p.avatar_url || "",
+        school: p.school || "cultivation",
+        levelTitle: p.level_title || "Phàm Nhân",
+        badgeClass: p.badge_class || "rank-1",
+        exp,
+        chaptersRead,
+        bookmarkCount: bookmarkCounts[p.id] || 0,
+        createdAt: p.updated_at,
+        lastSignInAt: null,
+        lastActiveAt: lastActive,
+        isGuest: true
+      });
+    }
+  }
+
+  // Sort by most active / highest EXP first
+  mergedUsers.sort((a, b) => {
+    if (b.exp !== a.exp) return b.exp - a.exp;
+    return new Date(b.lastActiveAt || 0).getTime() - new Date(a.lastActiveAt || 0).getTime();
+  });
+
+  return json({
+    totalUsers: mergedUsers.length,
+    active7Days: active7DaysCount,
+    totalChaptersRead,
+    totalExp,
+    users: mergedUsers
+  });
 }
 
 // ---- shared ----------------------------------------------------------------

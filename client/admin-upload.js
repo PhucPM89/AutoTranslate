@@ -53,6 +53,18 @@ const els = {
   addKeyForm: document.getElementById("adminAddKeyForm"),
   newApiKeyInput: document.getElementById("newApiKeyInput"),
   addKeyBtn: document.getElementById("adminAddKeyBtn"),
+  usersTab: document.getElementById("adminUsersTab"),
+  usersPanel: document.getElementById("adminUsersPanel"),
+  usersRefresh: document.getElementById("adminUsersRefresh"),
+  usersSearch: document.getElementById("adminUsersSearch"),
+  usersSchoolFilter: document.getElementById("adminUsersSchoolFilter"),
+  usersTbody: document.getElementById("adminUsersTbody"),
+  usersEmpty: document.getElementById("adminUsersEmpty"),
+  usersLoading: document.getElementById("adminUsersLoading"),
+  statTotalUsers: document.getElementById("statTotalUsers"),
+  statActive7Days: document.getElementById("statActive7Days"),
+  statTotalReadChapters: document.getElementById("statTotalReadChapters"),
+  statTotalUserExp: document.getElementById("statTotalUserExp"),
   bookSelect: document.getElementById("adminBookSelect"),
   password: document.getElementById("adminPassword"),
   epub: document.getElementById("adminEpub"),
@@ -91,10 +103,14 @@ export function mountAdmin() {
     els.keysTab?.addEventListener("click", () => selectAdminTab("keys"));
     els.crawlerTab?.addEventListener("click", () => selectAdminTab("crawler"));
     els.statsTab?.addEventListener("click", () => selectAdminTab("stats"));
+    els.usersTab?.addEventListener("click", () => selectAdminTab("users"));
     els.keysPingBtn?.addEventListener("click", runKeysPingTest);
     els.addKeyForm?.addEventListener("submit", handleAddKeySubmit);
     els.translateRefresh?.addEventListener("click", loadTranslateStatus);
     els.statsRefresh?.addEventListener("click", loadAnalytics);
+    els.usersRefresh?.addEventListener("click", loadAdminUsers);
+    els.usersSearch?.addEventListener("input", filterAdminUsers);
+    els.usersSchoolFilter?.addEventListener("change", filterAdminUsers);
     els.crawlerRefresh?.addEventListener("click", loadCrawlerConfig);
     els.crawlerWordCount?.addEventListener("change", describeCrawlerReach);
     els.crawlerForm?.querySelectorAll('[name="crawlerCategory"]').forEach((input) => {
@@ -669,8 +685,11 @@ const ADMIN_TABS = [
   { key: "translate", tab: "translateTab", panel: "translatePanel" },
   { key: "keys", tab: "keysTab", panel: "keysPanel" },
   { key: "crawler", tab: "crawlerTab", panel: "crawlerForm" },
-  { key: "stats", tab: "statsTab", panel: "statsPanel" }
+  { key: "stats", tab: "statsTab", panel: "statsPanel" },
+  { key: "users", tab: "usersTab", panel: "usersPanel" }
 ];
+
+let adminUsersData = [];
 
 function selectAdminTab(tab) {
   activeAdminTab = ADMIN_TABS.some((entry) => entry.key === tab) ? tab : "library";
@@ -685,6 +704,7 @@ function selectAdminTab(tab) {
   else stopTranslatePolling();
   if (activeAdminTab === "keys") loadAdminKeys();
   if (activeAdminTab === "stats") loadAnalytics();
+  if (activeAdminTab === "users") loadAdminUsers();
   if (activeAdminTab === "crawler") startCrawlerPolling();
   else stopCrawlerPolling();
 }
@@ -947,3 +967,132 @@ async function uploadToR2(file, kind, signal, onProgress) {
 
   return presign.key;
 }
+
+// ------------------------------------------------------------- USERS CONTROLLER
+
+async function loadAdminUsers() {
+  if (!els.usersTbody) return;
+  if (els.usersLoading) els.usersLoading.hidden = false;
+  if (els.usersEmpty) els.usersEmpty.hidden = true;
+  els.usersTbody.innerHTML = "";
+
+  try {
+    const data = await requestJson("/api/admin/users");
+    adminUsersData = data.users || [];
+    if (els.statTotalUsers) els.statTotalUsers.textContent = String(data.totalUsers || 0);
+    if (els.statActive7Days) els.statActive7Days.textContent = String(data.active7Days || 0);
+    if (els.statTotalReadChapters) els.statTotalReadChapters.textContent = Number(data.totalChaptersRead || 0).toLocaleString("vi-VN");
+    if (els.statTotalUserExp) els.statTotalUserExp.textContent = `${Number(data.totalExp || 0).toLocaleString("vi-VN")} EXP`;
+    
+    renderAdminUsers(adminUsersData);
+  } catch (error) {
+    els.usersTbody.innerHTML = `<tr><td colspan="6" class="users-error-row">Lỗi tải dữ liệu người dùng: ${escapeHtml(error.message)}</td></tr>`;
+  } finally {
+    if (els.usersLoading) els.usersLoading.hidden = true;
+  }
+}
+
+function filterAdminUsers() {
+  const query = String(els.usersSearch?.value || "").toLowerCase().trim();
+  const school = els.usersSchoolFilter?.value || "all";
+
+  const filtered = adminUsersData.filter((user) => {
+    const matchSchool = school === "all" || user.school === school;
+    if (!matchSchool) return false;
+    if (!query) return true;
+
+    const name = String(user.displayName || "").toLowerCase();
+    const fullName = String(user.fullName || "").toLowerCase();
+    const email = String(user.email || "").toLowerCase();
+    const id = String(user.id || "").toLowerCase();
+
+    return name.includes(query) || fullName.includes(query) || email.includes(query) || id.includes(query);
+  });
+
+  renderAdminUsers(filtered);
+}
+
+function renderAdminUsers(users) {
+  if (!els.usersTbody) return;
+  if (!users || !users.length) {
+    els.usersTbody.innerHTML = "";
+    if (els.usersEmpty) els.usersEmpty.hidden = false;
+    return;
+  }
+  if (els.usersEmpty) els.usersEmpty.hidden = true;
+
+  const schoolIcons = {
+    cultivation: "🔮 Tu Tiên",
+    scholarly: "📜 Khoa Bảng",
+    modern: "⚡ Hiện Đại"
+  };
+
+  els.usersTbody.innerHTML = users.map((user) => {
+    const initial = (user.displayName || user.email || "?").charAt(0).toUpperCase();
+    const avatarHtml = user.avatarUrl
+      ? `<img class="user-avatar-img" src="${escapeHtml(user.avatarUrl)}" alt="" loading="lazy">`
+      : `<span class="user-avatar-initial">${escapeHtml(initial)}</span>`;
+
+    const schoolLabel = schoolIcons[user.school] || "🔮 Tu Tiên";
+    const lastActiveFormatted = user.lastActiveAt ? formatRelativeTime(user.lastActiveAt) : "Chưa rõ";
+    const joinedFormatted = user.createdAt ? new Date(user.createdAt).toLocaleDateString("vi-VN") : "—";
+    const googleBadge = !user.isGuest
+      ? `<span class="user-auth-badge google" title="Đã liên kết tài khoản Google">✓ Google Auth</span>`
+      : `<span class="user-auth-badge guest" title="Chưa liên kết tài khoản">Ẩn danh</span>`;
+
+    return `
+      <tr class="user-table-row">
+        <td>
+          <div class="user-info-cell">
+            ${avatarHtml}
+            <div class="user-name-group">
+              <strong class="user-display-name">${escapeHtml(user.displayName)}</strong>
+              <small class="user-email-text">${escapeHtml(user.email)} ${googleBadge}</small>
+              <span class="user-id-text">${escapeHtml(user.id.slice(0, 13))}...</span>
+            </div>
+          </div>
+        </td>
+        <td>
+          <div class="user-rank-cell">
+            <span class="reader-rank-badge ${escapeHtml(user.badgeClass)}">[${escapeHtml(user.levelTitle)}]</span>
+            <small class="user-school-tag">${schoolLabel}</small>
+          </div>
+        </td>
+        <td>
+          <strong class="user-exp-val">${Number(user.exp || 0).toLocaleString("vi-VN")}</strong>
+          <small class="user-exp-unit">EXP</small>
+        </td>
+        <td>
+          <strong class="user-chapters-val">${Number(user.chaptersRead || 0).toLocaleString("vi-VN")}</strong>
+          <small class="user-exp-unit">chương</small>
+        </td>
+        <td>
+          <span class="user-bookmarks-tag">📚 ${user.bookmarkCount || 0} bộ</span>
+        </td>
+        <td>
+          <div class="user-time-cell">
+            <span class="user-last-active">${escapeHtml(lastActiveFormatted)}</span>
+            <small class="user-joined-date">Gia nhập: ${escapeHtml(joinedFormatted)}</small>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function formatRelativeTime(isoString) {
+  try {
+    const diffMs = Date.now() - new Date(isoString).getTime();
+    if (diffMs < 60000) return "Vừa xong";
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 60) return `${mins} phút trước`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours} giờ trước`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days} ngày trước`;
+    return new Date(isoString).toLocaleDateString("vi-VN");
+  } catch {
+    return isoString;
+  }
+}
+

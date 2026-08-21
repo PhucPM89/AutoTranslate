@@ -7866,6 +7866,305 @@ body.zen-mode .document-paper {
   text-decoration: underline;
 }
 
+/* ==========================================================================
+   Admin Users Management Panel
+   ========================================================================== */
+
+.admin-users-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.users-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.85rem;
+}
+
+.users-summary-grid .stat-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 1rem 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  transition: border-color 0.2s;
+}
+
+.users-summary-grid .stat-card:hover {
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+.users-summary-grid .stat-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+}
+
+.users-summary-grid .stat-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #f8fafc;
+  line-height: 1.2;
+}
+
+.users-summary-grid .stat-sub {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+/* Filter Bar */
+.users-filter-bar {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.users-search-box {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.users-search-box .icon {
+  position: absolute;
+  left: 0.85rem;
+  width: 16px;
+  height: 16px;
+  color: #64748b;
+  pointer-events: none;
+}
+
+.users-search-box input {
+  width: 100%;
+  padding: 0.65rem 0.85rem 0.65rem 2.4rem;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  color: #f8fafc;
+  font-size: 0.85rem;
+  transition: all 0.2s ease;
+}
+
+.users-search-box input:focus {
+  outline: none;
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+}
+
+.users-school-select {
+  padding: 0.65rem 0.85rem;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  color: #cbd5e1;
+  font-size: 0.85rem;
+  cursor: pointer;
+  outline: none;
+}
+
+.users-school-select:focus {
+  border-color: #38bdf8;
+}
+
+/* Users Table */
+.users-table-wrap {
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  overflow: hidden;
+  position: relative;
+}
+
+.users-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.85rem;
+}
+
+.users-table thead {
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.users-table th {
+  padding: 0.85rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+}
+
+.users-table tbody tr {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background-color 0.15s ease;
+}
+
+.users-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.users-table td {
+  padding: 0.85rem 1rem;
+  vertical-align: middle;
+}
+
+/* User Info Cell */
+.user-info-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.user-avatar-img {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  flex-shrink: 0;
+}
+
+.user-avatar-initial {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0284c7, #3b82f6);
+  color: #ffffff;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.user-name-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.user-display-name {
+  color: #f8fafc;
+  font-size: 0.9rem;
+}
+
+.user-email-text {
+  color: #94a3b8;
+  font-size: 0.78rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.user-id-text {
+  font-size: 0.7rem;
+  color: #475569;
+  font-family: monospace;
+}
+
+.user-auth-badge {
+  font-size: 0.65rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.user-auth-badge.google {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.user-auth-badge.guest {
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+/* User Rank Cell */
+.user-rank-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.user-school-tag {
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.user-exp-val {
+  color: #38bdf8;
+  font-size: 0.95rem;
+}
+
+.user-chapters-val {
+  color: #fbbf24;
+  font-size: 0.95rem;
+}
+
+.user-exp-unit {
+  color: #64748b;
+  font-size: 0.75rem;
+  margin-left: 0.15rem;
+}
+
+.user-bookmarks-tag {
+  font-size: 0.8rem;
+  color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* User Time Cell */
+.user-time-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.user-last-active {
+  color: #f1f5f9;
+  font-size: 0.8rem;
+}
+
+.user-joined-date {
+  color: #64748b;
+  font-size: 0.72rem;
+}
+
+/* Empty & Loading States */
+.users-empty-state, .users-loading-state {
+  padding: 3rem 1.5rem;
+  text-align: center;
+  color: #94a3b8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.users-error-row {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.05);
+}
+
+
 
 
 

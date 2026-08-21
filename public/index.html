@@ -79,8 +79,8 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/style.css?v=0c4dd6421fbf">
-    <script src="/app.js?v=73b1c0b5df04" defer></script>
+    <link rel="stylesheet" href="/style.css?v=24934b10e524">
+    <script src="/app.js?v=2cf6757b0f19" defer></script>
   </head>
   <body class="dark">
     <section id="libraryView" class="library-view">
@@ -411,6 +411,7 @@
         <button id="adminKeysTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminKeysPanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg>Sức khỏe 7 Keys</button>
         <button id="adminCrawlerTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminCrawlerForm"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path><circle cx="12" cy="12" r="4"></circle></svg>Crawler Fanqie</button>
         <button id="adminStatsTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminStatsPanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 3v18h18"></path><path d="M7 15v3M12 9v9M17 12v6"></path></svg>Số liệu độc giả</button>
+        <button id="adminUsersTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminUsersPanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Người dùng</button>
       </div>
 
       <form id="adminLoginForm" class="admin-login-form" method="post">
@@ -563,6 +564,76 @@
           <p id="adminStatsBooksEmpty" class="stats-empty" hidden>Chưa có lượt đọc nào được ghi nhận.</p>
         </div>
         <p id="adminStatsNote" class="stats-note"></p>
+      </section>
+
+      <section id="adminUsersPanel" class="admin-users-panel" hidden aria-labelledby="adminUsersTitle">
+        <div class="crawler-overview">
+          <div><p class="eyebrow">Quản lý Thành viên &amp; Tu Vi</p><h3 id="adminUsersTitle">Danh Sách Người Dùng &amp; Đạo Hữu</h3></div>
+          <div class="admin-users-actions">
+            <button id="adminUsersRefresh" class="secondary-action" type="button"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v6h-6M4 18v-6h6"></path><path d="M18.49 9A7 7 0 0 0 5.64 6.64L4 9M20 15l-1.64 2.36A7 7 0 0 1 5.51 15"></path></svg>Làm mới</button>
+          </div>
+        </div>
+
+        <div id="adminUsersSummaryGrid" class="users-summary-grid">
+          <div class="stat-card">
+            <span class="stat-label">Tổng người dùng</span>
+            <strong id="statTotalUsers" class="stat-value">0</strong>
+            <small class="stat-sub">Google Auth &amp; Ẩn danh</small>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Hoạt động 7 ngày qua</span>
+            <strong id="statActive7Days" class="stat-value">0</strong>
+            <small class="stat-sub">Đọc hoặc tương tác</small>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Tổng chương đã đọc</span>
+            <strong id="statTotalReadChapters" class="stat-value">0</strong>
+            <small class="stat-sub">Toàn bộ độc giả</small>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Tổng Tu Vi tích lũy</span>
+            <strong id="statTotalUserExp" class="stat-value">0 EXP</strong>
+            <small class="stat-sub">Điểm đột phá cảnh giới</small>
+          </div>
+        </div>
+
+        <div class="users-filter-bar">
+          <label class="users-search-box">
+            <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+            <input id="adminUsersSearch" type="search" placeholder="Tìm theo tên, email hoặc ID...">
+          </label>
+          <select id="adminUsersSchoolFilter" class="users-school-select" title="Lọc theo trường phái">
+            <option value="all">Tất cả trường phái</option>
+            <option value="cultivation">🔮 Tu Tiên Cảnh Giới</option>
+            <option value="scholarly">📜 Khoa Bảng Học Thức</option>
+            <option value="modern">⚡ Cày Truyện Hiện Đại</option>
+          </select>
+        </div>
+
+        <div class="users-table-wrap">
+          <table class="users-table">
+            <thead>
+              <tr>
+                <th>Người dùng</th>
+                <th>Cảnh giới / Trường phái</th>
+                <th>Tu Vi (EXP)</th>
+                <th>Chương đã đọc</th>
+                <th>Tủ truyện</th>
+                <th>Hoạt động gần nhất</th>
+              </tr>
+            </thead>
+            <tbody id="adminUsersTbody">
+              <!-- Render dynamic users -->
+            </tbody>
+          </table>
+          <div id="adminUsersEmpty" class="users-empty-state" hidden>
+            <p>Không tìm thấy người dùng nào phù hợp với bộ lọc.</p>
+          </div>
+          <div id="adminUsersLoading" class="users-loading-state" hidden>
+            <span class="spinner"></span>
+            <p>Đang tải danh sách người dùng...</p>
+          </div>
+        </div>
       </section>
       <p id="adminStatus" class="admin-status" role="status" aria-live="polite"></p>
     </dialog>
