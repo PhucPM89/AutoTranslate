@@ -109,5 +109,6 @@ function clearCommentsCache() {
 module.exports = {
   fetchChapterComments,
   postComment,
+  submitChapterComment: postComment,
   clearCommentsCache
 };

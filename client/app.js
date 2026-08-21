@@ -47,7 +47,7 @@ const {
 } = require("./reader-rank.js");
 const {
   fetchChapterComments,
-  submitChapterComment,
+  postComment,
   clearCommentsCache
 } = require("./comments.js");
 
