@@ -32,14 +32,14 @@ const PROFILES = {
   },
   translate: {
     required: [
-      "GEMINI_API_KEY",
       "R2_ACCOUNT_ID",
       "R2_ACCESS_KEY_ID",
       "R2_SECRET_ACCESS_KEY",
       "R2_BUCKET",
       "R2_PUBLIC_BASE_URL"
     ],
-    optional: ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "GEMINI_MODEL", "GEMINI_CHUNK_SIZE", "GEMINI_FALLBACK_MODELS", "TRANSLATE_SPACING_MS"]
+    anyOf: [["GEMINI_API_KEY", "GEMINI_API_KEYS"]],
+    optional: ["GEMINI_API_KEY", "GEMINI_API_KEYS", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "GEMINI_MODEL", "GEMINI_CHUNK_SIZE", "GEMINI_FALLBACK_MODELS", "TRANSLATE_SPACING_MS"]
   },
   keepalive: {
     required: ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"],
@@ -63,6 +63,15 @@ for (const name of profile.required) {
   const ok = typeof value === "string" && value.trim().length > 0;
   console.log(`  ${ok ? "OK     " : "MISSING"}  ${name}${ok ? `  (${value.trim().length} ký tự)` : ""}`);
   if (!ok) missing.push(name);
+}
+
+if (Array.isArray(profile.anyOf)) {
+  for (const group of profile.anyOf) {
+    const present = group.filter((name) => typeof process.env[name] === "string" && process.env[name].trim().length > 0);
+    const ok = present.length > 0;
+    console.log(`  ${ok ? "OK     " : "MISSING"}  ${group.join(" hoặc ")}${ok ? `  (dùng ${present[0]})` : ""}`);
+    if (!ok) missing.push(group.join(" hoặc "));
+  }
 }
 
 for (const name of profile.optional) {

@@ -23,6 +23,7 @@ const {
   isDone
 } = require("../server/ingest/translation-queue");
 const { translateText } = require("../server/gemini");
+const { createTranslationEngine } = require("../server/translation-engine");
 
 const args = process.argv.slice(2);
 const flag = (name, fallback) => {
@@ -51,11 +52,12 @@ const CHAPTERS_PER_TURN = Math.max(1, Number(process.env.TRANSLATE_CHAPTERS_PER_
 const ROTATION_KEY = "jobs/translate-rotation.json";
 
 async function main() {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("Thiếu GEMINI_API_KEY.");
 
   const storage = createStorage();
   const db = createSupabase();
+  const engine = createTranslationEngine({ storage });
   const deadlineAt = Date.now() + Math.max(0, RUN_MINUTES * 60 * 1000 - RESERVE_MS);
 
   const jobs = await listJobs(storage, ONLY_BOOK);
@@ -144,7 +146,12 @@ async function main() {
             console.log(`  ch ${chapter.chapterNumber}: đã có bản dịch trên R2, bỏ qua Gemini`);
             return existing.content;
           }
-          const output = await translateText(chapter.content, apiKey);
+          const glossary = await engine.loadGlossary(job.bookId);
+          const output = await translateText(chapter.content, apiKey, {
+            bookId: job.bookId,
+            glossary,
+            engine
+          });
           if (!output || !output.translation) throw new Error("Gemini không trả bản dịch.");
           return output.translation;
         },

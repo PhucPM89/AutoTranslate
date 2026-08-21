@@ -1,21 +1,53 @@
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
+const { createTranslationEngine } = require("./translation-engine");
+
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
 const GEMINI_FALLBACK_MODELS = parseCsv(
-  process.env.GEMINI_FALLBACK_MODELS || "gemini-3.5-flash-lite,gemini-3.6-flash"
+  process.env.GEMINI_FALLBACK_MODELS || "gemini-1.5-flash,gemini-1.5-pro"
 );
 const GEMINI_CHUNK_SIZE = Number(process.env.GEMINI_CHUNK_SIZE || 4000);
 const GEMINI_TRANSLATE_CONCURRENCY = Number(process.env.GEMINI_TRANSLATE_CONCURRENCY || 1);
 const GEMINI_REQUEST_TIMEOUT_MS = Number(process.env.GEMINI_REQUEST_TIMEOUT_MS || 120000);
 
-async function translateText(text, apiKey) {
+const defaultEngine = createTranslationEngine();
+
+function parseApiKeys(keys) {
+  if (Array.isArray(keys)) return keys.filter(Boolean);
+  if (typeof keys === "string") return parseCsv(keys);
+  return [];
+}
+
+async function translateText(text, apiKeys, options = {}) {
+  const keyList = parseApiKeys(apiKeys);
+  if (!keyList.length) throw new Error("Thiếu GEMINI_API_KEY.");
+
+  const glossary = options.glossary || {};
+  const bookTitle = options.bookTitle || "";
+  const engine = options.engine || defaultEngine;
+
   const chunks = splitTextIntoChunks(text, GEMINI_CHUNK_SIZE);
   const startedAt = Date.now();
+
+  let keyIndex = 0;
+  function getNextKey() {
+    const key = keyList[keyIndex % keyList.length];
+    keyIndex += 1;
+    return key;
+  }
+
   const chunkResults = await mapWithConcurrency(
     chunks,
     Math.max(1, GEMINI_TRANSLATE_CONCURRENCY),
-    (chunk, index) => translateChunk(apiKey, chunk, index, chunks.length)
+    (chunk, index) =>
+      translateChunkWithKeyPool(keyList, chunk, index, chunks.length, {
+        glossary,
+        bookTitle,
+        engine
+      })
   );
+
   const translatedChunks = chunkResults.map((result) => result.text);
-  const translation = stripMarkdown(translatedChunks.join("\n\n").trim());
+  const rawTranslation = translatedChunks.join("\n\n").trim();
+  const translation = engine.postProcessTranslation(rawTranslation, glossary);
   const modelsUsed = Array.from(new Set(chunkResults.map((result) => result.model)));
 
   return {
@@ -151,33 +183,54 @@ function buildTranslationPrompt(text, index, total, isRetry = false) {
     .join("\n");
 }
 
-async function translateChunk(apiKey, text, index, total) {
+async function translateChunkWithKeyPool(keyList, text, index, total, { glossary = {}, bookTitle = "", engine = defaultEngine } = {}) {
   const models = [GEMINI_MODEL, ...GEMINI_FALLBACK_MODELS].filter(
     (model, modelIndex, list) => model && list.indexOf(model) === modelIndex
   );
 
   let lastError = null;
-  for (let modelIndex = 0; modelIndex < models.length; modelIndex += 1) {
-    const model = models[modelIndex];
-    const prompt = buildTranslationPrompt(text, index, total, modelIndex > 0);
 
-    try {
-      const result = await translateChunkWithModel(apiKey, model, prompt);
-      const quality = assessTranslation(text, result.text);
-      if (quality.acceptable) return result;
+  for (let keyIdx = 0; keyIdx < keyList.length; keyIdx += 1) {
+    const apiKey = keyList[keyIdx];
 
-      const error = new Error(`Gemini trả về nội dung chưa được dịch (${quality.reason}).`);
-      error.status = 502;
-      error.model = model;
-      lastError = error;
-      continue;
-    } catch (error) {
-      lastError = error;
-      if (!shouldTryNextModel(error)) break;
+    for (let modelIndex = 0; modelIndex < models.length; modelIndex += 1) {
+      const model = models[modelIndex];
+      const prompt = engine.buildContextualPrompt({
+        text,
+        index,
+        total,
+        bookTitle,
+        glossary,
+        isRetry: modelIndex > 0
+      });
+
+      try {
+        const result = await translateChunkWithModel(apiKey, model, prompt);
+        const quality = assessTranslation(text, result.text);
+        if (quality.acceptable) return result;
+
+        const error = new Error(`Gemini trả về nội dung chưa được dịch (${quality.reason}).`);
+        error.status = 502;
+        error.model = model;
+        lastError = error;
+        continue;
+      } catch (error) {
+        lastError = error;
+        // If rate limited on this key (429 or quota), break model loop to try the next API key!
+        if (error.status === 429 || error.status === 403) {
+          console.warn(`API Key ...${apiKey.slice(-4)} bị giới hạn quota (${error.status}), chuyển sang key tiếp theo...`);
+          break;
+        }
+        if (!shouldTryNextModel(error)) break;
+      }
     }
   }
 
-  throw lastError || new Error("Gemini API trả về lỗi.");
+  throw lastError || new Error("Gemini API trả về lỗi trên toàn bộ các key.");
+}
+
+async function translateChunk(apiKey, text, index, total) {
+  return translateChunkWithKeyPool([apiKey], text, index, total);
 }
 
 function assessTranslation(source, translation) {
