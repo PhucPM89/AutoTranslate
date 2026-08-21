@@ -80,6 +80,12 @@ for (const name of profile.optional) {
   console.log(`  ${ok ? "OK     " : "-      "}  ${name} (tùy chọn)${ok ? `  (${value.trim().length} ký tự)` : ""}`);
 }
 
+const rawKeys = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY;
+if (rawKeys) {
+  const parsed = String(rawKeys).split(/[\r\n,;]+/).map((k) => k.trim()).filter((k) => k.length > 5);
+  console.log(`  INFO     Key pool: Tìm thấy ${parsed.length} Gemini API Key hợp lệ sẵn sàng sử dụng.`);
+}
+
 // A public base URL that is not a URL is a configuration error worth catching
 // here rather than as a broken chapter link in the reader.
 const publicBase = process.env.R2_PUBLIC_BASE_URL;

@@ -11,9 +11,29 @@ const GEMINI_REQUEST_TIMEOUT_MS = Number(process.env.GEMINI_REQUEST_TIMEOUT_MS |
 const defaultEngine = createTranslationEngine();
 
 function parseApiKeys(keys) {
-  if (Array.isArray(keys)) return keys.filter(Boolean);
-  if (typeof keys === "string") return parseCsv(keys);
-  return [];
+  if (Array.isArray(keys)) {
+    return keys
+      .flatMap((k) => parseApiKeys(String(k)))
+      .filter((k) => k.length > 10);
+  }
+  if (typeof keys !== "string") return [];
+
+  const cleaned = keys.replace(/\r\n/g, "\n");
+  const rawTokens = cleaned.split(/[\n,;]+/);
+  const result = [];
+
+  for (let token of rawTokens) {
+    token = token.trim();
+    if (!token) continue;
+    if (token.startsWith("AQ.") || token.startsWith("AIza") || result.length === 0) {
+      result.push(token);
+    } else {
+      // If browser wrapped the key across newlines without a comma, rejoin it
+      result[result.length - 1] += token;
+    }
+  }
+
+  return result.filter((k) => k.length > 10);
 }
 
 async function translateText(text, apiKeys, options = {}) {
@@ -496,8 +516,8 @@ function wait(ms) {
 }
 
 function parseCsv(value) {
-  return value
-    .split(",")
+  return String(value || "")
+    .split(/[\r\n,;]+/)
     .map((item) => item.trim())
     .filter(Boolean);
 }
@@ -508,5 +528,6 @@ module.exports = {
   translateMetadata,
   assessTranslation,
   splitTextIntoChunks,
-  stripMarkdown
+  stripMarkdown,
+  parseApiKeys
 };
