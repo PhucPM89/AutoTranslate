@@ -11,7 +11,7 @@
 // worker restart without needing a database on the ingest path.
 
 const STATES = ["pending", "processing", "completed", "failed", "retrying"];
-const DEFAULT_MAX_ATTEMPTS = 4;
+const DEFAULT_MAX_ATTEMPTS = 15;
 const DEFAULT_BACKOFF_MS = 2000;
 
 function jobStateKey(bookId) {
@@ -281,8 +281,8 @@ async function runTranslationJobs({
 function isQuotaError(error) {
   if (!error) return false;
   if (error.code === "quota_exceeded") return true;
-  if (error.status === 429) return true;
-  return /quota|rate limit|resource_exhausted|too many requests/i.test(String(error.message || ""));
+  if (error.status === 429 || error.status === 503) return true;
+  return /quota|rate limit|resource_exhausted|too many requests|TPD|TPM|tokens per day|tokens per minute|retry in/i.test(String(error.message || ""));
 }
 
 function defaultSleep(ms) {
