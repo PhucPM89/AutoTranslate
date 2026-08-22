@@ -22,6 +22,7 @@ const els = {
   crawlerStateMeta: document.getElementById("crawlerStateMeta"),
   crawlerProgress: document.getElementById("crawlerProgress"),
   crawlerProgressFill: document.getElementById("crawlerProgressFill"),
+  crawlerProgressLabel: document.getElementById("crawlerProgressLabel"),
   crawlerRecent: document.getElementById("crawlerRecent"),
   crawlerRecentList: document.getElementById("crawlerRecentList"),
   crawlerErrors: document.getElementById("crawlerErrors"),
@@ -551,11 +552,13 @@ function renderTranslateStatus(status = {}) {
     els.translateLiveProgress.hidden = !showProgress;
     if (showProgress) {
       const percent = Math.min(100, Math.round((saved / total) * 100));
-      els.translateProgressFill.style.width = `${percent}%`;
+      if (els.translateProgressFill) els.translateProgressFill.style.width = `${percent}%`;
       const matched = (adminCatalog.books || []).find((b) => b.id === status.currentBookId);
       const bookTitle = status.currentBookTitle || (matched ? matched.title : status.currentBookId);
-      els.translateProgressLabel.textContent =
-        `Đang dịch: ${bookTitle} — Chương ${saved}/${total} (${percent}%)`;
+      if (els.translateProgressLabel) {
+        els.translateProgressLabel.textContent =
+          `Đang dịch: ${bookTitle} — Chương ${saved}/${total} (${percent}%)`;
+      }
     }
   }
 
@@ -715,9 +718,11 @@ function renderCrawlerStatus(status = {}) {
     els.crawlerProgress.hidden = !showProgress;
     if (showProgress) {
       const percent = Math.min(100, Math.round((saved / total) * 100));
-      els.crawlerProgressFill.style.width = `${percent}%`;
-      els.crawlerProgressLabel.textContent =
-        `${status.currentBookTitle || "Đang tải"} — ${saved.toLocaleString("vi-VN")}/${total.toLocaleString("vi-VN")} chương (${percent}%)`;
+      if (els.crawlerProgressFill) els.crawlerProgressFill.style.width = `${percent}%`;
+      if (els.crawlerProgressLabel) {
+        els.crawlerProgressLabel.textContent =
+          `${status.currentBookTitle || "Đang tải"} — ${saved.toLocaleString("vi-VN")}/${total.toLocaleString("vi-VN")} chương (${percent}%)`;
+      }
     }
   }
 
