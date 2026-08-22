@@ -889,8 +889,9 @@ dialog[open] {
   width: min(1060px, calc(100% - 1.25rem));
   max-height: min(880px, calc(100dvh - 1.5rem));
   padding: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   overscroll-behavior: contain;
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -907,9 +908,7 @@ dialog[open] {
 }
 
 .admin-dialog-header {
-  position: sticky;
-  top: 0;
-  z-index: 2;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -917,7 +916,6 @@ dialog[open] {
   padding: 1.15rem 1.35rem;
   border-bottom: 1px solid var(--border-soft);
   background: color-mix(in srgb, var(--surface) 95%, transparent);
-  backdrop-filter: blur(14px);
 }
 
 .admin-dialog-header h2 {
@@ -927,21 +925,29 @@ dialog[open] {
   letter-spacing: 0;
 }
 
-.admin-login-form,
-.admin-upload-form,
-.admin-crawler-form,
-.admin-stats,
-.admin-keys-panel,
-.admin-users-panel {
-  padding: 1.35rem;
-}
-
 .admin-tabs {
+  flex-shrink: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
   padding: 0.75rem 1.35rem 0;
   border-bottom: 1px solid var(--border-soft);
+  background: var(--surface);
+}
+
+.admin-login-form,
+.admin-upload-form,
+.admin-crawler-form,
+.admin-stats,
+.admin-keys-panel,
+.admin-users-panel,
+.admin-translate-panel {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  min-height: 0;
+  padding: 1.35rem;
 }
 
 @media (max-width: 640px) {
@@ -952,7 +958,7 @@ dialog[open] {
   }
 
   .admin-dialog-header {
-    padding: 0.85rem 1rem;
+    padding: 0.75rem 1rem;
   }
 
   .admin-dialog-header h2 {
@@ -964,7 +970,7 @@ dialog[open] {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
-    padding: 0.4rem 0.75rem 0;
+    padding: 0.35rem 0.75rem 0;
     gap: 0.35rem;
   }
 
@@ -984,7 +990,8 @@ dialog[open] {
   .admin-crawler-form,
   .admin-stats,
   .admin-keys-panel,
-  .admin-users-panel {
+  .admin-users-panel,
+  .admin-translate-panel {
     padding: 0.85rem;
   }
 }
