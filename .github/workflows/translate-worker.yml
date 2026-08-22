@@ -1,18 +1,17 @@
 name: Translation worker
 
-# Deliberately separate from the crawler. The crawler detects and enqueues every
-# 10-15 minutes; this drains the Gemini queue in parallel with 5 sharded workers.
-# Each worker processes a distinct shard of novels simultaneously (150-250 ch/min).
+# Dedicated sequential novel translation worker.
+# Focuses 100% capacity on completing one novel at a time before advancing.
 on:
   schedule:
     - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:
       book:
-        description: "Chỉ dịch một bookId (để trống = tất cả)"
+        description: "Chỉ dịch một bookId (để trống = dịch dứt điểm bộ ưu tiên)"
         required: false
       budget:
-        description: "Số lượt gọi Gemini tối đa cho mỗi worker lượt này"
+        description: "Số lượt gọi AI tối đa lượt này"
         required: false
         default: "5000"
 
@@ -22,15 +21,11 @@ permissions:
 
 jobs:
   translate:
-    name: Worker Shard ${{ matrix.shard }}/5
+    name: Focused Sequential Novel Translator
     runs-on: ubuntu-latest
     timeout-minutes: 330
-    strategy:
-      matrix:
-        shard: [1, 2, 3, 4, 5]
-      fail-fast: false
     concurrency:
-      group: translate-worker-${{ matrix.shard }}
+      group: translate-worker-focused
       cancel-in-progress: false
     env:
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -64,18 +59,16 @@ jobs:
       - name: Check required secrets are present
         run: node scripts/check-env.js translate
 
-      - name: Drain the translation queue (Shard ${{ matrix.shard }}/5)
+      - name: Translate Focused Book 100%
         run: >
           node scripts/translate-worker.js
           --minutes 300
           --budget ${{ github.event.inputs.budget || '5000' }}
-          --shard-index ${{ matrix.shard }}
-          --total-shards 5
           --batch-size 1
           ${{ github.event.inputs.book && format('--book {0}', github.event.inputs.book) || '' }}
 
-      - name: Auto-chain next continuous translation run (Shard 1)
-        if: matrix.shard == 1 && always()
+      - name: Auto-chain next continuous translation run
+        if: always()
         run: |
           gh workflow run translate-worker.yml --ref main || true
         env:

@@ -13,6 +13,18 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://tram-chu.online/?book=fanqie-7405400367392902206</loc>
+    <lastmod>2026-08-22</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://tram-chu.online/?book=fanqie-7405400367392902206&amp;ch=1</loc>
+    <lastmod>2026-08-22</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://tram-chu.online/?book=fanqie-6883748331202284558</loc>
     <lastmod>2026-08-22</lastmod>
     <changefreq>daily</changefreq>

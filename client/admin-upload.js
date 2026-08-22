@@ -56,6 +56,8 @@ const els = {
   transActivePercentBadge: document.getElementById("transActivePercentBadge"),
   transActiveRemainingBadge: document.getElementById("transActiveRemainingBadge"),
   transActiveEtaBadge: document.getElementById("transActiveEtaBadge"),
+  transSessionCountBadge: document.getElementById("transSessionCountBadge"),
+  transCurrentChapterNameBadge: document.getElementById("transCurrentChapterNameBadge"),
   transHeartbeatText: document.getElementById("transHeartbeatText"),
   transHourlySummaryText: document.getElementById("transHourlySummaryText"),
   transNextBookTitle: document.getElementById("transNextBookTitle"),
@@ -586,6 +588,15 @@ function renderTranslateStatus(status = {}) {
   }
   if (els.transActiveRemainingBadge) {
     els.transActiveRemainingBadge.textContent = total > 0 ? `Còn lại: ${Math.max(0, total - saved).toLocaleString("vi-VN")} chương` : "Còn lại: --";
+  }
+
+  const sessionCount = Number(status.translatedThisRun || status.sessionChaptersTranslated || 0);
+  if (els.transSessionCountBadge) {
+    els.transSessionCountBadge.textContent = `⚡ Phiên này: +${sessionCount.toLocaleString("vi-VN")} chương`;
+  }
+  const currentCh = status.currentChapter || status.currentChapterNum || "";
+  if (els.transCurrentChapterNameBadge) {
+    els.transCurrentChapterNameBadge.textContent = currentCh ? `📖 Đang dịch: Chương ${currentCh}` : "📖 Đang sẵn sàng";
   }
 
   // Speed & ETA
