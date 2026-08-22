@@ -241,137 +241,144 @@ async function main() {
       }
 
       const bTitle = titleMap.get(job.bookId) || job.bookId;
-      console.log(`\n>>> [BẮT ĐẦU DỊCH DỨT ĐIỂM] Bộ truyện: "${bTitle}" (${job.bookId})`);
+      console.log(`\n===============================================================`);
+      console.log(`>>> [KHÓA CHẶT DỊCH 100%] Bộ truyện: "${bTitle}" (${job.bookId})`);
+      console.log(`===============================================================`);
 
-      // In Sequential Book Mode: Dedicate the entire budget to finish this novel 100%!
-      const remainingBudget = REQUEST_BUDGET === Infinity ? Infinity : REQUEST_BUDGET - spentTotal;
-      const result = await runTranslationJobs({
-        state: job.state,
-        requestBudget: remainingBudget, // Translate all chapters of this book until done!
-        deadlineAt,
-        spacingMs: () => computeAdaptiveSpacing(parsedKeys),
-        batchSize: BATCH_SIZE,
-        loadChapter: (n) => readJson(storage, originalKey(job.bookId, job.revision, n)),
-        translateChapter: async (chapter) => {
-          const existing = await readJson(storage, chapterKey(job.bookId, job.revision, chapter.chapterNumber));
-          if (existing && existing.translationStatus === "completed" && existing.content) {
-            console.log(`  ch ${chapter.chapterNumber}: đã có bản dịch trên R2, bỏ qua Groq AI`);
-            return existing.content;
-          }
-          const glossary = await engine.loadGlossary(job.bookId);
-          const output = await translateText(chapter.content, apiKey, {
-            bookId: job.bookId,
-            glossary,
-            engine
-          });
-          if (!output || !output.translation) throw new Error("Groq AI không trả bản dịch.");
-          if (output.tokensUsed) {
-            lastChapterTokens = output.tokensUsed;
-          }
-          return output.translation;
-        },
-        translateBatch: async (chapters) => {
-          const glossary = await engine.loadGlossary(job.bookId);
-          return translateBatchChapters(chapters, apiKey, {
-            bookId: job.bookId,
-            glossary,
-            engine
-          });
-        },
-        publishChapter: async (chapter, translation) => {
-          await storage.put(
-            chapterKey(job.bookId, job.revision, chapter.chapterNumber),
-            JSON.stringify(
-              buildChapterDocument({
-                bookId: job.bookId,
-                revision: job.revision,
-                chapter,
-                translation,
-                translationStatus: "completed"
-              })
-            )
-          );
-        },
-        saveState: (next) => storage.put(jobStateKey(job.bookId), JSON.stringify(next)),
-        onProgress: async ({ chapter, status, completed, total }) => {
-          const bTitle = titleMap.get(job.bookId) || job.bookId;
-          const elapsedMin = Math.max(0.05, (Date.now() - new Date(startedAt).getTime()) / 60000);
-          const currentSpeed = Math.round((translatedTotal / elapsedMin) * 10) / 10;
-          const currentSpacing = computeAdaptiveSpacing(parsedKeys);
-          console.log(`  [${bTitle}] ch ${chapter}: ${status}  (${completed}/${total}) [Điều tốc: ${Math.round(currentSpacing/1000)}s/chương]`);
-          await writeTranslateStatus(storage, {
-            state: "running",
-            startedAt,
-            speed: currentSpeed,
-            currentBookId: job.bookId,
-            currentBookTitle: bTitle,
-            currentChapter: chapter,
-            currentCompleted: completed,
-            currentTotalChapters: total,
-            translatedThisRun: translatedTotal,
-            spentRequests: spentTotal,
-            recentActivity,
-            message: `Đang dịch [${bTitle}] — Chương ${chapter} (${completed}/${total}) [Điều tốc 24/7: ${Math.round(currentSpacing/1000)}s]`,
-            queue: queue.map((j) => ({
-              bookId: j.bookId,
-              revision: j.revision,
-              pending: j.pending,
-              highPriority: j.highPriority || activeBookIds.has(j.bookId),
-              total: j.total,
-              translated: (j.total || 0) - (j.pending || 0)
-            }))
-          });
-        }
-      });
-
-      spentTotal += result.spent;
-      translatedTotal += result.translated;
-      translatedThisCycle += result.translated;
-
-      if (result.translated) {
-        touched.set(job.bookId, job);
-        const bTitle = titleMap.get(job.bookId) || job.bookId;
-        recentActivity = [
-          {
-            bookId: job.bookId,
-            title: bTitle,
-            count: result.translated,
-            at: new Date().toISOString()
+      while (!isDone(job.state) && spentTotal < REQUEST_BUDGET && Date.now() < deadlineAt) {
+        const remainingBudget = REQUEST_BUDGET === Infinity ? Infinity : REQUEST_BUDGET - spentTotal;
+        const result = await runTranslationJobs({
+          state: job.state,
+          requestBudget: remainingBudget, // Translate all chapters of this book until done!
+          deadlineAt,
+          spacingMs: () => computeAdaptiveSpacing(parsedKeys),
+          batchSize: BATCH_SIZE,
+          loadChapter: (n) => readJson(storage, originalKey(job.bookId, job.revision, n)),
+          translateChapter: async (chapter) => {
+            const existing = await readJson(storage, chapterKey(job.bookId, job.revision, chapter.chapterNumber));
+            if (existing && existing.translationStatus === "completed" && existing.content) {
+              console.log(`  ch ${chapter.chapterNumber}: đã có bản dịch trên R2, bỏ qua Groq AI`);
+              return existing.content;
+            }
+            const glossary = await engine.loadGlossary(job.bookId);
+            const output = await translateText(chapter.content, apiKey, {
+              bookId: job.bookId,
+              glossary,
+              engine
+            });
+            if (!output || !output.translation) throw new Error("Groq AI không trả bản dịch.");
+            if (output.tokensUsed) {
+              lastChapterTokens = output.tokensUsed;
+            }
+            return output.translation;
           },
-          ...recentActivity
-        ].slice(0, 30);
+          translateBatch: async (chapters) => {
+            const glossary = await engine.loadGlossary(job.bookId);
+            return translateBatchChapters(chapters, apiKey, {
+              bookId: job.bookId,
+              glossary,
+              engine
+            });
+          },
+          publishChapter: async (chapter, translation) => {
+            await storage.put(
+              chapterKey(job.bookId, job.revision, chapter.chapterNumber),
+              JSON.stringify(
+                buildChapterDocument({
+                  bookId: job.bookId,
+                  revision: job.revision,
+                  chapter,
+                  translation,
+                  translationStatus: "completed"
+                })
+              )
+            );
+          },
+          saveState: (next) => storage.put(jobStateKey(job.bookId), JSON.stringify(next)),
+          onProgress: async ({ chapter, status, completed, total }) => {
+            const bTitle = titleMap.get(job.bookId) || job.bookId;
+            const elapsedMin = Math.max(0.05, (Date.now() - new Date(startedAt).getTime()) / 60000);
+            const currentSpeed = Math.round((translatedTotal / elapsedMin) * 10) / 10;
+            const currentSpacing = computeAdaptiveSpacing(parsedKeys);
+            console.log(`  [${bTitle}] ch ${chapter}: ${status}  (${completed}/${total}) [Điều tốc: ${Math.round(currentSpacing/1000)}s/chương]`);
+            await writeTranslateStatus(storage, {
+              state: "running",
+              startedAt,
+              speed: currentSpeed,
+              currentBookId: job.bookId,
+              currentBookTitle: bTitle,
+              currentChapter: chapter,
+              currentCompleted: completed,
+              currentTotalChapters: total,
+              translatedThisRun: translatedTotal,
+              spentRequests: spentTotal,
+              recentActivity,
+              message: `Đang dịch [${bTitle}] — Chương ${chapter} (${completed}/${total}) [Điều tốc 24/7: ${Math.round(currentSpacing/1000)}s]`,
+              queue: queue.map((j) => ({
+                bookId: j.bookId,
+                revision: j.revision,
+                pending: j.pending,
+                highPriority: j.highPriority || activeBookIds.has(j.bookId),
+                total: j.total,
+                translated: (j.total || 0) - (j.pending || 0)
+              }))
+            });
+          }
+        });
 
-        const waiting = (sincePublish.get(job.bookId) || 0) + result.translated;
-        if (isDone(job.state)) {
-          sincePublish.set(job.bookId, 0);
-          await publishBook(job);
-          console.log(`\n🎉🎉🎉 [${bTitle}] ĐÃ DỊCH HOÀN TẤT TRỌN VẸN 100% (${job.total}/${job.total} chương)! Đã xuất bản lên thư viện.`);
-        } else if (waiting >= PUBLISH_EVERY_CHAPTERS) {
-          sincePublish.set(job.bookId, 0);
-          await publishBook(job);
-          console.log(`  [${job.bookId}] -> đã publish tiến độ (+${waiting} chương)`);
-        } else {
-          sincePublish.set(job.bookId, waiting);
+        spentTotal += result.spent;
+        translatedTotal += result.translated;
+        translatedThisCycle += result.translated;
+
+        if (result.translated) {
+          touched.set(job.bookId, job);
+          const bTitle = titleMap.get(job.bookId) || job.bookId;
+          recentActivity = [
+            {
+              bookId: job.bookId,
+              title: bTitle,
+              count: result.translated,
+              at: new Date().toISOString()
+            },
+            ...recentActivity
+          ].slice(0, 30);
+
+          const waiting = (sincePublish.get(job.bookId) || 0) + result.translated;
+          if (isDone(job.state)) {
+            sincePublish.set(job.bookId, 0);
+            await publishBook(job);
+            console.log(`\n🎉🎉🎉 [${bTitle}] ĐÃ DỊCH HOÀN TẤT TRỌN VẸN 100% (${job.total}/${job.total} chương)! Đã xuất bản lên thư viện.`);
+            break;
+          } else if (waiting >= PUBLISH_EVERY_CHAPTERS) {
+            sincePublish.set(job.bookId, 0);
+            await publishBook(job);
+            console.log(`  [${job.bookId}] -> đã publish tiến độ (+${waiting} chương)`);
+          } else {
+            sincePublish.set(job.bookId, waiting);
+          }
         }
-      }
 
-      // Written after every slice, so an interrupted run still tells the next one
-      // where the cycle had reached.
-      rotation.lastBookId = job.bookId;
-      await storage.put(ROTATION_KEY, JSON.stringify(rotation)).catch(() => {});
+        rotation.lastBookId = job.bookId;
+        await storage.put(ROTATION_KEY, JSON.stringify(rotation)).catch(() => {});
 
-      if (result.quotaExhausted) {
-        if (CONTINUOUS_MODE) {
-          const earliestMs = result.earliestCooldown ? Math.max(5000, result.earliestCooldown - Date.now()) : 30000;
-          const waitSec = Math.min(180, Math.max(10, Math.round(earliestMs / 1000)));
-          console.log(`  -> Tạm thời các key đang chờ hồi phục quota. Nghỉ ${waitSec} giây và tiếp tục dịch 24/7...`);
-          await new Promise((r) => setTimeout(r, waitSec * 1000));
-          continue;
-        } else {
-          stoppedForQuota = true;
-          stop = true;
-          console.log("  -> hết quota Groq AI, dừng để lượt sau tiếp tục từ đây");
+        if (isDone(job.state)) {
           break;
+        }
+
+        if (result.quotaExhausted) {
+          if (CONTINUOUS_MODE) {
+            const earliestMs = result.earliestCooldown ? Math.max(5000, result.earliestCooldown - Date.now()) : 30000;
+            const waitSec = Math.min(60, Math.max(5, Math.round(earliestMs / 1000)));
+            console.log(`  -> [${bTitle}] Tạm thời các key đang chờ hồi phục quota. Nghỉ ${waitSec} giây và tiếp tục dịch dứt điểm bộ này...`);
+            await new Promise((r) => setTimeout(r, waitSec * 1000));
+          } else {
+            stoppedForQuota = true;
+            stop = true;
+            console.log("  -> hết quota Groq AI, dừng để lượt sau tiếp tục từ đây");
+            break;
+          }
+        } else if (!result.translated) {
+          await new Promise((r) => setTimeout(r, 5000));
         }
       }
     }
