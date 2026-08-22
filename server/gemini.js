@@ -49,10 +49,10 @@ function getModelsForApiKey(apiKey) {
     return [primary, ...fallbacks].filter((m, i, l) => m && l.indexOf(m) === i);
   }
   if (apiKey.startsWith("cfut_") || apiKey.startsWith("cf_") || apiKey.includes("cfut_") || apiKey.includes("cf_")) {
-    const primary = process.env.CLOUDFLARE_AI_MODEL || "@cf/meta/llama-3.1-70b-instruct";
+    const primary = process.env.CLOUDFLARE_AI_MODEL || "@cf/meta/llama-3.1-8b-instruct";
     const fallbacks = parseCsv(
       process.env.CLOUDFLARE_AI_FALLBACK_MODELS ||
-        "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b,@cf/meta/llama-3.1-8b-instruct"
+        "@cf/meta/llama-3.1-70b-instruct,@cf/deepseek-ai/deepseek-r1-distill-qwen-32b"
     );
     return [primary, ...fallbacks].filter((m, i, l) => m && l.indexOf(m) === i);
   }
@@ -574,7 +574,7 @@ async function translateWithCloudflareWorkersAi(apiKey, model, prompt, generatio
     }
   }
 
-  const cfModel = model && model.startsWith("@cf/") ? model : "@cf/meta/llama-3.1-70b-instruct";
+  const cfModel = model && model.startsWith("@cf/") ? model : "@cf/meta/llama-3.1-8b-instruct";
   const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/run/${cfModel}`;
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
