@@ -50,9 +50,11 @@ const els = {
   transStatSpeed: document.getElementById("transStatSpeed"),
   transStatThroughput: document.getElementById("transStatThroughput"),
   transStatKeysActive: document.getElementById("transStatKeysActive"),
+  transActiveCoverImg: document.getElementById("transActiveCoverImg"),
   transActiveBookTitle: document.getElementById("transActiveBookTitle"),
   transActiveChapterBadge: document.getElementById("transActiveChapterBadge"),
   transActivePercentBadge: document.getElementById("transActivePercentBadge"),
+  transActiveRemainingBadge: document.getElementById("transActiveRemainingBadge"),
   transActiveEtaBadge: document.getElementById("transActiveEtaBadge"),
   transHeartbeatText: document.getElementById("transHeartbeatText"),
   transHourlySummaryText: document.getElementById("transHourlySummaryText"),
@@ -567,14 +569,26 @@ function renderTranslateStatus(status = {}) {
   if (els.transActiveBookTitle) {
     els.transActiveBookTitle.textContent = isRunning ? bookTitle : "Hệ thống đang sẵn sàng";
   }
+  if (els.transActiveCoverImg) {
+    if (matched && matched.cover) {
+      els.transActiveCoverImg.src = matched.cover;
+    } else if (status.currentBookId) {
+      els.transActiveCoverImg.src = `${CDN_BASE}/covers/${status.currentBookId}.jpg`;
+    } else {
+      els.transActiveCoverImg.src = "/library/covers/misty-pagoda.webp";
+    }
+  }
   if (els.translateStateMessage) {
-    els.translateStateMessage.textContent = status.message || (isRunning ? `Đang dịch [${bookTitle}]` : "Chưa có tác vụ dịch đang chạy.");
+    els.translateStateMessage.textContent = status.message || (isRunning ? `Đang dịch dứt điểm [${bookTitle}]` : "Chưa có tác vụ dịch đang chạy.");
   }
   if (els.transActiveChapterBadge) {
     els.transActiveChapterBadge.textContent = total > 0 ? `Đã dịch: ${saved} / ${total} chương` : `Chương ${saved || 0}`;
   }
   if (els.transActivePercentBadge) {
     els.transActivePercentBadge.textContent = `${percent}%`;
+  }
+  if (els.transActiveRemainingBadge) {
+    els.transActiveRemainingBadge.textContent = total > 0 ? `Còn lại: ${(total - saved).toLocaleString("vi-VN")} chương` : "Còn lại: --";
   }
 
   // Speed & ETA
@@ -599,14 +613,14 @@ function renderTranslateStatus(status = {}) {
   // Progress Bar
   if (els.translateProgressFill) els.translateProgressFill.style.width = `${percent}%`;
   if (els.translateProgressLabel) {
-    els.translateProgressLabel.textContent = total > 0 ? `Tiến độ: ${saved}/${total} chương (${percent}%)` : "Tiến độ: Đang dịch";
+    els.translateProgressLabel.textContent = total > 0 ? `Tiến độ dứt điểm: ${saved}/${total} chương (${percent}%)` : "Tiến độ: Đang dịch";
   }
   if (els.translateStateMeta) {
     const parts = [];
     if (status.startedAt) parts.push(`Bắt đầu: ${describeAge(status.startedAt)}`);
     if (status.translatedThisRun) parts.push(`Đã dịch đợt này: +${status.translatedThisRun} chương`);
     if (status.spentRequests) parts.push(`${status.spentRequests} requests AI`);
-    els.translateStateMeta.textContent = parts.join(" · ") || "Điều tốc 24/7: 600ms";
+    els.translateStateMeta.textContent = parts.join(" · ") || "Điều tốc 24/7: 600ms (17 Keys)";
   }
 
   // 2. 1-Hour Analytics Calculation
@@ -624,7 +638,7 @@ function renderTranslateStatus(status = {}) {
     els.transStatLastHourBooks.textContent = `trên ${lastHourUniqueBooks} bộ truyện`;
   }
   if (els.transHourlySummaryText) {
-    els.transHourlySummaryText.textContent = `Trong 1 giờ qua: đã hoàn thành +${lastHourCh} chương trên ${lastHourUniqueBooks} bộ truyện`;
+    els.transHourlySummaryText.textContent = `Trong 1 giờ qua: đã dịch +${lastHourCh} chương trên ${lastHourUniqueBooks} bộ truyện`;
   }
 
   // Render Activity List
@@ -650,7 +664,7 @@ function renderTranslateStatus(status = {}) {
     }
   }
 
-  // 3. Queue List
+  // 3. Next In Line Queue List
   let queue = Array.isArray(status.queue) && status.queue.length ? status.queue : [];
   if (!queue.length && Array.isArray(adminCatalog.books) && adminCatalog.books.length) {
     queue = adminCatalog.books
@@ -672,11 +686,14 @@ function renderTranslateStatus(status = {}) {
     if (!queue.length) {
       els.translateQueueList.innerHTML = `<p class="stats-empty">Hàng đợi trống. Tất cả truyện đã hoàn tất dịch 100%.</p>`;
     } else {
-      const sortedQueue = [...queue].sort((a, b) => {
-        const isCurrentA = status.state === "running" && status.currentBookId === a.bookId ? 1 : 0;
-        const isCurrentB = status.state === "running" && status.currentBookId === b.bookId ? 1 : 0;
-        if (isCurrentA !== isCurrentB) return isCurrentB - isCurrentA;
+      // Filter out the currently active translating book from the waiting queue
+      const waitingQueue = queue.filter((j) => !(status.state === "running" && status.currentBookId === j.bookId));
+
+      const sortedQueue = [...waitingQueue].sort((a, b) => {
         if (a.highPriority !== b.highPriority) return (b.highPriority ? 1 : 0) - (a.highPriority ? 1 : 0);
+        const aDone = (a.total || 0) - (a.pending || 0);
+        const bDone = (b.total || 0) - (b.pending || 0);
+        if (aDone > 0 || bDone > 0) return bDone - aDone;
         return (b.pending || 0) - (a.pending || 0);
       });
 
@@ -684,7 +701,8 @@ function renderTranslateStatus(status = {}) {
       const visibleItems = sortedQueue.slice(0, MAX_VISIBLE);
       const remainingCount = sortedQueue.length - visibleItems.length;
 
-      for (const item of visibleItems) {
+      for (let i = 0; i < visibleItems.length; i++) {
+        const item = visibleItems[i];
         const row = document.createElement("div");
         row.className = "translate-queue-item";
         const matchedB = (adminCatalog.books || []).find((b) => b.id === item.bookId);
@@ -693,14 +711,17 @@ function renderTranslateStatus(status = {}) {
         const pendingCh = Number(item.pending || 0);
         const doneCh = Math.max(0, totalCh - pendingCh);
         const pct = totalCh ? Math.round((doneCh / totalCh) * 100) : 0;
-        const isCurrent = status.state === "running" && status.currentBookId === item.bookId;
 
         row.innerHTML = `
           <div class="queue-item-info">
-            <strong class="queue-item-title">${isCurrent ? "⚡ [ĐANG DỊCH] " : ""}${title}</strong>
+            <strong class="queue-item-title">
+              <span class="queue-rank-badge" style="background: rgba(168, 85, 247, 0.2); color: #d8b4fe; padding: 0.15rem 0.45rem; border-radius: 4px; font-size: 0.72rem; margin-right: 0.4rem;">#${i + 1} Tiếp theo</span>
+              ${title}
+            </strong>
             <small class="queue-item-meta">
-              <span>Đã dịch: ${doneCh.toLocaleString("vi-VN")} / ${totalCh.toLocaleString("vi-VN")} chương</span>
+              <span>Đã có: ${doneCh.toLocaleString("vi-VN")} / ${totalCh.toLocaleString("vi-VN")} chương</span>
               <span class="queue-pct-badge ${pct === 100 ? 'is-done' : ''}">${pct}%</span>
+              <span>(Còn ${pendingCh.toLocaleString("vi-VN")} chương)</span>
               ${item.highPriority ? '<span class="queue-priority-badge">Ưu tiên cao</span>' : ''}
             </small>
           </div>
@@ -712,7 +733,7 @@ function renderTranslateStatus(status = {}) {
       if (remainingCount > 0) {
         const moreNote = document.createElement("div");
         moreNote.className = "queue-more-note";
-        moreNote.textContent = `... và ${remainingCount} bộ truyện khác đang xếp hàng xoay vòng 24/7`;
+        moreNote.textContent = `... và ${remainingCount} bộ truyện khác đang xếp hàng dịch dứt điểm tiếp theo`;
         els.translateQueueList.appendChild(moreNote);
       }
     }
