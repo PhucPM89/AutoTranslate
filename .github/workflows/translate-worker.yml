@@ -50,7 +50,7 @@ jobs:
       R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      TRANSLATE_SPACING_MS: ${{ vars.TRANSLATE_SPACING_MS || '200' }}
+      TRANSLATE_SPACING_MS: ${{ vars.TRANSLATE_SPACING_MS || '50' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -71,7 +71,7 @@ jobs:
           --budget ${{ github.event.inputs.budget || '5000' }}
           --shard-index ${{ matrix.shard }}
           --total-shards 5
-          --batch-size 3
+          --batch-size 5
           ${{ github.event.inputs.book && format('--book {0}', github.event.inputs.book) || '' }}
 
       - name: Auto-chain next continuous translation run (Shard 1)

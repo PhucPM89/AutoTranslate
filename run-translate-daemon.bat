@@ -11,8 +11,8 @@ echo Ban co the thu nho cua so nay de chay ngam.
 echo.
 
 :loop
-echo [%date% %time%] Dang chay phien dich tiep theo...
-node scripts/translate-worker.js --minutes 300 --budget 10000 --batch-size 3
+echo [%date% %time%] Dang chay phien dich tiep theo voi sieu toc do Llama-3.1 8B / 70B (Batch 5)...
+node scripts/translate-worker.js --minutes 300 --budget 10000 --batch-size 5
 echo.
 echo [%date% %time%] Phien dich hoan tat hoac nghi 5 giay de khoi dong phien tiep theo...
 timeout /t 5 /nobreak >nul

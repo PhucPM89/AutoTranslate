@@ -2,9 +2,9 @@
 
 const { createTranslationEngine } = require("./translation-engine");
 
-const GROQ_MODEL = process.env.GROQ_MODEL || process.env.GEMINI_MODEL || "qwen/qwen3.6-27b";
+const GROQ_MODEL = process.env.GROQ_MODEL || process.env.GEMINI_MODEL || "llama-3.1-8b-instant";
 const GROQ_FALLBACK_MODELS = parseCsv(
-  process.env.GROQ_FALLBACK_MODELS || process.env.GEMINI_FALLBACK_MODELS || "openai/gpt-oss-120b,openai/gpt-oss-20b,groq/compound"
+  process.env.GROQ_FALLBACK_MODELS || process.env.GEMINI_FALLBACK_MODELS || "llama-3.3-70b-versatile,qwen/qwen3.6-27b,openai/gpt-oss-120b"
 );
 const TRANSLATE_CHUNK_SIZE = Number(process.env.GEMINI_CHUNK_SIZE || 6000);
 const TRANSLATE_CONCURRENCY = Number(process.env.GEMINI_TRANSLATE_CONCURRENCY || 1);
@@ -162,11 +162,12 @@ async function translateBatchChapters(chapters, apiKeys, options = {}) {
     console.warn(`Batch translate failed (${err.message}), falling back to single translation`);
   }
 
-  const fallbackResults = [];
-  for (const ch of chapters) {
-    const single = await translateText(ch.content, apiKeys, options);
-    fallbackResults.push({ chapterNumber: ch.chapterNumber, translation: single.translation });
-  }
+  const fallbackResults = await Promise.all(
+    chapters.map(async (ch) => {
+      const single = await translateText(ch.content, apiKeys, options);
+      return { chapterNumber: ch.chapterNumber, translation: single.translation };
+    })
+  );
   return fallbackResults;
 }
 
