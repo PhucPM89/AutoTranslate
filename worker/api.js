@@ -51,6 +51,7 @@ const UPLOAD_KINDS = {
 };
 
 const ROUTES = {
+  "/api/catalog": handlePublicCatalog,
   "/api/admin/keys": handleAdminKeys,
   "/api/admin/session": handleSession,
   "/api/admin/login": handleLogin,
@@ -76,6 +77,27 @@ export async function handleApiRequest({ request, env }) {
     console.error(`${url.pathname} lỗi:`, error.message);
     return withSecurityHeaders(json({ error: error.publicMessage || error.message }, error.status || 500), env);
   }
+}
+
+// ---- public catalog --------------------------------------------------------
+async function handlePublicCatalog({ request, env }) {
+  if (request.method !== "GET" && request.method !== "HEAD") return methodNotAllowed("GET, HEAD");
+  const reader = env.R2_READER ? createR2BindingStorage(env.R2_READER) : null;
+  if (!reader) {
+    throw fail(503, "R2 Reader bucket chưa được cấu hình.");
+  }
+  const raw = await reader.get("catalog/latest.json");
+  if (!raw) {
+    throw fail(404, "Chưa có dữ liệu catalog.");
+  }
+  return new Response(raw, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
+      "Access-Control-Allow-Origin": "*"
+    }
+  });
 }
 
 // ---- admin session ---------------------------------------------------------

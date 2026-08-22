@@ -827,22 +827,27 @@ async function loadLibraryManifest() {
 }
 
 // The snapshot stores the same shape the manifest already uses, so the rest of the
-// library code is untouched. A miss returns null and the caller falls back.
 async function loadCatalogSnapshot() {
-  // Deliberately not gated on READER_CDN_ENABLED. That flag controls where
-  // chapters are read from; the catalogue is a static object on the CDN and is
-  // the only source of the library now, so gating it here emptied the shelf.
-  if (!CDN_BASE) return null;
-  try {
-    const response = await fetch(`${cdnUrl("catalog/latest.json")}?t=${Date.now()}`);
-    if (!response.ok) return null;
-    const snapshot = await response.json();
-    if (!snapshot || !Array.isArray(snapshot.books)) return null;
-    return { site: snapshot.site || {}, books: snapshot.books };
-  } catch (error) {
-    console.warn("Không đọc được catalog từ CDN, dùng API.", error);
-    return null;
+  const urls = [];
+  if (CDN_BASE) urls.push(`${cdnUrl("catalog/latest.json")}?t=${Date.now()}`);
+  urls.push(`/api/catalog?t=${Date.now()}`);
+  urls.push("/library.json");
+
+  for (const u of urls) {
+    try {
+      const response = await fetch(u);
+      if (!response.ok) continue;
+      const text = await response.text();
+      if (!text || !text.trim().startsWith("{")) continue;
+      const snapshot = JSON.parse(text);
+      if (snapshot && Array.isArray(snapshot.books) && snapshot.books.length > 0) {
+        return { site: snapshot.site || {}, books: snapshot.books };
+      }
+    } catch (err) {
+      console.warn(`Không đọc được catalog từ ${u}:`, err.message);
+    }
   }
+  return null;
 }
 
 async function applyLibraryManifest(manifest) {
