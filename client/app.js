@@ -3,7 +3,7 @@
 // Force clear old service workers and stale caches from previous builds
 (function forcePwaUpdate() {
   if (typeof window === "undefined") return;
-  const BUILD_VERSION = "20260821-v4";
+  const BUILD_VERSION = "20260823-v1";
   const stored = localStorage.getItem("app_build_epoch");
   if (stored !== BUILD_VERSION) {
     localStorage.setItem("app_build_epoch", BUILD_VERSION);
