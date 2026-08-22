@@ -476,11 +476,98 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
 
 async function translateChunkWithModel(apiKey, model, prompt, generationConfig = {}) {
   const isGroq = apiKey.startsWith("gsk_");
+  const isOpenRouter = apiKey.startsWith("sk-or-v1-");
   
   if (isGroq) {
     return translateWithGroq(apiKey, model, prompt, generationConfig);
+  } else if (isOpenRouter) {
+    return translateWithOpenRouter(apiKey, model, prompt, generationConfig);
   } else {
     return translateWithGemini(apiKey, model, prompt, generationConfig);
+  }
+}
+
+async function translateWithOpenRouter(apiKey, model, prompt, generationConfig = {}) {
+  const url = "https://openrouter.ai/api/v1/chat/completions";
+  const openRouterModel = model && (model.includes(":") || model.includes("/")) ? model : "openrouter/free";
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const dynamicMaxTokens = Math.min(1800, Math.max(300, Math.ceil(prompt.length * 0.9)));
+      const maxTokens = generationConfig.maxTokens || dynamicMaxTokens;
+
+      const bodyPayload = {
+        model: openRouterModel,
+        messages: [
+          {
+            role: "system",
+            content: "Bạn là dịch giả tiểu thuyết Trung Quốc sang tiếng Việt chuyên nghiệp. Hãy dịch toàn bộ sang tiếng Việt tự nhiên, đúng chuẩn văn phong tiểu thuyết/tiên hiệp/huyền huyễn. Chỉ trả về duy nhất nội dung đã dịch, không kèm suy nghĩ, lời giải thích hay ghi chú thêm."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        temperature: generationConfig.temperature ?? 0.3,
+        max_tokens: maxTokens
+      };
+
+      if (generationConfig.responseFormat === "json") {
+        bodyPayload.response_format = { type: "json_object" };
+      }
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://tram-chu.online",
+          "X-Title": "Tram Chu Translator"
+        },
+        signal: controller.signal,
+        body: JSON.stringify(bodyPayload)
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        const retryable = response.status >= 500;
+        if (retryable && attempt < 1) {
+          await wait(500 * (attempt + 1));
+          continue;
+        }
+
+        const message = data?.error?.message || `OpenRouter API HTTP ${response.status}`;
+        const error = new Error(message);
+        error.status = response.status;
+        error.model = openRouterModel;
+        throw error;
+      }
+
+      const text = data?.choices?.[0]?.message?.content || "";
+      if (!text.trim()) {
+        throw new Error("OpenRouter trả về phản hồi rỗng.");
+      }
+
+      return {
+        text,
+        model: openRouterModel,
+        usage: data.usage || {}
+      };
+    } catch (err) {
+      if (err.name === "AbortError") {
+        const timeoutError = new Error(`Hết thời gian chờ kết nối OpenRouter (${REQUEST_TIMEOUT_MS}ms).`);
+        timeoutError.status = 504;
+        timeoutError.model = openRouterModel;
+        throw timeoutError;
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 }
 
