@@ -295,7 +295,7 @@ async function main() {
             const bTitle = titleMap.get(job.bookId) || job.bookId;
             const elapsedMin = Math.max(0.05, (Date.now() - new Date(startedAt).getTime()) / 60000);
             const currentSpeed = Math.round((currentTotalSession / elapsedMin) * 10) / 10;
-            const currentSpacing = computeAdaptiveSpacing(parsedKeys);
+            const currentSpacing = computeAdaptiveSpacing(allUniqueKeys);
             console.log(`  [${bTitle}] ch ${chapter}: ${status}  (${completed}/${total}) [Phiên này: +${currentTotalSession} ch] [Điều tốc: ${Math.round(currentSpacing/1000)}s/ch]`);
             await writeTranslateStatus(storage, {
               state: "running",
@@ -437,18 +437,45 @@ async function main() {
 }
 
 async function listJobs(storage, onlyBook) {
+  if (onlyBook) {
+    const state = await readJson(storage, jobStateKey(onlyBook));
+    if (!state || !Array.isArray(state.chapters)) return [];
+    let healed = false;
+    for (const entry of state.chapters) {
+      if (entry.status !== "completed" && entry.attempts > 0) {
+        entry.status = "pending";
+        entry.attempts = 0;
+        entry.lastError = "";
+        entry.nextAttemptAt = 0;
+        healed = true;
+      }
+    }
+    if (healed) {
+      storage.put(jobStateKey(onlyBook), JSON.stringify(state)).catch(() => {});
+    }
+    const counts = summarize(state);
+    if (counts.completed === counts.total) return [];
+    return [{
+      bookId: state.bookId,
+      revision: state.revision,
+      state,
+      total: counts.total,
+      pending: counts.total - counts.completed,
+      highPriority: counts.highPriority || 0
+    }];
+  }
+
   const objects = await storage.list("jobs/");
   const jobs = [];
   for (const object of objects) {
     if (!object.key.endsWith("/translation.json")) continue;
     const state = await readJson(storage, object.key);
     if (!state || !Array.isArray(state.chapters)) continue;
-    if (onlyBook && state.bookId !== onlyBook) continue;
 
-    // Auto-heal any chapters that were stalled by previous disabled service accounts
+    // Auto-heal any chapters that were stalled by previous failed attempts or rate limits
     let healed = false;
     for (const entry of state.chapters) {
-      if (entry.status === "failed" && entry.lastError && (entry.lastError.includes("service account") || entry.lastError.includes("API key") || entry.lastError.includes("disabled") || entry.lastError.includes("401") || entry.lastError.includes("403"))) {
+      if (entry.status !== "completed" && entry.attempts > 0) {
         entry.status = "pending";
         entry.attempts = 0;
         entry.lastError = "";

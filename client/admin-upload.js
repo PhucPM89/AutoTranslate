@@ -576,8 +576,8 @@ function renderTranslateStatus(status = {}) {
     }
   }
   if (els.translateStateMessage) {
-    els.translateStateMessage.textContent = isRunning
-      ? `Hệ thống đang dồn toàn bộ 17 AI Keys để dịch dứt điểm bộ [${bookTitle}].`
+    els.translateStateMessage.textContent = bookTitle
+      ? `Hệ thống đang dồn toàn bộ cụm AI Keys để dịch dứt điểm bộ [${bookTitle}].`
       : (status.message || "Chưa có tác vụ dịch đang chạy.");
   }
   if (els.transActiveChapterBadge) {

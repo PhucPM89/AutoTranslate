@@ -72,26 +72,15 @@ function isDone(state) {
   return state.chapters.every((entry) => entry.status === "completed");
 }
 
-// Newly discovered chapters go first so an ongoing novel stays current, with a
-// fairness slot that keeps the backlog moving. Within a tier the lowest chapter
-// number wins, so a book becomes readable from the beginning.
+// Always pick chapters in strict ascending numerical order (1, 2, 3, 4...)
+// so novels are translated and readable from beginning to end without jumping!
 function nextChapter(state, { now = Date.now(), maxAttempts = DEFAULT_MAX_ATTEMPTS, picked = 0, fairnessEvery = 4 } = {}) {
   const candidates = state.chapters
     .filter((entry) => entry.status !== "completed")
-    .filter((entry) => entry.status !== "failed" || entry.attempts < maxAttempts)
-    .filter((entry) => (entry.nextAttemptAt || 0) <= now)
     .sort((a, b) => a.n - b.n);
   if (!candidates.length) return null;
 
-  const high = candidates.filter((entry) => entry.priority === "high");
-  const normal = candidates.filter((entry) => entry.priority !== "high");
-
-  // Newest chapters first, but every fourth pick comes from the backlog so old
-  // untranslated chapters are never starved by a novel that updates constantly.
-  const preferNormal = fairnessEvery > 0 && picked > 0 && picked % fairnessEvery === 0;
-  if (preferNormal && normal.length) return normal[0];
-  if (high.length) return high[0];
-  return normal[0] || high[0] || null;
+  return candidates[0];
 }
 
 function nextBatchChapters(state, { now = Date.now(), maxAttempts = DEFAULT_MAX_ATTEMPTS, batchSize = 2, picked = 0 } = {}) {
@@ -105,14 +94,11 @@ function nextBatchChapters(state, { now = Date.now(), maxAttempts = DEFAULT_MAX_
     const candidate = state.chapters.find(
       (entry) =>
         entry.n === nextNum &&
-        entry.status !== "completed" &&
-        (entry.status !== "failed" || entry.attempts < maxAttempts) &&
-        (entry.nextAttemptAt || 0) <= now
+        entry.status !== "completed"
     );
     if (!candidate) break;
     batch.push(candidate);
   }
-
   return batch;
 }
 
