@@ -1309,7 +1309,12 @@ function heroVariant(coverUrl) {
 }
 
 function fallbackCoverForBook(book) {
-  const seed = String(book.id || book.title || "tang-thu");
+  if (book && book.id) {
+    const cleanId = cleanBookId(book.id);
+    const cdnUrl = `${(typeof CDN_BASE !== "undefined" && CDN_BASE) || "https://cdn.tram-chu.online"}/covers/${cleanId}.jpg`;
+    return cdnUrl;
+  }
+  const seed = String(book?.id || book?.title || "tang-thu");
   const hash = Array.from(seed).reduce((value, character) => ((value * 31) + character.charCodeAt(0)) >>> 0, 0);
   return FALLBACK_BOOK_COVERS[hash % FALLBACK_BOOK_COVERS.length];
 }

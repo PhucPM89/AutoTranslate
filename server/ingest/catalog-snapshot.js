@@ -18,6 +18,12 @@ function hasHan(str) {
   return /\p{Script=Han}/u.test(String(str || ""));
 }
 
+function resolveCoverUrl(bookId, coverUrl, env = process.env) {
+  if (coverUrl && typeof coverUrl === "string" && coverUrl.startsWith("http")) return coverUrl;
+  const base = env?.R2_PUBLIC_BASE_URL || "https://cdn.tram-chu.online";
+  return bookId ? `${base.replace(/\/$/, "")}/covers/${bookId}.jpg` : "";
+}
+
 async function buildSnapshotFromSupabase(env = process.env) {
   const db = createSupabase(env);
   if (!db) return null;
@@ -29,7 +35,7 @@ async function buildSnapshotFromSupabase(env = process.env) {
     title: row.title,
     author: row.author || "",
     description: row.description || "",
-    cover: row.cover_url || "",
+    cover: resolveCoverUrl(row.id, row.cover_url, env),
     status: row.status || "",
     // Flattened from the embedded join; "" when a book has no category yet, which
     // the client treats as uncategorised rather than inventing a label.
@@ -60,7 +66,7 @@ async function buildSnapshotFromStorage(storage) {
         title: index.title,
         author: index.author || "",
         description: index.description || "",
-        cover: index.cover || "",
+        cover: resolveCoverUrl(index.bookId, index.cover, process.env),
         status: index.status || "",
         chapterCount: index.totalChapters || 0,
         translatedChapters: index.translatedChapters || 0,
