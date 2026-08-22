@@ -37,6 +37,27 @@ const AVERAGE_CHARS_PER_CHAPTER = 2200;
 // Probing /page/ is only a fallback now, so it gets a tight budget.
 const MAX_DETAIL_PROBES = 12;
 
+async function countUntranslatedBooks(storage) {
+  try {
+    const rawCatalog = await storage.get("catalog/latest.json");
+    if (!rawCatalog) return 0;
+    const catalog = JSON.parse(rawCatalog.toString("utf8"));
+    const books = Array.isArray(catalog.books) ? catalog.books : [];
+    let pendingCount = 0;
+    for (const b of books) {
+      const total = Number(b.chapterCount || b.totalChapters || 0);
+      const done = Number(b.translatedChapters || 0);
+      if (total > 0 && done < total) {
+        pendingCount++;
+      }
+    }
+    return pendingCount;
+  } catch (err) {
+    console.warn("countUntranslatedBooks error:", err.message);
+    return 0;
+  }
+}
+
 async function main() {
   requireEnvironment();
   // Config, status and the crawled-book list come straight from R2 and Supabase.
@@ -50,9 +71,22 @@ async function main() {
     return;
   }
 
+  const storage = createStorage();
+  const maxBacklog = Number(config.maxBacklog || 5);
+  const pendingCount = await countUntranslatedBooks(storage);
+  if (pendingCount >= maxBacklog) {
+    const msg = `Hàng đợi dịch đang có ${pendingCount} bộ chưa dịch xong (vượt mức tối đa ${maxBacklog} bộ). Tạm dừng cào sách mới để tập trung dịch dứt điểm các bộ hiện có.`;
+    await updateStatus({
+      state: "idle",
+      message: msg,
+      finishedAt: new Date().toISOString()
+    });
+    console.log(`[CRAWLER] ${msg}`);
+    return;
+  }
+
   // Pre-flight check: If translation worker is paused due to quota, halt crawler immediately!
   try {
-    const storage = createStorage();
     const rawTransStatus = await storage.get("jobs/translate-status.json");
     if (rawTransStatus) {
       const transStatus = JSON.parse(rawTransStatus.toString("utf8"));
@@ -795,10 +829,10 @@ async function translateBookMetadata(source) {
   } catch {}
 
   if (!apiKey) {
-    apiKey = process.env.GROQ_API_KEY || process.env.GROQ_API_KEYS || process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEYS;
+    apiKey = process.env.GROQ_API_KEYS || process.env.GROQ_API_KEY || process.env.OPENROUTER_API_KEYS || process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY;
   }
   if (!apiKey) {
-    throw new Error("Không dịch được metadata: thiếu GROQ_API_KEY / GEMINI_API_KEY.");
+    throw new Error("Không dịch được metadata: thiếu GROQ_API_KEY / OPENROUTER_API_KEY.");
   }
   return translateMetadata(source, apiKey);
 }
