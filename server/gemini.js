@@ -105,13 +105,13 @@ function getActiveKeys(apiKeys) {
   const parsed = parseApiKeys(apiKeys);
   if (parsed.length) return parsed;
 
-  const fromEnv = process.env.GROQ_API_KEYS || process.env.GROQ_API_KEY || process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY;
+  const fromEnv = process.env.GROQ_API_KEYS || process.env.GROQ_API_KEY || process.env.OPENROUTER_API_KEYS || process.env.OPENROUTER_API_KEY;
   return parseApiKeys(fromEnv);
 }
 
 async function translateText(text, apiKeys, options = {}) {
   const keyList = getActiveKeys(apiKeys);
-  if (!keyList.length) throw new Error("Thiếu GROQ_API_KEY / GEMINI_API_KEY.");
+  if (!keyList.length) throw new Error("Thiếu GROQ_API_KEY / OPENROUTER_API_KEY.");
 
   const glossary = options.glossary || {};
   const bookTitle = options.bookTitle || "";
@@ -154,7 +154,7 @@ async function translateBatchChapters(chapters, apiKeys, options = {}) {
   }
 
   const keyList = getActiveKeys(apiKeys);
-  if (!keyList.length) throw new Error("Thiếu GROQ_API_KEY / GEMINI_API_KEY.");
+  if (!keyList.length) throw new Error("Thiếu GROQ_API_KEY / OPENROUTER_API_KEY.");
 
   const glossary = options.glossary || {};
   const bookTitle = options.bookTitle || "";

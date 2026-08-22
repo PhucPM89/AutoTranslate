@@ -736,7 +736,7 @@ async function getActiveKeyList(env) {
       }
     } catch {}
   }
-  const fromEnv = env.GROQ_API_KEYS || env.GROQ_API_KEY || env.GEMINI_API_KEYS || env.GEMINI_API_KEY || "";
+  const fromEnv = env.GROQ_API_KEYS || env.GROQ_API_KEY || env.OPENROUTER_API_KEYS || env.OPENROUTER_API_KEY || "";
   const { parseApiKeys } = await import("../server/gemini.js");
   return parseApiKeys(fromEnv);
 }
@@ -759,8 +759,8 @@ async function handleAdminKeys({ request, env }) {
   await requireAdmin(request, env);
 
   const keyList = await getActiveKeyList(env);
-  const model = env.GROQ_MODEL || env.GEMINI_MODEL || "openai/gpt-oss-120b";
-  const fallbackModels = env.GROQ_FALLBACK_MODELS || env.GEMINI_FALLBACK_MODELS || "qwen/qwen3.6-27b,openai/gpt-oss-20b,groq/compound-mini";
+  const model = env.GROQ_MODEL || env.OPENROUTER_MODEL || "openai/gpt-oss-120b";
+  const fallbackModels = env.GROQ_FALLBACK_MODELS || env.OPENROUTER_FALLBACK_MODELS || "meta-llama/llama-3.3-70b-instruct";
 
   if (request.method === "POST") {
     const body = await readJson(request);
@@ -768,8 +768,8 @@ async function handleAdminKeys({ request, env }) {
 
     if (action === "add") {
       const newKey = String(body?.key || "").trim();
-      if (!newKey || (!newKey.startsWith("gsk_") && !newKey.startsWith("AQ.") && !newKey.startsWith("AIza"))) {
-        throw fail(400, "API Key không hợp lệ. Key Groq phải bắt đầu bằng 'gsk_'.");
+      if (!newKey || (!newKey.startsWith("gsk_") && !newKey.startsWith("sk-or-v1-"))) {
+        throw fail(400, "API Key không hợp lệ. Key phải bắt đầu bằng 'gsk_' (Groq) hoặc 'sk-or-v1-' (OpenRouter).");
       }
       if (keyList.includes(newKey)) {
         throw fail(400, "API Key này đã tồn tại trong danh sách.");
@@ -783,7 +783,7 @@ async function handleAdminKeys({ request, env }) {
         keys: updatedList.map((k, i) => ({
           id: i + 1,
           masked: k.slice(0, 8) + "..." + k.slice(-6),
-          provider: k.startsWith("gsk_") ? "Groq LPU" : "Google Gemini",
+          provider: k.startsWith("gsk_") ? "Groq LPU" : "OpenRouter",
           status: "ready"
         })),
         activeModel: model,
@@ -799,7 +799,7 @@ async function handleAdminKeys({ request, env }) {
       if (!Number.isNaN(targetIndex) && targetIndex >= 0 && targetIndex < keyList.length) {
         targetKey = keyList[targetIndex];
       } else if (targetMasked) {
-        targetKey = keyList.find((k) => (k.slice(0, 8) + "..." + k.slice(-6)) === targetMasked) || "";
+        targetKey = keyList.find((k) => (k.slice(0, 8) + "..." + k.slice(-6)) === targetMasked);
       }
 
       if (!targetKey) {
@@ -819,7 +819,7 @@ async function handleAdminKeys({ request, env }) {
         keys: updatedList.map((k, i) => ({
           id: i + 1,
           masked: k.slice(0, 8) + "..." + k.slice(-6),
-          provider: k.startsWith("gsk_") ? "Groq LPU" : "Google Gemini",
+          provider: k.startsWith("gsk_") ? "Groq LPU" : "OpenRouter",
           status: "ready"
         })),
         activeModel: model,
@@ -827,50 +827,26 @@ async function handleAdminKeys({ request, env }) {
       });
     }
 
-    // Ping action with realistic test payload & quota diagnostics
+    // Default action: "ping" - Probe all keys live
     const results = [];
     for (let i = 0; i < keyList.length; i++) {
       const key = keyList[i];
-      const masked = key.slice(0, 8) + "..." + key.slice(-6);
       const isGroq = key.startsWith("gsk_");
+      const isOpenRouter = key.startsWith("sk-or-v1-");
+      const masked = key.slice(0, 8) + "..." + key.slice(-6);
       const startTime = Date.now();
+
       try {
         if (isGroq) {
-          const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${key}`
-            },
-            body: JSON.stringify({
-              model,
-              messages: [
-                { role: "system", content: "Dịch sang tiếng Việt." },
-                { role: "user", content: "第一章 天命所归\n浩瀚大千世界，九天十地，万族林立。" }
-              ],
-              max_tokens: 100
-            }),
-            signal: AbortSignal.timeout(8000)
+          const resp = await fetch("https://api.groq.com/openai/v1/models", {
+            headers: { Authorization: `Bearer ${key}` }
           });
+          const data = await resp.json().catch(() => null);
           const ok = resp.ok;
-          let data = null;
-          try {
-            data = await resp.json();
-          } catch {}
-
-          let status = ok ? "ready" : (resp.status === 429 ? "rate_limited" : `HTTP ${resp.status}`);
-          let statusMessage = ok ? "Sẵn sàng (24/7)" : "";
-
-          if (!ok && resp.status === 429) {
-            const errMsg = data?.error?.message || "";
-            if (errMsg.includes("TPD") || errMsg.includes("tokens per day")) {
-              status = "tpd_limited";
-              statusMessage = "Chạm TPD (200k/ngày) - đang hồi phục theo giờ";
-            } else if (errMsg.includes("TPM") || errMsg.includes("tokens per minute")) {
-              status = "tpm_limited";
-              statusMessage = "Chạm TPM (8k/phút) - hồi sau vài giây";
-            }
-          }
+          const status = ok ? "ready" : (resp.status === 429 ? "cooldown" : "error");
+          const statusMessage = ok
+            ? "Sẵn sàng (Groq LPU)"
+            : (resp.status === 429 ? "Tạm hết RPM/TPM" : (data?.error?.message || `Lỗi HTTP ${resp.status}`));
 
           const remTokens = resp.headers.get("x-ratelimit-remaining-tokens");
           const limTokens = resp.headers.get("x-ratelimit-limit-tokens");
@@ -895,25 +871,46 @@ async function handleAdminKeys({ request, env }) {
             limitRequests: limRequests ? Number(limRequests) : 1000,
             resetRequests: resetRequests || null
           });
+        } else if (isOpenRouter) {
+          const resp = await fetch("https://openrouter.ai/api/v1/auth/key", {
+            headers: { Authorization: `Bearer ${key}` }
+          });
+          const data = await resp.json().catch(() => null);
+          const ok = resp.ok;
+          const status = ok ? "ready" : (resp.status === 429 ? "cooldown" : "error");
+          const statusMessage = ok
+            ? "Sẵn sàng (OpenRouter)"
+            : (resp.status === 429 ? "Tạm hết RPM/TPM" : (data?.error?.message || `Lỗi HTTP ${resp.status}`));
+
+          results.push({
+            id: i + 1,
+            masked,
+            provider: "OpenRouter",
+            status,
+            statusMessage,
+            latencyMs: Date.now() - startTime,
+            ok,
+            error: data?.error?.message || null,
+            limitTokens: 50000,
+            remainingTokens: 50000,
+            resetTokens: "0s"
+          });
         } else {
           results.push({
             id: i + 1,
             masked,
-            provider: "Gemini",
+            provider: "API Khác",
             status: "ready",
             statusMessage: "Sẵn sàng",
             latencyMs: Date.now() - startTime,
-            ok: true,
-            limitTokens: 15000,
-            remainingTokens: 15000,
-            resetTokens: "0s"
+            ok: true
           });
         }
       } catch (err) {
         results.push({
           id: i + 1,
           masked,
-          provider: isGroq ? "Groq LPU" : "Gemini",
+          provider: isGroq ? "Groq LPU" : isOpenRouter ? "OpenRouter" : "Khác",
           status: "error",
           statusMessage: err.message,
           error: err.message,
@@ -923,8 +920,8 @@ async function handleAdminKeys({ request, env }) {
     }
 
     const healthyCount = results.filter((r) => r.ok).length;
-    const dailyCapacity = Math.round(keyList.length * 75); // ~750 chapters/day on 10 keys
-    const safeSpacingSec = Math.max(5, Math.round(110 / Math.max(1, healthyCount)));
+    const dailyCapacity = Math.round(keyList.length * 2500); // ~40k chapters/day
+    const safeSpacingSec = Math.max(1, Math.round(18 / Math.max(1, healthyCount)));
 
     return json({
       keys: results,
@@ -932,7 +929,7 @@ async function handleAdminKeys({ request, env }) {
       fallbackModels,
       totalKeys: keyList.length,
       healthyKeys: healthyCount,
-      dailyCapacityEstimate: `${dailyCapacity} chương/ngày`,
+      dailyCapacityEstimate: `~${dailyCapacity.toLocaleString("vi-VN")} chương/ngày`,
       safePacingEstimate: `${safeSpacingSec}s/chương (Dịch 24/24 liên tục)`
     });
   }

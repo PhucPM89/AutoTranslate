@@ -116,9 +116,9 @@ async function main() {
   } catch {}
 
   if (!apiKey) {
-    apiKey = process.env.GROQ_API_KEYS || process.env.GROQ_API_KEY || process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY;
+    apiKey = process.env.GROQ_API_KEYS || process.env.GROQ_API_KEY || process.env.OPENROUTER_API_KEYS || process.env.OPENROUTER_API_KEY;
   }
-  if (!apiKey) throw new Error("Thiếu GROQ_API_KEY / GEMINI_API_KEY.");
+  if (!apiKey) throw new Error("Thiếu GROQ_API_KEY / OPENROUTER_API_KEY.");
   const db = createSupabase();
   const engine = createTranslationEngine({ storage });
   const deadlineAt = Date.now() + Math.max(0, RUN_MINUTES * 60 * 1000 - RESERVE_MS);

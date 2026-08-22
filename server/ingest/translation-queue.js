@@ -169,14 +169,16 @@ async function runTranslationJobs({
     await saveState(state);
 
     if (typeof onProgress === "function") {
-      const doneCount = state.chapters.filter((c) => c.status === "completed").length;
-      await onProgress({
-        chapter: entries[0]?.n || 0,
-        status: "translating",
-        completed: doneCount,
-        total: state.chapters.length,
-        sessionDelta: translated
-      }).catch(() => {});
+      try {
+        const doneCount = state.chapters.filter((c) => c.status === "completed").length;
+        await onProgress({
+          chapter: entries[0]?.n || 0,
+          status: "translating",
+          completed: doneCount,
+          total: state.chapters.length,
+          sessionDelta: translated
+        });
+      } catch {}
     }
 
     try {
@@ -216,14 +218,16 @@ async function runTranslationJobs({
       }
 
       if (typeof onProgress === "function") {
-        const doneCount = state.chapters.filter((c) => c.status === "completed").length;
-        await onProgress({
-          chapter: entries[0]?.n || 0,
-          status: "completed",
-          completed: doneCount,
-          total: state.chapters.length,
-          sessionDelta: translated
-        }).catch(() => {});
+        try {
+          const doneCount = state.chapters.filter((c) => c.status === "completed").length;
+          await onProgress({
+            chapter: entries[0]?.n || 0,
+            status: "completed",
+            completed: doneCount,
+            total: state.chapters.length,
+            sessionDelta: translated
+          });
+        } catch {}
       }
     } catch (error) {
       spent += 1;
