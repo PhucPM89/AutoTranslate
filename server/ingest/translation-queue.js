@@ -199,6 +199,42 @@ async function runTranslationJobs({
             translated += 1;
           }
         }
+      } else if (entries.length > 1) {
+        // Parallel concurrent translation across different API keys
+        await Promise.all(
+          entries.map(async (entry) => {
+            try {
+              const chapter = await loadChapter(entry.n);
+              if (!chapter) throw new Error(`Không tìm thấy nội dung chương ${entry.n}.`);
+
+              const translation = await translateChapter(chapter);
+              await publishChapter(chapter, translation);
+
+              entry.status = "completed";
+              entry.lastError = "";
+              entry.nextAttemptAt = 0;
+              entry.completedAt = new Date(now()).toISOString();
+              translated += 1;
+              spent += 1;
+            } catch (err) {
+              spent += 1;
+              const errMsg = String(err && err.message ? err.message : err).slice(0, 300);
+              entry.lastError = errMsg;
+              if (isQuotaError(err)) {
+                entry.attempts = Math.max(0, entry.attempts - 1);
+                entry.status = "pending";
+                entry.nextAttemptAt = now() + backoffFor(1, backoffBaseMs);
+                quotaExhausted = true;
+              } else if (entry.attempts >= maxAttempts) {
+                entry.status = "failed";
+                failed += 1;
+              } else {
+                entry.status = "retrying";
+                entry.nextAttemptAt = now() + backoffFor(entry.attempts, backoffBaseMs);
+              }
+            }
+          })
+        );
       } else {
         const entry = entries[0];
         const chapter = await loadChapter(entry.n);
@@ -221,7 +257,7 @@ async function runTranslationJobs({
         try {
           const doneCount = state.chapters.filter((c) => c.status === "completed").length;
           await onProgress({
-            chapter: entries[0]?.n || 0,
+            chapter: entries[entries.length - 1]?.n || 0,
             status: "completed",
             completed: doneCount,
             total: state.chapters.length,

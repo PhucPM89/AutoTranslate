@@ -56,7 +56,7 @@ const RUN_MINUTES = Number(flag("--minutes", process.env.TRANSLATE_RUN_MINUTES |
 const ONLY_BOOK = flag("--book", "");
 const SHARD_INDEX = Number(flag("--shard-index", process.env.TRANSLATE_SHARD_INDEX || 0));
 const TOTAL_SHARDS = Math.max(1, Number(flag("--total-shards", process.env.TRANSLATE_TOTAL_SHARDS || 1)));
-const BATCH_SIZE = Math.max(1, Number(flag("--batch-size", process.env.TRANSLATE_BATCH_SIZE || 1)));
+const BATCH_SIZE = Math.max(1, Number(flag("--batch-size", process.env.TRANSLATE_BATCH_SIZE || process.env.TRANSLATE_CONCURRENCY || 3)));
 const CONTINUOUS_MODE = !args.includes("--once") && (args.includes("--continuous") || args.includes("--loop") || process.env.TRANSLATE_CONTINUOUS !== "false");
 const RESERVE_MS = 3 * 60 * 1000;
 const PUBLISH_EVERY = Math.max(1, Number(process.env.TRANSLATE_PUBLISH_EVERY || 20));
@@ -74,19 +74,16 @@ function computeAdaptiveSpacing(keyList) {
   const readyKeys = stats.filter((s) => s.ready).length;
   
   if (readyKeys >= 8) {
-    // 8-10 keys: Ultra Fast Mode (~2.5s per chapter total = ~1.440 chapters/hour)
-    return 600;
+    // 8-17 keys: Parallel Waves Mode (~300ms pacing between waves)
+    return 300;
   } else if (readyKeys >= 5) {
-    // 5-7 keys: Fast Balanced Mode (~3.5s per chapter)
-    return 1200;
+    return 600;
   } else if (readyKeys >= 3) {
-    // 3-4 keys: Controlled Pacing (~5s per chapter)
-    return 2500;
+    return 1200;
   } else if (readyKeys >= 1) {
-    // 1-2 keys: Safe Single-Key TPM Protection (~8s per chapter)
-    return 5000;
+    return 2500;
   }
-  return 15000;
+  return 5000;
 }
 
 async function writeTranslateStatus(storage, status) {
