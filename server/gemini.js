@@ -195,25 +195,34 @@ async function translateMetadata(metadata, apiKey) {
   let lastError = null;
 
   const keyList = getActiveKeys(apiKey);
-  const primaryKey = keyList[0] || apiKey;
-
-  for (const model of models) {
-    try {
-      const result = await translateChunkWithModel(primaryKey, model, prompt, { responseFormat: "json", temperature: 0.2 });
-      const translated = parseMetadataJson(result.text);
-      validateTranslatedMetadata(source, translated);
-      return {
-        title: cleanMetadataField(translated.title, 120),
-        author: cleanMetadataField(translated.author, 100),
-        description: cleanMetadataField(translated.description, 3000),
-        model: result.model
-      };
-    } catch (error) {
-      lastError = error;
-      if (!shouldTryNextModel(error) && error.status !== 502) break;
+  for (const key of keyList) {
+    for (const model of models) {
+      try {
+        const result = await translateChunkWithModel(key, model, prompt, { responseFormat: "json", temperature: 0.2 });
+        const translated = parseMetadataJson(result.text);
+        validateTranslatedMetadata(source, translated);
+        return {
+          title: cleanMetadataField(translated.title, 120),
+          author: cleanMetadataField(translated.author, 100),
+          description: cleanMetadataField(translated.description, 3000),
+          model: result.model
+        };
+      } catch (error) {
+        lastError = error;
+        if (!shouldTryNextModel(error) && error.status !== 502) break;
+      }
     }
   }
-  throw lastError || new Error("Không dịch được metadata truyện.");
+
+  // Resilient fallback: If AI metadata translation fails, never fail the entire book ingest.
+  // Use source metadata cleanly so the novel is published and translated normally.
+  console.warn("Metadata AI translation fallback:", lastError?.message);
+  return {
+    title: cleanMetadataField(source.title, 120),
+    author: cleanMetadataField(source.author, 100) || "Tác giả",
+    description: cleanMetadataField(source.description, 3000) || "Đang cập nhật giới thiệu truyện.",
+    model: "fallback-source"
+  };
 }
 
 function parseMetadataJson(value) {
