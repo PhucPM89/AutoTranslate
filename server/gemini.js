@@ -244,9 +244,13 @@ async function translateMetadata(metadata, apiKey) {
     }
   }
 
-  // Resilient fallback: If AI metadata translation fails, never fail the entire book ingest.
-  // Use source metadata cleanly so the novel is published and translated normally.
-  console.warn("Metadata AI translation fallback:", lastError?.message);
+  // If AI metadata translation fails and source contains Chinese, throw error so untranslated books are never uploaded!
+  if (hasHan(source.title) || hasHan(source.author) || hasHan(source.description)) {
+    const err = lastError || new Error("Không thể dịch metadata: Tất cả API key đều hết hạn mức hoặc lỗi mô hình.");
+    err.status = lastError?.status || 429;
+    throw err;
+  }
+
   return {
     title: cleanMetadataField(source.title, 120),
     author: cleanMetadataField(source.author, 100) || "Tác giả",

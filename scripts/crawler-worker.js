@@ -49,6 +49,24 @@ async function main() {
     return;
   }
 
+  // Pre-flight check: If translation worker is paused due to quota, halt crawler immediately!
+  try {
+    const storage = createStorage();
+    const rawTransStatus = await storage.get("jobs/translate-status.json");
+    if (rawTransStatus) {
+      const transStatus = JSON.parse(rawTransStatus.toString("utf8"));
+      if (transStatus.state === "paused_quota") {
+        await updateStatus({
+          state: "paused_quota",
+          message: "API keys dịch đang tạm hết hạn mức (Quota/Rate Limit). Tạm dừng cào sách mới để tránh upload truyện chưa dịch.",
+          finishedAt: new Date().toISOString()
+        });
+        console.warn("[CRAWLER] Translation worker is paused for quota. Halting crawler to protect library integrity.");
+        return;
+      }
+    }
+  } catch {}
+
   const startedAt = new Date().toISOString();
   const resumeJob = selectResumeJob(previousStatus, catalog);
   const status = {
@@ -69,6 +87,29 @@ async function main() {
   startHeartbeat(status);
 
   try {
+    // Pre-flight check: verify that metadata translation works before spinning up Tomato & downloads
+    try {
+      const preflight = await translateBookMetadata({
+        title: "测试小说",
+        author: "作者",
+        description: "测试简介"
+      });
+      if (!preflight?.title || /[\u4e00-\u9fa5]/.test(preflight.title)) {
+        throw new Error("Không thể dịch metadata sang tiếng Việt.");
+      }
+    } catch (error) {
+      const isQuota = error.status === 429 || String(error.message || "").toLowerCase().includes("quota") || String(error.message || "").toLowerCase().includes("rate limit") || String(error.message || "").toLowerCase().includes("hết hạn mức");
+      if (isQuota) {
+        stopHeartbeat();
+        status.state = "paused_quota";
+        status.message = "API keys dịch đang hết hạn mức (Quota/Rate Limit). Tạm dừng cào sách mới để bảo toàn dữ liệu.";
+        status.finishedAt = new Date().toISOString();
+        await updateStatus(status);
+        console.warn("[CRAWLER] Translation pre-flight failed due to quota. Halting crawler.");
+        return;
+      }
+    }
+
     await waitForTomato();
     await configureTomato();
 
@@ -106,6 +147,15 @@ async function main() {
             ...(status.recent || [])
           ].slice(0, 8);
         } catch (error) {
+          const isQuota = error.status === 429 || String(error.message || "").toLowerCase().includes("quota") || String(error.message || "").toLowerCase().includes("rate limit") || String(error.message || "").toLowerCase().includes("hết hạn mức");
+          if (isQuota) {
+            status.state = "paused_quota";
+            status.message = `Tạm dừng crawler: API keys dịch đang tạm hết hạn mức (Quota/Rate Limit). Ngừng cào để tránh upload sách chưa dịch.`;
+            status.finishedAt = new Date().toISOString();
+            await updateStatus(status);
+            console.warn(`[CRAWLER PAUSED] ${status.message}`);
+            return;
+          }
           status.failed += 1;
           const errorMsg = error.message || String(error);
           status.message = `Book ${candidate.sourceId} thất bại: ${errorMsg}`;
