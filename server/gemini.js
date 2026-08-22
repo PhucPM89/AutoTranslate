@@ -1,5 +1,10 @@
 "use strict";
 
+const dns = require("dns");
+if (typeof dns.setDefaultResultOrder === "function") {
+  dns.setDefaultResultOrder("ipv4first");
+}
+
 const { createTranslationEngine } = require("./translation-engine");
 
 const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
@@ -43,8 +48,8 @@ function getModelsForApiKey(apiKey) {
     const fallbacks = parseCsv(process.env.OPENROUTER_FALLBACK_MODELS || "deepseek/deepseek-chat,qwen/qwen-2.5-72b-instruct");
     return [primary, ...fallbacks].filter((m, i, l) => m && l.indexOf(m) === i);
   }
-  const primary = process.env.GEMINI_MODEL || "gemini-2.0-flash";
-  const fallbacks = parseCsv(process.env.GEMINI_FALLBACK_MODELS || "gemini-1.5-flash,gemini-1.5-pro");
+  const primary = process.env.GEMINI_MODEL || "gemini-3.6-flash";
+  const fallbacks = parseCsv(process.env.GEMINI_FALLBACK_MODELS || "gemini-2.5-flash,gemini-flash-latest,gemini-3.7-flash,gemini-1.5-flash");
   return [primary, ...fallbacks].filter((m, i, l) => m && l.indexOf(m) === i);
 }
 
@@ -723,10 +728,19 @@ async function translateWithGemini(apiKey, model, prompt, generationConfig = {})
     try {
       const response = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-client": "gl-node/gemini-translator"
+        },
         signal: controller.signal,
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: prompt }] }],
+          safetySettings: [
+            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
+            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
+            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" }
+          ],
           generationConfig: {
             temperature: generationConfig.temperature ?? 0.3,
             ...(generationConfig.responseFormat === "json" ? { responseMimeType: "application/json" } : {})
@@ -742,22 +756,29 @@ async function translateWithGemini(apiKey, model, prompt, generationConfig = {})
           continue;
         }
 
-        const message = data?.error?.message || "Gemini API trả về lỗi.";
+        const message = `${data?.error?.message || "Gemini API trả về lỗi."} [Key: ${apiKey.slice(0, 10)}...] (Status: ${response.status})`;
         const error = new Error(message);
         error.status = response.status;
         error.model = model;
         throw error;
       }
 
+      if (data?.candidates?.[0]?.finishReason === "SAFETY") {
+        const error = new Error("Nội dung bị chặn bởi bộ lọc an toàn Gemini.");
+        error.status = 400;
+        error.isContentFilter = true;
+        throw error;
+      }
+
       let text = data?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim() || "";
       text = stripMarkdown(text);
-      return { text, model };
+      return { text, model, usage: data?.usageMetadata || null };
     } finally {
       clearTimeout(timeout);
     }
   }
 
-  const error = new Error("Gemini API trả về lỗi.");
+  const error = new Error("Gemini API không phản hồi.");
   error.model = model;
   throw error;
 }

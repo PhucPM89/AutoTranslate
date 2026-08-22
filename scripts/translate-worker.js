@@ -1,15 +1,9 @@
 "use strict";
 
-// Translation worker.
-//
-// Deliberately separate from the crawler. The crawler runs every 15 minutes and
-// must finish in minutes: it detects chapters, publishes their source text and
-// enqueues them. This worker is the slow half — it drains those queues against
-// Gemini on its own schedule, checkpointing after every chapter so a run that
-// hits the Gemini quota or the GitHub Actions time limit simply stops and the
-// next run resumes.
-//
-//   node scripts/translate-worker.js [--budget 200] [--minutes 300] [--book id]
+const dns = require("dns");
+if (typeof dns.setDefaultResultOrder === "function") {
+  dns.setDefaultResultOrder("ipv4first");
+}
 
 const fs = require("fs");
 const path = require("path");
