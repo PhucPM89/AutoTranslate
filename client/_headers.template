@@ -14,7 +14,7 @@
 # straight there with a presigned PUT. Readers never contact that host.
 
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: %CDN_ORIGIN% https://*.googleusercontent.com https://lh3.googleusercontent.com; connect-src 'self' %CDN_ORIGIN% https://*.supabase.co https://*.r2.cloudflarestorage.com https://cloudflareinsights.com https://*.cloudflareinsights.com; media-src 'none'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self' mailto:
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https://cdn.tram-chu.online https://*.tram-chu.online %CDN_ORIGIN% https://*.googleusercontent.com https://lh3.googleusercontent.com; connect-src 'self' https://cdn.tram-chu.online https://*.tram-chu.online %CDN_ORIGIN% https://*.supabase.co https://*.r2.cloudflarestorage.com https://cloudflareinsights.com https://*.cloudflareinsights.com; media-src 'none'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self' mailto:
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: DENY

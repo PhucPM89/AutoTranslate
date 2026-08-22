@@ -208,12 +208,11 @@ function writeHeaders() {
 }
 
 function cdnOrigin() {
-  const base = process.env.R2_PUBLIC_BASE_URL || "";
-  if (!base) return "";
+  const base = process.env.R2_PUBLIC_BASE_URL || "https://cdn.tram-chu.online";
   try {
     return new URL(base).origin;
   } catch {
-    return "";
+    return "https://cdn.tram-chu.online";
   }
 }
 

@@ -1014,18 +1014,18 @@ export function withSecurityHeaders(response, env) {
 function contentSecurityPolicy(env) {
   let cdn = "";
   try {
-    cdn = env.R2_PUBLIC_BASE_URL ? new URL(env.R2_PUBLIC_BASE_URL).origin : "";
+    cdn = env.R2_PUBLIC_BASE_URL ? new URL(env.R2_PUBLIC_BASE_URL).origin : "https://cdn.tram-chu.online";
   } catch {
-    cdn = "";
+    cdn = "https://cdn.tram-chu.online";
   }
   return [
     "default-src 'self'",
-    `img-src 'self' data:${cdn ? ` ${cdn}` : ""}`,
+    `img-src 'self' data: https://cdn.tram-chu.online https://*.tram-chu.online${cdn ? ` ${cdn}` : ""}`,
     "script-src 'self'",
     "style-src 'self'",
     // The CDN for chapters, Supabase for analytics, and the R2 S3 endpoint for
     // the admin page's presigned upload.
-    `connect-src 'self'${cdn ? ` ${cdn}` : ""} https://*.supabase.co https://*.r2.cloudflarestorage.com`,
+    `connect-src 'self' https://cdn.tram-chu.online https://*.tram-chu.online${cdn ? ` ${cdn}` : ""} https://*.supabase.co https://*.r2.cloudflarestorage.com`,
     "media-src 'none'",
     "object-src 'none'",
     "base-uri 'self'",
