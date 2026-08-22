@@ -26,16 +26,16 @@ jobs:
     timeout-minutes: 330
     concurrency:
       group: translate-worker-focused
-      cancel-in-progress: false
+      cancel-in-progress: true
     env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
+      GEMINI_MODEL: ${{ secrets.GEMINI_MODEL || 'gemini-3.6-flash' }}
+      GEMINI_FALLBACK_MODELS: ${{ secrets.GEMINI_FALLBACK_MODELS || 'gemini-2.5-flash,gemini-flash-latest,gemini-3.7-flash,gemini-1.5-flash' }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       GROQ_API_KEYS: ${{ secrets.GROQ_API_KEYS }}
-      GROQ_MODEL: ${{ secrets.GROQ_MODEL }}
-      GROQ_FALLBACK_MODELS: ${{ secrets.GROQ_FALLBACK_MODELS }}
-      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      OPENROUTER_API_KEYS: ${{ secrets.OPENROUTER_API_KEYS }}
-      OPENROUTER_MODEL: ${{ secrets.OPENROUTER_MODEL }}
-      OPENROUTER_FALLBACK_MODELS: ${{ secrets.OPENROUTER_FALLBACK_MODELS }}
+      GROQ_MODEL: ${{ secrets.GROQ_MODEL || 'openai/gpt-oss-120b' }}
+      GROQ_FALLBACK_MODELS: ${{ secrets.GROQ_FALLBACK_MODELS || 'qwen/qwen3.6-27b' }}
       R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
