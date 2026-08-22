@@ -224,7 +224,6 @@ async function runTranslationJobs({
                 entry.attempts = Math.max(0, entry.attempts - 1);
                 entry.status = "pending";
                 entry.nextAttemptAt = now() + backoffFor(1, backoffBaseMs);
-                quotaExhausted = true;
               } else if (entry.attempts >= maxAttempts) {
                 entry.status = "failed";
                 failed += 1;

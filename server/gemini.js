@@ -63,10 +63,10 @@ function parseApiKeys(keys) {
   for (let token of rawTokens) {
     token = token.trim();
     if (!token) continue;
-    if (token.startsWith("gsk_") || token.startsWith("AQ.") || token.startsWith("AIza") || result.length === 0) {
+    if (token.startsWith("gsk_") || token.startsWith("sk-or-v1-") || token.startsWith("AQ.") || token.startsWith("AIza") || result.length === 0) {
       result.push(token);
     } else {
-      result[result.length - 1] += token;
+      result.push(token);
     }
   }
 
@@ -105,7 +105,12 @@ function getActiveKeys(apiKeys) {
   const parsed = parseApiKeys(apiKeys);
   if (parsed.length) return parsed;
 
-  const fromEnv = process.env.GROQ_API_KEYS || process.env.GROQ_API_KEY || process.env.OPENROUTER_API_KEYS || process.env.OPENROUTER_API_KEY;
+  const fromEnv = [
+    process.env.GROQ_API_KEYS,
+    process.env.GROQ_API_KEY,
+    process.env.OPENROUTER_API_KEYS,
+    process.env.OPENROUTER_API_KEY
+  ].filter(Boolean).join(",");
   return parseApiKeys(fromEnv);
 }
 
@@ -447,25 +452,18 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
   const readyKeys = keyOrder.filter(({ key }) => getKeyHealth(key).cooldownUntil <= now);
   const cooldownKeys = keyOrder.filter(({ key }) => getKeyHealth(key).cooldownUntil > now);
 
-  // Prioritize ready keys. If all on cooldown, sort by earliest cooldown expiration
-  const prioritizedKeys = readyKeys.length > 0
-    ? readyKeys
-    : [...cooldownKeys].sort((a, b) => getKeyHealth(a.key).cooldownUntil - getKeyHealth(b.key).cooldownUntil);
+  // Chain ready keys first, followed by cooldown keys in order of earliest cooldown
+  const sortedCooldownKeys = [...cooldownKeys].sort((a, b) => getKeyHealth(a.key).cooldownUntil - getKeyHealth(b.key).cooldownUntil);
+  const prioritizedKeys = [...readyKeys, ...sortedCooldownKeys];
 
   for (const { key: apiKey, index: keyIdx } of prioritizedKeys) {
     const health = getKeyHealth(apiKey);
     const timeUntilReady = health.cooldownUntil - Date.now();
-    if (timeUntilReady > 0 && readyKeys.length > 0) {
-      // If other keys are ready, skip this key
+    if (timeUntilReady > 5000) {
       continue;
     }
-    if (timeUntilReady > 0 && readyKeys.length === 0) {
-      // If all keys are on cooldown, wait for earliest if under 15s
-      if (timeUntilReady <= 15000) {
-        await wait(timeUntilReady + 200);
-      } else {
-        continue;
-      }
+    if (timeUntilReady > 0) {
+      await wait(timeUntilReady + 100);
     }
 
     const models = getModelsForApiKey(apiKey);
@@ -482,12 +480,13 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
 
       try {
         const result = await translateChunkWithModel(apiKey, model, prompt);
-        const quality = assessTranslation(text, result.text);
+        const processedText = engine.postProcessTranslation(result.text, glossary);
+        const quality = assessTranslation(text, processedText);
         if (quality.acceptable) {
           markKeySuccess(apiKey, result.usage?.total_tokens || 0);
           // Advance global key pointer so the NEXT request uses the next key
           globalKeyIndex = (keyIdx + 1) % nKeys;
-          return result;
+          return { text: processedText, model: result.model, usage: result.usage };
         }
 
         const error = new Error(`Bản dịch chưa đạt yêu cầu (${quality.reason}).`);
@@ -505,15 +504,17 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
           return { text: fallbackClean || "Nội dung chương đang được cập nhật bản dịch phù hợp.", model: "safety-fallback" };
         }
 
-        if (error.status === 429 || error.status === 403) {
-          const cooldownDuration = parseGroqRetryDurationMs(error.message);
+        if (error.status === 429 || error.status === 403 || error.status === 401) {
+          if (modelIndex < models.length - 1 && error.status !== 401) {
+            continue;
+          }
+          const cooldownDuration = error.status === 401 ? 86400000 : parseGroqRetryDurationMs(error.message);
           markKeyCooldown(apiKey, cooldownDuration, error.message);
           break; // Switch to next key in pool immediately
         }
         if (!shouldTryNextModel(error)) break;
       }
     }
-    markKeyCooldown(apiKey, 5000);
   }
 
   // If initial pass failed, check if any key is nearing cooldown reset
@@ -545,7 +546,7 @@ async function translateWithOpenRouter(apiKey, model, prompt, generationConfig =
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
-      const dynamicMaxTokens = Math.min(1800, Math.max(300, Math.ceil(prompt.length * 0.9)));
+      const dynamicMaxTokens = Math.min(4096, Math.max(1024, Math.ceil(prompt.length * 1.8)));
       const maxTokens = generationConfig.maxTokens || dynamicMaxTokens;
 
       const bodyPayload = {
@@ -553,7 +554,7 @@ async function translateWithOpenRouter(apiKey, model, prompt, generationConfig =
         messages: [
           {
             role: "system",
-            content: "Bạn là dịch giả văn học tiểu thuyết mạng Trung - Việt xuất sắc nhất (Tiên hiệp, Huyền huyễn, Đô thị, Mạt thế). Hãy dịch toàn bộ sang tiếng Việt tự nhiên, văn phong mượt mà, thuần Việt và chuẩn Hán-Việt 100% cho tên riêng/thuật ngữ. Xưng hô chuẩn mực (ta-ngươi, huynh-đệ, sư phụ-đồ nhi). Chỉ trả về duy nhất nội dung đã dịch, không kèm suy nghĩ, lời giải thích hay ghi chú."
+            content: "Bạn là dịch giả văn học tiểu thuyết mạng Trung - Việt xuất sắc nhất (Tiên hiệp, Huyền huyễn, Đô thị, Mạt thế). Hãy dịch toàn bộ sang tiếng Việt tự nhiên, văn phong mượt mà, thuần Việt và chuẩn Hán-Việt 100% cho tên riêng/thuật ngữ. Xưng hô chuẩn mực (ta-ngươi, huynh-đệ, sư phụ-đồ nhi). TUYỆT ĐỐI KHÔNG để sót bất kỳ chữ Hán nào trong bản dịch, mọi từ đều phải chuyển sang tiếng Việt hoặc âm Hán-Việt chuẩn xác. Chỉ trả về duy nhất nội dung đã dịch, không kèm suy nghĩ, lời giải thích hay ghi chú."
           },
           {
             role: "user",
@@ -596,11 +597,15 @@ async function translateWithOpenRouter(apiKey, model, prompt, generationConfig =
         throw error;
       }
 
-      const text = data?.choices?.[0]?.message?.content || "";
+      let text = data?.choices?.[0]?.message?.content || "";
       if (!text.trim()) {
-        throw new Error("OpenRouter trả về phản hồi rỗng.");
+        const emptyError = new Error("OpenRouter API trả về kết quả rỗng.");
+        emptyError.model = openRouterModel;
+        throw emptyError;
       }
 
+      text = stripThinkTags(text);
+      text = stripMarkdown(text);
       return {
         text,
         model: openRouterModel,
@@ -628,8 +633,8 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
-      // Dynamic max_tokens based on actual input length to prevent Groq TPM over-reservation
-      const dynamicMaxTokens = Math.min(1800, Math.max(300, Math.ceil(prompt.length * 0.9)));
+      // Dynamic max_tokens based on actual chapter content length to prevent Groq TPM over-reservation
+      const dynamicMaxTokens = Math.min(750, Math.max(250, Math.ceil(prompt.length * 0.25)));
       const maxTokens = generationConfig.maxTokens || dynamicMaxTokens;
 
       const bodyPayload = {
@@ -652,10 +657,11 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
         bodyPayload.response_format = { type: "json_object" };
       }
 
+      const authHeader = `Bearer ${apiKey.trim()}`;
       const response = await fetch(url, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${apiKey}`,
+          Authorization: authHeader,
           "Content-Type": "application/json"
         },
         signal: controller.signal,
@@ -671,7 +677,7 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
           continue;
         }
 
-        const message = data?.error?.message || `Groq API HTTP ${response.status}`;
+        const message = `${data?.error?.message || `Groq API HTTP ${response.status}`} [Key: ${apiKey.slice(0, 15)}...] (Status: ${response.status})`;
         const error = new Error(message);
         error.status = response.status;
         error.model = model;

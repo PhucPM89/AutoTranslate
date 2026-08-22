@@ -121,7 +121,7 @@ async function main() {
 
   const allUniqueKeys = Array.from(new Set([...keyList, ...envKeys])).filter(Boolean);
   if (!allUniqueKeys.length) throw new Error("Thiếu GROQ_API_KEY / OPENROUTER_API_KEY.");
-  apiKey = allUniqueKeys.join(",");
+  const apiKey = allUniqueKeys.join(",");
   const db = createSupabase();
   const engine = createTranslationEngine({ storage });
   const deadlineAt = Date.now() + Math.max(0, RUN_MINUTES * 60 * 1000 - RESERVE_MS);
@@ -274,14 +274,6 @@ async function main() {
               lastChapterTokens = output.tokensUsed;
             }
             return output.translation;
-          },
-          translateBatch: async (chapters) => {
-            const glossary = await engine.loadGlossary(job.bookId);
-            return translateBatchChapters(chapters, apiKey, {
-              bookId: job.bookId,
-              glossary,
-              engine
-            });
           },
           publishChapter: async (chapter, translation) => {
             await storage.put(
