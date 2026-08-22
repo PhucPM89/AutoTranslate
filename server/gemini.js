@@ -554,9 +554,28 @@ async function translateChunkWithModel(apiKey, model, prompt, generationConfig =
 }
 
 async function translateWithCloudflareWorkersAi(apiKey, model, prompt, generationConfig = {}) {
-  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || process.env.R2_ACCOUNT_ID || "aa644d98f2377007f0fa98abcafe3d21";
+  let token = apiKey;
+  let accountId = process.env.CLOUDFLARE_ACCOUNT_ID || process.env.R2_ACCOUNT_ID || "aa644d98f2377007f0fa98abcafe3d21";
+
+  if (typeof apiKey === "string") {
+    if (apiKey.includes(":")) {
+      const parts = apiKey.split(":");
+      if (parts[0].startsWith("cfut_") || parts[0].startsWith("cf_")) {
+        token = parts[0];
+        accountId = parts[1];
+      } else {
+        accountId = parts[0];
+        token = parts[1];
+      }
+    } else if (apiKey.includes("@")) {
+      const parts = apiKey.split("@");
+      token = parts[0];
+      accountId = parts[1];
+    }
+  }
+
   const cfModel = model && model.startsWith("@cf/") ? model : "@cf/meta/llama-3.1-70b-instruct";
-  const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${cfModel}`;
+  const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/run/${cfModel}`;
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const controller = new AbortController();
@@ -566,7 +585,7 @@ async function translateWithCloudflareWorkersAi(apiKey, model, prompt, generatio
       const response = await fetch(url, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${apiKey}`,
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json"
         },
         signal: controller.signal,
@@ -592,7 +611,7 @@ async function translateWithCloudflareWorkersAi(apiKey, model, prompt, generatio
         }
 
         const errMsg = Array.isArray(data?.errors) ? data.errors.map((e) => e.message).join(", ") : "Cloudflare AI lỗi.";
-        const message = `${errMsg} [Key: ${apiKey.slice(0, 10)}...] (Status: ${response.status})`;
+        const message = `${errMsg} [Key: ${token.slice(0, 10)}...] (Status: ${response.status})`;
         const error = new Error(message);
         error.status = response.status;
         error.model = cfModel;
