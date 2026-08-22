@@ -151,7 +151,7 @@ function createTranslationEngine({ storage = null } = {}) {
       "",
       "2. DANH TỪ RIÊNG VÀ XƯNG HÔ:",
       "   - Bắt buộc chuyển toàn bộ tên người, địa danh, môn phái, công pháp, chiêu thức, cảnh giới, pháp bảo sang âm Hán-Việt phù hợp nhất.",
-      "   - Tuyệt đối không dùng Pinyin hoặc chữ Hán trong bản dịch (Ví dụ: 陈清 -> Trần Thanh, 张伟 -> Trương Vĩ, 姜子牙 -> Khương Tử Nha, 诸葛亮 -> Gia Cát Lượng).",
+      "   - Tuyệt đối không dùng Pinyin hoặc chữ Hán trong bản dịch (Ví dụ: 陈清 phải dịch là Trần Thanh, 张伟 -> Trương Vĩ, 姜子牙 -> Khương Tử Nha, 诸葛亮 -> Gia Cát Lượng).",
       "   - Xưng hô nhân vật phong phú, tự nhiên theo tính cách và vai vế (ta/ngươi, huynh/đệ, tỷ/muội, tiền bối/vãn bối, sư tôn/đồ nhi, chư vị đạo hữu, lão tử, tại hạ...).",
       "",
       "3. TÍNH TOÀN VẸN:",
@@ -161,7 +161,7 @@ function createTranslationEngine({ storage = null } = {}) {
       "   - Chỉ trả về duy nhất nội dung bản dịch tiếng Việt hoàn chỉnh.",
       glossarySection,
       isRetry
-        ? "Lưu ý đặc biệt: Lần dịch trước có sai sót hoặc còn chữ Trung. Hãy dịch lại thật chau chuốt, mượt mà toàn bộ chương này."
+        ? "Lưu ý đặc biệt: Bản dịch trước đã bị hệ thống từ chối vì còn sót chữ Hán hoặc câu cú chưa đạt. Hãy dịch lại thật chuẩn xác, chau chuốt toàn bộ nội dung sau đây sang tiếng Việt."
         : "",
       chunkNote,
       "",

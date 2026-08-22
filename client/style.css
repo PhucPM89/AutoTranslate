@@ -294,15 +294,88 @@ body.theme-oled {
   --border-strong: rgba(255, 255, 255, 0.22);
 }
 
-/* Font styles */
+/* Theme Forest — Xanh Rừng dịu mắt chống nhức mỏi */
+body.theme-forest {
+  color-scheme: dark;
+  --bg: #0d1512;
+  --app-bg: #0d1512;
+  --bg-sunken: #080d0b;
+  --topbar: rgba(13, 21, 18, 0.92);
+  --sidebar: #0f1915;
+  --surface: #13201b;
+  --surface-raised: #1a2b25;
+  --surface-hover: #22372f;
+  --paper: #0d1512;
+  --paper-text: #d5e5dc;
+  --text: #d5e5dc;
+  --text-soft: #a2beaf;
+  --muted: #6e8b7c;
+  --faint: #4e675a;
+  --border: rgba(94, 234, 160, 0.16);
+  --border-soft: rgba(94, 234, 160, 0.08);
+  --border-strong: rgba(94, 234, 160, 0.3);
+  --accent: #10b981;
+  --accent-strong: #34d399;
+}
+
+/* Theme Light — Nền giấy sáng tự nhiên */
+body.theme-light {
+  color-scheme: light;
+  --bg: #faf9f6;
+  --app-bg: #faf9f6;
+  --bg-sunken: #f0eee8;
+  --topbar: rgba(250, 249, 246, 0.94);
+  --sidebar: #f3f1ec;
+  --surface: #ffffff;
+  --surface-raised: #f5f4ef;
+  --surface-hover: #ebe9e2;
+  --paper: #ffffff;
+  --paper-text: #1a1a1c;
+  --text: #1a1a1c;
+  --text-soft: #4a4a52;
+  --muted: #71717a;
+  --faint: #a1a1aa;
+  --border: rgba(0, 0, 0, 0.12);
+  --border-soft: rgba(0, 0, 0, 0.06);
+  --border-strong: rgba(0, 0, 0, 0.22);
+  --accent: #7c3aed;
+  --accent-strong: #6d28d9;
+}
+
+/* Font styles — Typography chuyên nghiệp cho đọc tiểu thuyết */
+body.font-literata .document-text,
+body.font-literata #paperTitle {
+  font-family: "Literata", "Georgia", "Times New Roman", serif;
+}
+
+body.font-lora .document-text,
+body.font-lora #paperTitle {
+  font-family: "Lora", "Georgia", "Merriweather", serif;
+}
+
+body.font-merriweather .document-text,
+body.font-merriweather #paperTitle {
+  font-family: "Merriweather", "Georgia", serif;
+}
+
+body.font-bevietnam .document-text,
+body.font-bevietnam #paperTitle {
+  font-family: "Be Vietnam Pro", sans-serif;
+}
+
+body.font-inter .document-text,
+body.font-inter #paperTitle {
+  font-family: "Inter", "Be Vietnam Pro", sans-serif;
+}
+
 body.font-serif .document-text,
 body.font-serif #paperTitle {
-  font-family: "Lora", "Merriweather", "Literata", "Georgia", "Times New Roman", serif;
+  font-family: "Literata", "Lora", "Merriweather", "Georgia", "Times New Roman", serif;
 }
 
 body.font-sans .document-text,
 body.font-sans #paperTitle {
-  font-family: var(--font-sans);
+  font-family: "Be Vietnam Pro", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 /* =========================================================================
@@ -3301,17 +3374,68 @@ body:not(.dark) .theme-moon {
   text-transform: uppercase;
 }
 
-/* Long-form reading gets a serif and a looser measure. */
+/* Long-form reading gets a polished typography scale and breathable paragraph spacing. */
 .document-text {
-  white-space: pre-wrap;
   color: var(--paper-text);
-  font-family: var(--font-read);
-  font-size: var(--content-font-size);
-  line-height: 1.85;
-  letter-spacing: 0.002em;
-  text-wrap: pretty;
-  font-variant-ligatures: common-ligatures;
+  font-family: var(--font-read, "Literata", "Lora", "Be Vietnam Pro", sans-serif);
+  font-size: var(--content-font-size, 20px);
+  line-height: var(--reader-line-height, 1.95);
+  letter-spacing: var(--reader-letter-spacing, 0.012em);
   text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "kern" 1, "liga" 1;
+}
+
+/* Individual paragraphs inside reader — clear, comfortable breathing space */
+.document-text p,
+.document-text .tts-paragraph-highlight {
+  position: relative;
+  margin-top: 0;
+  margin-bottom: var(--reader-par-spacing, 1.75em);
+  line-height: var(--reader-line-height, 1.95);
+  letter-spacing: var(--reader-letter-spacing, 0.012em);
+  text-align: justify;
+  text-justify: inter-word;
+  word-break: break-word;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.document-text p:last-child,
+.document-text .tts-paragraph-highlight:last-child {
+  margin-bottom: var(--space-4);
+}
+
+.document-text p:hover {
+  background-color: rgba(255, 255, 255, 0.025);
+}
+
+body.theme-sepia .document-text p:hover,
+body.theme-light .document-text p:hover {
+  background-color: rgba(0, 0, 0, 0.025);
+}
+
+/* TTS Speaking paragraph active highlight */
+.document-text p.tts-speaking,
+.document-text .tts-paragraph-highlight.tts-speaking {
+  background-color: rgba(168, 85, 247, 0.16) !important;
+  box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.35);
+  color: #ffffff;
+}
+
+body.theme-sepia .document-text p.tts-speaking,
+body.theme-sepia .document-text .tts-paragraph-highlight.tts-speaking {
+  background-color: rgba(139, 92, 246, 0.14) !important;
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.3);
+  color: #1a1005;
+}
+
+body.theme-forest .document-text p.tts-speaking,
+body.theme-forest .document-text .tts-paragraph-highlight.tts-speaking {
+  background-color: rgba(16, 185, 129, 0.16) !important;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.35);
+  color: #ffffff;
 }
 
 .document-text.empty {
@@ -3319,6 +3443,7 @@ body:not(.dark) .theme-moon {
   color: var(--muted);
   font-family: var(--font-sans);
   font-size: var(--text-base);
+  line-height: 1.6;
 }
 
 .document-text.is-loading {

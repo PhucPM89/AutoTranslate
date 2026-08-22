@@ -205,6 +205,7 @@ const els = {
   readerThemeToggle: document.getElementById("readerThemeToggle"),
   readerThemeSelect: document.getElementById("readerThemeSelect"),
   readerFontFamily: document.getElementById("readerFontFamily"),
+  readerSpacingSelect: document.getElementById("readerSpacingSelect"),
   autoScrollBtn: document.getElementById("autoScrollBtn"),
   autoScrollLabel: document.getElementById("autoScrollLabel"),
   autoScrollSpeed: document.getElementById("autoScrollSpeed"),
@@ -510,6 +511,7 @@ function bindEvents() {
   });
   els.readerThemeSelect?.addEventListener("change", (event) => applyTheme(event.target.value));
   els.readerFontFamily?.addEventListener("change", (event) => applyFont(event.target.value));
+  els.readerSpacingSelect?.addEventListener("change", updateReaderSettings);
   els.autoScrollBtn?.addEventListener("click", toggleAutoScroll);
   window.addEventListener("wheel", () => { if (isAutoScrolling) stopAutoScroll(); }, { passive: true });
   window.addEventListener("touchstart", (e) => {
@@ -692,8 +694,11 @@ function initPreferences() {
   const theme = localStorage.getItem("epubTranslator.theme") || "dark";
   applyTheme(theme);
 
-  const font = localStorage.getItem("epubTranslator.fontFamily") || "sans";
+  const font = localStorage.getItem("epubTranslator.fontFamily") || "literata";
   applyFont(font);
+
+  const spacing = localStorage.getItem("epubTranslator.readerSpacing") || "comfortable";
+  if (els.readerSpacingSelect) els.readerSpacingSelect.value = spacing;
 
   localStorage.setItem(
     "epubTranslator.fontSize",
@@ -704,22 +709,43 @@ function initPreferences() {
 }
 
 function applyTheme(theme) {
-  document.body.classList.remove("dark", "theme-sepia", "theme-oled");
+  document.body.classList.remove("dark", "theme-sepia", "theme-oled", "theme-forest", "theme-light");
   if (theme === "dark") {
     document.body.classList.add("dark");
   } else if (theme === "sepia") {
     document.body.classList.add("theme-sepia");
   } else if (theme === "oled") {
     document.body.classList.add("dark", "theme-oled");
+  } else if (theme === "forest") {
+    document.body.classList.add("dark", "theme-forest");
+  } else if (theme === "light") {
+    document.body.classList.add("theme-light");
   }
-  if (els.themeLabel) els.themeLabel.textContent = theme === "dark" || theme === "oled" ? "Light" : "Dark";
+  if (els.themeLabel) els.themeLabel.textContent = theme === "dark" || theme === "oled" || theme === "forest" ? "Light" : "Dark";
   if (els.readerThemeSelect) els.readerThemeSelect.value = theme;
   localStorage.setItem("epubTranslator.theme", theme);
 }
 
 function applyFont(font) {
-  document.body.classList.toggle("font-serif", font === "serif");
-  document.body.classList.toggle("font-sans", font !== "serif");
+  const fontClasses = ["font-serif", "font-sans", "font-literata", "font-lora", "font-merriweather", "font-bevietnam", "font-inter"];
+  fontClasses.forEach((cls) => document.body.classList.remove(cls));
+
+  if (font === "literata") {
+    document.body.classList.add("font-literata");
+  } else if (font === "lora") {
+    document.body.classList.add("font-lora");
+  } else if (font === "merriweather") {
+    document.body.classList.add("font-merriweather");
+  } else if (font === "bevietnam") {
+    document.body.classList.add("font-bevietnam");
+  } else if (font === "inter") {
+    document.body.classList.add("font-inter");
+  } else if (font === "serif") {
+    document.body.classList.add("font-serif");
+  } else {
+    document.body.classList.add("font-sans");
+  }
+
   if (els.readerFontFamily) els.readerFontFamily.value = font;
   localStorage.setItem("epubTranslator.fontFamily", font);
 }
@@ -731,11 +757,25 @@ function updateReaderSettings() {
     comfortable: "820px",
     wide: "1020px"
   };
+  const spacingPreset = els.readerSpacingSelect?.value || localStorage.getItem("epubTranslator.readerSpacing") || "comfortable";
+
+  const spacingConfig = {
+    compact: { lineHeight: "1.8", parSpacing: "1.3em", letterSpacing: "0.01em" },
+    comfortable: { lineHeight: "2.0", parSpacing: "1.85em", letterSpacing: "0.015em" },
+    loose: { lineHeight: "2.25", parSpacing: "2.4em", letterSpacing: "0.02em" }
+  };
+
+  const currentSpacing = spacingConfig[spacingPreset] || spacingConfig.comfortable;
 
   document.documentElement.style.setProperty("--content-font-size", `${fontSize}px`);
   document.documentElement.style.setProperty("--document-width", widthMap[els.widthPreset?.value] || widthMap.comfortable);
+  document.documentElement.style.setProperty("--reader-line-height", currentSpacing.lineHeight);
+  document.documentElement.style.setProperty("--reader-par-spacing", currentSpacing.parSpacing);
+  document.documentElement.style.setProperty("--reader-letter-spacing", currentSpacing.letterSpacing);
+
   if (els.fontSizeLabel) els.fontSizeLabel.textContent = `${fontSize}px`;
   if (els.widthPreset) localStorage.setItem("epubTranslator.widthPreset", els.widthPreset.value);
+  if (els.readerSpacingSelect) localStorage.setItem("epubTranslator.readerSpacing", spacingPreset);
 }
 
 function changeFontSize(delta) {
