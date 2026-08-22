@@ -254,7 +254,7 @@ async function main() {
           state: job.state,
           requestBudget: remainingBudget, // Translate all chapters of this book until done!
           deadlineAt,
-          spacingMs: () => computeAdaptiveSpacing(parsedKeys),
+          spacingMs: () => computeAdaptiveSpacing(allUniqueKeys),
           batchSize: BATCH_SIZE,
           loadChapter: (n) => readJson(storage, originalKey(job.bookId, job.revision, n)),
           translateChapter: async (chapter) => {
