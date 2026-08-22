@@ -107,14 +107,16 @@ async function main() {
   } catch {}
 
   const envKeys = [
+    process.env.CLOUDFLARE_AI_TOKEN,
+    process.env.CLOUDFLARE_API_TOKEN,
+    process.env.GEMINI_API_KEYS,
+    process.env.GEMINI_API_KEY,
     process.env.GROQ_API_KEYS,
-    process.env.GROQ_API_KEY,
-    process.env.OPENROUTER_API_KEYS,
-    process.env.OPENROUTER_API_KEY
+    process.env.GROQ_API_KEY
   ].filter(Boolean).flatMap(k => parseApiKeys(k));
 
   const allUniqueKeys = Array.from(new Set([...keyList, ...envKeys])).filter(Boolean);
-  if (!allUniqueKeys.length) throw new Error("Thiếu GROQ_API_KEY / OPENROUTER_API_KEY.");
+  if (!allUniqueKeys.length) throw new Error("Thiếu API Keys (Cloudflare AI / Gemini / Groq).");
   const apiKey = allUniqueKeys.join(",");
   const db = createSupabase();
   const engine = createTranslationEngine({ storage });

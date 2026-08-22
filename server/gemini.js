@@ -48,6 +48,14 @@ function getModelsForApiKey(apiKey) {
     const fallbacks = parseCsv(process.env.OPENROUTER_FALLBACK_MODELS || "deepseek/deepseek-chat,qwen/qwen-2.5-72b-instruct");
     return [primary, ...fallbacks].filter((m, i, l) => m && l.indexOf(m) === i);
   }
+  if (apiKey.startsWith("cfut_") || apiKey.startsWith("cf_")) {
+    const primary = process.env.CLOUDFLARE_AI_MODEL || "@cf/meta/llama-3.1-70b-instruct";
+    const fallbacks = parseCsv(
+      process.env.CLOUDFLARE_AI_FALLBACK_MODELS ||
+        "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b,@cf/meta/llama-3.1-8b-instruct"
+    );
+    return [primary, ...fallbacks].filter((m, i, l) => m && l.indexOf(m) === i);
+  }
   const primary = process.env.GEMINI_MODEL || "gemini-3.6-flash";
   const fallbacks = parseCsv(process.env.GEMINI_FALLBACK_MODELS || "gemini-2.5-flash,gemini-flash-latest,gemini-3.7-flash,gemini-1.5-flash");
   return [primary, ...fallbacks].filter((m, i, l) => m && l.indexOf(m) === i);
@@ -532,14 +540,77 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
 async function translateChunkWithModel(apiKey, model, prompt, generationConfig = {}) {
   const isGroq = apiKey.startsWith("gsk_");
   const isOpenRouter = apiKey.startsWith("sk-or-v1-");
+  const isCloudflare = apiKey.startsWith("cfut_") || apiKey.startsWith("cf_");
   
   if (isGroq) {
     return translateWithGroq(apiKey, model, prompt, generationConfig);
   } else if (isOpenRouter) {
     return translateWithOpenRouter(apiKey, model, prompt, generationConfig);
+  } else if (isCloudflare) {
+    return translateWithCloudflareWorkersAi(apiKey, model, prompt, generationConfig);
   } else {
     return translateWithGemini(apiKey, model, prompt, generationConfig);
   }
+}
+
+async function translateWithCloudflareWorkersAi(apiKey, model, prompt, generationConfig = {}) {
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || process.env.R2_ACCOUNT_ID || "aa644d98f2377007f0fa98abcafe3d21";
+  const cfModel = model && model.startsWith("@cf/") ? model : "@cf/meta/llama-3.1-70b-instruct";
+  const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${cfModel}`;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          messages: [
+            {
+              role: "system",
+              content:
+                "Bạn là dịch giả văn học mạng Trung - Việt xuất sắc. Hãy dịch toàn bộ sang tiếng Việt tự nhiên, đúng chất tiên hiệp/huyền huyễn."
+            },
+            { role: "user", content: prompt }
+          ],
+          max_tokens: generationConfig.maxTokens || 4000
+        })
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        const retryable = response.status === 429 || response.status >= 500;
+        if (retryable && attempt < 1) {
+          await wait(800 * (attempt + 1));
+          continue;
+        }
+
+        const errMsg = Array.isArray(data?.errors) ? data.errors.map((e) => e.message).join(", ") : "Cloudflare AI lỗi.";
+        const message = `${errMsg} [Key: ${apiKey.slice(0, 10)}...] (Status: ${response.status})`;
+        const error = new Error(message);
+        error.status = response.status;
+        error.model = cfModel;
+        throw error;
+      }
+
+      let text = data?.result?.response || "";
+      text = stripThinkTags(text);
+      text = stripMarkdown(text);
+      return { text: text.trim(), model: cfModel, usage: null };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  const error = new Error("Cloudflare Workers AI không phản hồi.");
+  error.model = cfModel;
+  throw error;
 }
 
 async function translateWithOpenRouter(apiKey, model, prompt, generationConfig = {}) {
