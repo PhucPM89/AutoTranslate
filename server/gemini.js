@@ -2,9 +2,9 @@
 
 const { createTranslationEngine } = require("./translation-engine");
 
-const GROQ_MODEL = process.env.GROQ_MODEL || process.env.GEMINI_MODEL || "openai/gpt-oss-120b";
+const GROQ_MODEL = process.env.GROQ_MODEL || process.env.GEMINI_MODEL || "openai/gpt-oss-20b";
 const GROQ_FALLBACK_MODELS = parseCsv(
-  process.env.GROQ_FALLBACK_MODELS || process.env.GEMINI_FALLBACK_MODELS || "qwen/qwen3.6-27b,llama-3.1-8b-instant,groq/compound-mini,openai/gpt-oss-20b"
+  process.env.GROQ_FALLBACK_MODELS || process.env.GEMINI_FALLBACK_MODELS || "groq/compound-mini,qwen/qwen3.6-27b,openai/gpt-oss-120b"
 );
 const TRANSLATE_CHUNK_SIZE = Number(process.env.GEMINI_CHUNK_SIZE || 3000);
 const TRANSLATE_CONCURRENCY = Number(process.env.GEMINI_TRANSLATE_CONCURRENCY || 1);
@@ -221,7 +221,8 @@ async function translateMetadata(metadata, apiKey) {
   const keyList = getActiveKeys(apiKey);
   for (const key of keyList) {
     for (const model of models) {
-      for (const format of ["json", "text"]) {
+      const formats = key.startsWith("gsk_") ? ["text"] : ["json", "text"];
+      for (const format of formats) {
         try {
           const result = await translateChunkWithModel(key, model, prompt, { responseFormat: format, temperature: 0.2 });
           const translated = parseMetadataJson(result.text);
@@ -382,19 +383,18 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
         }
 
         if (error.status === 429 || error.status === 403) {
-          // If a model hits 429 TPM, continue to try fallback model (e.g. compound-mini 70k TPM)
-          continue;
+          // If key hit 429/quota, put key on 5m cooldown and immediately switch to next key in pool
+          markKeyCooldown(apiKey, 300000);
+          break;
         }
         if (!shouldTryNextModel(error)) break;
       }
-
-      // If all models failed on this key, put key on short 10s cooldown
-      markKeyCooldown(apiKey, 10000);
     }
+    markKeyCooldown(apiKey, 10000);
   }
 
-  // If initial pass failed, wait 3 seconds and try one more pass across keys
-  await wait(3000);
+  // If initial pass failed, wait 1 second and try across available keys
+  await wait(1000);
   for (let keyIdx = 0; keyIdx < sortedKeys.length; keyIdx += 1) {
     const apiKey = sortedKeys[keyIdx];
     for (let modelIndex = 0; modelIndex < models.length; modelIndex += 1) {
@@ -416,6 +416,9 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
         }
       } catch (error) {
         lastError = error;
+        if (error.status === 429 || error.status === 403) {
+          break;
+        }
       }
     }
   }
@@ -441,7 +444,7 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
-      const maxTokens = generationConfig.maxTokens || Math.min(3500, Math.max(1000, Math.round(prompt.length * 1.5)));
+      const maxTokens = generationConfig.maxTokens || Math.min(2500, Math.max(300, Math.round(prompt.length * 0.85)));
       const bodyPayload = {
         model,
         messages: [
@@ -455,7 +458,7 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
           }
         ],
         temperature: generationConfig.temperature ?? 0.3,
-        max_completion_tokens: maxTokens
+        max_tokens: maxTokens
       };
 
       if (generationConfig.responseFormat === "json") {
@@ -475,9 +478,9 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
       const data = await response.json();
 
       if (!response.ok) {
-        const retryable = response.status === 429 || response.status >= 500;
+        const retryable = response.status >= 500;
         if (retryable && attempt < 1) {
-          await wait(1000 * (attempt + 1) + Math.floor(Math.random() * 500));
+          await wait(500 * (attempt + 1));
           continue;
         }
 
@@ -610,6 +613,18 @@ function shouldTryNextModel(error) {
   if (error?.status === 429 || error?.status >= 500) return true;
 
   const message = String(error?.message || "").toLowerCase();
+  if (
+    message.includes("rate limit") ||
+    message.includes("quota") ||
+    message.includes("tokens per day") ||
+    message.includes("tokens per minute") ||
+    message.includes("tpd") ||
+    message.includes("tpm") ||
+    message.includes("too many requests") ||
+    message.includes("resource_exhausted")
+  ) {
+    return true;
+  }
   return (
     message.includes("model") &&
     (message.includes("no longer available") ||
