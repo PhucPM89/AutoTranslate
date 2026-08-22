@@ -160,6 +160,12 @@ async function main() {
   }
   if (rotation.lastBookId) console.log(`  (lượt trước dừng ở ${rotation.lastBookId}; vòng này bắt đầu sau đó)`);
 
+  const existingStatus = (await readJson(storage, TRANSLATE_STATUS_KEY)) || {};
+  const startedAt = existingStatus.state === "running" && existingStatus.startedAt ? existingStatus.startedAt : new Date().toISOString();
+  let recentActivity = Array.isArray(existingStatus.recentActivity) ? existingStatus.recentActivity : [];
+  const catalog = (await readJson(storage, "catalog/latest.json")) || {};
+  const titleMap = new Map((catalog.books || []).map((b) => [b.id, b.title]));
+
   let spentTotal = 0;
   let translatedTotal = 0;
   let stoppedForQuota = false;
@@ -247,16 +253,23 @@ async function main() {
         },
         saveState: (next) => storage.put(jobStateKey(job.bookId), JSON.stringify(next)),
         onProgress: async ({ chapter, status, completed, total }) => {
-          console.log(`  [${job.bookId}] ch ${chapter}: ${status}  (${completed}/${total})`);
+          const bTitle = titleMap.get(job.bookId) || job.bookId;
+          const elapsedMin = Math.max(0.05, (Date.now() - new Date(startedAt).getTime()) / 60000);
+          const currentSpeed = Math.round((translatedTotal / elapsedMin) * 10) / 10;
+          console.log(`  [${bTitle}] ch ${chapter}: ${status}  (${completed}/${total})`);
           await writeTranslateStatus(storage, {
             state: "running",
+            startedAt,
+            speed: currentSpeed,
             currentBookId: job.bookId,
+            currentBookTitle: bTitle,
             currentChapter: chapter,
             currentCompleted: completed,
             currentTotalChapters: total,
             translatedThisRun: translatedTotal,
             spentRequests: spentTotal,
-            message: `Đang dịch [${job.bookId}] — Chương ${chapter} (${completed}/${total})`,
+            recentActivity,
+            message: `Đang dịch [${bTitle}] — Chương ${chapter} (${completed}/${total})`,
             queue: queue.map((j) => ({
               bookId: j.bookId,
               revision: j.revision,
@@ -275,6 +288,17 @@ async function main() {
 
       if (result.translated) {
         touched.set(job.bookId, job);
+        const bTitle = titleMap.get(job.bookId) || job.bookId;
+        recentActivity = [
+          {
+            bookId: job.bookId,
+            title: bTitle,
+            count: result.translated,
+            at: new Date().toISOString()
+          },
+          ...recentActivity
+        ].slice(0, 8);
+
         const waiting = (sincePublish.get(job.bookId) || 0) + result.translated;
         if (waiting >= PUBLISH_EVERY) {
           sincePublish.set(job.bookId, 0);

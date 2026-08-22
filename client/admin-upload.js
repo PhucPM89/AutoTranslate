@@ -38,6 +38,8 @@ const els = {
   translateLiveProgress: document.getElementById("translateLiveProgress"),
   translateProgressFill: document.getElementById("translateProgressFill"),
   translateProgressLabel: document.getElementById("translateProgressLabel"),
+  translateRecentActivity: document.getElementById("translateRecentActivity"),
+  translateRecentList: document.getElementById("translateRecentList"),
   translateQueueList: document.getElementById("translateQueueList"),
   statsTab: document.getElementById("adminStatsTab"),
   statsPanel: document.getElementById("adminStatsPanel"),
@@ -531,8 +533,14 @@ function renderTranslateStatus(status = {}) {
   const beat = status.updatedAt || status.finishedAt;
   const parts = [];
   if (beat) parts.push(`Nhịp tim: ${describeAge(beat)}`);
-  if (status.spentRequests) parts.push(`${status.spentRequests} requests Groq AI`);
-  if (status.translatedThisRun) parts.push(`đã dịch ${status.translatedThisRun} chương mới`);
+  if (status.startedAt) parts.push(`chạy từ ${describeAge(status.startedAt)}`);
+  if (status.speed) {
+    parts.push(`⚡ ${status.speed} ch/phút (~${Math.round(status.speed * 60).toLocaleString("vi-VN")} ch/giờ)`);
+  }
+  if (status.translatedThisRun) {
+    parts.push(`đã dịch ${status.translatedThisRun.toLocaleString("vi-VN")} chương`);
+  }
+  if (status.spentRequests) parts.push(`${status.spentRequests.toLocaleString("vi-VN")} requests AI`);
   els.translateStateMeta.textContent = parts.join(" · ");
 
   // Live progress
@@ -545,9 +553,25 @@ function renderTranslateStatus(status = {}) {
       const percent = Math.min(100, Math.round((saved / total) * 100));
       els.translateProgressFill.style.width = `${percent}%`;
       const matched = (adminCatalog.books || []).find((b) => b.id === status.currentBookId);
-      const bookTitle = matched ? matched.title : status.currentBookId;
+      const bookTitle = status.currentBookTitle || (matched ? matched.title : status.currentBookId);
       els.translateProgressLabel.textContent =
         `Đang dịch: ${bookTitle} — Chương ${saved}/${total} (${percent}%)`;
+    }
+  }
+
+  // Recent Translated Activity List
+  const recentActs = Array.isArray(status.recentActivity) ? status.recentActivity : [];
+  if (els.translateRecentActivity) {
+    els.translateRecentActivity.hidden = !recentActs.length;
+    if (els.translateRecentList) {
+      els.translateRecentList.innerHTML = "";
+      for (const act of recentActs) {
+        const item = document.createElement("li");
+        appendText(item, "span", "crawler-recent-name", act.title || act.bookId);
+        appendText(item, "span", "crawler-recent-count", `+${act.count} chương`);
+        appendText(item, "span", "crawler-recent-age", describeAge(act.at));
+        els.translateRecentList.appendChild(item);
+      }
     }
   }
 
