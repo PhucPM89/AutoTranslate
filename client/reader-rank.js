@@ -259,7 +259,7 @@ async function syncReaderLeaderboard({ supabaseUrl, supabaseKey, user = null, fo
   try {
     lastSyncTime = now;
     invalidateLeaderboardCache();
-    const res = await fetch(`${supabaseUrl}/rest/v1/reader_leaderboard`, {
+    const res = await fetch(`${supabaseUrl}/rest/v1/reader_leaderboard?on_conflict=id`, {
       method: "POST",
       headers: {
         apikey: supabaseKey,

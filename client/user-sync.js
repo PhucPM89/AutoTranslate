@@ -106,19 +106,33 @@ function createUserSync({ url, anonKey, authClient, storage, fetchImpl = fetch }
   async function sendRemoteUpsert(items) {
     const token = getSessionToken();
     const userId = getUserId();
-    if (!token || !userId || !base || !anonKey || !items.length) return false;
+    if (!token || !userId || !base || !anonKey || !items || !items.length) return false;
 
-    const payload = items.map((b) => ({
-      user_id: userId,
-      book_id: cleanId(b.bookId),
-      chapter_index: b.chapterIndex || 0,
-      chapter_title: b.chapterTitle || "",
-      progress_pct: Math.round(b.progressPct || 0),
-      updated_at: b.updatedAt || new Date().toISOString()
-    }));
+    // Deduplicate items by cleaned bookId (keep the latest updated_at) to prevent Postgres Error 21000
+    const dedupeMap = new Map();
+    for (const b of items) {
+      if (!b) continue;
+      const bId = cleanId(b.bookId);
+      if (!bId) continue;
+      
+      const existing = dedupeMap.get(bId);
+      if (!existing || new Date(b.updatedAt || 0).getTime() >= new Date(existing.updatedAt || 0).getTime()) {
+        dedupeMap.set(bId, {
+          user_id: userId,
+          book_id: bId,
+          chapter_index: b.chapterIndex || 0,
+          chapter_title: b.chapterTitle || "",
+          progress_pct: Math.round(b.progressPct || 0),
+          updated_at: b.updatedAt || new Date().toISOString()
+        });
+      }
+    }
+
+    const payload = Array.from(dedupeMap.values());
+    if (!payload.length) return false;
 
     try {
-      const res = await fetchImpl(`${base}/rest/v1/user_bookmarks`, {
+      const res = await fetchImpl(`${base}/rest/v1/user_bookmarks?on_conflict=user_id,book_id`, {
         method: "POST",
         headers: {
           apikey: anonKey,
