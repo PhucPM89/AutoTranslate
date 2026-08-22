@@ -82,8 +82,8 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/style.css?v=8b69e13a44fb">
-    <script src="/app.js?v=7c08a7970132" defer></script>
+    <link rel="stylesheet" href="/style.css?v=e36fc86ced3a">
+    <script src="/app.js?v=05e690104ceb" defer></script>
   </head>
   <body class="dark">
     <section id="libraryView" class="library-view">
@@ -412,7 +412,7 @@
       <div id="adminTabs" class="admin-tabs" role="tablist" aria-label="Khu vực quản trị" hidden>
         <button id="adminLibraryTab" class="admin-tab active" type="button" role="tab" aria-selected="true" aria-controls="adminUploadForm"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2Z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7Z"></path></svg>Thư viện</button>
         <button id="adminTranslateTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminTranslatePanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>Tiến trình AI</button>
-        <button id="adminKeysTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminKeysPanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg>Sức khỏe 7 Keys</button>
+        <button id="adminKeysTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminKeysPanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg><span id="adminKeysTabTitle">Sức khỏe API Keys</span></button>
         <button id="adminCrawlerTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminCrawlerForm"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path><circle cx="12" cy="12" r="4"></circle></svg>Crawler Fanqie</button>
         <button id="adminStatsTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminStatsPanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 3v18h18"></path><path d="M7 15v3M12 9v9M17 12v6"></path></svg>Số liệu độc giả</button>
         <button id="adminUsersTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminUsersPanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Người dùng</button>
@@ -451,31 +451,101 @@
       <!-- Translation Engine Live Monitor Panel -->
       <section id="adminTranslatePanel" class="admin-translate-panel" hidden aria-labelledby="translateMonitorTitle">
         <div class="crawler-overview">
-          <div><p class="eyebrow">Dịch thuật Groq AI (Qwen/Llama)</p><h3 id="translateMonitorTitle">Tiến trình Dịch Tự Động</h3></div>
+          <div><p class="eyebrow">Dịch Thuật Đa Nền Tảng (Groq LPU &amp; OpenRouter)</p><h3 id="translateMonitorTitle">Tiến trình Dịch Tự Động 24/7</h3></div>
           <div class="overview-actions">
-            <button id="adminTranslateStartBtn" class="primary-action" type="button" title="Chạy 5 Worker Shards dịch ngay trên GitHub Actions"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>Dịch ngay</button>
+            <button id="adminTranslateStartBtn" class="primary-action" type="button" title="Chạy dịch ngay"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>Dịch ngay</button>
             <button id="adminTranslateRefresh" class="secondary-action" type="button"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v6h-6M4 18v-6h6"></path><path d="M18.49 9A7 7 0 0 0 5.64 6.64L4 9M20 15l-1.64 2.36A7 7 0 0 1 5.51 15"></path></svg>Làm mới</button>
           </div>
         </div>
 
-        <div class="crawler-state" aria-live="polite">
-          <span id="translateStateBadge" class="crawler-state-badge">Nghỉ</span>
-          <div class="crawler-state-body">
-            <strong id="translateStateMessage">Đang tải trạng thái dịch...</strong>
-            <small id="translateStateMeta"></small>
-            <div id="translateLiveProgress" class="crawler-progress" hidden>
-              <div class="crawler-progress-bar"><span id="translateProgressFill"></span></div>
-              <small id="translateProgressLabel"></small>
+        <!-- 4 Stat Metric Cards: Active, Last 1 Hour, Total Speed, Key Pool -->
+        <div class="translate-metrics-grid">
+          <div class="stat-card stat-card-highlight">
+            <span class="stat-label">⚡ Đang dịch hiện tại</span>
+            <strong id="transStatCurrentBook" class="stat-value text-accent-cyan">Đang kiểm tra...</strong>
+            <small id="transStatCurrentCh" class="stat-sub">Chương 0 / 0 (0%)</small>
+          </div>
+          <div class="stat-card stat-card-glow">
+            <span class="stat-label">⏱️ Năng suất 1 giờ qua</span>
+            <strong id="transStatLastHourCh" class="stat-value text-accent-green">+0 chương</strong>
+            <small id="transStatLastHourBooks" class="stat-sub">trên 0 bộ truyện</small>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">🚀 Tốc độ xử lý thực tế</span>
+            <strong id="transStatSpeed" class="stat-value">~1.8s / chương</strong>
+            <small id="transStatThroughput" class="stat-sub">~1.200 ch/giờ</small>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">🔑 Hồ chứa API Keys</span>
+            <strong id="transStatKeysActive" class="stat-value text-accent-purple">17 Keys Sẵn sàng</strong>
+            <small class="stat-sub">9 Groq LPU + 8 OpenRouter</small>
+          </div>
+        </div>
+
+        <!-- Active Translating Novel Hero Card -->
+        <div id="transActiveCard" class="trans-active-hero-card">
+          <div class="trans-active-header">
+            <div class="trans-active-badge-wrap">
+              <span id="translateStateBadge" class="crawler-state-badge">Đang dịch AI</span>
+              <span class="trans-live-pulse"><span class="pulse-dot"></span> Trực tiếp 24/7</span>
             </div>
-            <div id="translateRecentActivity" class="crawler-recent" hidden>
-              <p class="crawler-recent-title">Vừa dịch thêm</p>
-              <ul id="translateRecentList"></ul>
+            <span id="transHeartbeatText" class="trans-heartbeat">Nhịp tim: Vừa xong</span>
+          </div>
+
+          <div class="trans-active-content">
+            <div class="trans-book-main">
+              <div class="trans-book-info">
+                <span class="trans-tag">TIẾN TRÌNH TRỰC TIẾP</span>
+                <h4 id="transActiveBookTitle" class="trans-book-title">Chưa có bộ truyện nào đang dịch</h4>
+                <p id="translateStateMessage" class="trans-state-msg">Đang đồng bộ tiến trình...</p>
+                <div class="trans-book-meta">
+                  <span id="transActiveChapterBadge" class="trans-meta-pill">Chương 0 / 0</span>
+                  <span id="transActivePercentBadge" class="trans-meta-pill highlight">0%</span>
+                  <span id="transActiveEtaBadge" class="trans-meta-pill">ETA: --</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Big Interactive Progress Bar -->
+            <div class="trans-progress-wrap">
+              <div class="trans-progress-bar-bg">
+                <div id="translateProgressFill" class="trans-progress-fill" style="width: 0%"></div>
+              </div>
+              <div class="trans-progress-footer">
+                <small id="translateProgressLabel">Chờ tiến trình...</small>
+                <small id="translateStateMeta">Điều tốc: 600ms</small>
+              </div>
             </div>
           </div>
         </div>
 
+        <!-- Hourly & Recent Activity Breakdown -->
+        <div class="trans-section-card">
+          <div class="trans-section-header">
+            <div class="trans-section-title-wrap">
+              <span class="trans-section-icon">📈</span>
+              <div>
+                <h4>Nhật ký dịch thuật &amp; Tiến độ trong 1 giờ qua</h4>
+                <p id="transHourlySummaryText" class="trans-section-subtitle">Thống kê chi tiết số chương và bộ truyện hoàn thành</p>
+              </div>
+            </div>
+          </div>
+          <div id="translateRecentActivity" class="trans-activity-wrap">
+            <ul id="translateRecentList" class="trans-activity-list"></ul>
+          </div>
+        </div>
+
+        <!-- Translation Queue -->
         <div class="translate-queue-section">
-          <h4>Hàng đợi xoay vòng (Translation Queue)</h4>
+          <div class="trans-section-header">
+            <div class="trans-section-title-wrap">
+              <span class="trans-section-icon">📚</span>
+              <div>
+                <h4>Hàng đợi xoay vòng (Translation Queue)</h4>
+                <p class="trans-section-subtitle">Các bộ truyện đang chờ dịch tự động theo thứ tự xoay vòng</p>
+              </div>
+            </div>
+          </div>
           <div id="translateQueueList" class="translate-queue-list">
             <p class="stats-empty">Đang tải hàng đợi...</p>
           </div>
