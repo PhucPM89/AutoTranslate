@@ -168,6 +168,17 @@ async function runTranslationJobs({
     state.updatedAt = new Date(now()).toISOString();
     await saveState(state);
 
+    if (typeof onProgress === "function") {
+      const doneCount = state.chapters.filter((c) => c.status === "completed").length;
+      await onProgress({
+        chapter: entries[0]?.n || 0,
+        status: "translating",
+        completed: doneCount,
+        total: state.chapters.length,
+        sessionDelta: translated
+      }).catch(() => {});
+    }
+
     try {
       if (entries.length > 1 && typeof translateBatch === "function") {
         const chapters = await Promise.all(entries.map((e) => loadChapter(e.n)));
@@ -202,6 +213,17 @@ async function runTranslationJobs({
         entry.nextAttemptAt = 0;
         entry.completedAt = new Date(now()).toISOString();
         translated += 1;
+      }
+
+      if (typeof onProgress === "function") {
+        const doneCount = state.chapters.filter((c) => c.status === "completed").length;
+        await onProgress({
+          chapter: entries[0]?.n || 0,
+          status: "completed",
+          completed: doneCount,
+          total: state.chapters.length,
+          sessionDelta: translated
+        }).catch(() => {});
       }
     } catch (error) {
       spent += 1;

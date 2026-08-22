@@ -295,12 +295,13 @@ async function main() {
             );
           },
           saveState: (next) => storage.put(jobStateKey(job.bookId), JSON.stringify(next)),
-          onProgress: async ({ chapter, status, completed, total }) => {
+          onProgress: async ({ chapter, status, completed, total, sessionDelta }) => {
+            const currentTotalSession = translatedTotal + (sessionDelta || 0);
             const bTitle = titleMap.get(job.bookId) || job.bookId;
             const elapsedMin = Math.max(0.05, (Date.now() - new Date(startedAt).getTime()) / 60000);
-            const currentSpeed = Math.round((translatedTotal / elapsedMin) * 10) / 10;
+            const currentSpeed = Math.round((currentTotalSession / elapsedMin) * 10) / 10;
             const currentSpacing = computeAdaptiveSpacing(parsedKeys);
-            console.log(`  [${bTitle}] ch ${chapter}: ${status}  (${completed}/${total}) [Điều tốc: ${Math.round(currentSpacing/1000)}s/chương]`);
+            console.log(`  [${bTitle}] ch ${chapter}: ${status}  (${completed}/${total}) [Phiên này: +${currentTotalSession} ch] [Điều tốc: ${Math.round(currentSpacing/1000)}s/ch]`);
             await writeTranslateStatus(storage, {
               state: "running",
               startedAt,
@@ -310,18 +311,23 @@ async function main() {
               currentChapter: chapter,
               currentCompleted: completed,
               currentTotalChapters: total,
-              translatedThisRun: translatedTotal,
-              spentRequests: spentTotal,
+              translatedThisRun: currentTotalSession,
+              spentRequests: spentTotal + (sessionDelta || 0),
               recentActivity,
-              message: `Đang dịch [${bTitle}] — Chương ${chapter} (${completed}/${total}) [Điều tốc 24/7: ${Math.round(currentSpacing/1000)}s]`,
-              queue: queue.map((j) => ({
-                bookId: j.bookId,
-                revision: j.revision,
-                pending: j.pending,
-                highPriority: j.highPriority || activeBookIds.has(j.bookId),
-                total: j.total,
-                translated: (j.total || 0) - (j.pending || 0)
-              }))
+              message: `Đang dịch [${bTitle}] — Chương ${chapter} (${completed}/${total}) [Phiên này: +${currentTotalSession} chương]`,
+              queue: queue.map((j) => {
+                const isCurrent = j.bookId === job.bookId;
+                const doneCh = isCurrent ? completed : (j.total || 0) - (j.pending || 0);
+                const pendCh = isCurrent ? Math.max(0, total - completed) : j.pending;
+                return {
+                  bookId: j.bookId,
+                  revision: j.revision,
+                  pending: pendCh,
+                  highPriority: j.highPriority || activeBookIds.has(j.bookId),
+                  total: j.total,
+                  translated: doneCh
+                };
+              })
             });
           }
         });
