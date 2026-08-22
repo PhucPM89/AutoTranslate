@@ -838,15 +838,24 @@ async function handleAdminKeys({ request, env }) {
 
       try {
         if (isGroq) {
-          const resp = await fetch("https://api.groq.com/openai/v1/models", {
-            headers: { Authorization: `Bearer ${key}` }
+          const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${key}`
+            },
+            body: JSON.stringify({
+              model: "openai/gpt-oss-120b",
+              messages: [{ role: "user", content: "hi" }],
+              max_tokens: 1
+            })
           });
           const data = await resp.json().catch(() => null);
           const ok = resp.ok;
           const status = ok ? "ready" : (resp.status === 429 ? "cooldown" : "error");
           const statusMessage = ok
-            ? "Sẵn sàng (Groq LPU)"
-            : (resp.status === 429 ? "Tạm hết RPM/TPM" : (data?.error?.message || `Lỗi HTTP ${resp.status}`));
+            ? "Sẵn sàng (Groq LPU 120B)"
+            : (resp.status === 429 ? "Tạm hết TPM/TPD" : (data?.error?.message || `Lỗi HTTP ${resp.status}`));
 
           const remTokens = resp.headers.get("x-ratelimit-remaining-tokens");
           const limTokens = resp.headers.get("x-ratelimit-limit-tokens");
@@ -879,8 +888,13 @@ async function handleAdminKeys({ request, env }) {
           const ok = resp.ok;
           const status = ok ? "ready" : (resp.status === 429 ? "cooldown" : "error");
           const statusMessage = ok
-            ? "Sẵn sàng (OpenRouter)"
+            ? "Sẵn sàng (OpenRouter 70B)"
             : (resp.status === 429 ? "Tạm hết RPM/TPM" : (data?.error?.message || `Lỗi HTTP ${resp.status}`));
+
+          const usage = data?.data?.usage;
+          const limit = data?.data?.limit;
+          const usageText = usage != null ? `$${Number(usage).toFixed(3)} đã dùng` : "";
+          const limitText = limit != null ? `Hạn mức: $${limit}` : "Không giới hạn";
 
           results.push({
             id: i + 1,
@@ -891,6 +905,7 @@ async function handleAdminKeys({ request, env }) {
             latencyMs: Date.now() - startTime,
             ok,
             error: data?.error?.message || null,
+            usageInfo: usageText ? `${usageText} (${limitText})` : "Sẵn sàng (70B Instruct)",
             limitTokens: 50000,
             remainingTokens: 50000,
             resetTokens: "0s"

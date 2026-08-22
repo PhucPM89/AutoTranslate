@@ -923,15 +923,22 @@ function renderKeysList(keys, isPingResult = false) {
       statusBadge = `<span class="key-status-badge is-error" title="${escapeHtml(k.error || "Lỗi")}">🔴 Lỗi</span>`;
     }
 
-    const quotaHtml = k.remainingTokens != null
-      ? `
+    let quotaHtml = "";
+    if (k.usageInfo) {
+      quotaHtml = `
+        <div class="key-quota-row">
+          <span class="key-quota-pill highlight-purple" title="Chi phí / Hạn mức OpenRouter">💳 ${escapeHtml(k.usageInfo)}</span>
+        </div>
+      `;
+    } else if (k.remainingTokens != null) {
+      quotaHtml = `
         <div class="key-quota-row">
           <span class="key-quota-pill" title="Tokens Per Minute">⚡ ${Number(k.remainingTokens).toLocaleString("vi-VN")} / ${Number(k.limitTokens || 8000).toLocaleString("vi-VN")} TPM</span>
           <span class="key-quota-pill recovery" title="Thời gian khôi phục quota">⏱ Hồi phục: ${escapeHtml(k.resetTokens || "0s")}</span>
           ${k.remainingRequests != null ? `<span class="key-quota-pill daily" title="Requests hôm nay">📅 Còn: ${k.remainingRequests}/1.000 req</span>` : ""}
         </div>
-      `
-      : "";
+      `;
+    }
 
     card.innerHTML = `
       <div class="key-card-header">
