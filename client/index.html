@@ -559,7 +559,8 @@
         <div class="crawler-settings">
           <label class="admin-field"><span>Độ dài truyện</span><select id="crawlerWordCount" aria-describedby="crawlerWordCountHint"></select><small id="crawlerWordCountHint">Dùng đúng bộ lọc số chữ của Fanqie nên chỉ cần 1 request mỗi thể loại</small></label>
           <label class="admin-field"><span>Tình trạng</span><select id="crawlerCreationStatus"></select></label>
-          <label class="admin-field"><span>Truyện mới mỗi lượt</span><select id="crawlerMaxBooks"><option value="1">1 truyện</option><option value="2">2 truyện</option><option value="3">3 truyện</option></select></label>
+          <label class="admin-field"><span>Truyện mới mỗi lượt</span><select id="crawlerMaxBooks"><option value="1">1 truyện</option><option value="2">2 truyện</option><option value="3">3 truyện</option><option value="5">5 truyện</option><option value="10">10 truyện</option></select></label>
+          <label class="admin-field"><span>Giới hạn hàng đợi chờ dịch</span><select id="crawlerMaxBacklog" title="Chỉ cào tiếp khi số truyện chờ dịch thấp hơn ngưỡng này"><option value="3">Tối đa 3 bộ</option><option value="5">Tối đa 5 bộ</option><option value="10">Tối đa 10 bộ</option><option value="20">Tối đa 20 bộ</option><option value="50">Tối đa 50 bộ</option></select><small>Dịch xong mới cào tiếp để tránh ứ đọng</small></label>
           <label class="admin-check crawler-update-check"><input id="crawlerUpdateExisting" type="checkbox"><span>Theo dõi truyện đã thêm</span></label>
         </div>
         <p id="crawlerReach" class="crawler-reach" aria-live="polite"></p>

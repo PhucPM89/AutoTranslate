@@ -32,7 +32,8 @@ const CREATION_STATUSES = [
 const DEFAULT_CONFIG = {
   enabled: false,
   categories: Object.keys(CATEGORY_DEFINITIONS),
-  maxNewBooksPerRun: 1,
+  maxNewBooksPerRun: 2,
+  maxPendingBooksBacklog: 5,
   wordCountBucket: 4,
   creationStatus: -1,
   updateExisting: true,
@@ -70,6 +71,7 @@ function sanitizeCrawlerConfig(value) {
     enabled: Boolean(value?.enabled),
     categories: categories.length ? categories : [...DEFAULT_CONFIG.categories],
     maxNewBooksPerRun: clampInteger(value?.maxNewBooksPerRun, 1, 3, DEFAULT_CONFIG.maxNewBooksPerRun),
+    maxPendingBooksBacklog: clampInteger(value?.maxPendingBooksBacklog, 1, 50, DEFAULT_CONFIG.maxPendingBooksBacklog),
     // The word-count bucket is the single length control; Fanqie applies it
     // server-side, so a separate chapter minimum is redundant.
     wordCountBucket: allowedChoice(value?.wordCountBucket, WORD_COUNT_BUCKETS, DEFAULT_CONFIG.wordCountBucket),

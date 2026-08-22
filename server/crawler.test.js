@@ -68,6 +68,7 @@ test("sanitizes crawler configuration and removes unknown categories", () => {
     enabled: true,
     categories: ["xianxia", "horror"],
     maxNewBooksPerRun: 3,
+    maxPendingBooksBacklog: 5,
     wordCountBucket: 3,
     creationStatus: 0,
     updateExisting: false,

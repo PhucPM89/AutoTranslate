@@ -16,6 +16,7 @@ const els = {
   crawlerCreationStatus: document.getElementById("crawlerCreationStatus"),
   crawlerReach: document.getElementById("crawlerReach"),
   crawlerMaxBooks: document.getElementById("crawlerMaxBooks"),
+  crawlerMaxBacklog: document.getElementById("crawlerMaxBacklog"),
   crawlerUpdateExisting: document.getElementById("crawlerUpdateExisting"),
   crawlerStateBadge: document.getElementById("crawlerStateBadge"),
   crawlerStateMessage: document.getElementById("crawlerStateMessage"),
@@ -342,7 +343,8 @@ async function loadCrawlerConfig() {
   fillChoices(els.crawlerWordCount, result.wordCountBuckets, result.config.wordCountBucket);
   fillChoices(els.crawlerCreationStatus, result.creationStatuses, result.config.creationStatus);
   els.crawlerEnabled.checked = Boolean(result.config.enabled);
-  els.crawlerMaxBooks.value = String(result.config.maxNewBooksPerRun || 1);
+  els.crawlerMaxBooks.value = String(result.config.maxNewBooksPerRun || 2);
+  if (els.crawlerMaxBacklog) els.crawlerMaxBacklog.value = String(result.config.maxPendingBooksBacklog || 5);
   els.crawlerUpdateExisting.checked = result.config.updateExisting !== false;
   const selected = new Set(result.config.categories || []);
   els.crawlerForm.querySelectorAll('[name="crawlerCategory"]').forEach((input) => { input.checked = selected.has(input.value); });
@@ -665,6 +667,7 @@ async function saveCrawlerConfig(event) {
         wordCountBucket: els.crawlerWordCount.value,
         creationStatus: els.crawlerCreationStatus.value,
         maxNewBooksPerRun: els.crawlerMaxBooks.value,
+        maxPendingBooksBacklog: els.crawlerMaxBacklog ? els.crawlerMaxBacklog.value : 5,
         updateExisting: els.crawlerUpdateExisting.checked
       })
     });

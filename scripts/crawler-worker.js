@@ -6,6 +6,7 @@ const JSZip = require("jszip");
 const { runIngest } = require("../server/ingest/run-ingest");
 const { translateMetadata } = require("../server/gemini");
 const { createCrawlerState } = require("../server/crawler-state");
+const { getTranslationBacklog } = require("../server/ingest/translation-queue");
 const { createStorage, createArchiveStorage } = require("../server/storage");
 
 const TOMATO_URL = String(process.env.TOMATO_URL || "http://127.0.0.1:18423").replace(/\/$/, "");
@@ -197,41 +198,51 @@ async function main() {
 
     let discovery = null;
     let newCandidateCount = 0;
-    // Minutes are free on a public repo, and the job is allowed 330 of them, so
-    // the run keeps discovering and downloading until its budget is nearly spent.
-    // It used to do exactly one pass for maxNewBooksPerRun books, finish in about
-    // five minutes and then sit idle for the remaining 295 waiting on the next
-    // cron - and GitHub delivers those late or not at all, which is what produced
-    // the long gaps with nothing downloading.
-    while (remainingBudgetMs() >= MIN_BUDGET_FOR_NEW_JOB_MS) {
-      const candidates = await discoverBooks(config, categories, status);
-      const newCandidates = candidates.filter((item) => !existingIds.has(item.sourceId) && !excludedIds.has(item.sourceId));
-      newCandidateCount = newCandidates.length;
-      // The bucket is the length control; this floor only matters on the rank-page
-      // fallback, where no server-side word filter is available.
-      const chapterFloor = bucketChapterFloor(config.wordCountBucket);
-      if (chapterFloor > 0) {
-        status.message = `Đang tìm truyện từ ${chapterFloor} chương trở lên...`;
-        await updateStatus(status);
-      }
-      discovery = await selectNewBookCandidates(
-        newCandidates,
-        chapterFloor,
-        config.maxNewBooksPerRun,
-        fetchText,
-        async ({ scanned, scanLimit, selected, bestChapterCount }) => {
-          status.message = `Đang lọc truyện dài: đã kiểm ${scanned}/${scanLimit}, chọn ${selected}, dài nhất ${bestChapterCount} chương.`;
+    
+    // Backpressure: check translation queue backlog before crawling new novels
+    const storage = createStorage();
+    const maxBacklog = config.maxPendingBooksBacklog || 5;
+    const backlog = await getTranslationBacklog(storage);
+    const maxNewBooks = Math.min(config.maxNewBooksPerRun || 2, Math.max(0, maxBacklog - backlog.pendingBooksCount));
+
+    if (backlog.pendingBooksCount >= maxBacklog) {
+      const backpressureMsg = `Hàng đợi dịch đang có ${backlog.pendingBooksCount} bộ truyện (${backlog.totalPendingChapters} chương) chờ dịch. Tạm dừng cào thêm truyện mới để ưu tiên dịch hoàn tất (ngưỡng tối đa: ${maxBacklog} bộ).`;
+      console.log(`[CRAWLER BACKPRESSURE] ${backpressureMsg}`);
+      status.message = backpressureMsg;
+      await updateStatus(status);
+    } else {
+      console.log(`[CRAWLER CAPACITY] Hàng đợi dịch hiện có ${backlog.pendingBooksCount}/${maxBacklog} bộ truyện chờ dịch. Cho phép cào tối đa ${maxNewBooks} bộ mới trong lượt này.`);
+      let booksAddedThisRun = 0;
+
+      while (remainingBudgetMs() >= MIN_BUDGET_FOR_NEW_JOB_MS && booksAddedThisRun < maxNewBooks) {
+        const candidates = await discoverBooks(config, categories, status);
+        const newCandidates = candidates.filter((item) => !existingIds.has(item.sourceId) && !excludedIds.has(item.sourceId));
+        newCandidateCount = newCandidates.length;
+
+        const chapterFloor = bucketChapterFloor(config.wordCountBucket);
+        if (chapterFloor > 0) {
+          status.message = `Đang tìm truyện từ ${chapterFloor} chương trở lên...`;
           await updateStatus(status);
         }
-      );
-      // Nothing left that this configuration can reach: stop rather than spin
-      // through the same rejected candidates for the rest of the budget.
-      if (!discovery.selected.length) break;
+        discovery = await selectNewBookCandidates(
+          newCandidates,
+          chapterFloor,
+          maxNewBooks - booksAddedThisRun,
+          fetchText,
+          async ({ scanned, scanLimit, selected, bestChapterCount }) => {
+            status.message = `Đang lọc truyện dài: đã kiểm ${scanned}/${scanLimit}, chọn ${selected}, dài nhất ${bestChapterCount} chương.`;
+            await updateStatus(status);
+          }
+        );
 
-      status.discovered += discovery.selected.length;
-      await runJobs(discovery.selected);
-      // Everything just taken is known now, so the next pass looks past it.
-      for (const item of discovery.selected) existingIds.add(String(item.sourceId));
+        if (!discovery.selected.length) break;
+
+        status.discovered += discovery.selected.length;
+        await runJobs(discovery.selected);
+        booksAddedThisRun += discovery.selected.length;
+
+        for (const item of discovery.selected) existingIds.add(String(item.sourceId));
+      }
     }
 
     if (!status.published && !status.failed) {

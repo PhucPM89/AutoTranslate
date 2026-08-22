@@ -259,6 +259,43 @@ function defaultSleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function getTranslationBacklog(storage) {
+  try {
+    const objects = await storage.list("jobs/");
+    const pendingBooks = [];
+    let totalPendingChapters = 0;
+    for (const obj of objects) {
+      if (!obj.key.endsWith("/translation.json")) continue;
+      const raw = await storage.get(obj.key);
+      if (!raw) continue;
+      let state = null;
+      try {
+        state = JSON.parse(raw.toString("utf8"));
+      } catch {}
+      if (!state || !Array.isArray(state.chapters)) continue;
+      const counts = summarize(state);
+      const pendingChapters = counts.total - counts.completed;
+      if (pendingChapters > 0) {
+        pendingBooks.push({
+          bookId: state.bookId,
+          revision: state.revision,
+          total: counts.total,
+          completed: counts.completed,
+          pending: pendingChapters
+        });
+        totalPendingChapters += pendingChapters;
+      }
+    }
+    return {
+      pendingBooksCount: pendingBooks.length,
+      totalPendingChapters,
+      pendingBooks
+    };
+  } catch {
+    return { pendingBooksCount: 0, totalPendingChapters: 0, pendingBooks: [] };
+  }
+}
+
 module.exports = {
   STATES,
   DEFAULT_MAX_ATTEMPTS,
@@ -271,5 +308,6 @@ module.exports = {
   nextBatchChapters,
   backoffFor,
   runTranslationJobs,
-  isQuotaError
+  isQuotaError,
+  getTranslationBacklog
 };
