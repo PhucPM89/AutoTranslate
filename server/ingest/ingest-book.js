@@ -40,6 +40,12 @@ async function ingestBook({
 }) {
   if (!storage) throw new Error("ingestBook cần storage.");
   if (!book || !book.id) throw new Error("ingestBook cần book.id.");
+  if (book.title && /\p{Script=Han}/u.test(book.title)) {
+    throw new Error(`[INGEST REJECTED] Sách "${book.title}" bị từ chối ingest: Tiêu đề vẫn còn chứa ký tự tiếng Trung chưa dịch.`);
+  }
+  if (book.author && /\p{Script=Han}/u.test(book.author)) {
+    throw new Error(`[INGEST REJECTED] Sách "${book.title}" bị từ chối ingest: Tác giả "${book.author}" vẫn còn chứa ký tự tiếng Trung chưa dịch.`);
+  }
 
   const rev = revision || 1;
   log({ event: "ingest.started", bookId: book.id, revision: rev });

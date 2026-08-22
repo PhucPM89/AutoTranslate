@@ -14,12 +14,17 @@ const { createSupabase } = require("../supabase");
 
 const SNAPSHOT_SCHEMA = 1;
 
+function hasHan(str) {
+  return /\p{Script=Han}/u.test(String(str || ""));
+}
+
 async function buildSnapshotFromSupabase(env = process.env) {
   const db = createSupabase(env);
   if (!db) return null;
   const rows = await db.listBooks({ limit: 1000, order: "updated_at.desc" });
   if (!Array.isArray(rows)) return null;
-  return rows.map((row) => ({
+  const filtered = rows.filter((row) => row && row.id && row.title && !hasHan(row.title) && !hasHan(row.author));
+  return filtered.map((row) => ({
     id: row.id,
     title: row.title,
     author: row.author || "",
@@ -49,6 +54,7 @@ async function buildSnapshotFromStorage(storage) {
     if (!raw) continue;
     try {
       const index = JSON.parse(raw.toString("utf8"));
+      if (!index || !index.title || hasHan(index.title) || hasHan(index.author)) continue;
       books.push({
         id: index.bookId,
         title: index.title,

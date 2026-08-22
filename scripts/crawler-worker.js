@@ -730,6 +730,10 @@ async function downloadAndPublish(candidate, status, wordCountBucket = -1) {
     description: metadata.description || ""
   });
 
+  if (!translatedMetadata || !translatedMetadata.title || /\p{Script=Han}/u.test(translatedMetadata.title) || /\p{Script=Han}/u.test(translatedMetadata.author || "")) {
+    throw new Error(`Dịch metadata thất bại cho Fanqie book ${candidate.sourceId}: Tiêu đề hoặc tác giả vẫn còn chứa chữ Hán.`);
+  }
+
   // Extract and enqueue only. Translation is a separate workload: this job runs
   // every 15 minutes and must finish in minutes, while a 3,000-chapter novel takes
   // Gemini hours. scripts/translate-worker.js drains the queue on its own schedule.
