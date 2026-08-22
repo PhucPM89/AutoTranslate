@@ -55,6 +55,7 @@ const REQUEST_BUDGET = Number(flag("--budget", process.env.TRANSLATE_BUDGET || 0
 const RUN_MINUTES = Number(flag("--minutes", process.env.TRANSLATE_RUN_MINUTES || 300));
 const ONLY_BOOK = flag("--book", "");
 const SHARD_INDEX = Number(flag("--shard-index", process.env.TRANSLATE_SHARD_INDEX || 0));
+const TOTAL_SHARDS = Math.max(1, Number(flag("--total-shards", process.env.TRANSLATE_TOTAL_SHARDS || 1)));
 const BATCH_SIZE = Math.max(1, Number(flag("--batch-size", process.env.TRANSLATE_BATCH_SIZE || 5)));
 const SPACING_MS = Number(process.env.TRANSLATE_SPACING_MS || 50);
 const RESERVE_MS = 3 * 60 * 1000;
