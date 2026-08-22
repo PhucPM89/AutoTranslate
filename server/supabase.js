@@ -80,14 +80,29 @@ function createSupabase(env = process.env, { role = "service" } = {}) {
     // Chunked because a 4,000-chapter novel in one request would be a very large
     // body; the unique (book_id, revision, chapter_number) key makes it idempotent.
     async upsertChapters(bookId, revision, chapters, { chunkSize = 500 } = {}) {
+      if (!Array.isArray(chapters) || !chapters.length) return 0;
+
+      // Deduplicate chapters by chapter_number within the batch to prevent Postgres Error 21000
+      // ("ON CONFLICT DO UPDATE command cannot affect row a second time")
+      const seen = new Map();
+      for (const chapter of chapters) {
+        if (!chapter) continue;
+        const num = Number(chapter.chapterNumber ?? chapter.chapter_number);
+        if (!Number.isFinite(num)) continue;
+        seen.set(num, chapter);
+      }
+      const uniqueChapters = Array.from(seen.values()).sort(
+        (a, b) => (Number(a.chapterNumber ?? a.chapter_number) || 0) - (Number(b.chapterNumber ?? b.chapter_number) || 0)
+      );
+
       let written = 0;
-      for (let i = 0; i < chapters.length; i += chunkSize) {
-        const slice = chapters.slice(i, i + chunkSize).map((chapter) => ({
+      for (let i = 0; i < uniqueChapters.length; i += chunkSize) {
+        const slice = uniqueChapters.slice(i, i + chunkSize).map((chapter) => ({
           book_id: bookId,
           revision,
-          chapter_number: chapter.chapterNumber,
+          chapter_number: Number(chapter.chapterNumber ?? chapter.chapter_number),
           title: chapter.title || "",
-          translation_status: chapter.translationStatus || "pending",
+          translation_status: chapter.translationStatus || chapter.translation_status || "pending",
           characters: chapter.characters || 0
         }));
         await request("chapters", {
@@ -130,12 +145,18 @@ function createSupabase(env = process.env, { role = "service" } = {}) {
     // ---- categories ----------------------------------------------------
 
     async upsertCategories(categories) {
-      if (!categories.length) return [];
+      if (!Array.isArray(categories) || !categories.length) return [];
+      const seen = new Map();
+      for (const item of categories) {
+        if (!item || !item.slug) continue;
+        seen.set(item.slug, item);
+      }
+      const unique = Array.from(seen.values());
       return request("categories", {
         method: "POST",
         query: "?on_conflict=slug",
         headers: { Prefer: "resolution=merge-duplicates,return=representation" },
-        body: categories.map((item) => ({ slug: item.slug, name: item.name, source_id: item.sourceId ?? null }))
+        body: unique.map((item) => ({ slug: item.slug, name: item.name, source_id: item.sourceId ?? null }))
       });
     },
 
