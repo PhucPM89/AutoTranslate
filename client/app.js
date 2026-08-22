@@ -356,6 +356,7 @@ const els = {
 const parser = new DOMParser();
 
 initPreferences();
+initDialogScrollLock();
 bindEvents();
 initQuoteCardAndSelection();
 initCrossDeviceQrController();
@@ -369,6 +370,54 @@ initSecurityGuards();
 registerServiceWorker();
 initTTSController();
 initZenModeController();
+
+function initDialogScrollLock() {
+  if (typeof document === "undefined") return;
+
+  function updateLock() {
+    const hasOpen = Boolean(document.querySelector("dialog[open]"));
+    document.body.classList.toggle("dialog-open", hasOpen);
+    document.documentElement.classList.toggle("dialog-open", hasOpen);
+  }
+
+  document.querySelectorAll("dialog").forEach((dlg) => {
+    dlg.addEventListener("close", updateLock);
+    dlg.addEventListener("cancel", updateLock);
+  });
+
+  if (typeof HTMLDialogElement !== "undefined" && HTMLDialogElement.prototype) {
+    const origShow = HTMLDialogElement.prototype.show;
+    const origShowModal = HTMLDialogElement.prototype.showModal;
+    const origClose = HTMLDialogElement.prototype.close;
+
+    if (origShowModal) {
+      HTMLDialogElement.prototype.showModal = function() {
+        const res = origShowModal.apply(this, arguments);
+        updateLock();
+        return res;
+      };
+    }
+    if (origShow) {
+      HTMLDialogElement.prototype.show = function() {
+        const res = origShow.apply(this, arguments);
+        updateLock();
+        return res;
+      };
+    }
+    if (origClose) {
+      HTMLDialogElement.prototype.close = function() {
+        const res = origClose.apply(this, arguments);
+        updateLock();
+        return res;
+      };
+    }
+  }
+
+  try {
+    const observer = new MutationObserver(updateLock);
+    observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ["open"] });
+  } catch {}
+}
 // Before initializeLibrary, because a confirmation link comes back with tokens in
 // the URL fragment and they have to be consumed and wiped before anything else
 // reads the hash.
