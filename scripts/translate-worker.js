@@ -101,21 +101,27 @@ async function main() {
   const storage = createStorage();
 
   // Load dynamically configured keys from R2 Storage if present
-  let apiKey = "";
+  let keyList = [];
   try {
     const rawKeys = await storage.get("config/api-keys.json");
     if (rawKeys) {
       const parsed = JSON.parse(rawKeys.toString("utf8"));
       if (Array.isArray(parsed) && parsed.length > 0) {
-        apiKey = parsed.join(",");
+        keyList = parsed;
       }
     }
   } catch {}
 
-  if (!apiKey) {
-    apiKey = process.env.GROQ_API_KEYS || process.env.GROQ_API_KEY || process.env.OPENROUTER_API_KEYS || process.env.OPENROUTER_API_KEY;
-  }
-  if (!apiKey) throw new Error("Thiếu GROQ_API_KEY / OPENROUTER_API_KEY.");
+  const envKeys = [
+    process.env.GROQ_API_KEYS,
+    process.env.GROQ_API_KEY,
+    process.env.OPENROUTER_API_KEYS,
+    process.env.OPENROUTER_API_KEY
+  ].filter(Boolean).flatMap(k => parseApiKeys(k));
+
+  const allUniqueKeys = Array.from(new Set([...keyList, ...envKeys])).filter(Boolean);
+  if (!allUniqueKeys.length) throw new Error("Thiếu GROQ_API_KEY / OPENROUTER_API_KEY.");
+  apiKey = allUniqueKeys.join(",");
   const db = createSupabase();
   const engine = createTranslationEngine({ storage });
   const deadlineAt = Date.now() + Math.max(0, RUN_MINUTES * 60 * 1000 - RESERVE_MS);

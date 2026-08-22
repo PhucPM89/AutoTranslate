@@ -490,7 +490,7 @@ function appendText(parent, tagName, className, value) {
 function startTranslatePolling() {
   stopTranslatePolling();
   loadTranslateStatus();
-  translateTimer = setInterval(loadTranslateStatus, 5000);
+  translateTimer = setInterval(loadTranslateStatus, 2500);
 }
 
 function stopTranslatePolling() {
