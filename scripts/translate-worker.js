@@ -50,7 +50,7 @@ const RUN_MINUTES = Number(flag("--minutes", process.env.TRANSLATE_RUN_MINUTES |
 const ONLY_BOOK = flag("--book", "");
 const SHARD_INDEX = Number(flag("--shard-index", process.env.TRANSLATE_SHARD_INDEX || 0));
 const TOTAL_SHARDS = Math.max(1, Number(flag("--total-shards", process.env.TRANSLATE_TOTAL_SHARDS || 1)));
-const BATCH_SIZE = Math.max(1, Number(flag("--batch-size", process.env.TRANSLATE_BATCH_SIZE || process.env.TRANSLATE_CONCURRENCY || 4)));
+const BATCH_SIZE = Math.max(1, Number(flag("--batch-size", process.env.TRANSLATE_BATCH_SIZE || process.env.TRANSLATE_CONCURRENCY || 6)));
 const CONTINUOUS_MODE = !args.includes("--once") && (args.includes("--continuous") || args.includes("--loop") || process.env.TRANSLATE_CONTINUOUS !== "false");
 const RESERVE_MS = 3 * 60 * 1000;
 const PUBLISH_EVERY = Math.max(1, Number(process.env.TRANSLATE_PUBLISH_EVERY || 20));
@@ -67,17 +67,19 @@ function computeAdaptiveSpacing(keyList) {
   const stats = getKeyPoolStats(keyList);
   const readyKeys = stats.filter((s) => s.ready).length;
   
-  if (readyKeys >= 8) {
-    // 8-17 keys: Parallel Waves Mode (~300ms pacing between waves)
-    return 300;
+  if (readyKeys >= 12) {
+    // 12-20 keys: Ultra Parallel Waves Mode (~100ms spacing between 6-chapter waves)
+    return 100;
+  } else if (readyKeys >= 8) {
+    return 250;
   } else if (readyKeys >= 5) {
-    return 600;
+    return 500;
   } else if (readyKeys >= 3) {
-    return 1200;
+    return 1000;
   } else if (readyKeys >= 1) {
-    return 2500;
+    return 2000;
   }
-  return 5000;
+  return 4000;
 }
 
 async function writeTranslateStatus(storage, status) {
