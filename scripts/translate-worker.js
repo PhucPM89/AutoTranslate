@@ -82,6 +82,16 @@ function computeAdaptiveSpacing(keyList) {
   return 4000;
 }
 
+async function readJson(storage, key) {
+  try {
+    const raw = await storage.get(key);
+    if (!raw) return null;
+    return JSON.parse(raw.toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
 async function writeTranslateStatus(storage, status) {
   try {
     await storage.put(TRANSLATE_STATUS_KEY, JSON.stringify({
