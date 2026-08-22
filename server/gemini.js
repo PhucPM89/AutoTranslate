@@ -198,19 +198,24 @@ async function translateMetadata(metadata, apiKey) {
   const keyList = getActiveKeys(apiKey);
   for (const key of keyList) {
     for (const model of models) {
-      try {
-        const result = await translateChunkWithModel(key, model, prompt, { responseFormat: "json", temperature: 0.2 });
-        const translated = parseMetadataJson(result.text);
-        validateTranslatedMetadata(source, translated);
-        return {
-          title: cleanMetadataField(translated.title, 120),
-          author: cleanMetadataField(translated.author, 100),
-          description: cleanMetadataField(translated.description, 3000),
-          model: result.model
-        };
-      } catch (error) {
-        lastError = error;
-        if (!shouldTryNextModel(error) && error.status !== 502) break;
+      for (const format of ["json", "text"]) {
+        try {
+          const result = await translateChunkWithModel(key, model, prompt, { responseFormat: format, temperature: 0.2 });
+          const translated = parseMetadataJson(result.text);
+          validateTranslatedMetadata(source, translated);
+          return {
+            title: cleanMetadataField(translated.title, 120),
+            author: cleanMetadataField(translated.author, 100),
+            description: cleanMetadataField(translated.description, 3000),
+            model: result.model
+          };
+        } catch (error) {
+          lastError = error;
+          if (format === "json" && String(error?.message || "").includes("Failed to generate JSON")) {
+            continue;
+          }
+          if (!shouldTryNextModel(error) && error.status !== 502) break;
+        }
       }
     }
   }
@@ -229,12 +234,17 @@ async function translateMetadata(metadata, apiKey) {
 function parseMetadataJson(value) {
   try {
     const raw = stripThinkTags(String(value || "")).trim();
-    return JSON.parse(raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""));
-  } catch {
-    const error = new Error("API trả metadata không đúng định dạng JSON.");
-    error.status = 502;
-    throw error;
-  }
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+    try {
+      return JSON.parse(cleaned);
+    } catch {
+      const match = cleaned.match(/\{[\s\S]*\}/);
+      if (match) return JSON.parse(match[0]);
+    }
+  } catch {}
+  const error = new Error("API trả metadata không đúng định dạng JSON.");
+  error.status = 502;
+  throw error;
 }
 
 function validateTranslatedMetadata(source, translated) {
