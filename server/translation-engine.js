@@ -175,8 +175,10 @@ function createTranslationEngine({ storage = null } = {}) {
   function postProcessTranslation(translation, glossary = {}) {
     if (!translation) return "";
     let clean = String(translation)
-      // Remove think blocks
-      .replace(/<think>[\s\S]*?<\/think>/gi, "")
+      // Remove think blocks (closed, unclosed, or orphaned)
+      .replace(/<think[\s\S]*?(?:<\/think>|$)/gi, "")
+      .replace(/<thought[\s\S]*?(?:<\/thought>|$)/gi, "")
+      .replace(/<\/(?:think|thought)>/gi, "")
       // Remove code fences and markdown headers
       .replace(/```[a-z]*\n?/gi, "")
       .replace(/^\s{0,3}#{1,6}\s+/gm, "")

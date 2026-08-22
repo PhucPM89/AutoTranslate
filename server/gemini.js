@@ -39,7 +39,11 @@ function parseApiKeys(keys) {
 
 function stripThinkTags(text) {
   if (typeof text !== "string") return "";
-  return text.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, "").trim();
+  return text
+    .replace(/<think[\s\S]*?(?:<\/think>|$)/gi, "")
+    .replace(/<thought[\s\S]*?(?:<\/thought>|$)/gi, "")
+    .replace(/<\/(?:think|thought)>/gi, "")
+    .trim();
 }
 
 function stripMarkdown(text) {
@@ -378,11 +382,40 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
         }
 
         if (error.status === 429 || error.status === 403) {
-          console.warn(`Key ...${apiKey.slice(-6)} bị giới hạn quota (${error.status}), tạm dừng 60s và chuyển sang key tiếp theo...`);
-          markKeyCooldown(apiKey, 60000);
-          break; // Try next key
+          // If a model hits 429 TPM, continue to try fallback model (e.g. compound-mini 70k TPM)
+          continue;
         }
         if (!shouldTryNextModel(error)) break;
+      }
+
+      // If all models failed on this key, put key on short 10s cooldown
+      markKeyCooldown(apiKey, 10000);
+    }
+  }
+
+  // If initial pass failed, wait 3 seconds and try one more pass across keys
+  await wait(3000);
+  for (let keyIdx = 0; keyIdx < sortedKeys.length; keyIdx += 1) {
+    const apiKey = sortedKeys[keyIdx];
+    for (let modelIndex = 0; modelIndex < models.length; modelIndex += 1) {
+      const model = models[modelIndex];
+      const prompt = engine.buildContextualPrompt({
+        text,
+        index,
+        total,
+        bookTitle,
+        glossary,
+        isRetry: true
+      });
+      try {
+        const result = await translateChunkWithModel(apiKey, model, prompt);
+        const quality = assessTranslation(text, result.text);
+        if (quality.acceptable) {
+          markKeySuccess(apiKey);
+          return result;
+        }
+      } catch (error) {
+        lastError = error;
       }
     }
   }
