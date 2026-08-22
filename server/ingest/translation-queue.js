@@ -141,7 +141,7 @@ async function runTranslationJobs({
     if (spent >= requestBudget) break;
     if (now() >= deadlineAt) break;
 
-    const entries = (typeof translateBatch === "function" && batchSize > 1)
+    const entries = (batchSize > 1)
       ? nextBatchChapters(state, { now: now(), maxAttempts, batchSize, picked: spent })
       : [nextChapter(state, { now: now(), maxAttempts, picked: spent })].filter(Boolean);
 

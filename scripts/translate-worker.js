@@ -50,7 +50,7 @@ const RUN_MINUTES = Number(flag("--minutes", process.env.TRANSLATE_RUN_MINUTES |
 const ONLY_BOOK = flag("--book", "");
 const SHARD_INDEX = Number(flag("--shard-index", process.env.TRANSLATE_SHARD_INDEX || 0));
 const TOTAL_SHARDS = Math.max(1, Number(flag("--total-shards", process.env.TRANSLATE_TOTAL_SHARDS || 1)));
-const BATCH_SIZE = Math.max(1, Number(flag("--batch-size", process.env.TRANSLATE_BATCH_SIZE || process.env.TRANSLATE_CONCURRENCY || 3)));
+const BATCH_SIZE = Math.max(1, Number(flag("--batch-size", process.env.TRANSLATE_BATCH_SIZE || process.env.TRANSLATE_CONCURRENCY || 4)));
 const CONTINUOUS_MODE = !args.includes("--once") && (args.includes("--continuous") || args.includes("--loop") || process.env.TRANSLATE_CONTINUOUS !== "false");
 const RESERVE_MS = 3 * 60 * 1000;
 const PUBLISH_EVERY = Math.max(1, Number(process.env.TRANSLATE_PUBLISH_EVERY || 20));

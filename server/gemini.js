@@ -15,7 +15,7 @@ const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "meta-llama/llama-3.3-7
 const OPENROUTER_FALLBACK_MODELS = parseCsv(
   process.env.OPENROUTER_FALLBACK_MODELS || "deepseek/deepseek-chat,qwen/qwen-2.5-72b-instruct"
 );
-const TRANSLATE_CHUNK_SIZE = Number(process.env.GEMINI_CHUNK_SIZE || 1400);
+const TRANSLATE_CHUNK_SIZE = Number(process.env.GEMINI_CHUNK_SIZE || 5000);
 const TRANSLATE_CONCURRENCY = Number(process.env.GEMINI_TRANSLATE_CONCURRENCY || 2);
 const REQUEST_TIMEOUT_MS = Number(process.env.GROQ_REQUEST_TIMEOUT_MS || process.env.GEMINI_REQUEST_TIMEOUT_MS || 90000);
 
