@@ -711,6 +711,64 @@ body > * {
   font-variant-numeric: tabular-nums;
 }
 
+.crawler-errors {
+  margin-top: 0.65rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, #ef4444 10%, var(--surface-subtle, transparent));
+  border: 1px solid color-mix(in srgb, #ef4444 25%, transparent);
+}
+
+.crawler-errors-title {
+  margin: 0 0 0.35rem;
+  color: #f87171;
+  font-size: var(--text-2xs);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.crawler-errors ul {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.crawler-errors li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 0.6rem;
+  font-size: var(--text-xs);
+}
+
+.crawler-error-name {
+  color: var(--text);
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+
+.crawler-error-msg {
+  color: #fca5a5;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.76rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crawler-error-age {
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -22,9 +22,10 @@ const els = {
   crawlerStateMeta: document.getElementById("crawlerStateMeta"),
   crawlerProgress: document.getElementById("crawlerProgress"),
   crawlerProgressFill: document.getElementById("crawlerProgressFill"),
-  crawlerProgressLabel: document.getElementById("crawlerProgressLabel"),
   crawlerRecent: document.getElementById("crawlerRecent"),
   crawlerRecentList: document.getElementById("crawlerRecentList"),
+  crawlerErrors: document.getElementById("crawlerErrors"),
+  crawlerErrorsList: document.getElementById("crawlerErrorsList"),
   crawlerWorkerWarning: document.getElementById("crawlerWorkerWarning"),
   crawlerRefresh: document.getElementById("crawlerRefresh"),
   translateTab: document.getElementById("adminTranslateTab"),
@@ -707,6 +708,22 @@ function renderCrawlerStatus(status = {}) {
       appendText(item, "span", "crawler-recent-count", `${Number(entry.chapters || 0).toLocaleString("vi-VN")} chương`);
       appendText(item, "span", "crawler-recent-age", describeAge(entry.at));
       els.crawlerRecentList.appendChild(item);
+    }
+  }
+
+  // Recent errors log with clear reason
+  const recentErrors = Array.isArray(status.recentErrors) ? status.recentErrors : [];
+  if (els.crawlerErrors) {
+    els.crawlerErrors.hidden = !recentErrors.length;
+    if (els.crawlerErrorsList) {
+      els.crawlerErrorsList.innerHTML = "";
+      for (const entry of recentErrors) {
+        const item = document.createElement("li");
+        appendText(item, "span", "crawler-error-name", entry.title || `Book ${entry.sourceId}`);
+        appendText(item, "span", "crawler-error-msg", entry.error);
+        appendText(item, "span", "crawler-error-age", describeAge(entry.at));
+        els.crawlerErrorsList.appendChild(item);
+      }
     }
   }
 }

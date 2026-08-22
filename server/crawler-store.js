@@ -57,7 +57,8 @@ const DEFAULT_STATUS = {
   failed: 0,
   // What actually arrived, newest first. A count of one is not enough to know
   // whether the crawler is producing anything.
-  recent: []
+  recent: [],
+  recentErrors: []
 };
 const MAX_RECENT = 8;
 
@@ -107,6 +108,17 @@ function sanitizeCrawlerStatus(value) {
             sourceId: clean(entry?.sourceId, 30).replace(/\D/g, "")
           }))
           .filter((entry) => entry.title)
+      : [],
+    recentErrors: Array.isArray(value?.recentErrors)
+      ? value.recentErrors
+          .slice(0, 6)
+          .map((entry) => ({
+            sourceId: clean(entry?.sourceId, 30).replace(/\D/g, ""),
+            title: clean(entry?.title, 200),
+            error: clean(entry?.error, 300),
+            at: cleanDate(entry?.at)
+          }))
+          .filter((entry) => entry.error)
       : []
   };
 }

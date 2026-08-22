@@ -107,8 +107,18 @@ async function main() {
           ].slice(0, 8);
         } catch (error) {
           status.failed += 1;
-          status.message = `Book ${candidate.sourceId} thất bại: ${error.message}`;
-          console.error(status.message);
+          const errorMsg = error.message || String(error);
+          status.message = `Book ${candidate.sourceId} thất bại: ${errorMsg}`;
+          status.recentErrors = [
+            {
+              sourceId: String(candidate.sourceId),
+              title: candidate.title || status.currentBookTitle || `Fanqie ${candidate.sourceId}`,
+              error: errorMsg,
+              at: new Date().toISOString()
+            },
+            ...(status.recentErrors || [])
+          ].slice(0, 6);
+          console.error(`[CRAWLER ERROR] ${status.message}`);
         }
         await updateStatus(status);
       }
