@@ -48,7 +48,7 @@ function getModelsForApiKey(apiKey) {
     const fallbacks = parseCsv(process.env.OPENROUTER_FALLBACK_MODELS || "deepseek/deepseek-chat,qwen/qwen-2.5-72b-instruct");
     return [primary, ...fallbacks].filter((m, i, l) => m && l.indexOf(m) === i);
   }
-  if (apiKey.startsWith("cfut_") || apiKey.startsWith("cf_")) {
+  if (apiKey.startsWith("cfut_") || apiKey.startsWith("cf_") || apiKey.includes("cfut_") || apiKey.includes("cf_")) {
     const primary = process.env.CLOUDFLARE_AI_MODEL || "@cf/meta/llama-3.1-70b-instruct";
     const fallbacks = parseCsv(
       process.env.CLOUDFLARE_AI_FALLBACK_MODELS ||
@@ -540,7 +540,7 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
 async function translateChunkWithModel(apiKey, model, prompt, generationConfig = {}) {
   const isGroq = apiKey.startsWith("gsk_");
   const isOpenRouter = apiKey.startsWith("sk-or-v1-");
-  const isCloudflare = apiKey.startsWith("cfut_") || apiKey.startsWith("cf_");
+  const isCloudflare = apiKey.startsWith("cfut_") || apiKey.startsWith("cf_") || apiKey.includes("cfut_") || apiKey.includes("cf_");
   
   if (isGroq) {
     return translateWithGroq(apiKey, model, prompt, generationConfig);
