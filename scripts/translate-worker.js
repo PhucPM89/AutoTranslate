@@ -57,7 +57,7 @@ const ONLY_BOOK = flag("--book", "");
 const SHARD_INDEX = Number(flag("--shard-index", process.env.TRANSLATE_SHARD_INDEX || 0));
 const TOTAL_SHARDS = Math.max(1, Number(flag("--total-shards", process.env.TRANSLATE_TOTAL_SHARDS || 1)));
 const BATCH_SIZE = Math.max(1, Number(flag("--batch-size", process.env.TRANSLATE_BATCH_SIZE || 1)));
-const CONTINUOUS_MODE = args.includes("--continuous") || args.includes("--loop") || process.env.TRANSLATE_CONTINUOUS === "true";
+const CONTINUOUS_MODE = !args.includes("--once") && (args.includes("--continuous") || args.includes("--loop") || process.env.TRANSLATE_CONTINUOUS !== "false");
 const RESERVE_MS = 3 * 60 * 1000;
 const PUBLISH_EVERY = Math.max(1, Number(process.env.TRANSLATE_PUBLISH_EVERY || 20));
 const CHAPTERS_PER_TURN = Math.max(1, Number(process.env.TRANSLATE_CHAPTERS_PER_TURN || 5));
@@ -67,18 +67,26 @@ const TRANSLATE_STATUS_KEY = "jobs/translate-status.json";
 let lastChapterTokens = 2200;
 
 function computeAdaptiveSpacing(keyList) {
+  if (process.env.TRANSLATE_SPACING_MS) {
+    return Math.max(0, Number(process.env.TRANSLATE_SPACING_MS));
+  }
   const stats = getKeyPoolStats(keyList);
   const readyKeys = stats.filter((s) => s.ready).length;
-  const healthyKeys = Math.max(1, readyKeys);
   
-  // Safe rate: healthyKeys * 2.1 tokens/sec
-  const safeTokenRatePerSec = healthyKeys * 2.1;
-  const calculatedDelayMs = Math.round((lastChapterTokens / safeTokenRatePerSec) * 1000);
-  
-  // Dynamic minimum floor based on available healthy keys
-  const minFloorMs = healthyKeys >= 8 ? 5000 : (healthyKeys >= 4 ? 12000 : 30000);
-  const maxCeilingMs = 180000;
-  return Math.min(maxCeilingMs, Math.max(minFloorMs, calculatedDelayMs));
+  if (readyKeys >= 8) {
+    // 8-10 keys: Ultra Fast Mode (~2.5s per chapter total = ~1.440 chapters/hour)
+    return 600;
+  } else if (readyKeys >= 5) {
+    // 5-7 keys: Fast Balanced Mode (~3.5s per chapter)
+    return 1200;
+  } else if (readyKeys >= 3) {
+    // 3-4 keys: Controlled Pacing (~5s per chapter)
+    return 2500;
+  } else if (readyKeys >= 1) {
+    // 1-2 keys: Safe Single-Key TPM Protection (~8s per chapter)
+    return 5000;
+  }
+  return 15000;
 }
 
 async function writeTranslateStatus(storage, status) {
@@ -339,8 +347,10 @@ async function main() {
 
       if (result.quotaExhausted) {
         if (CONTINUOUS_MODE) {
-          console.log("  -> Tạm thời tất cả key đang chờ hồi phục quota. Nghỉ 60 giây và tiếp tục chu kỳ dịch 24/7...");
-          await new Promise((r) => setTimeout(r, 60000));
+          const earliestMs = result.earliestCooldown ? Math.max(5000, result.earliestCooldown - Date.now()) : 30000;
+          const waitSec = Math.min(180, Math.max(10, Math.round(earliestMs / 1000)));
+          console.log(`  -> Tạm thời các key đang chờ hồi phục quota. Nghỉ ${waitSec} giây và tiếp tục dịch 24/7...`);
+          await new Promise((r) => setTimeout(r, waitSec * 1000));
           continue;
         } else {
           stoppedForQuota = true;

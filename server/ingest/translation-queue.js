@@ -148,6 +148,7 @@ async function runTranslationJobs({
   let translated = 0;
   let failed = 0;
   let quotaExhausted = false;
+  let earliestCooldown = 0;
   let spent = 0;
 
   while (true) {
@@ -205,6 +206,9 @@ async function runTranslationJobs({
     } catch (error) {
       spent += 1;
       const errMsg = String(error && error.message ? error.message : error).slice(0, 300);
+      if (error && error.earliestCooldown) {
+        earliestCooldown = error.earliestCooldown;
+      }
 
       for (const entry of entries) {
         if (entry.status === "completed") continue;
@@ -245,7 +249,7 @@ async function runTranslationJobs({
     }
   }
 
-  return { translated, failed, quotaExhausted, spent, summary: summarize(state), done: isDone(state) };
+  return { translated, failed, quotaExhausted, earliestCooldown, spent, summary: summarize(state), done: isDone(state) };
 }
 
 function isQuotaError(error) {

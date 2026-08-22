@@ -4,10 +4,10 @@ const { createTranslationEngine } = require("./translation-engine");
 
 const GROQ_MODEL = process.env.GROQ_MODEL || process.env.GEMINI_MODEL || "openai/gpt-oss-20b";
 const GROQ_FALLBACK_MODELS = parseCsv(
-  process.env.GROQ_FALLBACK_MODELS || process.env.GEMINI_FALLBACK_MODELS || "groq/compound-mini,qwen/qwen3.6-27b,openai/gpt-oss-120b"
+  process.env.GROQ_FALLBACK_MODELS || process.env.GEMINI_FALLBACK_MODELS || "qwen/qwen3.6-27b"
 );
-const TRANSLATE_CHUNK_SIZE = Number(process.env.GEMINI_CHUNK_SIZE || 3000);
-const TRANSLATE_CONCURRENCY = Number(process.env.GEMINI_TRANSLATE_CONCURRENCY || 1);
+const TRANSLATE_CHUNK_SIZE = Number(process.env.GEMINI_CHUNK_SIZE || 1400);
+const TRANSLATE_CONCURRENCY = Number(process.env.GEMINI_TRANSLATE_CONCURRENCY || 2);
 const REQUEST_TIMEOUT_MS = Number(process.env.GROQ_REQUEST_TIMEOUT_MS || process.env.GEMINI_REQUEST_TIMEOUT_MS || 90000);
 
 const defaultEngine = createTranslationEngine();
@@ -493,7 +493,7 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
 
     try {
       // Dynamic max_tokens based on actual input length to prevent Groq TPM over-reservation
-      const dynamicMaxTokens = Math.min(2200, Math.max(300, Math.ceil(prompt.length * 1.15)));
+      const dynamicMaxTokens = Math.min(1800, Math.max(300, Math.ceil(prompt.length * 0.9)));
       const maxTokens = generationConfig.maxTokens || dynamicMaxTokens;
 
       const bodyPayload = {
