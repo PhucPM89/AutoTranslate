@@ -82,22 +82,38 @@ export async function handleApiRequest({ request, env }) {
 // ---- public catalog --------------------------------------------------------
 async function handlePublicCatalog({ request, env }) {
   if (request.method !== "GET" && request.method !== "HEAD") return methodNotAllowed("GET, HEAD");
-  const reader = env.R2_READER ? createR2BindingStorage(env.R2_READER) : null;
-  if (!reader) {
-    throw fail(503, "R2 Reader bucket chưa được cấu hình.");
-  }
-  const raw = await reader.get("catalog/latest.json");
-  if (!raw) {
-    throw fail(404, "Chưa có dữ liệu catalog.");
-  }
-  return new Response(raw, {
-    status: 200,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
-      "Access-Control-Allow-Origin": "*"
+  const bucket = env.R2_READER || env.R2_BUCKET;
+  if (bucket) {
+    const reader = createR2BindingStorage(bucket);
+    const raw = await reader.get("catalog/latest.json").catch(() => null);
+    if (raw) {
+      return new Response(raw, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
+          "Access-Control-Allow-Origin": "*"
+        }
+      });
     }
-  });
+  }
+
+  try {
+    const cdnRes = await fetch("https://cdn.tram-chu.online/catalog/latest.json");
+    if (cdnRes.ok) {
+      const data = await cdnRes.text();
+      return new Response(data, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
+          "Access-Control-Allow-Origin": "*"
+        }
+      });
+    }
+  } catch {}
+
+  throw fail(404, "Chưa có dữ liệu catalog.");
 }
 
 // ---- admin session ---------------------------------------------------------

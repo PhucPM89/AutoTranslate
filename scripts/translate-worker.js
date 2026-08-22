@@ -159,14 +159,25 @@ async function main() {
   const activeReadBooks = await (db?.readTopBooks?.({ limit: 20 }).catch(() => [])) || [];
   const activeBookIds = new Set(activeReadBooks.map((b) => b.bookId));
 
-  // Sort queue:
+  // Sort queue: Sequential Book Completion Mode
   // 1. VIP Active Books (currently being read by real readers)
-  // 2. High priority newly discovered chapters
-  // 3. Stable rotation order
+  // 2. In-progress books with highest completion (finish almost-done books first so readers get 100% full translations!)
+  // 3. Smaller pending books, then stable ID
   queue.sort((a, b) => {
     const aIsActive = activeBookIds.has(a.bookId);
     const bIsActive = activeBookIds.has(b.bookId);
     if (aIsActive !== bIsActive) return bIsActive ? 1 : -1;
+
+    const aDone = (a.total || 0) - (a.pending || 0);
+    const bDone = (b.total || 0) - (b.pending || 0);
+    if (aDone > 0 || bDone > 0) {
+      // Prioritize novel with highest completion count to finish 100% fastest
+      const aPct = (a.total || 0) ? (aDone / a.total) : 0;
+      const bPct = (b.total || 0) ? (bDone / b.total) : 0;
+      if (Math.abs(bPct - aPct) > 0.05) return bPct - aPct;
+      return bDone - aDone;
+    }
+
     if (b.highPriority !== a.highPriority) return b.highPriority - a.highPriority;
     return a.bookId.localeCompare(b.bookId);
   });
@@ -178,12 +189,15 @@ async function main() {
     console.log(`\n=== [SHARD ${normalizedShard + 1}/${TOTAL_SHARDS}] Được phân bổ ${activeQueue.length}/${queue.length} bộ truyện ===`);
   }
 
+  console.log(`\n=== CHẾ ĐỘ DỊCH DỨT ĐIỂM TỪNG BỘ TRUYỆN 100% ===`);
   console.log(`Có ${activeQueue.length} book trong hàng đợi worker (Batch size: ${BATCH_SIZE}, ${activeBookIds.size} book VIP toàn hệ thống):`);
-  for (const job of activeQueue) {
+  for (const job of activeQueue.slice(0, 10)) {
     const vipTag = activeBookIds.has(job.bookId) ? " [VIP ĐỘC GIẢ]" : "";
-    console.log(`  ${job.bookId} r${job.revision}: ${job.pending} chờ (${job.highPriority} ưu tiên)${vipTag} / ${job.total}`);
+    const done = (job.total || 0) - (job.pending || 0);
+    const pct = job.total ? Math.round((done / job.total) * 100) : 0;
+    console.log(`  ${job.bookId} r${job.revision}: Đã dịch ${done}/${job.total} (${pct}%)${vipTag} — Còn ${job.pending} chương`);
   }
-  if (rotation.lastBookId) console.log(`  (lượt trước dừng ở ${rotation.lastBookId}; vòng này bắt đầu sau đó)`);
+  if (activeQueue.length > 10) console.log(`  ... và ${activeQueue.length - 10} bộ truyện khác đang xếp hàng.`);
 
   const existingStatus = (await readJson(storage, TRANSLATE_STATUS_KEY)) || {};
   const startedAt = existingStatus.state === "running" && existingStatus.startedAt ? existingStatus.startedAt : new Date().toISOString();
@@ -197,8 +211,8 @@ async function main() {
   let stop = false;
   let cycle = 0;
 
-  // Publishing is throttled per book, not globally: with one chapter per turn a
-  // publish at the end of every slice would rewrite a 95 KB index per chapter.
+  // Publishing is throttled per book: every 5 chapters published immediately
+  const PUBLISH_EVERY_CHAPTERS = 5;
   const sincePublish = new Map();
   const touched = new Map();
   const rowChecked = new Set();
@@ -222,21 +236,18 @@ async function main() {
       if (isDone(job.state)) continue;
 
       if (!rowChecked.has(job.bookId)) {
-        // chapters.book_id references books.id. Ingest normally creates the row
-        // first, but if it did not every chapter sync fails on the foreign key.
         await ensureBookRow({ storage, db, job });
         rowChecked.add(job.bookId);
       }
 
-      const isVip = activeBookIds.has(job.bookId);
-      const sliceSize = isVip
-        ? Math.max(10, Number(process.env.TRANSLATE_CHAPTERS_PER_TURN_VIP || 10))
-        : CHAPTERS_PER_TURN;
+      const bTitle = titleMap.get(job.bookId) || job.bookId;
+      console.log(`\n>>> [BẮT ĐẦU DỊCH DỨT ĐIỂM] Bộ truyện: "${bTitle}" (${job.bookId})`);
 
+      // In Sequential Book Mode: Dedicate the entire budget to finish this novel 100%!
       const remainingBudget = REQUEST_BUDGET === Infinity ? Infinity : REQUEST_BUDGET - spentTotal;
       const result = await runTranslationJobs({
         state: job.state,
-        requestBudget: Math.min(remainingBudget, sliceSize),
+        requestBudget: remainingBudget, // Translate all chapters of this book until done!
         deadlineAt,
         spacingMs: () => computeAdaptiveSpacing(parsedKeys),
         batchSize: BATCH_SIZE,
@@ -328,13 +339,17 @@ async function main() {
             at: new Date().toISOString()
           },
           ...recentActivity
-        ].slice(0, 8);
+        ].slice(0, 30);
 
         const waiting = (sincePublish.get(job.bookId) || 0) + result.translated;
-        if (waiting >= PUBLISH_EVERY) {
+        if (isDone(job.state)) {
           sincePublish.set(job.bookId, 0);
           await publishBook(job);
-          console.log(`  [${job.bookId}] -> đã publish tiến độ`);
+          console.log(`\n🎉🎉🎉 [${bTitle}] ĐÃ DỊCH HOÀN TẤT TRỌN VẸN 100% (${job.total}/${job.total} chương)! Đã xuất bản lên thư viện.`);
+        } else if (waiting >= PUBLISH_EVERY_CHAPTERS) {
+          sincePublish.set(job.bookId, 0);
+          await publishBook(job);
+          console.log(`  [${job.bookId}] -> đã publish tiến độ (+${waiting} chương)`);
         } else {
           sincePublish.set(job.bookId, waiting);
         }
