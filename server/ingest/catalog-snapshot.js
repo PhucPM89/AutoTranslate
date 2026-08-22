@@ -19,9 +19,12 @@ function hasHan(str) {
 }
 
 function resolveCoverUrl(bookId, coverUrl, env = process.env) {
-  if (coverUrl && typeof coverUrl === "string" && coverUrl.startsWith("http")) return coverUrl;
-  const base = env?.R2_PUBLIC_BASE_URL || "https://cdn.tram-chu.online";
-  return bookId ? `${base.replace(/\/$/, "")}/covers/${bookId}.jpg` : "";
+  if (coverUrl && typeof coverUrl === "string") {
+    if (coverUrl.startsWith("/covers/")) return coverUrl;
+    const match = coverUrl.match(/\/covers\/[^/?#]+/);
+    if (match) return match[0];
+  }
+  return bookId ? `/covers/${bookId}.jpg` : "";
 }
 
 async function buildSnapshotFromSupabase(env = process.env) {
