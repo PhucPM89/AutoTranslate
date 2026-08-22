@@ -33,7 +33,8 @@ async function buildSnapshotFromSupabase(env = process.env) {
     translatedChapters: row.translated_chapters || 0,
     revision: row.revision || 1,
     featured: Boolean(row.featured),
-    updatedAt: (row.updated_at || "").slice(0, 10)
+    updatedAt: row.updated_at || "",
+    createdAt: row.created_at || ""
   }));
 }
 
@@ -59,13 +60,14 @@ async function buildSnapshotFromStorage(storage) {
         translatedChapters: index.translatedChapters || 0,
         revision: index.revision || 1,
         featured: false,
-        updatedAt: (index.updatedAt || "").slice(0, 10)
+        updatedAt: index.updatedAt || "",
+        createdAt: index.createdAt || ""
       });
     } catch {
       // A malformed index should not take the whole catalogue down.
     }
   }
-  return books.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+  return books.sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
 }
 
 async function publishCatalogSnapshot({ storage, site = {}, env = process.env, log = () => {} }) {

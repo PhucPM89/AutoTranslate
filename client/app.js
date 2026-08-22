@@ -1130,12 +1130,22 @@ function getFilteredCatalogBooks() {
     if (sort === "titleAsc") {
       return String(a.title || "").localeCompare(String(b.title || ""), "vi");
     }
-    return (
-      Number(Boolean(b.featured)) - Number(Boolean(a.featured)) ||
-      Number(Number(b.translatedChapters || 0) > 0) - Number(Number(a.translatedChapters || 0) > 0) ||
-      Number(b.translatedChapters || 0) - Number(a.translatedChapters || 0) ||
-      String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""))
-    );
+    if (sort === "translatedDesc") {
+      const ta = Number(a.translatedChapters || 0);
+      const tb = Number(b.translatedChapters || 0);
+      if (ta !== tb) return tb - ta;
+    }
+    // Default ("latest"): Truyện mới nhất lên đầu tiên
+    const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime() || 0;
+    const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime() || 0;
+    if (timeA !== timeB) return timeB - timeA;
+
+    // So sánh ID số đối với truyện Fanqie (ID số lớn hơn = vừa được thêm mới hơn)
+    const numA = BigInt(String(a.id || "").replace(/\D/g, "") || "0");
+    const numB = BigInt(String(b.id || "").replace(/\D/g, "") || "0");
+    if (numB > numA) return 1;
+    if (numA > numB) return -1;
+    return 0;
   });
 }
 
