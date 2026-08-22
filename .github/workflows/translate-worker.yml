@@ -71,7 +71,7 @@ jobs:
           --budget ${{ github.event.inputs.budget || '5000' }}
           --shard-index ${{ matrix.shard }}
           --total-shards 5
-          --batch-size 5
+          --batch-size 1
           ${{ github.event.inputs.book && format('--book {0}', github.event.inputs.book) || '' }}
 
       - name: Auto-chain next continuous translation run (Shard 1)

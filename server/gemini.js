@@ -4,7 +4,7 @@ const { createTranslationEngine } = require("./translation-engine");
 
 const GROQ_MODEL = process.env.GROQ_MODEL || process.env.GEMINI_MODEL || "llama-3.1-8b-instant";
 const GROQ_FALLBACK_MODELS = parseCsv(
-  process.env.GROQ_FALLBACK_MODELS || process.env.GEMINI_FALLBACK_MODELS || "llama-3.3-70b-versatile,qwen/qwen3.6-27b,openai/gpt-oss-120b"
+  process.env.GROQ_FALLBACK_MODELS || process.env.GEMINI_FALLBACK_MODELS || "llama-3.3-70b-versatile,llama3-70b-8192,llama3-8b-8192"
 );
 const TRANSLATE_CHUNK_SIZE = Number(process.env.GEMINI_CHUNK_SIZE || 6000);
 const TRANSLATE_CONCURRENCY = Number(process.env.GEMINI_TRANSLATE_CONCURRENCY || 1);
