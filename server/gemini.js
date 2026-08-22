@@ -16,11 +16,26 @@ const REQUEST_TIMEOUT_MS = Number(process.env.GROQ_REQUEST_TIMEOUT_MS || process
 
 const defaultEngine = createTranslationEngine();
 
+const DEPRECATED_GROQ_MODELS = new Set([
+  "gemma2-9b-it",
+  "mixtral-8x7b-32768",
+  "llama-3.3-70b-versatile",
+  "llama-3.1-8b-instant",
+  "openai/gpt-oss-20b"
+]);
+
+function sanitizeGroqModel(model) {
+  if (!model || DEPRECATED_GROQ_MODELS.has(model)) return "openai/gpt-oss-120b";
+  return model;
+}
+
 function getModelsForApiKey(apiKey) {
   if (typeof apiKey !== "string") return [GROQ_MODEL, ...GROQ_FALLBACK_MODELS];
   if (apiKey.startsWith("gsk_")) {
-    const primary = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
-    const fallbacks = parseCsv(process.env.GROQ_FALLBACK_MODELS || "qwen/qwen3.6-27b,openai/gpt-oss-20b");
+    const rawPrimary = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
+    const primary = sanitizeGroqModel(rawPrimary);
+    const fallbacks = parseCsv(process.env.GROQ_FALLBACK_MODELS || "qwen/qwen3.6-27b,openai/gpt-oss-120b")
+      .filter((m) => m && !DEPRECATED_GROQ_MODELS.has(m));
     return [primary, ...fallbacks].filter((m, i, l) => m && l.indexOf(m) === i);
   }
   if (apiKey.startsWith("sk-or-v1-")) {
