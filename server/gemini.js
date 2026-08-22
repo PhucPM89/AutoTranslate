@@ -2,15 +2,36 @@
 
 const { createTranslationEngine } = require("./translation-engine");
 
-const GROQ_MODEL = process.env.GROQ_MODEL || process.env.GEMINI_MODEL || "openai/gpt-oss-20b";
+const GROQ_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
 const GROQ_FALLBACK_MODELS = parseCsv(
-  process.env.GROQ_FALLBACK_MODELS || process.env.GEMINI_FALLBACK_MODELS || "qwen/qwen3.6-27b"
+  process.env.GROQ_FALLBACK_MODELS || "qwen/qwen3.6-27b,openai/gpt-oss-20b"
+);
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct";
+const OPENROUTER_FALLBACK_MODELS = parseCsv(
+  process.env.OPENROUTER_FALLBACK_MODELS || "deepseek/deepseek-chat,qwen/qwen-2.5-72b-instruct"
 );
 const TRANSLATE_CHUNK_SIZE = Number(process.env.GEMINI_CHUNK_SIZE || 1400);
 const TRANSLATE_CONCURRENCY = Number(process.env.GEMINI_TRANSLATE_CONCURRENCY || 2);
 const REQUEST_TIMEOUT_MS = Number(process.env.GROQ_REQUEST_TIMEOUT_MS || process.env.GEMINI_REQUEST_TIMEOUT_MS || 90000);
 
 const defaultEngine = createTranslationEngine();
+
+function getModelsForApiKey(apiKey) {
+  if (typeof apiKey !== "string") return [GROQ_MODEL, ...GROQ_FALLBACK_MODELS];
+  if (apiKey.startsWith("gsk_")) {
+    const primary = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
+    const fallbacks = parseCsv(process.env.GROQ_FALLBACK_MODELS || "qwen/qwen3.6-27b,openai/gpt-oss-20b");
+    return [primary, ...fallbacks].filter((m, i, l) => m && l.indexOf(m) === i);
+  }
+  if (apiKey.startsWith("sk-or-v1-")) {
+    const primary = process.env.OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct";
+    const fallbacks = parseCsv(process.env.OPENROUTER_FALLBACK_MODELS || "deepseek/deepseek-chat,qwen/qwen-2.5-72b-instruct");
+    return [primary, ...fallbacks].filter((m, i, l) => m && l.indexOf(m) === i);
+  }
+  const primary = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+  const fallbacks = parseCsv(process.env.GEMINI_FALLBACK_MODELS || "gemini-1.5-flash,gemini-1.5-pro");
+  return [primary, ...fallbacks].filter((m, i, l) => m && l.indexOf(m) === i);
+}
 
 function parseApiKeys(keys) {
   if (Array.isArray(keys)) {
@@ -177,9 +198,26 @@ async function translateBatchChapters(chapters, apiKeys, options = {}) {
   return fallbackResults;
 }
 
+function cleanTranslatedTitle(title) {
+  return String(title || "")
+    .replace(/[\-_|·].*(bản hoàn chỉnh|đọc miễn phí|trực tuyến|tiểu thuyết|toàn bộ|toàn văn).*$/i, "")
+    .replace(/\s*(toàn bộ|toàn văn|hoàn chỉnh|bản toàn thể)?\s*trực tuyến miễn phí đọc\s*$/i, "")
+    .replace(/\s*toàn văn đọc miễn phí\s*$/i, "")
+    .replace(/\s*bản hoàn chỉnh\s*$/i, "")
+    .replace(/\s*bản toàn thể\s*$/i, "")
+    .replace(/\s*tiểu thuyết\s*$/i, "")
+    .trim();
+}
+
 async function translateMetadata(metadata, apiKey) {
+  const rawTitle = String(metadata?.title || "")
+    .replace(/_?番茄小说.*$/i, "")
+    .replace(/[\-_|·]?\s*(完整版|最新章节|免费阅读|全文阅读|小说).*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
   const source = {
-    title: cleanMetadataField(metadata?.title, 120),
+    title: cleanMetadataField(rawTitle, 120),
     author: cleanMetadataField(metadata?.author, 100),
     description: cleanMetadataField(metadata?.description, 3000)
   };
@@ -192,23 +230,22 @@ async function translateMetadata(metadata, apiKey) {
     "QUY TẮC BẮT BUỘC:",
     "1. TIÊU ĐỀ (title):",
     "   - PHẢI dùng âm Hán-Việt hoặc lối dịch quy ước chuẩn mực của cộng đồng tiểu thuyết cho các danh từ riêng, cảnh giới, thể loại, chiêu thức.",
-    "   - Tuyệt đối KHÔNG dịch máy móc từng chữ thô thiển.",
+    "   - Tuyệt đối KHÔNG dịch máy móc từng chữ thô thiển. Không giữ lại các từ quảng cáo đọc miễn phí.",
     "   - Ví dụ chuẩn:",
+    "     * 通幽小儒仙 ➔ Thông U Tiểu Nho Tiên",
+    "     * 逆徒，你还要忤逆为师多少次？ ➔ Nghịch Đồ, Ngươi Còn Muốn Cãi Lời Vi Sư Bao Nhiêu Lần?",
+    "     * 剑道圣体的我只想躺平 ➔ Ta Là Kiếm Đạo Thánh Thể Chỉ Muốn Nằm Ngửa",
+    "     * 太古剑尊 ➔ Thái Cổ Kiếm Tôn",
+    "     * 我靠避凶天赋苟道长生 ➔ Ta Dựa Vào Thiên Phú Tị Hung Cẩu Đạo Trường Sinh",
+    "     * 武道丹帝 ➔ Võ Đạo Đan Đế",
+    "     * 太好了，是变态邻居，我们没救了 ➔ Tốt Quá Rồi, Là Hàng Xóm Biến Thái, Chúng Ta Hết Cứu Rồi",
+    "     * 盗墓：我拆了格尔木疗养院 ➔ Đạo Mộ: Ta Phá Viện Dưỡng Lão Golmud",
     "     * 踏天境 ➔ Đạp Thiên Cảnh",
-    "     * 十日终焉 ➔ Thập Nhật Chung Yên (hoặc Mười Ngày Chung Cuộc)",
-    "     * 凡人修仙之符祖 ➔ Phàm Nhân Tu Tiên Chi Phù Tổ",
-    "     * 仙界闭关小能手 ➔ Tiên Giới Bế Quan Tiểu Năng Thủ",
-    "     * 开局长生，苟在下界吃土飞升 ➔ Khởi Đầu Trường Sinh: Cẩu Ở Hạ Giới Tu Luyện Phi Thăng",
-    "     * 诡舍 ➔ Quỷ Xá",
-    "     * 凡骨 ➔ Phàm Cốt",
-    "     * 开局S级怪谈，但给我C级天赋？ ➔ Khởi Đầu Quái Đàm Cấp S, Nhưng Lại Cho Ta Thiên Phú Cấp C?",
-    "     * 合欢宗第一炉鼎！ ➔ Hợp Hoan Tông Đệ Nhất Lô Đỉnh!",
-    "     * 欺神演出！ ➔ Vở Kịch Lừa Thần!",
-    "     * 序列公路 ➔ Xa Lộ Tuần Tự",
+    "     * 十日终焉 ➔ Thập Nhật Chung Yên",
     "2. TÁC GIẢ (author):",
-    "   - Chuyển 100% tên/bút danh tác giả sang âm Hán-Việt chuẩn xác. Tuyệt đối không để chữ Hán hoặc Pinyin (Ví dụ: 夜来风雨声丶 ➔ Dạ Lai Phong Vũ Thanh, 永夜星河 ➔ Vĩnh Dạ Tinh Hà, 杀虫队队员 ➔ Sát Trùng Đội Đội Viên, 苍白纪元 ➔ Thương Bạch Kỷ Nguyên, 以非当年少 ➔ Dĩ Phi Đương Niên Thiếu).",
+    "   - Chuyển 100% tên/bút danh tác giả sang âm Hán-Việt chuẩn xác. Tuyệt đối không để chữ Hán hoặc Pinyin (Ví dụ: 油子吟 ➔ Du Tử Ngâm, 暮霭烟尘 ➔ Mộ Ngải Yên Trần, 青石细语 ➔ Thanh Thạch Tế Ngữ, 鹤顶红加冰 ➔ Hạc Đỉnh Hồng Gia Băng, 吃人的妖怪 ➔ Yêu Quái Ăn Thịt Người).",
     "3. GIỚI THIỆU (description):",
-    "   - Dịch toàn bộ giới thiệu trôi chảy, đúng chất tiểu thuyết, không tóm tắt, không thêm bình luận.",
+    "   - Dịch toàn bộ giới thiệu trôi chảy, đúng chất tiểu thuyết, xưng hô chuẩn mực (ta-ngươi thay vì tôi-bạn), không tóm tắt, không thêm bình luận.",
     "",
     "Chỉ trả về duy nhất định dạng JSON đúng schema sau:",
     "{\"title\":\"...\",\"author\":\"...\",\"description\":\"...\"}",
@@ -217,11 +254,11 @@ async function translateMetadata(metadata, apiKey) {
     JSON.stringify(source)
   ].join("\n");
 
-  const models = [GROQ_MODEL, ...GROQ_FALLBACK_MODELS].filter((model, index, list) => model && list.indexOf(model) === index);
   let lastError = null;
 
   const keyList = getActiveKeys(apiKey);
   for (const key of keyList) {
+    const models = getModelsForApiKey(key);
     for (const model of models) {
       const formats = key.startsWith("gsk_") ? ["text"] : ["json", "text"];
       for (const format of formats) {
@@ -230,7 +267,7 @@ async function translateMetadata(metadata, apiKey) {
           const translated = parseMetadataJson(result.text);
           validateTranslatedMetadata(source, translated);
           return {
-            title: cleanMetadataField(translated.title, 120),
+            title: cleanTranslatedTitle(cleanMetadataField(translated.title, 120)),
             author: cleanMetadataField(translated.author, 100),
             description: cleanMetadataField(translated.description, 3000),
             model: result.model
@@ -375,10 +412,6 @@ function isContentSafetyRefusal(data, error) {
 }
 
 async function translateChunkWithKeyPool(keyList, text, index, total, { glossary = {}, bookTitle = "", engine = defaultEngine } = {}) {
-  const models = [GROQ_MODEL, ...GROQ_FALLBACK_MODELS].filter(
-    (model, modelIndex, list) => model && list.indexOf(model) === modelIndex
-  );
-
   if (!keyList || !keyList.length) {
     throw new Error("Không có API key nào trong danh sách.");
   }
@@ -420,6 +453,7 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
       }
     }
 
+    const models = getModelsForApiKey(apiKey);
     for (let modelIndex = 0; modelIndex < models.length; modelIndex += 1) {
       const model = models[modelIndex];
       const prompt = engine.buildContextualPrompt({
@@ -489,7 +523,7 @@ async function translateChunkWithModel(apiKey, model, prompt, generationConfig =
 
 async function translateWithOpenRouter(apiKey, model, prompt, generationConfig = {}) {
   const url = "https://openrouter.ai/api/v1/chat/completions";
-  const openRouterModel = model && (model.includes(":") || model.includes("/")) ? model : "openrouter/free";
+  const openRouterModel = model && model.includes("/") ? model : OPENROUTER_MODEL;
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const controller = new AbortController();
@@ -504,7 +538,7 @@ async function translateWithOpenRouter(apiKey, model, prompt, generationConfig =
         messages: [
           {
             role: "system",
-            content: "Bạn là dịch giả tiểu thuyết Trung Quốc sang tiếng Việt chuyên nghiệp. Hãy dịch toàn bộ sang tiếng Việt tự nhiên, đúng chuẩn văn phong tiểu thuyết/tiên hiệp/huyền huyễn. Chỉ trả về duy nhất nội dung đã dịch, không kèm suy nghĩ, lời giải thích hay ghi chú thêm."
+            content: "Bạn là dịch giả văn học tiểu thuyết mạng Trung - Việt xuất sắc nhất (Tiên hiệp, Huyền huyễn, Đô thị, Mạt thế). Hãy dịch toàn bộ sang tiếng Việt tự nhiên, văn phong mượt mà, thuần Việt và chuẩn Hán-Việt 100% cho tên riêng/thuật ngữ. Xưng hô chuẩn mực (ta-ngươi, huynh-đệ, sư phụ-đồ nhi). Chỉ trả về duy nhất nội dung đã dịch, không kèm suy nghĩ, lời giải thích hay ghi chú."
           },
           {
             role: "user",
@@ -588,7 +622,7 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
         messages: [
           {
             role: "system",
-            content: "Bạn là dịch giả tiểu thuyết Trung Quốc sang tiếng Việt chuyên nghiệp. Hãy dịch toàn bộ sang tiếng Việt tự nhiên, đúng chuẩn văn phong tiểu thuyết/tiên hiệp/huyền huyễn. Chỉ trả về nội dung đã dịch, không kèm lời giải thích hay ghi chú thêm."
+            content: "Bạn là dịch giả văn học tiểu thuyết mạng Trung - Việt xuất sắc nhất (Tiên hiệp, Huyền huyễn, Đô thị, Mạt thế). Hãy dịch toàn bộ sang tiếng Việt tự nhiên, văn phong mượt mà, thuần Việt và chuẩn Hán-Việt 100% cho tên riêng/thuật ngữ. Xưng hô chuẩn mực (ta-ngươi, huynh-đệ, sư phụ-đồ nhi). Chỉ trả về duy nhất nội dung đã dịch, không kèm lời giải thích hay ghi chú thêm."
           },
           {
             role: "user",
