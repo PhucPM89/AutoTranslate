@@ -803,7 +803,7 @@ async function runKeysPingTest() {
   if (!els.keysPingBtn || !els.keysList) return;
   const originalText = els.keysPingBtn.innerHTML;
   els.keysPingBtn.disabled = true;
-  els.keysPingBtn.innerHTML = '<svg class="icon spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/></svg>Đang ping 7 keys...';
+  els.keysPingBtn.innerHTML = '<svg class="icon spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/></svg>Đang ping kiểm tra Keys...';
   try {
     const data = await requestJson("/api/admin/keys", {
       method: "POST",
@@ -811,7 +811,8 @@ async function runKeysPingTest() {
       body: JSON.stringify({ action: "ping" })
     });
     renderKeysList(data.keys || [], true);
-    setStatus("Đã hoàn tất kiểm tra kết nối toàn bộ Key.");
+    const capacityText = data.dailyCapacityEstimate ? ` [Công suất 24/7: ~${data.dailyCapacityEstimate}, ${data.safePacingEstimate}]` : "";
+    setStatus(`Đã hoàn tất kiểm tra tải thực tế toàn bộ Key.${capacityText}`);
   } catch (error) {
     setStatus(`Lỗi khi ping keys: ${error.message}`, true);
   } finally {
@@ -882,11 +883,14 @@ function renderKeysList(keys, isPingResult = false) {
       ? `<span class="ping-badge ${k.ok ? "ping-fast" : "ping-fail"}">${k.latencyMs}ms</span>`
       : '<span class="ping-badge">Chưa ping</span>';
 
-    const statusBadge = k.status === "rate_limited"
-      ? '<span class="key-status-badge is-warning">🟡 Đang chờ hồi TPM</span>'
-      : (k.ok !== false
-        ? '<span class="key-status-badge is-ready">🟢 Sẵn sàng</span>'
-        : '<span class="key-status-badge is-error">🔴 Lỗi</span>');
+    let statusBadge = '<span class="key-status-badge is-ready">🟢 Sẵn sàng (24/7)</span>';
+    if (k.status === "tpd_limited") {
+      statusBadge = '<span class="key-status-badge is-warning" title="Hết 200k tokens/ngày - đang nhả dần theo giờ">🟡 Đang hồi TPD</span>';
+    } else if (k.status === "tpm_limited" || k.status === "rate_limited") {
+      statusBadge = '<span class="key-status-badge is-warning" title="Đang điều tốc">🟡 Đang chờ TPM</span>';
+    } else if (k.ok === false) {
+      statusBadge = `<span class="key-status-badge is-error" title="${escapeHtml(k.error || "Lỗi")}">🔴 Lỗi</span>`;
+    }
 
     const quotaHtml = k.remainingTokens != null
       ? `

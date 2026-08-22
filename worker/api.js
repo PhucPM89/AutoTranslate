@@ -789,9 +789,10 @@ async function handleAdminKeys({ request, env }) {
       });
     }
 
-    // Ping action
+    // Ping action with realistic test payload & quota diagnostics
     const results = [];
-    for (const key of keyList) {
+    for (let i = 0; i < keyList.length; i++) {
+      const key = keyList[i];
       const masked = key.slice(0, 8) + "..." + key.slice(-6);
       const isGroq = key.startsWith("gsk_");
       const startTime = Date.now();
@@ -805,13 +806,34 @@ async function handleAdminKeys({ request, env }) {
             },
             body: JSON.stringify({
               model,
-              messages: [{ role: "user", content: "hi" }],
-              max_tokens: 1
+              messages: [
+                { role: "system", content: "Dịch sang tiếng Việt." },
+                { role: "user", content: "第一章 天命所归\n浩瀚大千世界，九天十地，万族林立。" }
+              ],
+              max_tokens: 100
             }),
-            signal: AbortSignal.timeout(6000)
+            signal: AbortSignal.timeout(8000)
           });
           const ok = resp.ok;
-          const status = ok ? "ready" : (resp.status === 429 ? "rate_limited" : `HTTP ${resp.status}`);
+          let data = null;
+          try {
+            data = await resp.json();
+          } catch {}
+
+          let status = ok ? "ready" : (resp.status === 429 ? "rate_limited" : `HTTP ${resp.status}`);
+          let statusMessage = ok ? "Sẵn sàng (24/7)" : "";
+
+          if (!ok && resp.status === 429) {
+            const errMsg = data?.error?.message || "";
+            if (errMsg.includes("TPD") || errMsg.includes("tokens per day")) {
+              status = "tpd_limited";
+              statusMessage = "Chạm TPD (200k/ngày) - đang hồi phục theo giờ";
+            } else if (errMsg.includes("TPM") || errMsg.includes("tokens per minute")) {
+              status = "tpm_limited";
+              statusMessage = "Chạm TPM (8k/phút) - hồi sau vài giây";
+            }
+          }
+
           const remTokens = resp.headers.get("x-ratelimit-remaining-tokens");
           const limTokens = resp.headers.get("x-ratelimit-limit-tokens");
           const resetTokens = resp.headers.get("x-ratelimit-reset-tokens");
@@ -820,11 +842,14 @@ async function handleAdminKeys({ request, env }) {
           const resetRequests = resp.headers.get("x-ratelimit-reset-requests");
 
           results.push({
+            id: i + 1,
             masked,
             provider: "Groq LPU",
             status,
+            statusMessage,
             latencyMs: Date.now() - startTime,
             ok,
+            error: data?.error?.message || null,
             remainingTokens: remTokens ? Number(remTokens) : null,
             limitTokens: limTokens ? Number(limTokens) : 8000,
             resetTokens: resetTokens || "0s",
@@ -834,9 +859,11 @@ async function handleAdminKeys({ request, env }) {
           });
         } else {
           results.push({
+            id: i + 1,
             masked,
             provider: "Gemini",
             status: "ready",
+            statusMessage: "Sẵn sàng",
             latencyMs: Date.now() - startTime,
             ok: true,
             limitTokens: 15000,
@@ -846,15 +873,30 @@ async function handleAdminKeys({ request, env }) {
         }
       } catch (err) {
         results.push({
+          id: i + 1,
           masked,
           provider: isGroq ? "Groq LPU" : "Gemini",
           status: "error",
+          statusMessage: err.message,
           error: err.message,
           ok: false
         });
       }
     }
-    return json({ keys: results, activeModel: model, fallbackModels, totalKeys: keyList.length });
+
+    const healthyCount = results.filter((r) => r.ok).length;
+    const dailyCapacity = Math.round(keyList.length * 75); // ~750 chapters/day on 10 keys
+    const safeSpacingSec = Math.max(5, Math.round(110 / Math.max(1, healthyCount)));
+
+    return json({
+      keys: results,
+      activeModel: model,
+      fallbackModels,
+      totalKeys: keyList.length,
+      healthyKeys: healthyCount,
+      dailyCapacityEstimate: `${dailyCapacity} chương/ngày`,
+      safePacingEstimate: `${safeSpacingSec}s/chương (Dịch 24/24 liên tục)`
+    });
   }
 
   const summary = keyList.map((key, i) => ({

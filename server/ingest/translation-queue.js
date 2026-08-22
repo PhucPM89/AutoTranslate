@@ -238,9 +238,10 @@ async function runTranslationJobs({
         await onProgress({ chapter: entry.n, status: entry.status, ...summarize(state) });
       }
     }
-    if (spacingMs) {
-      const jitter = Math.floor(Math.random() * 500);
-      await sleep(spacingMs + jitter);
+    const currentSpacing = typeof spacingMs === "function" ? spacingMs() : spacingMs;
+    if (currentSpacing) {
+      const jitter = Math.floor(Math.random() * 300);
+      await sleep(currentSpacing + jitter);
     }
   }
 

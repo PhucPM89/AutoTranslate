@@ -42,7 +42,7 @@ const {
   summarize,
   isDone
 } = require("../server/ingest/translation-queue");
-const { translateText, translateBatchChapters } = require("../server/gemini");
+const { translateText, translateBatchChapters, parseApiKeys, getKeyPoolStats } = require("../server/gemini");
 const { createTranslationEngine } = require("../server/translation-engine");
 
 const args = process.argv.slice(2);
@@ -57,12 +57,29 @@ const ONLY_BOOK = flag("--book", "");
 const SHARD_INDEX = Number(flag("--shard-index", process.env.TRANSLATE_SHARD_INDEX || 0));
 const TOTAL_SHARDS = Math.max(1, Number(flag("--total-shards", process.env.TRANSLATE_TOTAL_SHARDS || 1)));
 const BATCH_SIZE = Math.max(1, Number(flag("--batch-size", process.env.TRANSLATE_BATCH_SIZE || 1)));
-const SPACING_MS = Number(process.env.TRANSLATE_SPACING_MS || 50);
+const CONTINUOUS_MODE = args.includes("--continuous") || args.includes("--loop") || process.env.TRANSLATE_CONTINUOUS === "true";
 const RESERVE_MS = 3 * 60 * 1000;
 const PUBLISH_EVERY = Math.max(1, Number(process.env.TRANSLATE_PUBLISH_EVERY || 20));
 const CHAPTERS_PER_TURN = Math.max(1, Number(process.env.TRANSLATE_CHAPTERS_PER_TURN || 5));
 const ROTATION_KEY = "jobs/translate-rotation.json";
 const TRANSLATE_STATUS_KEY = "jobs/translate-status.json";
+
+let lastChapterTokens = 2200;
+
+function computeAdaptiveSpacing(keyList) {
+  const stats = getKeyPoolStats(keyList);
+  const readyKeys = stats.filter((s) => s.ready).length;
+  const healthyKeys = Math.max(1, readyKeys);
+  
+  // Safe rate: healthyKeys * 2.1 tokens/sec
+  const safeTokenRatePerSec = healthyKeys * 2.1;
+  const calculatedDelayMs = Math.round((lastChapterTokens / safeTokenRatePerSec) * 1000);
+  
+  // Dynamic minimum floor based on available healthy keys
+  const minFloorMs = healthyKeys >= 8 ? 5000 : (healthyKeys >= 4 ? 12000 : 30000);
+  const maxCeilingMs = 180000;
+  return Math.min(maxCeilingMs, Math.max(minFloorMs, calculatedDelayMs));
+}
 
 async function writeTranslateStatus(storage, status) {
   try {
@@ -183,6 +200,8 @@ async function main() {
       console.warn(`  (không publish được tiến độ ${job.bookId}: ${error.message})`)
     );
 
+  const parsedKeys = parseApiKeys(apiKey);
+
   while (!stop) {
     cycle += 1;
     let translatedThisCycle = 0;
@@ -211,7 +230,7 @@ async function main() {
         state: job.state,
         requestBudget: Math.min(remainingBudget, sliceSize),
         deadlineAt,
-        spacingMs: SPACING_MS,
+        spacingMs: () => computeAdaptiveSpacing(parsedKeys),
         batchSize: BATCH_SIZE,
         loadChapter: (n) => readJson(storage, originalKey(job.bookId, job.revision, n)),
         translateChapter: async (chapter) => {
@@ -227,6 +246,9 @@ async function main() {
             engine
           });
           if (!output || !output.translation) throw new Error("Groq AI không trả bản dịch.");
+          if (output.tokensUsed) {
+            lastChapterTokens = output.tokensUsed;
+          }
           return output.translation;
         },
         translateBatch: async (chapters) => {
@@ -256,7 +278,8 @@ async function main() {
           const bTitle = titleMap.get(job.bookId) || job.bookId;
           const elapsedMin = Math.max(0.05, (Date.now() - new Date(startedAt).getTime()) / 60000);
           const currentSpeed = Math.round((translatedTotal / elapsedMin) * 10) / 10;
-          console.log(`  [${bTitle}] ch ${chapter}: ${status}  (${completed}/${total})`);
+          const currentSpacing = computeAdaptiveSpacing(parsedKeys);
+          console.log(`  [${bTitle}] ch ${chapter}: ${status}  (${completed}/${total}) [Điều tốc: ${Math.round(currentSpacing/1000)}s/chương]`);
           await writeTranslateStatus(storage, {
             state: "running",
             startedAt,
@@ -269,7 +292,7 @@ async function main() {
             translatedThisRun: translatedTotal,
             spentRequests: spentTotal,
             recentActivity,
-            message: `Đang dịch [${bTitle}] — Chương ${chapter} (${completed}/${total})`,
+            message: `Đang dịch [${bTitle}] — Chương ${chapter} (${completed}/${total}) [Điều tốc 24/7: ${Math.round(currentSpacing/1000)}s]`,
             queue: queue.map((j) => ({
               bookId: j.bookId,
               revision: j.revision,
@@ -315,16 +338,29 @@ async function main() {
       await storage.put(ROTATION_KEY, JSON.stringify(rotation)).catch(() => {});
 
       if (result.quotaExhausted) {
-        stoppedForQuota = true;
-        stop = true;
-        console.log("  -> hết quota Groq AI, dừng để lượt sau tiếp tục từ đây");
-        break;
+        if (CONTINUOUS_MODE) {
+          console.log("  -> Tạm thời tất cả key đang chờ hồi phục quota. Nghỉ 60 giây và tiếp tục chu kỳ dịch 24/7...");
+          await new Promise((r) => setTimeout(r, 60000));
+          continue;
+        } else {
+          stoppedForQuota = true;
+          stop = true;
+          console.log("  -> hết quota Groq AI, dừng để lượt sau tiếp tục từ đây");
+          break;
+        }
       }
     }
 
     // A full pass that translated nothing means every queue is finished or
-    // waiting on a backoff, so spinning gains nothing.
-    if (!translatedThisCycle) break;
+    // waiting on a backoff.
+    if (!translatedThisCycle) {
+      if (CONTINUOUS_MODE) {
+        console.log("  [24/7 Continuous Mode] Hàng đợi tạm thời không còn chương chờ. Nghỉ 30s trước vòng lặp tiếp theo...");
+        await new Promise((r) => setTimeout(r, 30000));
+        continue;
+      }
+      break;
+    }
   }
 
   // Anything with unpublished progress is written once at the end, so counts are

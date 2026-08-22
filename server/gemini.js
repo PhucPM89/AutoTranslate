@@ -99,11 +99,13 @@ async function translateText(text, apiKeys, options = {}) {
   const rawTranslation = translatedChunks.join("\n\n").trim();
   const translation = engine.postProcessTranslation(rawTranslation, glossary);
   const modelsUsed = Array.from(new Set(chunkResults.map((result) => result.model)));
+  const totalTokens = chunkResults.reduce((sum, result) => sum + (result.usage?.total_tokens || 0), 0);
 
   return {
     translation,
     chunkCount: chunks.length,
     modelsUsed,
+    tokensUsed: totalTokens,
     elapsedMs: Date.now() - startedAt
   };
 }
@@ -290,26 +292,72 @@ function validateTranslatedMetadata(source, translated) {
   }
 }
 
-// In-memory key health state to prevent pounding keys that hit 429/safety errors
+// In-memory key health state to track 24/7 key rotation, tokens, and precise cooldowns
 const keyHealthMap = new Map();
+let globalKeyIndex = 0;
 
 function getKeyHealth(key) {
   if (!keyHealthMap.has(key)) {
-    keyHealthMap.set(key, { cooldownUntil: 0, consecutiveErrors: 0, lastUsed: 0 });
+    keyHealthMap.set(key, {
+      cooldownUntil: 0,
+      consecutiveErrors: 0,
+      lastUsed: 0,
+      tokensUsedSession: 0,
+      lastErrorMsg: ""
+    });
   }
   return keyHealthMap.get(key);
 }
 
-function markKeyCooldown(key, durationMs = 60000) {
+function parseGroqRetryDurationMs(errorMsg) {
+  if (!errorMsg || typeof errorMsg !== "string") return 60000;
+  // Match "Please try again in 3m50.688s" or "Please try again in 14.5s" or "try again in 1h20m10s"
+  const match = errorMsg.match(/try again in (?:(\d+)h)?(?:(\d+)m)?(\d+(?:\.\d+)?)s/i);
+  if (match) {
+    const hours = Number(match[1] || 0);
+    const minutes = Number(match[2] || 0);
+    const seconds = Number(match[3] || 0);
+    const totalMs = (hours * 3600 + minutes * 60 + seconds) * 1000;
+    return Math.max(5000, totalMs + 3000); // 3s safety cushion
+  }
+  if (errorMsg.includes("TPD") || errorMsg.includes("tokens per day")) {
+    return 300000; // 5 mins default for TPD
+  }
+  if (errorMsg.includes("TPM") || errorMsg.includes("tokens per minute")) {
+    return 20000; // 20s default for TPM
+  }
+  return 60000;
+}
+
+function markKeyCooldown(key, durationMs = 60000, errorMsg = "") {
   const health = getKeyHealth(key);
   health.cooldownUntil = Date.now() + durationMs;
   health.consecutiveErrors += 1;
+  if (errorMsg) health.lastErrorMsg = errorMsg;
 }
 
-function markKeySuccess(key) {
+function markKeySuccess(key, tokens = 0) {
   const health = getKeyHealth(key);
   health.consecutiveErrors = 0;
   health.lastUsed = Date.now();
+  health.tokensUsedSession = (health.tokensUsedSession || 0) + tokens;
+}
+
+function getKeyPoolStats(keyList = []) {
+  const now = Date.now();
+  return keyList.map((key, idx) => {
+    const health = getKeyHealth(key);
+    const onCooldown = health.cooldownUntil > now;
+    return {
+      index: idx + 1,
+      masked: key.slice(0, 8) + "..." + key.slice(-6),
+      ready: !onCooldown,
+      cooldownRemainingMs: onCooldown ? Math.max(0, health.cooldownUntil - now) : 0,
+      consecutiveErrors: health.consecutiveErrors,
+      tokensUsedSession: health.tokensUsedSession || 0,
+      lastUsed: health.lastUsed ? new Date(health.lastUsed).toISOString() : null
+    };
+  });
 }
 
 function isContentSafetyRefusal(data, error) {
@@ -331,24 +379,45 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
     (model, modelIndex, list) => model && list.indexOf(model) === modelIndex
   );
 
+  if (!keyList || !keyList.length) {
+    throw new Error("Không có API key nào trong danh sách.");
+  }
+
+  const nKeys = keyList.length;
+  const now = Date.now();
   let lastError = null;
 
-  // Sort keys prioritizing those not on cooldown and least recently used
-  const now = Date.now();
-  const sortedKeys = [...keyList].sort((a, b) => {
-    const healthA = getKeyHealth(a);
-    const healthB = getKeyHealth(b);
-    const onCooldownA = healthA.cooldownUntil > now ? 1 : 0;
-    const onCooldownB = healthB.cooldownUntil > now ? 1 : 0;
-    if (onCooldownA !== onCooldownB) return onCooldownA - onCooldownB;
-    return healthA.lastUsed - healthB.lastUsed;
-  });
+  // Build candidate order starting from globalKeyIndex in strict round-robin fashion
+  const startIndex = globalKeyIndex % nKeys;
+  const keyOrder = [];
+  for (let i = 0; i < nKeys; i++) {
+    const idx = (startIndex + i) % nKeys;
+    keyOrder.push({ key: keyList[idx], index: idx });
+  }
 
-  for (let keyIdx = 0; keyIdx < sortedKeys.length; keyIdx += 1) {
-    const apiKey = sortedKeys[keyIdx];
+  // Separate keys into: ready (not on cooldown) vs on cooldown
+  const readyKeys = keyOrder.filter(({ key }) => getKeyHealth(key).cooldownUntil <= now);
+  const cooldownKeys = keyOrder.filter(({ key }) => getKeyHealth(key).cooldownUntil > now);
+
+  // Prioritize ready keys. If all on cooldown, sort by earliest cooldown expiration
+  const prioritizedKeys = readyKeys.length > 0
+    ? readyKeys
+    : [...cooldownKeys].sort((a, b) => getKeyHealth(a.key).cooldownUntil - getKeyHealth(b.key).cooldownUntil);
+
+  for (const { key: apiKey, index: keyIdx } of prioritizedKeys) {
     const health = getKeyHealth(apiKey);
-    if (health.cooldownUntil > Date.now()) {
-      continue; // Skip keys currently on cooldown
+    const timeUntilReady = health.cooldownUntil - Date.now();
+    if (timeUntilReady > 0 && readyKeys.length > 0) {
+      // If other keys are ready, skip this key
+      continue;
+    }
+    if (timeUntilReady > 0 && readyKeys.length === 0) {
+      // If all keys are on cooldown, wait for earliest if under 15s
+      if (timeUntilReady <= 15000) {
+        await wait(timeUntilReady + 200);
+      } else {
+        continue;
+      }
     }
 
     for (let modelIndex = 0; modelIndex < models.length; modelIndex += 1) {
@@ -366,7 +435,9 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
         const result = await translateChunkWithModel(apiKey, model, prompt);
         const quality = assessTranslation(text, result.text);
         if (quality.acceptable) {
-          markKeySuccess(apiKey);
+          markKeySuccess(apiKey, result.usage?.total_tokens || 0);
+          // Advance global key pointer so the NEXT request uses the next key
+          globalKeyIndex = (keyIdx + 1) % nKeys;
           return result;
         }
 
@@ -381,53 +452,26 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
         // Anti-Ban Safety Circuit Breaker:
         if (isContentSafetyRefusal(null, error)) {
           console.warn("Phát hiện bộ lọc an toàn nội dung. Dừng retry để tránh vi phạm chính sách API.");
-          // Soften and fallback gracefully using translation engine
           const fallbackClean = engine.postProcessTranslation(text, glossary);
           return { text: fallbackClean || "Nội dung chương đang được cập nhật bản dịch phù hợp.", model: "safety-fallback" };
         }
 
         if (error.status === 429 || error.status === 403) {
-          // If key hit 429/quota, put key on 5m cooldown and immediately switch to next key in pool
-          markKeyCooldown(apiKey, 300000);
-          break;
+          const cooldownDuration = parseGroqRetryDurationMs(error.message);
+          markKeyCooldown(apiKey, cooldownDuration, error.message);
+          break; // Switch to next key in pool immediately
         }
         if (!shouldTryNextModel(error)) break;
       }
     }
-    markKeyCooldown(apiKey, 10000);
+    markKeyCooldown(apiKey, 5000);
   }
 
-  // If initial pass failed, wait 1 second and try across available keys
-  await wait(1000);
-  for (let keyIdx = 0; keyIdx < sortedKeys.length; keyIdx += 1) {
-    const apiKey = sortedKeys[keyIdx];
-    for (let modelIndex = 0; modelIndex < models.length; modelIndex += 1) {
-      const model = models[modelIndex];
-      const prompt = engine.buildContextualPrompt({
-        text,
-        index,
-        total,
-        bookTitle,
-        glossary,
-        isRetry: true
-      });
-      try {
-        const result = await translateChunkWithModel(apiKey, model, prompt);
-        const quality = assessTranslation(text, result.text);
-        if (quality.acceptable) {
-          markKeySuccess(apiKey);
-          return result;
-        }
-      } catch (error) {
-        lastError = error;
-        if (error.status === 429 || error.status === 403) {
-          break;
-        }
-      }
-    }
-  }
-
-  throw lastError || new Error("Tất cả các API key đều đang trong thời gian chờ hoặc hết hạn mức.");
+  // If initial pass failed, check if any key is nearing cooldown reset
+  const earliestCooldown = Math.min(...keyList.map((k) => getKeyHealth(k).cooldownUntil));
+  const err = lastError || new Error("Tất cả các API key đều đang trong thời gian chờ hoặc hết hạn mức.");
+  err.earliestCooldown = earliestCooldown;
+  throw err;
 }
 
 async function translateChunkWithModel(apiKey, model, prompt, generationConfig = {}) {
@@ -448,7 +492,10 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
-      const maxTokens = generationConfig.maxTokens || Math.min(2500, Math.max(300, Math.round(prompt.length * 0.85)));
+      // Dynamic max_tokens based on actual input length to prevent Groq TPM over-reservation
+      const dynamicMaxTokens = Math.min(2200, Math.max(300, Math.ceil(prompt.length * 1.15)));
+      const maxTokens = generationConfig.maxTokens || dynamicMaxTokens;
+
       const bodyPayload = {
         model,
         messages: [
@@ -507,7 +554,11 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
       text = stripThinkTags(text);
       text = stripMarkdown(text);
 
-      return { text: text.trim(), model };
+      return {
+        text: text.trim(),
+        model,
+        usage: data?.usage || null
+      };
     } finally {
       clearTimeout(timeout);
     }
@@ -733,5 +784,7 @@ module.exports = {
   stripMarkdown,
   stripThinkTags,
   splitTextIntoChunks,
-  parseApiKeys
+  parseApiKeys,
+  getKeyPoolStats,
+  parseGroqRetryDurationMs
 };
