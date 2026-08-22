@@ -448,7 +448,7 @@
         </div>
       </form>
 
-      <!-- Translation Engine Live Monitor Panel -->
+      <!-- Translation Engine Live Monitor Panel - Single-Novel Focus Mode -->
       <section id="adminTranslatePanel" class="admin-translate-panel" hidden aria-labelledby="translateMonitorTitle">
         <div class="crawler-overview">
           <div>
@@ -464,100 +464,71 @@
           </div>
         </div>
 
-        <!-- 4 Stat Metric Cards -->
-        <div class="translate-metrics-grid">
-          <div class="stat-card stat-card-highlight">
-            <span class="stat-label">🎯 Đang dịch dứt điểm</span>
-            <strong id="transStatCurrentBook" class="stat-value text-accent-cyan">Đang kiểm tra...</strong>
-            <small id="transStatCurrentCh" class="stat-sub">Chương 0 / 0 (0%)</small>
-          </div>
-          <div class="stat-card stat-card-glow">
-            <span class="stat-label">⏱️ Năng suất 1 giờ qua</span>
-            <strong id="transStatLastHourCh" class="stat-value text-accent-green">+0 chương</strong>
-            <small id="transStatLastHourBooks" class="stat-sub">trên 0 bộ truyện</small>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">🚀 Tốc độ &amp; Dự kiến</span>
-            <strong id="transStatSpeed" class="stat-value">~1.8s / chương</strong>
-            <small id="transStatThroughput" class="stat-sub">~1.200 ch/giờ</small>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">🔑 Hồ chứa API Keys</span>
-            <strong id="transStatKeysActive" class="stat-value text-accent-purple">17 Keys Sẵn sàng</strong>
-            <small class="stat-sub">9 Groq LPU + 8 OpenRouter</small>
-          </div>
-        </div>
-
-        <!-- Active Focus Novel Hero Card -->
-        <div id="transActiveCard" class="trans-active-hero-card">
-          <div class="trans-active-header">
-            <div class="trans-active-badge-wrap">
+        <!-- THE MAIN FOCUS HERO CARD: Single Novel Center -->
+        <div id="transActiveCard" class="trans-focus-card">
+          <div class="trans-focus-topbar">
+            <div class="trans-focus-status-badge">
               <span id="translateStateBadge" class="crawler-state-badge">Đang dịch AI</span>
-              <span class="trans-live-pulse"><span class="pulse-dot"></span> Đang dịch dứt điểm 24/7</span>
+              <span class="trans-live-pulse"><span class="pulse-dot"></span> Tập trung 100% băng thông</span>
             </div>
             <span id="transHeartbeatText" class="trans-heartbeat">Nhịp tim: Vừa xong</span>
           </div>
 
-          <div class="trans-active-content">
-            <div class="trans-novel-layout">
-              <div class="trans-novel-cover-box">
-                <img id="transActiveCoverImg" class="trans-novel-cover" src="/library/covers/misty-pagoda.webp" alt="" loading="lazy">
-              </div>
-              <div class="trans-novel-details">
-                <span class="trans-tag">🎯 BỘ TRUYỆN ĐANG TẬP TRUNG DỊCH ĐẾN CHƯƠNG CUỐI CÙNG</span>
-                <h4 id="transActiveBookTitle" class="trans-book-title">Chưa có bộ truyện nào đang dịch</h4>
-                <p id="translateStateMessage" class="trans-state-msg">Đang đồng bộ tiến trình...</p>
-                <div class="trans-book-meta">
-                  <span id="transActiveChapterBadge" class="trans-meta-pill highlight">Chương 0 / 0</span>
-                  <span id="transActivePercentBadge" class="trans-meta-pill">0%</span>
-                  <span id="transActiveRemainingBadge" class="trans-meta-pill">Còn lại: --</span>
-                  <span id="transActiveEtaBadge" class="trans-meta-pill highlight-gold">ETA: --</span>
-                </div>
+          <div class="trans-focus-body">
+            <div class="trans-focus-cover-wrap">
+              <img id="transActiveCoverImg" class="trans-focus-cover" src="/library/covers/misty-pagoda.webp" alt="Bìa truyện đang dịch">
+            </div>
+            <div class="trans-focus-info">
+              <span class="trans-tag">🎯 BỘ TRUYỆN ĐANG TẬP TRUNG DỊCH FULL</span>
+              <h3 id="transActiveBookTitle" class="trans-focus-title">Đang đồng bộ truyện...</h3>
+              <p id="translateStateMessage" class="trans-focus-desc">Hệ thống đang dồn toàn bộ 17 AI Keys để dịch hoàn tất bộ truyện này.</p>
+              
+              <div class="trans-focus-badges">
+                <span id="transActiveChapterBadge" class="trans-focus-pill highlight-purple">Chương 0 / 0</span>
+                <span id="transActivePercentBadge" class="trans-focus-pill highlight-cyan">Tiến độ: 0%</span>
+                <span id="transActiveRemainingBadge" class="trans-focus-pill">Còn lại: --</span>
+                <span id="transActiveEtaBadge" class="trans-focus-pill highlight-gold">Dự kiến xong: --</span>
               </div>
             </div>
+          </div>
 
-            <!-- Big Visual Progress Bar -->
-            <div class="trans-progress-wrap">
-              <div class="trans-progress-bar-bg">
-                <div id="translateProgressFill" class="trans-progress-fill" style="width: 0%"></div>
-              </div>
-              <div class="trans-progress-footer">
-                <small id="translateProgressLabel">Chờ tiến trình...</small>
-                <small id="translateStateMeta">Điều tốc: 600ms</small>
-              </div>
+          <!-- Large Visual Progress Bar -->
+          <div class="trans-focus-progress-box">
+            <div class="trans-focus-progress-bar-bg">
+              <div id="translateProgressFill" class="trans-focus-progress-bar-fill" style="width: 0%"></div>
+            </div>
+            <div class="trans-focus-progress-labels">
+              <span id="translateProgressLabel">Đã dịch: 0 / 0 chương (0%)</span>
+              <span id="transStatSpeed">Tốc độ: ~1.8s / chương (~1.200 ch/giờ)</span>
+            </div>
+          </div>
+
+          <!-- Bottom 3 Operational Specs Grid -->
+          <div class="trans-focus-specs-grid">
+            <div class="trans-spec-item">
+              <span class="trans-spec-label">⏱️ Năng suất 1 giờ qua</span>
+              <strong id="transStatLastHourCh" class="trans-spec-val text-accent-green">+0 chương</strong>
+              <small id="transHourlySummaryText" class="trans-spec-sub">trong phiên hiện tại</small>
+            </div>
+            <div class="trans-spec-item">
+              <span class="trans-spec-label">🔑 Cụm AI Keys</span>
+              <strong id="transStatKeysActive" class="trans-spec-val text-accent-purple">17 Keys Hoạt động</strong>
+              <small class="trans-spec-sub">9 Groq LPU + 8 OpenRouter</small>
+            </div>
+            <div class="trans-spec-item">
+              <span class="trans-spec-label">⚡ Cơ chế điều tốc</span>
+              <strong class="trans-spec-val text-accent-cyan">Tự động 24/7</strong>
+              <small id="translateStateMeta" class="trans-spec-sub">600ms / request xoay vòng</small>
             </div>
           </div>
         </div>
 
-        <!-- Next In Line Queue Section -->
-        <div class="translate-queue-section">
-          <div class="trans-section-header">
-            <div class="trans-section-title-wrap">
-              <span class="trans-section-icon">📋</span>
-              <div>
-                <h4>Kế hoạch các bộ truyện tiếp theo (Next In Line)</h4>
-                <p class="trans-section-subtitle">Sau khi hoàn thành 100% bộ hiện tại, hệ thống sẽ tự động dồn băng thông sang các bộ này</p>
-              </div>
-            </div>
-          </div>
-          <div id="translateQueueList" class="translate-queue-list">
-            <p class="stats-empty">Đang tải danh sách chờ...</p>
-          </div>
-        </div>
-
-        <!-- Hourly & Recent Activity Breakdown -->
-        <div class="trans-section-card">
-          <div class="trans-section-header">
-            <div class="trans-section-title-wrap">
-              <span class="trans-section-icon">📈</span>
-              <div>
-                <h4>Nhật ký dịch thuật trong 1 giờ qua</h4>
-                <p id="transHourlySummaryText" class="trans-section-subtitle">Thống kê số chương vừa hoàn thành theo mốc thời gian</p>
-              </div>
-            </div>
-          </div>
-          <div id="translateRecentActivity" class="trans-activity-wrap">
-            <ul id="translateRecentList" class="trans-activity-list"></ul>
+        <!-- Next Novel Teaser (Chỉ 1 thẻ nhỏ gọn duy nhất) -->
+        <div id="transNextTeaserCard" class="trans-next-teaser-card">
+          <span class="trans-next-icon">⏭️</span>
+          <div class="trans-next-content">
+            <span class="trans-next-label">BỘ TRUYỆN KẾ TIẾP (SAU KHI DỊCH XONG BỘ TRÊN):</span>
+            <strong id="transNextBookTitle" class="trans-next-title">Đang tính toán bộ tiếp theo...</strong>
           </div>
         </div>
       </section>

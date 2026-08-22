@@ -58,6 +58,7 @@ const els = {
   transActiveEtaBadge: document.getElementById("transActiveEtaBadge"),
   transHeartbeatText: document.getElementById("transHeartbeatText"),
   transHourlySummaryText: document.getElementById("transHourlySummaryText"),
+  transNextBookTitle: document.getElementById("transNextBookTitle"),
   statsTab: document.getElementById("adminStatsTab"),
   statsPanel: document.getElementById("adminStatsPanel"),
   statsGrid: document.getElementById("adminStatsGrid"),
@@ -552,22 +553,16 @@ function renderTranslateStatus(status = {}) {
     els.transHeartbeatText.textContent = beat ? `Nhịp tim: ${describeAge(beat)}` : "Nhịp tim: Đang chờ";
   }
 
-  // 1. Current Active Novel Info
+  // 1. Current Active Focus Novel Info
   const total = Number(status.currentTotalChapters || 0);
   const saved = Number(status.currentCompleted || status.currentChapter || 0);
   const matched = (adminCatalog.books || []).find((b) => b.id === status.currentBookId);
-  const bookTitle = status.currentBookTitle || (matched ? matched.title : status.currentBookId) || "Chưa có bộ truyện nào";
-  const percent = total ? Math.min(100, Math.round((saved / total) * 100)) : 0;
+  const bookTitle = status.currentBookTitle || (matched ? matched.title : status.currentBookId) || "Đang chờ lượt...";
+  const percent = total ? Math.min(100, Math.round((saved / total) * 1000) / 10) : 0;
   const isRunning = status.state === "running";
 
-  if (els.transStatCurrentBook) {
-    els.transStatCurrentBook.textContent = isRunning ? bookTitle : (status.state === "idle" ? "Đang chờ lượt..." : "Tạm dừng");
-  }
-  if (els.transStatCurrentCh) {
-    els.transStatCurrentCh.textContent = total > 0 ? `Chương ${saved.toLocaleString("vi-VN")} / ${total.toLocaleString("vi-VN")} (${percent}%)` : (isRunning ? "Đang khởi tạo..." : "0 chương");
-  }
   if (els.transActiveBookTitle) {
-    els.transActiveBookTitle.textContent = isRunning ? bookTitle : "Hệ thống đang sẵn sàng";
+    els.transActiveBookTitle.textContent = isRunning ? bookTitle : (status.state === "idle" ? "Hệ thống đang sẵn sàng" : "Đang tạm dừng");
   }
   if (els.transActiveCoverImg) {
     if (matched && matched.cover) {
@@ -579,92 +574,60 @@ function renderTranslateStatus(status = {}) {
     }
   }
   if (els.translateStateMessage) {
-    els.translateStateMessage.textContent = status.message || (isRunning ? `Đang dịch dứt điểm [${bookTitle}]` : "Chưa có tác vụ dịch đang chạy.");
+    els.translateStateMessage.textContent = isRunning
+      ? `Hệ thống đang dồn toàn bộ 17 AI Keys để dịch dứt điểm bộ [${bookTitle}].`
+      : (status.message || "Chưa có tác vụ dịch đang chạy.");
   }
   if (els.transActiveChapterBadge) {
-    els.transActiveChapterBadge.textContent = total > 0 ? `Đã dịch: ${saved} / ${total} chương` : `Chương ${saved || 0}`;
+    els.transActiveChapterBadge.textContent = total > 0 ? `Chương ${saved.toLocaleString("vi-VN")} / ${total.toLocaleString("vi-VN")}` : `Chương ${saved || 0}`;
   }
   if (els.transActivePercentBadge) {
-    els.transActivePercentBadge.textContent = `${percent}%`;
+    els.transActivePercentBadge.textContent = `Tiến độ: ${percent}%`;
   }
   if (els.transActiveRemainingBadge) {
-    els.transActiveRemainingBadge.textContent = total > 0 ? `Còn lại: ${(total - saved).toLocaleString("vi-VN")} chương` : "Còn lại: --";
+    els.transActiveRemainingBadge.textContent = total > 0 ? `Còn lại: ${Math.max(0, total - saved).toLocaleString("vi-VN")} chương` : "Còn lại: --";
   }
 
   // Speed & ETA
   const speed = Number(status.speed || 0);
   const pending = Math.max(0, total - saved);
-  let etaText = "ETA: --";
+  let etaText = "Dự kiến: --";
   if (speed > 0 && pending > 0) {
     const mins = Math.ceil(pending / speed);
-    etaText = mins > 60 ? `ETA: ~${Math.floor(mins / 60)}h${mins % 60}m` : `ETA: ~${mins} phút`;
+    etaText = mins > 60 ? `Dự kiến: ~${Math.floor(mins / 60)}h${mins % 60}m` : `Dự kiến: ~${mins} phút`;
   } else if (pending === 0 && total > 0) {
-    etaText = "ETA: Sắp hoàn tất";
+    etaText = "Dự kiến: Sắp hoàn tất";
   }
   if (els.transActiveEtaBadge) els.transActiveEtaBadge.textContent = etaText;
 
   if (els.transStatSpeed) {
-    els.transStatSpeed.textContent = speed > 0 ? `${speed} ch/phút` : "~1.8s / chương";
-  }
-  if (els.transStatThroughput) {
-    els.transStatThroughput.textContent = speed > 0 ? `~${Math.round(speed * 60).toLocaleString("vi-VN")} ch/giờ` : "~1.200 ch/giờ";
+    els.transStatSpeed.textContent = speed > 0 ? `Tốc độ: ${speed} ch/phút (~${Math.round(speed * 60).toLocaleString("vi-VN")} ch/giờ)` : "Tốc độ: ~1.8s / chương (~1.200 ch/giờ)";
   }
 
   // Progress Bar
   if (els.translateProgressFill) els.translateProgressFill.style.width = `${percent}%`;
   if (els.translateProgressLabel) {
-    els.translateProgressLabel.textContent = total > 0 ? `Tiến độ dứt điểm: ${saved}/${total} chương (${percent}%)` : "Tiến độ: Đang dịch";
-  }
-  if (els.translateStateMeta) {
-    const parts = [];
-    if (status.startedAt) parts.push(`Bắt đầu: ${describeAge(status.startedAt)}`);
-    if (status.translatedThisRun) parts.push(`Đã dịch đợt này: +${status.translatedThisRun} chương`);
-    if (status.spentRequests) parts.push(`${status.spentRequests} requests AI`);
-    els.translateStateMeta.textContent = parts.join(" · ") || "Điều tốc 24/7: 600ms (17 Keys)";
+    els.translateProgressLabel.textContent = total > 0 ? `Đã dịch: ${saved}/${total} chương (${percent}%)` : "Đang khởi tạo...";
   }
 
-  // 2. 1-Hour Analytics Calculation
+  // 2. Operational Specs
   const ONE_HOUR_MS = 60 * 60 * 1000;
   const recentActs = Array.isArray(status.recentActivity) ? status.recentActivity : [];
   const now = Date.now();
   const lastHourActs = recentActs.filter((a) => a.at && now - new Date(a.at).getTime() <= ONE_HOUR_MS);
   const lastHourCh = lastHourActs.reduce((sum, a) => sum + Number(a.count || 0), 0);
-  const lastHourUniqueBooks = new Set(lastHourActs.map((a) => a.bookId)).size;
 
   if (els.transStatLastHourCh) {
     els.transStatLastHourCh.textContent = `+${lastHourCh.toLocaleString("vi-VN")} chương`;
   }
-  if (els.transStatLastHourBooks) {
-    els.transStatLastHourBooks.textContent = `trên ${lastHourUniqueBooks} bộ truyện`;
-  }
   if (els.transHourlySummaryText) {
-    els.transHourlySummaryText.textContent = `Trong 1 giờ qua: đã dịch +${lastHourCh} chương trên ${lastHourUniqueBooks} bộ truyện`;
+    els.transHourlySummaryText.textContent = status.startedAt ? `bắt đầu từ ${describeAge(status.startedAt)}` : "trong phiên hiện tại";
+  }
+  if (els.translateStateMeta) {
+    els.translateStateMeta.textContent = "600ms / request xoay vòng (17 Keys)";
   }
 
-  // Render Activity List
-  if (els.translateRecentList) {
-    els.translateRecentList.innerHTML = "";
-    if (!recentActs.length) {
-      els.translateRecentList.innerHTML = `<li class="stats-empty">Chưa có dữ liệu dịch trong phiên gần đây.</li>`;
-    } else {
-      for (const act of recentActs) {
-        const li = document.createElement("li");
-        li.className = "trans-activity-row";
-        const bookM = (adminCatalog.books || []).find((b) => b.id === act.bookId);
-        const name = act.title || (bookM ? bookM.title : act.bookId);
-        li.innerHTML = `
-          <div class="trans-activity-left">
-            <span class="trans-activity-badge">+${act.count} chương</span>
-            <strong class="trans-activity-title">${name}</strong>
-          </div>
-          <span class="trans-activity-time">${describeAge(act.at)}</span>
-        `;
-        els.translateRecentList.appendChild(li);
-      }
-    }
-  }
-
-  // 3. Next In Line Queue List
+  // 3. Next In Line Teaser
   let queue = Array.isArray(status.queue) && status.queue.length ? status.queue : [];
   if (!queue.length && Array.isArray(adminCatalog.books) && adminCatalog.books.length) {
     queue = adminCatalog.books
@@ -681,61 +644,26 @@ function renderTranslateStatus(status = {}) {
       .filter((b) => b.total > 0 && b.pending > 0);
   }
 
-  if (els.translateQueueList) {
-    els.translateQueueList.innerHTML = "";
-    if (!queue.length) {
-      els.translateQueueList.innerHTML = `<p class="stats-empty">Hàng đợi trống. Tất cả truyện đã hoàn tất dịch 100%.</p>`;
+  const waitingQueue = queue.filter((j) => !(status.state === "running" && status.currentBookId === j.bookId));
+  const sortedQueue = [...waitingQueue].sort((a, b) => {
+    if (a.highPriority !== b.highPriority) return (b.highPriority ? 1 : 0) - (a.highPriority ? 1 : 0);
+    const aDone = (a.total || 0) - (a.pending || 0);
+    const bDone = (b.total || 0) - (b.pending || 0);
+    if (aDone > 0 || bDone > 0) return bDone - aDone;
+    return (b.pending || 0) - (a.pending || 0);
+  });
+
+  if (els.transNextBookTitle) {
+    if (sortedQueue.length > 0) {
+      const nextBook = sortedQueue[0];
+      const matchedNext = (adminCatalog.books || []).find((b) => b.id === nextBook.bookId);
+      const nextTitle = matchedNext ? matchedNext.title : nextBook.bookId;
+      const totalNext = Number(nextBook.total || 0);
+      const pendingNext = Number(nextBook.pending || 0);
+      const doneNext = Math.max(0, totalNext - pendingNext);
+      els.transNextBookTitle.textContent = `${nextTitle} (Đã có ${doneNext.toLocaleString("vi-VN")}/${totalNext.toLocaleString("vi-VN")} chương — Còn ${pendingNext.toLocaleString("vi-VN")} chương)`;
     } else {
-      // Filter out the currently active translating book from the waiting queue
-      const waitingQueue = queue.filter((j) => !(status.state === "running" && status.currentBookId === j.bookId));
-
-      const sortedQueue = [...waitingQueue].sort((a, b) => {
-        if (a.highPriority !== b.highPriority) return (b.highPriority ? 1 : 0) - (a.highPriority ? 1 : 0);
-        const aDone = (a.total || 0) - (a.pending || 0);
-        const bDone = (b.total || 0) - (b.pending || 0);
-        if (aDone > 0 || bDone > 0) return bDone - aDone;
-        return (b.pending || 0) - (a.pending || 0);
-      });
-
-      const MAX_VISIBLE = 8;
-      const visibleItems = sortedQueue.slice(0, MAX_VISIBLE);
-      const remainingCount = sortedQueue.length - visibleItems.length;
-
-      for (let i = 0; i < visibleItems.length; i++) {
-        const item = visibleItems[i];
-        const row = document.createElement("div");
-        row.className = "translate-queue-item";
-        const matchedB = (adminCatalog.books || []).find((b) => b.id === item.bookId);
-        const title = matchedB ? matchedB.title : item.bookId;
-        const totalCh = Number(item.total || 0);
-        const pendingCh = Number(item.pending || 0);
-        const doneCh = Math.max(0, totalCh - pendingCh);
-        const pct = totalCh ? Math.round((doneCh / totalCh) * 100) : 0;
-
-        row.innerHTML = `
-          <div class="queue-item-info">
-            <strong class="queue-item-title">
-              <span class="queue-rank-badge" style="background: rgba(168, 85, 247, 0.2); color: #d8b4fe; padding: 0.15rem 0.45rem; border-radius: 4px; font-size: 0.72rem; margin-right: 0.4rem;">#${i + 1} Tiếp theo</span>
-              ${title}
-            </strong>
-            <small class="queue-item-meta">
-              <span>Đã có: ${doneCh.toLocaleString("vi-VN")} / ${totalCh.toLocaleString("vi-VN")} chương</span>
-              <span class="queue-pct-badge ${pct === 100 ? 'is-done' : ''}">${pct}%</span>
-              <span>(Còn ${pendingCh.toLocaleString("vi-VN")} chương)</span>
-              ${item.highPriority ? '<span class="queue-priority-badge">Ưu tiên cao</span>' : ''}
-            </small>
-          </div>
-          <div class="queue-item-bar"><span style="width: ${pct}%"></span></div>
-        `;
-        els.translateQueueList.appendChild(row);
-      }
-
-      if (remainingCount > 0) {
-        const moreNote = document.createElement("div");
-        moreNote.className = "queue-more-note";
-        moreNote.textContent = `... và ${remainingCount} bộ truyện khác đang xếp hàng dịch dứt điểm tiếp theo`;
-        els.translateQueueList.appendChild(moreNote);
-      }
+      els.transNextBookTitle.textContent = "Không còn bộ truyện nào đang chờ (Tất cả 100% hoàn tất).";
     }
   }
 }
