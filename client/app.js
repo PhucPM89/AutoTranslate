@@ -909,7 +909,8 @@ function renderFeaturedBook() {
   els.featuredTitle.textContent = book.title;
   els.featuredDescription.textContent = book.description || "Mở truyện để xem mục lục và bắt đầu dịch theo chương.";
   els.featuredAuthor.textContent = book.author ? `Tác giả ${book.author}` : "Tác giả đang cập nhật";
-  els.featuredChapters.textContent = book.chapterCount ? `${book.chapterCount} chương` : "Định dạng EPUB";
+  const featuredCh = Number(book.chapterCount || book.totalChapters || 0);
+  els.featuredChapters.textContent = featuredCh > 0 ? `${featuredCh.toLocaleString("vi-VN")} chương` : "Đang cập nhật";
 }
 
 function openFeaturedBook() {
@@ -1400,10 +1401,10 @@ async function showBookDetail(book, { updateHash = true } = {}) {
   els.bookViewStatus.className = `book-status ${isFullDetail ? "status-full" : "status-ongoing"}`;
   els.bookViewTitle.textContent = book.title;
   els.bookViewAuthor.textContent = book.author ? `Tác giả: ${book.author}` : "Tác giả chưa cập nhật";
-  els.bookViewChapters.textContent = book.chapterCount ? `${book.chapterCount} chương` : "Định dạng EPUB";
   const catalogBook = libraryState.books.find((b) => b.id === book.id) || book;
   const totalCh = Number(catalogBook.chapterCount || catalogBook.totalChapters || book.chapterCount || book.totalChapters || 0);
   const transCh = Number(catalogBook.translatedChapters || book.translatedChapters || 0);
+  els.bookViewChapters.textContent = totalCh > 0 ? `${totalCh.toLocaleString("vi-VN")} chương` : "Đang cập nhật";
 
   let transPctStr = "0%";
   let fillWidthPct = 0;
@@ -1434,7 +1435,8 @@ async function showBookDetail(book, { updateHash = true } = {}) {
     els.bookViewTranslateFill.style.width = `${fillWidthPct}%`;
   }
 
-  renderBookDescription(book.description);
+  const finalDescription = book.description || catalogBook.description || "";
+  renderBookDescription(finalDescription);
   renderRelatedBooks(book);
   updateBookViewBookmark(book);
 
