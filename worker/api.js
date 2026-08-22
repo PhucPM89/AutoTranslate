@@ -721,8 +721,8 @@ async function handleAdminKeys({ request, env }) {
   await requireAdmin(request, env);
 
   const keyList = await getActiveKeyList(env);
-  const model = env.GROQ_MODEL || env.GEMINI_MODEL || "llama-3.1-8b-instant";
-  const fallbackModels = env.GROQ_FALLBACK_MODELS || env.GEMINI_FALLBACK_MODELS || "llama-3.3-70b-versatile,qwen/qwen3.6-27b,openai/gpt-oss-120b";
+  const model = env.GROQ_MODEL || env.GEMINI_MODEL || "openai/gpt-oss-120b";
+  const fallbackModels = env.GROQ_FALLBACK_MODELS || env.GEMINI_FALLBACK_MODELS || "qwen/qwen3.6-27b,openai/gpt-oss-20b,groq/compound-mini";
 
   if (request.method === "POST") {
     const body = await readJson(request);

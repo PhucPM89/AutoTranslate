@@ -2,11 +2,11 @@
 
 const { createTranslationEngine } = require("./translation-engine");
 
-const GROQ_MODEL = process.env.GROQ_MODEL || process.env.GEMINI_MODEL || "llama-3.1-8b-instant";
+const GROQ_MODEL = process.env.GROQ_MODEL || process.env.GEMINI_MODEL || "openai/gpt-oss-120b";
 const GROQ_FALLBACK_MODELS = parseCsv(
-  process.env.GROQ_FALLBACK_MODELS || process.env.GEMINI_FALLBACK_MODELS || "llama-3.3-70b-versatile,llama3-70b-8192,llama3-8b-8192"
+  process.env.GROQ_FALLBACK_MODELS || process.env.GEMINI_FALLBACK_MODELS || "qwen/qwen3.6-27b,openai/gpt-oss-20b,groq/compound-mini"
 );
-const TRANSLATE_CHUNK_SIZE = Number(process.env.GEMINI_CHUNK_SIZE || 6000);
+const TRANSLATE_CHUNK_SIZE = Number(process.env.GEMINI_CHUNK_SIZE || 3000);
 const TRANSLATE_CONCURRENCY = Number(process.env.GEMINI_TRANSLATE_CONCURRENCY || 1);
 const REQUEST_TIMEOUT_MS = Number(process.env.GROQ_REQUEST_TIMEOUT_MS || process.env.GEMINI_REQUEST_TIMEOUT_MS || 90000);
 
@@ -39,7 +39,7 @@ function parseApiKeys(keys) {
 
 function stripThinkTags(text) {
   if (typeof text !== "string") return "";
-  return text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  return text.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, "").trim();
 }
 
 function stripMarkdown(text) {
@@ -379,6 +379,7 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
+      const maxTokens = generationConfig.maxTokens || Math.min(3500, Math.max(1000, Math.round(prompt.length * 1.5)));
       const bodyPayload = {
         model,
         messages: [
@@ -392,7 +393,7 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
           }
         ],
         temperature: generationConfig.temperature ?? 0.3,
-        max_completion_tokens: 8192
+        max_completion_tokens: maxTokens
       };
 
       if (generationConfig.responseFormat === "json") {
