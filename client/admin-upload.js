@@ -787,7 +787,7 @@ async function loadAdminKeys() {
   try {
     const data = await requestJson("/api/admin/keys");
     if (els.keysTotalCount) els.keysTotalCount.textContent = `${data.totalKeys || 0} Keys`;
-    if (els.keysActiveModel) els.keysActiveModel.textContent = data.activeModel || "qwen/qwen3.6-27b";
+    if (els.keysActiveModel) els.keysActiveModel.textContent = data.activeModel || "llama-3.1-8b-instant";
     renderKeysList(data.keys || []);
   } catch (error) {
     els.keysList.innerHTML = `<p class="stats-empty text-error">Không tải được thông tin key: ${error.message}</p>`;
