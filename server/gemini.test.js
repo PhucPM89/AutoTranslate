@@ -115,6 +115,30 @@ test("Groq Qwen translation disables reasoning instead of only hiding it", async
   }
 });
 
+test("a nearly complete translation gets a focused residual-Han repair pass", async () => {
+  const originalFetch = global.fetch;
+  const almost = `Đây là bản dịch đầy đủ nhưng còn sót chữ 残 trong một cụm từ. ${"Nội dung tiếng Việt được giữ nguyên đầy đủ. ".repeat(16)}`;
+  const repaired = almost.replace("残", "tàn");
+  const responses = [almost, repaired];
+  const prompts = [];
+  global.fetch = async (_url, options) => {
+    prompts.push(JSON.parse(options.body).messages[1].content);
+    return {
+      ok: true,
+      json: async () => ({ choices: [{ finish_reason: "stop", message: { content: responses.shift() } }] })
+    };
+  };
+
+  try {
+    const result = await translateText(chineseSource, "gsk_test-key");
+    assert.equal(result.translation, repaired.trim());
+    assert.match(prompts[1], /còn sót một vài chữ Hán/);
+    assert.match(prompts[1], /残/);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test("injects matching translation-memory terminology without an extra AI call", async () => {
   const originalFetch = global.fetch;
   const source = "众人倒吸一口凉气，谁也不敢继续向前。".repeat(20);

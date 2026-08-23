@@ -481,6 +481,7 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
   const nKeys = keyList.length;
   const now = Date.now();
   let lastError = null;
+  let residualHanCandidate = "";
 
   // Build candidate order starting from globalKeyIndex in strict round-robin fashion
   // Reserve the starting key synchronously. Concurrent chunks used to read the
@@ -509,16 +510,18 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
     const models = getModelsForApiKey(apiKey);
     for (let modelIndex = 0; modelIndex < models.length; modelIndex += 1) {
       const model = models[modelIndex];
-      const prompt = engine.buildContextualPrompt({
-        text,
-        index,
-        total,
-        bookTitle,
-        glossary,
-        // A pool with one model per key still needs the corrective retry prompt
-        // after another key returned incomplete or untranslated text.
-        isRetry: Boolean(lastError) || modelIndex > 0
-      });
+      const prompt = residualHanCandidate
+        ? buildResidualHanRepairPrompt(residualHanCandidate)
+        : engine.buildContextualPrompt({
+            text,
+            index,
+            total,
+            bookTitle,
+            glossary,
+            // A pool with one model per key still needs the corrective retry prompt
+            // after another key returned incomplete or untranslated text.
+            isRetry: Boolean(lastError) || modelIndex > 0
+          });
 
       try {
         const result = await translateChunkWithModel(apiKey, model, prompt, {
@@ -535,6 +538,7 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
         error.status = 502;
         error.model = model;
         lastError = error;
+        residualHanCandidate = quality.reason.includes("chữ Hán") ? processedText : "";
         continue;
       } catch (error) {
         lastError = error;
@@ -560,6 +564,18 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
   const err = lastError || new Error("Tất cả các API key đều đang trong thời gian chờ hoặc hết hạn mức.");
   err.earliestCooldown = earliestCooldown;
   throw err;
+}
+
+function buildResidualHanRepairPrompt(translation) {
+  return [
+    "Bạn là biên tập viên bản dịch Trung - Việt.",
+    "Bản dịch tiếng Việt dưới đây đã đầy đủ nhưng còn sót một vài chữ Hán.",
+    "Hãy thay TOÀN BỘ chữ Hán còn sót bằng từ tiếng Việt hoặc âm Hán-Việt phù hợp với ngữ cảnh.",
+    "Giữ nguyên toàn bộ nội dung tiếng Việt, con số, lời thoại và cấu trúc đoạn; không tóm tắt, không giải thích.",
+    "Chỉ trả về bản dịch đã sửa và tuyệt đối không còn bất kỳ chữ Hán nào.",
+    "",
+    translation
+  ].join("\n");
 }
 
 function outputTokenBudget(sourceText) {
@@ -1149,5 +1165,6 @@ module.exports = {
   getKeyPoolStats,
   parseGroqRetryDurationMs,
   reserveKeyOrder,
-  outputTokenBudget
+  outputTokenBudget,
+  buildResidualHanRepairPrompt
 };
