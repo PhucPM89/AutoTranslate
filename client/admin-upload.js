@@ -1030,7 +1030,15 @@ function setField(name, value) {
 }
 
 async function requestJson(url, options = {}) {
-  const response = await fetch(url, { credentials: "same-origin", cache: "no-store", ...options });
+  let response;
+  try {
+    response = await fetch(url, { credentials: "same-origin", cache: "no-store", ...options });
+  } catch (err) {
+    if (typeof window !== "undefined" && window.location.protocol === "file:") {
+      throw new Error("Không thể gọi API từ file://. Vui lòng mở trang web qua https://tram-chu.online hoặc dev server.");
+    }
+    throw new Error(`Không thể kết nối máy chủ (${err.message}). Vui lòng kiểm tra lại mạng hoặc tạm tắt tiện ích chặn quảng cáo/tracker.`);
+  }
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.error || `Yêu cầu thất bại (HTTP ${response.status}).`);
   return body;
