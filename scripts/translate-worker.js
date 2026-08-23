@@ -257,6 +257,12 @@ async function main() {
   let translatedTotal = 0;
   let stoppedForQuota = false;
   let stop = false;
+  let quotaResumeAt = 0;
+  let quotaBookId = "";
+  let quotaBookTitle = "";
+  let quotaChapter = 0;
+  let quotaCompleted = 0;
+  let quotaTotal = 0;
   let cycle = 0;
   let lastSuccessAt = "";
   let lastSuccessfulChapter = 0;
@@ -472,15 +478,22 @@ async function main() {
         }
 
         if (result.quotaExhausted) {
-          if (CONTINUOUS_MODE) {
-            const earliestMs = result.earliestCooldown ? Math.max(5000, result.earliestCooldown - Date.now()) : 30000;
+          const earliestMs = result.earliestCooldown ? Math.max(5000, result.earliestCooldown - Date.now()) : 30000;
+          if (CONTINUOUS_MODE && earliestMs <= 90_000) {
             const waitSec = Math.min(60, Math.max(5, Math.round(earliestMs / 1000)));
-            console.log(`  -> [${bTitle}] Tạm thời các key đang chờ hồi phục quota. Nghỉ ${waitSec} giây và tiếp tục dịch dứt điểm bộ này...`);
+            console.log(`  -> [${bTitle}] Key kế tiếp sắp sẵn sàng. Nghỉ ${waitSec} giây rồi tiếp tục...`);
             await new Promise((r) => setTimeout(r, waitSec * 1000));
           } else {
             stoppedForQuota = true;
             stop = true;
-            console.log("  -> hết quota Groq AI, dừng để lượt sau tiếp tục từ đây");
+            quotaResumeAt = Number(result.earliestCooldown || Date.now() + 30_000);
+            quotaBookId = job.bookId;
+            quotaBookTitle = bTitle;
+            quotaChapter = Number(result.chapter || job.state?.cursor || 0);
+            quotaCompleted = Number(result.summary?.completed || 0);
+            quotaTotal = Number(result.summary?.total || job.total || 0);
+            const resumeLabel = new Date(quotaResumeAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
+            console.log(`  -> Mạch quota đã mở. Không gửi thêm request; sẽ tiếp tục sau ${resumeLabel}.`);
             break;
           }
         } else if (!result.translated) {
@@ -520,11 +533,17 @@ async function main() {
     cooldownKeyCount: allUniqueKeys.length - finalReadyKeyCount,
     spacingMs: computeAdaptiveSpacing(allUniqueKeys),
     finishedAt: new Date().toISOString(),
-    currentBookId: "",
+    currentBookId: stoppedForQuota ? quotaBookId : "",
+    currentBookTitle: stoppedForQuota ? quotaBookTitle : "",
+    currentChapter: stoppedForQuota ? quotaChapter : 0,
+    currentCompleted: stoppedForQuota ? quotaCompleted : 0,
+    currentTotalChapters: stoppedForQuota ? quotaTotal : 0,
+    activityState: stoppedForQuota ? "waiting_quota" : "idle",
+    resumesAt: stoppedForQuota && quotaResumeAt ? new Date(quotaResumeAt).toISOString() : null,
     translatedThisRun: translatedTotal,
     spentRequests: spentTotal,
     message: stoppedForQuota
-      ? `Tạm dừng: Hết quota Groq AI. Đã dịch ${translatedTotal} chương trong phiên.`
+      ? `Tạm dừng an toàn: quota chưa hồi đầy, không gửi thêm request. Tự tiếp tục sau ${new Date(quotaResumeAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}. Phiên này đã dịch ${translatedTotal} chương.`
       : `Phiên dịch hoàn tất: Đã dịch ${translatedTotal} chương mới trên ${touched.size} bộ truyện.`,
     queue: queue.map((j) => ({
       bookId: j.bookId,
@@ -543,7 +562,7 @@ async function main() {
   }
 
   const reason = stoppedForQuota
-    ? " Dừng vì hết quota Groq AI trong ngày; lượt sau sẽ tiếp tục sau khi hồi phục hạn mức."
+    ? " Circuit breaker đang chờ quota hồi đầy; lượt sau chỉ tiếp tục khi hết thời gian khóa."
     : Date.now() >= deadlineAt
       ? " Dừng vì hết thời gian chạy."
       : " Hết việc trong hàng đợi.";

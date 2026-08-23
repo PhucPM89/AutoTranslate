@@ -832,7 +832,7 @@ function renderTranslateStatus(status = {}) {
   const labels = {
     idle: "Tạm nghỉ",
     running: "Đang dịch AI",
-    paused_quota: "Hết Quota Groq",
+    paused_quota: "Chờ quota hồi đầy",
     completed: "Hoàn tất",
     error: "Có lỗi"
   };
@@ -854,11 +854,12 @@ function renderTranslateStatus(status = {}) {
   const bookTitle = status.currentBookTitle || (matched ? matched.title : status.currentBookId) || "Đang chờ lượt...";
   const percent = total ? Math.min(100, Math.round((saved / total) * 1000) / 10) : 0;
   const isRunning = status.state === "running";
+  const isQuotaPaused = status.state === "paused_quota";
   const activityState = String(status.activityState || "");
   const hasProgressThisRun = Number(status.translatedThisRun || status.sessionChaptersTranslated || 0) > 0;
 
   if (els.transActiveBookTitle) {
-    els.transActiveBookTitle.textContent = isRunning ? bookTitle : (status.state === "idle" ? "Hệ thống đang sẵn sàng" : "Đang tạm dừng");
+    els.transActiveBookTitle.textContent = isRunning || isQuotaPaused ? bookTitle : (status.state === "idle" ? "Hệ thống đang sẵn sàng" : "Đang tạm dừng");
   }
   if (els.transActiveCoverImg) {
     if (matched && matched.cover) {
@@ -878,7 +879,9 @@ function renderTranslateStatus(status = {}) {
     const label = heartbeatStale && isRunning
       ? "Worker có thể đã dừng"
       : activityState === "waiting_quota"
-        ? "Đang chờ quota · không gửi request"
+        ? status.resumesAt
+          ? `Không gửi request · tiếp tục ${new Date(status.resumesAt).toLocaleString("vi-VN")}`
+          : "Đang chờ quota · không gửi request"
       : activityState === "translating"
       ? "Đang gọi AI"
       : activityState === "progress"

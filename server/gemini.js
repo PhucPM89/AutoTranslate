@@ -19,6 +19,9 @@ const TRANSLATE_CHUNK_SIZE = Number(process.env.GEMINI_CHUNK_SIZE || 1800);
 const TRANSLATE_CONCURRENCY = Number(process.env.GEMINI_TRANSLATE_CONCURRENCY || 1);
 const MAX_KEYS_PER_CHUNK = Math.max(1, Number(process.env.TRANSLATE_MAX_KEYS_PER_CHUNK || 3));
 const REQUEST_TIMEOUT_MS = Number(process.env.GROQ_REQUEST_TIMEOUT_MS || process.env.GEMINI_REQUEST_TIMEOUT_MS || 90000);
+const MINUTE_QUOTA_RECOVERY_MS = Math.max(60_000, Number(process.env.TRANSLATE_MINUTE_QUOTA_RECOVERY_MS || 10 * 60_000));
+const DAILY_QUOTA_RECOVERY_MS = Math.max(60 * 60_000, Number(process.env.TRANSLATE_DAILY_QUOTA_RECOVERY_MS || 24 * 60 * 60_000));
+const QUOTA_SAFETY_MS = Math.max(10_000, Number(process.env.TRANSLATE_QUOTA_SAFETY_MS || 5 * 60_000));
 
 const defaultEngine = createTranslationEngine();
 
@@ -396,7 +399,9 @@ function getKeyHealth(key) {
       consecutiveErrors: 0,
       lastUsed: 0,
       tokensUsedSession: 0,
-      lastErrorMsg: ""
+      lastErrorMsg: "",
+      quotaClass: "",
+      recoveryPolicy: ""
     });
   }
   return keyHealthMap.get(key);
@@ -432,11 +437,72 @@ function parseGroqRetryDurationMs(errorMsg) {
   return 60000;
 }
 
-function markKeyCooldown(key, durationMs = 60000, errorMsg = "") {
+function classifyQuotaError(errorMsg) {
+  const message = String(errorMsg || "").toLowerCase();
+  if (/\b(tpd|rpd)\b|tokens? per day|requests? per day|per-day|daily (?:free )?(?:allocation|quota|limit)|neurons/.test(message)) {
+    return "daily";
+  }
+  if (/\b(tpm|rpm|itpm|otpm)\b|tokens? per minute|requests? per minute|per-minute/.test(message)) {
+    return "minute";
+  }
+  return "quota";
+}
+
+function parseRateLimitHeaders(headers) {
+  if (!headers || typeof headers.get !== "function") return {};
+  const retryAfter = Number(headers.get("retry-after"));
+  return {
+    retryAfterMs: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 0
+  };
+}
+
+function nextPacificMidnightMs(now = Date.now()) {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Los_Angeles",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    hourCycle: "h23"
+  });
+  const current = Object.fromEntries(formatter.formatToParts(new Date(now)).map((part) => [part.type, Number(part.value)]));
+  const tomorrow = new Date(Date.UTC(current.year, current.month - 1, current.day + 1));
+  let candidate = Date.UTC(tomorrow.getUTCFullYear(), tomorrow.getUTCMonth(), tomorrow.getUTCDate(), 8);
+  const local = Object.fromEntries(formatter.formatToParts(new Date(candidate)).map((part) => [part.type, Number(part.value)]));
+  if (local.year === tomorrow.getUTCFullYear() && local.month === tomorrow.getUTCMonth() + 1 && local.day === tomorrow.getUTCDate()) {
+    candidate -= local.hour * 60 * 60_000;
+  }
+  return candidate;
+}
+
+function computeQuotaRecovery(error, apiKey, now = Date.now()) {
+  const message = String(error?.message || error || "");
+  const quotaClass = classifyQuotaError(message);
+  const providerWait = Math.max(0, Number(error?.retryAfterMs || 0), parseGroqRetryDurationMs(message));
+  const isGemini = !String(apiKey || "").startsWith("gsk_") && !String(apiKey || "").startsWith("sk-or-v1-") && !isCloudflareKey(apiKey);
+
+  if (quotaClass === "daily") {
+    const fullResetWait = isGemini
+      ? Math.max(60_000, nextPacificMidnightMs(now) - now)
+      : DAILY_QUOTA_RECOVERY_MS;
+    return { quotaClass, durationMs: Math.max(providerWait, fullResetWait) + QUOTA_SAFETY_MS, policy: "wait_full_daily_reset" };
+  }
+  if (quotaClass === "minute") {
+    return { quotaClass, durationMs: Math.max(providerWait, MINUTE_QUOTA_RECOVERY_MS) + 30_000, policy: "wait_full_minute_window" };
+  }
+
+  const consecutiveErrors = Math.max(0, Number(error?.consecutiveErrors || 0));
+  const circuitWait = Math.min(6 * 60 * 60_000, 15 * 60_000 * (2 ** Math.min(4, consecutiveErrors)));
+  return { quotaClass, durationMs: Math.max(providerWait, circuitWait) + QUOTA_SAFETY_MS, policy: "exponential_quota_circuit" };
+}
+
+function markKeyCooldown(key, durationMs = 60000, errorMsg = "", details = {}) {
   const health = getKeyHealth(key);
   health.cooldownUntil = Date.now() + durationMs;
   health.consecutiveErrors += 1;
   if (errorMsg) health.lastErrorMsg = errorMsg;
+  health.quotaClass = String(details.quotaClass || "");
+  health.recoveryPolicy = String(details.policy || "");
 }
 
 function markKeySuccess(key, tokens = 0) {
@@ -444,6 +510,8 @@ function markKeySuccess(key, tokens = 0) {
   health.consecutiveErrors = 0;
   health.lastUsed = Date.now();
   health.tokensUsedSession = (health.tokensUsedSession || 0) + tokens;
+  health.quotaClass = "";
+  health.recoveryPolicy = "";
 }
 
 function getKeyPoolStats(keyList = []) {
@@ -458,7 +526,10 @@ function getKeyPoolStats(keyList = []) {
       cooldownRemainingMs: onCooldown ? Math.max(0, health.cooldownUntil - now) : 0,
       consecutiveErrors: health.consecutiveErrors,
       tokensUsedSession: health.tokensUsedSession || 0,
-      lastUsed: health.lastUsed ? new Date(health.lastUsed).toISOString() : null
+      lastUsed: health.lastUsed ? new Date(health.lastUsed).toISOString() : null,
+      quotaClass: health.quotaClass || "",
+      recoveryPolicy: health.recoveryPolicy || "",
+      resumesAt: onCooldown ? new Date(health.cooldownUntil).toISOString() : null
     };
   });
 }
@@ -470,7 +541,7 @@ function keyFingerprint(key) {
 
 function exportKeyPoolState(keyList = []) {
   return {
-    schema: 1,
+    schema: 2,
     updatedAt: new Date().toISOString(),
     cursor: globalKeyIndex,
     keys: keyList.map((key) => {
@@ -481,7 +552,9 @@ function exportKeyPoolState(keyList = []) {
         consecutiveErrors: Number(health.consecutiveErrors || 0),
         lastUsed: Number(health.lastUsed || 0),
         tokensUsedSession: Number(health.tokensUsedSession || 0),
-        lastErrorMsg: String(health.lastErrorMsg || "").slice(0, 300)
+        lastErrorMsg: String(health.lastErrorMsg || "").slice(0, 300),
+        quotaClass: String(health.quotaClass || ""),
+        recoveryPolicy: String(health.recoveryPolicy || "")
       };
     })
   };
@@ -500,6 +573,19 @@ function importKeyPoolState(snapshot, keyList = []) {
     health.lastUsed = Math.max(0, Number(saved.lastUsed || 0));
     health.tokensUsedSession = Math.max(0, Number(saved.tokensUsedSession || 0));
     health.lastErrorMsg = String(saved.lastErrorMsg || "").slice(0, 300);
+    health.quotaClass = String(saved.quotaClass || "");
+    health.recoveryPolicy = String(saved.recoveryPolicy || "");
+    // Schema 1 used the provider's "next request" delay. Upgrade an existing
+    // quota lock before this process can call the provider again.
+    if (Number(snapshot.schema || 1) < 2 && /quota|rate limit|\b(tpd|tpm|rpd|rpm)\b|tokens? per|requests? per|retry in|try again in/i.test(health.lastErrorMsg)) {
+      const recovery = computeQuotaRecovery({
+        message: health.lastErrorMsg,
+        consecutiveErrors: health.consecutiveErrors
+      }, key);
+      health.cooldownUntil = Math.max(health.cooldownUntil, Date.now() + recovery.durationMs);
+      health.quotaClass = recovery.quotaClass;
+      health.recoveryPolicy = recovery.policy;
+    }
   }
 }
 
@@ -597,10 +683,14 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
         }
 
         if (error.status === 429 || error.status === 403 || error.status === 401) {
-          const cooldownDuration = error.status === 401 || error.status === 403
-            ? 6 * 60 * 60 * 1000
-            : parseGroqRetryDurationMs(error.message);
-          markKeyCooldown(apiKey, cooldownDuration, error.message);
+          const recovery = error.status === 429
+            ? computeQuotaRecovery({
+                message: error.message,
+                retryAfterMs: error.retryAfterMs,
+                consecutiveErrors: health.consecutiveErrors
+              }, apiKey)
+            : { durationMs: 24 * 60 * 60_000, quotaClass: "auth", policy: "disable_invalid_key" };
+          markKeyCooldown(apiKey, recovery.durationMs, error.message, recovery);
           break; // Switch to next key in pool immediately
         }
         if (!shouldTryNextModel(error)) break;
@@ -882,7 +972,9 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
       const data = await response.json();
 
       if (!response.ok) {
-        const retryable = response.status === 429 || response.status >= 500;
+        // Let 429 reach the pool circuit breaker immediately. Retrying here
+        // consumed the tiny amount of quota that had just recovered.
+        const retryable = response.status >= 500;
         if (retryable && attempt < 1) {
           await wait(800 * (attempt + 1));
           continue;
@@ -892,6 +984,7 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
         const error = new Error(message);
         error.status = response.status;
         error.model = model;
+        Object.assign(error, parseRateLimitHeaders(response.headers));
         throw error;
       }
 
@@ -956,7 +1049,7 @@ async function translateWithGemini(apiKey, model, prompt, generationConfig = {})
       const data = await response.json();
 
       if (!response.ok) {
-        const retryable = response.status === 429 || response.status >= 500;
+        const retryable = response.status >= 500;
         if (retryable && attempt < 1) {
           await wait(800 * (attempt + 1));
           continue;
@@ -966,6 +1059,7 @@ async function translateWithGemini(apiKey, model, prompt, generationConfig = {})
         const error = new Error(message);
         error.status = response.status;
         error.model = model;
+        Object.assign(error, parseRateLimitHeaders(response.headers));
         throw error;
       }
 
@@ -1220,6 +1314,9 @@ module.exports = {
   parseApiKeys,
   getKeyPoolStats,
   parseGroqRetryDurationMs,
+  classifyQuotaError,
+  computeQuotaRecovery,
+  nextPacificMidnightMs,
   reserveKeyOrder,
   outputTokenBudget,
   buildResidualHanRepairPrompt,

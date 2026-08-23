@@ -9,7 +9,10 @@ const {
   outputTokenBudget,
   exportKeyPoolState,
   importKeyPoolState,
-  keyFingerprint
+  keyFingerprint,
+  classifyQuotaError,
+  computeQuotaRecovery,
+  nextPacificMidnightMs
 } = require("./gemini");
 
 const chineseSource = "这是一个需要翻译成越南语的中文段落。".repeat(20);
@@ -243,7 +246,7 @@ test("one chunk tries only a bounded slice of the key pool", async () => {
       (error) => error.code === "key_pool_slice_exhausted"
     );
     assert.equal(new Set(authorizations).size, 3);
-    assert.equal(authorizations.length, 6, "each selected key gets the provider's one HTTP retry");
+    assert.equal(authorizations.length, 3, "429 must open the circuit without an immediate HTTP retry");
   } finally {
     global.fetch = originalFetch;
   }
@@ -253,6 +256,7 @@ test("key cooldown and rotation cursor survive a worker restart snapshot", () =>
   const keys = ["gsk_persist-a", "gsk_persist-b"];
   const future = Date.now() + 60_000;
   importKeyPoolState({
+    schema: 2,
     cursor: 7,
     keys: [{
       id: keyFingerprint(keys[0]),
@@ -266,4 +270,44 @@ test("key cooldown and rotation cursor survive a worker restart snapshot", () =>
   assert.equal(saved.cursor, 7);
   assert.equal(first.cooldownUntil, future);
   assert.equal(first.consecutiveErrors, 2);
+});
+
+test("legacy short quota cooldown is upgraded before another provider call", () => {
+  const keys = ["gsk_legacy-daily"];
+  const now = Date.now();
+  importKeyPoolState({
+    schema: 1,
+    keys: [{
+      id: keyFingerprint(keys[0]),
+      cooldownUntil: now + 30_000,
+      consecutiveErrors: 3,
+      lastErrorMsg: "TPD tokens per day exhausted; try again in 20s"
+    }]
+  }, keys);
+  const saved = exportKeyPoolState(keys).keys[0];
+  assert.ok(saved.cooldownUntil >= now + 24 * 60 * 60_000);
+  assert.equal(saved.recoveryPolicy, "wait_full_daily_reset");
+});
+
+test("daily quota waits for a full reset instead of the provider next-request delay", () => {
+  const recovery = computeQuotaRecovery(new Error("TPD limit reached; try again in 2m10s"), "gsk_daily-key", 1_700_000_000_000);
+  assert.equal(recovery.quotaClass, "daily");
+  assert.equal(recovery.policy, "wait_full_daily_reset");
+  assert.ok(recovery.durationMs >= 24 * 60 * 60_000);
+});
+
+test("minute quota gets a quiet recovery window", () => {
+  const recovery = computeQuotaRecovery(new Error("TPM limit reached; retry in 12s"), "gsk_minute-key");
+  assert.equal(classifyQuotaError("requests per minute"), "minute");
+  assert.equal(recovery.policy, "wait_full_minute_window");
+  assert.ok(recovery.durationMs >= 10 * 60_000);
+});
+
+test("Gemini daily quota resumes only after the next Pacific midnight", () => {
+  const now = Date.parse("2026-08-23T12:00:00Z");
+  const reset = nextPacificMidnightMs(now);
+  const recovery = computeQuotaRecovery(new Error("Requests per day quota exceeded"), "gemini-key", now);
+  assert.ok(reset > now);
+  assert.ok(recovery.durationMs >= reset - now);
+  assert.ok(recovery.durationMs <= 25 * 60 * 60_000);
 });
