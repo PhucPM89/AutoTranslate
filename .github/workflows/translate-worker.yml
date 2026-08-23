@@ -5,6 +5,13 @@ name: Translation worker
 on:
   schedule:
     - cron: "*/15 * * * *"
+  push:
+    branches:
+      - main
+    paths:
+      - "server/**"
+      - "scripts/**"
+      - ".github/workflows/translate-worker.yml"
   workflow_dispatch:
     inputs:
       book:
@@ -26,7 +33,7 @@ jobs:
     timeout-minutes: 330
     concurrency:
       group: translate-worker-focused
-      cancel-in-progress: false
+      cancel-in-progress: true
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
