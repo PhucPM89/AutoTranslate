@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { translateText, translateMetadata, assessTranslation, splitTextIntoChunks, reserveKeyOrder } = require("./gemini");
+const { translateText, translateMetadata, assessTranslation, splitTextIntoChunks, reserveKeyOrder, outputTokenBudget } = require("./gemini");
 
 const chineseSource = "这是一个需要翻译成越南语的中文段落。".repeat(20);
 
@@ -156,4 +156,10 @@ test("concurrent work reserves different starting keys before awaiting a respons
   const second = reserveKeyOrder(keys);
   assert.notEqual(first[0].key, second[0].key);
   assert.deepEqual(new Set(first.map((entry) => entry.key)), new Set(keys));
+});
+
+test("translation output budget follows source size instead of repeated prompt size", () => {
+  assert.equal(outputTokenBudget("中".repeat(100)), 1200);
+  assert.equal(outputTokenBudget("中".repeat(800)), 2400);
+  assert.equal(outputTokenBudget("中".repeat(2000)), 4096);
 });

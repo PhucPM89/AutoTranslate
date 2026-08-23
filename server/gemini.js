@@ -519,7 +519,9 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
       });
 
       try {
-        const result = await translateChunkWithModel(apiKey, model, prompt);
+        const result = await translateChunkWithModel(apiKey, model, prompt, {
+          maxTokens: outputTokenBudget(text)
+        });
         const processedText = engine.postProcessTranslation(result.text, glossary);
         const quality = assessTranslation(text, processedText);
         if (quality.acceptable) {
@@ -556,6 +558,13 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
   const err = lastError || new Error("Tất cả các API key đều đang trong thời gian chờ hoặc hết hạn mức.");
   err.earliestCooldown = earliestCooldown;
   throw err;
+}
+
+function outputTokenBudget(sourceText) {
+  // Vietnamese output is usually longer than Chinese source, but basing the
+  // budget on the full prompt also charges the repeated instruction block as if
+  // it were output. That inflated every reservation and exhausted shared TPD.
+  return Math.min(4096, Math.max(1200, Math.ceil(String(sourceText || "").length * 3)));
 }
 
 function reserveKeyOrder(keyList) {
@@ -860,7 +869,7 @@ async function translateWithGemini(apiKey, model, prompt, generationConfig = {})
           ],
           generationConfig: {
             temperature: generationConfig.temperature ?? 0.2,
-            maxOutputTokens: 8192,
+            maxOutputTokens: generationConfig.maxTokens || 8192,
             ...(generationConfig.responseFormat === "json" ? { responseMimeType: "application/json" } : {})
           }
         })
@@ -1132,5 +1141,6 @@ module.exports = {
   parseApiKeys,
   getKeyPoolStats,
   parseGroqRetryDurationMs,
-  reserveKeyOrder
+  reserveKeyOrder,
+  outputTokenBudget
 };

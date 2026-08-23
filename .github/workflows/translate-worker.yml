@@ -63,7 +63,7 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       # 1,800 Chinese characters frequently expand beyond Groq's 4,096 output
       # tokens. Smaller chunks avoid publishing truncated translations.
-      GEMINI_CHUNK_SIZE: "1200"
+      GEMINI_CHUNK_SIZE: "800"
       TRANSLATE_ALLOW_CLOUDFLARE: "false"
       TRANSLATE_SPACING_MS: ${{ vars.TRANSLATE_SPACING_MS || '500' }}
     steps:
