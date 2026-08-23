@@ -728,8 +728,8 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
-      // Dynamic max_tokens based on actual chapter content length to prevent Groq TPM over-reservation
-      const dynamicMaxTokens = Math.min(750, Math.max(250, Math.ceil(prompt.length * 0.25)));
+      // Dynamic max_tokens based on actual chapter content length
+      const dynamicMaxTokens = Math.min(4096, Math.max(1500, Math.ceil(prompt.length * 1.8)));
       const maxTokens = generationConfig.maxTokens || dynamicMaxTokens;
 
       const bodyPayload = {
@@ -737,7 +737,7 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
         messages: [
           {
             role: "system",
-            content: "Bạn là dịch giả văn học tiểu thuyết mạng Trung - Việt xuất sắc nhất (Tiên hiệp, Huyền huyễn, Đô thị, Mạt thế). Hãy dịch toàn bộ sang tiếng Việt tự nhiên, văn phong mượt mà, thuần Việt và chuẩn Hán-Việt 100% cho tên riêng/thuật ngữ. Xưng hô chuẩn mực (ta-ngươi, huynh-đệ, sư phụ-đồ nhi). Chỉ trả về duy nhất nội dung đã dịch, không kèm lời giải thích hay ghi chú thêm."
+            content: "Bạn là dịch giả văn học tiểu thuyết mạng Trung - Việt xuất sắc nhất (Tiên hiệp, Huyền huyễn, Đô thị, Mạt thế). Hãy dịch toàn bộ sang tiếng Việt tự nhiên, văn phong mượt mà, thuần Việt và chuẩn Hán-Việt 100% cho tên riêng/thuật ngữ. Xưng hô chuẩn mực (ta-ngươi, huynh-đệ, sư phụ-đồ nhi). Dịch trọn vẹn toàn bộ đoạn văn, tuyệt đối không được bỏ sót hay tóm tắt. Chỉ trả về duy nhất nội dung đã dịch, không kèm lời giải thích hay ghi chú thêm."
           },
           {
             role: "user",
