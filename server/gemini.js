@@ -393,6 +393,13 @@ function getKeyHealth(key) {
 
 function parseGroqRetryDurationMs(errorMsg) {
   if (!errorMsg || typeof errorMsg !== "string") return 60000;
+  if (
+    errorMsg.includes("daily free allocation") ||
+    errorMsg.includes("10,000 neurons") ||
+    errorMsg.includes("neurons")
+  ) {
+    return 12 * 3600 * 1000; // 12 hours for Cloudflare daily neurons quota
+  }
   // Match "Please try again in 3m50.688s" or "Please try again in 14.5s" or "try again in 1h20m10s"
   const match = errorMsg.match(/try again in (?:(\d+)h)?(?:(\d+)m)?(\d+(?:\.\d+)?)s/i);
   if (match) {
@@ -530,10 +537,7 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
         }
 
         if (error.status === 429 || error.status === 403 || error.status === 401) {
-          if (modelIndex < models.length - 1 && error.status !== 401) {
-            continue;
-          }
-          const cooldownDuration = error.status === 401 ? 86400000 : parseGroqRetryDurationMs(error.message);
+          const cooldownDuration = parseGroqRetryDurationMs(error.message);
           markKeyCooldown(apiKey, cooldownDuration, error.message);
           break; // Switch to next key in pool immediately
         }
@@ -589,59 +593,47 @@ async function translateWithCloudflareWorkersAi(apiKey, model, prompt, generatio
   const cfModel = model && model.startsWith("@cf/") ? model : "@cf/meta/llama-3.1-8b-instruct";
   const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/run/${cfModel}`;
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-    try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json"
-        },
-        signal: controller.signal,
-        body: JSON.stringify({
-          messages: [
-            {
-              role: "system",
-              content:
-                "Bạn là dịch giả văn học mạng Trung - Việt xuất sắc nhất. Dịch nguyên văn 1:1, đầy đủ 100% từng câu từng chữ, tuyệt đối KHÔNG tóm tắt, KHÔNG lược bỏ bất kỳ câu thoại hay tình tiết nào. Giữ nguyên cấu trúc các đoạn văn."
-            },
-            { role: "user", content: prompt }
-          ],
-          max_tokens: generationConfig.maxTokens || 4096
-        })
-      });
-      const data = await response.json();
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token.trim()}`,
+        "Content-Type": "application/json"
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        messages: [
+          {
+            role: "system",
+            content:
+              "Bạn là dịch giả văn học mạng Trung - Việt xuất sắc nhất. Dịch nguyên văn 1:1, đầy đủ 100% từng câu từng chữ, tuyệt đối KHÔNG tóm tắt, KHÔNG lược bỏ bất kỳ câu thoại hay tình tiết nào. Giữ nguyên cấu trúc các đoạn văn."
+          },
+          { role: "user", content: prompt }
+        ],
+        max_tokens: generationConfig.maxTokens || 4096
+      })
+    });
+    const data = await response.json();
 
-      if (!response.ok || !data.success) {
-        const retryable = response.status === 429 || response.status >= 500;
-        if (retryable && attempt < 1) {
-          await wait(800 * (attempt + 1));
-          continue;
-        }
-
-        const errMsg = Array.isArray(data?.errors) ? data.errors.map((e) => e.message).join(", ") : "Cloudflare AI lỗi.";
-        const message = `${errMsg} [Key: ${token.slice(0, 10)}...] (Status: ${response.status})`;
-        const error = new Error(message);
-        error.status = response.status;
-        error.model = cfModel;
-        throw error;
-      }
-
-      let text = data?.result?.response || "";
-      text = stripThinkTags(text);
-      text = stripMarkdown(text);
-      return { text: text.trim(), model: cfModel, usage: null };
-    } finally {
-      clearTimeout(timeout);
+    if (!response.ok || !data.success) {
+      const errMsg = Array.isArray(data?.errors) ? data.errors.map((e) => e.message).join(", ") : "Cloudflare AI lỗi.";
+      const message = `${errMsg} [Key: ${token.slice(0, 10)}...] (Status: ${response.status})`;
+      const error = new Error(message);
+      error.status = response.status;
+      error.model = cfModel;
+      throw error;
     }
-  }
 
-  const error = new Error("Cloudflare Workers AI không phản hồi.");
-  error.model = cfModel;
-  throw error;
+    let text = data?.result?.response || "";
+    text = stripThinkTags(text);
+    text = stripMarkdown(text);
+    return { text: text.trim(), model: cfModel, usage: null };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function translateWithOpenRouter(apiKey, model, prompt, generationConfig = {}) {
