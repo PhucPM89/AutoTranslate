@@ -230,10 +230,13 @@ async function main() {
   if (activeQueue.length > 10) console.log(`  ... và ${activeQueue.length - 10} bộ truyện khác đang xếp hàng.`);
 
   const existingStatus = (await readJson(storage, TRANSLATE_STATUS_KEY)) || {};
-  const startedAt = existingStatus.state === "running" && existingStatus.startedAt ? existingStatus.startedAt : new Date().toISOString();
+  // Every Actions run is a distinct session. Reusing a cancelled run's timestamp
+  // makes speed/ETA collapse toward zero and mislabels the new focused run.
+  const startedAt = new Date().toISOString();
   let recentActivity = Array.isArray(existingStatus.recentActivity) ? existingStatus.recentActivity : [];
   const catalog = (await readJson(storage, "catalog/latest.json")) || {};
   const titleMap = new Map((catalog.books || []).map((b) => [b.id, b.title]));
+  recentActivity = recentActivity.filter((activity) => titleMap.has(activity.bookId));
   const selectionMode = configuredFocus ? "focused" : "automatic";
 
   let spentTotal = 0;

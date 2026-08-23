@@ -21,6 +21,10 @@ on:
         description: "Số lượt gọi AI tối đa lượt này"
         required: false
         default: "5000"
+      replace_current:
+        description: "Hủy lượt đang chạy để áp dụng ngay lựa chọn ưu tiên mới"
+        required: false
+        default: "false"
 
 permissions:
   contents: read
@@ -32,7 +36,9 @@ jobs:
     timeout-minutes: 18
     concurrency:
       group: novel-pipeline-storage-writes
-      cancel-in-progress: false
+      # Scheduled/crawler runs wait normally. Only an explicit focus change from
+      # the admin dashboard may replace the run that read an older configuration.
+      cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' && inputs.replace_current == 'true' }}
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}

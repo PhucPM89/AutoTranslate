@@ -594,6 +594,9 @@ async function saveTranslationFocus() {
     });
     renderTranslationFocusHint(result.config || {});
     setStatus(result.message || "Đã lưu lựa chọn ưu tiên.");
+    if (result.dispatchStarted) {
+      setTimeout(loadTranslateStatus, 3000);
+    }
   } catch (error) {
     setStatus(`Không lưu được bộ ưu tiên: ${error.message}`, true);
   } finally {

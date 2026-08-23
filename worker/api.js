@@ -433,12 +433,30 @@ async function handleTranslateStatus({ request, env }) {
         }
       }
       const config = await writeTranslationConfig(storage, { focusBookId });
+      let dispatchStarted = false;
+      if (env.GITHUB_DISPATCH_TOKEN && env.GITHUB_REPOSITORY) {
+        try {
+          await dispatchTranslationWorkflow(env, {
+            book: focusBookId,
+            budget: "5000",
+            replaceCurrent: true
+          });
+          dispatchStarted = true;
+        } catch (error) {
+          console.error("Unable to replace translation run after focus change:", error.message);
+        }
+      }
       return json({
         success: true,
         config,
+        dispatchStarted,
         message: focusBookId
-          ? "Đã lưu bộ truyện ưu tiên. Worker sẽ chỉ dịch bộ này cho đến khi hoàn tất."
-          : "Đã chuyển về chế độ tự động chọn bộ truyện."
+          ? dispatchStarted
+            ? "Đã lưu ưu tiên và đang chuyển worker sang bộ truyện này ngay."
+            : "Đã lưu bộ truyện ưu tiên; worker sẽ áp dụng ở lượt chạy kế tiếp."
+          : dispatchStarted
+            ? "Đã chuyển về tự động và đang khởi động lại worker."
+            : "Đã chuyển về chế độ tự động chọn bộ truyện."
       });
     }
 
@@ -448,33 +466,7 @@ async function handleTranslateStatus({ request, env }) {
     const book = String(body?.book || "").trim();
     const budget = String(body?.budget || "5000").trim();
 
-    const response = await fetch(
-      `https://api.github.com/repos/${env.GITHUB_REPOSITORY}/actions/workflows/translate-worker.yml/dispatches`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${env.GITHUB_DISPATCH_TOKEN}`,
-          Accept: "application/vnd.github+json",
-          "X-GitHub-Api-Version": "2022-11-28",
-          "Content-Type": "application/json",
-          "User-Agent": "tram-chu-admin"
-        },
-        body: JSON.stringify({
-          ref: env.GITHUB_DISPATCH_REF || "main",
-          inputs: {
-            book,
-            budget
-          }
-        }),
-        signal: AbortSignal.timeout(15000)
-      }
-    );
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => "");
-      console.error("Workflow dispatch translate-worker failed:", response.status, errText);
-      throw fail(502, `Không gọi được GitHub Actions translate worker (HTTP ${response.status}).`);
-    }
+    await dispatchTranslationWorkflow(env, { book, budget });
 
     return json({ success: true, message: "Đã kích hoạt worker dịch trên GitHub Actions thành công!" }, 202);
   }
@@ -502,6 +494,9 @@ async function handleTranslateStatus({ request, env }) {
       if (publishedBookIds) {
         if (Array.isArray(status?.queue)) {
           status.queue = status.queue.filter((job) => publishedBookIds.has(job.bookId));
+        }
+        if (Array.isArray(status?.recentActivity)) {
+          status.recentActivity = status.recentActivity.filter((activity) => publishedBookIds.has(activity.bookId));
         }
         if (config.focusBookId && !publishedBookIds.has(config.focusBookId)) {
           config = await writeTranslationConfig(storage, { focusBookId: "" });
@@ -550,6 +545,37 @@ async function handleTranslateStatus({ request, env }) {
   status.focusBookId = config.focusBookId;
   status.selectionMode = config.focusBookId ? "focused" : "automatic";
   return json({ status, config });
+}
+
+async function dispatchTranslationWorkflow(env, { book = "", budget = "5000", replaceCurrent = false } = {}) {
+  const response = await fetch(
+      `https://api.github.com/repos/${env.GITHUB_REPOSITORY}/actions/workflows/translate-worker.yml/dispatches`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.GITHUB_DISPATCH_TOKEN}`,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          "Content-Type": "application/json",
+          "User-Agent": "tram-chu-admin"
+        },
+        body: JSON.stringify({
+          ref: env.GITHUB_DISPATCH_REF || "main",
+          inputs: {
+            book,
+            budget,
+            replace_current: replaceCurrent ? "true" : "false"
+          }
+        }),
+        signal: AbortSignal.timeout(15000)
+      }
+    );
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+      console.error("Workflow dispatch translate-worker failed:", response.status, errText);
+      throw fail(502, `Không gọi được GitHub Actions translate worker (HTTP ${response.status}).`);
+    }
 }
 
 // ---- analytics -------------------------------------------------------------

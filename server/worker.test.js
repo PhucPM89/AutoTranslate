@@ -402,6 +402,39 @@ test("translation focus refuses a book outside the published catalog", async () 
   assert.equal(response.status, 400);
 });
 
+test("saving translation focus dispatches an immediate replacement run", async () => {
+  const environment = env({
+    GITHUB_DISPATCH_TOKEN: "github-test-token"
+  });
+  environment.NOVEL_STORAGE.objects.set(
+    "catalog/latest.json",
+    Buffer.from('{"books":[{"id":"book-1","title":"Truyện Một"}]}')
+  );
+  const originalFetch = global.fetch;
+  let dispatched = null;
+  global.fetch = async (url, options = {}) => {
+    if (String(url).includes("/actions/workflows/translate-worker.yml/dispatches")) {
+      dispatched = JSON.parse(options.body);
+      return new Response(null, { status: 204 });
+    }
+    throw new Error(`Unexpected fetch ${url}`);
+  };
+
+  try {
+    const response = await call(
+      "/api/admin/translate",
+      { method: "POST", cookie: cookie(), body: { action: "focus", focusBookId: "book-1" } },
+      environment
+    );
+    const body = await response.json();
+    assert.equal(body.dispatchStarted, true);
+    assert.equal(dispatched.inputs.book, "book-1");
+    assert.equal(dispatched.inputs.replace_current, "true");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test("translation status hides deleted books left in an old worker snapshot", async () => {
   const environment = env();
   environment.NOVEL_STORAGE.objects.set(
@@ -421,6 +454,10 @@ test("translation status hides deleted books left in an old worker snapshot", as
       queue: [
         { bookId: "deleted-book", total: 4251, pending: 2579 },
         { bookId: "live-book", total: 10, pending: 5 }
+      ],
+      recentActivity: [
+        { bookId: "deleted-book", count: 8 },
+        { bookId: "live-book", count: 2 }
       ]
     }))
   );
@@ -430,6 +467,7 @@ test("translation status hides deleted books left in an old worker snapshot", as
   assert.equal(body.status.state, "idle");
   assert.equal(body.status.currentBookId, "");
   assert.deepEqual(body.status.queue.map((job) => job.bookId), ["live-book"]);
+  assert.deepEqual(body.status.recentActivity.map((activity) => activity.bookId), ["live-book"]);
   assert.equal(body.config.focusBookId, "");
 });
 
