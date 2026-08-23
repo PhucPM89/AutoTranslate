@@ -515,7 +515,9 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
         total,
         bookTitle,
         glossary,
-        isRetry: modelIndex > 0
+        // A pool with one model per key still needs the corrective retry prompt
+        // after another key returned incomplete or untranslated text.
+        isRetry: Boolean(lastError) || modelIndex > 0
       });
 
       try {

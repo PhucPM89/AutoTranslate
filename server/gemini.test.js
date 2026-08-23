@@ -79,10 +79,12 @@ test("tries the next model when a model echoes Chinese text", async () => {
     assert.equal(result.translation, vietnamese.trim());
     assert.equal(calls.length, 2);
     const firstPrompt = calls[0].body.contents[0].parts[0].text;
+    const retryPrompt = calls[1].body.contents[0].parts[0].text;
     assert.match(firstPrompt, /âm Hán-Việt/);
     assert.match(firstPrompt, /Pinyin/i);
     assert.match(firstPrompt, /Lý Tử Dạ/);
     assert.doesNotMatch(firstPrompt, /Phiên âm tên riêng sang chữ Latin/);
+    assert.match(retryPrompt, /Bản dịch trước đã bị hệ thống từ chối/);
   } finally {
     global.fetch = originalFetch;
   }
