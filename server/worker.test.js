@@ -402,6 +402,37 @@ test("translation focus refuses a book outside the published catalog", async () 
   assert.equal(response.status, 400);
 });
 
+test("translation status hides deleted books left in an old worker snapshot", async () => {
+  const environment = env();
+  environment.NOVEL_STORAGE.objects.set(
+    "catalog/latest.json",
+    Buffer.from('{"books":[{"id":"live-book","title":"Truyện Còn"}]}')
+  );
+  environment.NOVEL_STORAGE.objects.set(
+    "config/translation.json",
+    Buffer.from('{"focusBookId":"deleted-book"}')
+  );
+  environment.NOVEL_STORAGE.objects.set(
+    "jobs/translate-status.json",
+    Buffer.from(JSON.stringify({
+      state: "running",
+      currentBookId: "deleted-book",
+      currentBookTitle: "Yến Vũ Lâu",
+      queue: [
+        { bookId: "deleted-book", total: 4251, pending: 2579 },
+        { bookId: "live-book", total: 10, pending: 5 }
+      ]
+    }))
+  );
+
+  const response = await call("/api/admin/translate", { cookie: cookie() }, environment);
+  const body = await response.json();
+  assert.equal(body.status.state, "idle");
+  assert.equal(body.status.currentBookId, "");
+  assert.deepEqual(body.status.queue.map((job) => job.bookId), ["live-book"]);
+  assert.equal(body.config.focusBookId, "");
+});
+
 test("admin deletion permanently removes book objects, job state and database row", async () => {
   const environment = env({
     SUPABASE_URL: "https://project.supabase.co",

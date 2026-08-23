@@ -481,12 +481,44 @@ async function handleTranslateStatus({ request, env }) {
 
   let status = null;
   let config = { schema: 1, focusBookId: "", updatedAt: "" };
+  let publishedBookIds = null;
   try {
     if (env.NOVEL_STORAGE) {
       const storage = createR2BindingStorage(env.NOVEL_STORAGE);
       config = await readTranslationConfig(storage);
+      const catalogRaw = await storage.get("catalog/latest.json").catch(() => null);
+      if (catalogRaw) {
+        const catalog = JSON.parse(catalogRaw.toString("utf8"));
+        if (Array.isArray(catalog.books)) {
+          publishedBookIds = new Set(catalog.books.map((book) => book.id));
+        }
+      }
       const raw = await storage.get("jobs/translate-status.json").catch(() => null);
       if (raw) status = JSON.parse(raw.toString("utf8"));
+
+      // Status is a heartbeat snapshot and can outlive a deleted book. Never
+      // expose those stale entries to the dashboard, and release a stale focus
+      // so the next worker run can select a real published title.
+      if (publishedBookIds) {
+        if (Array.isArray(status?.queue)) {
+          status.queue = status.queue.filter((job) => publishedBookIds.has(job.bookId));
+        }
+        if (config.focusBookId && !publishedBookIds.has(config.focusBookId)) {
+          config = await writeTranslationConfig(storage, { focusBookId: "" });
+        }
+        if (status?.currentBookId && !publishedBookIds.has(status.currentBookId)) {
+          status = {
+            ...status,
+            state: "idle",
+            currentBookId: "",
+            currentBookTitle: "",
+            currentChapter: 0,
+            currentCompleted: 0,
+            currentTotalChapters: 0,
+            message: "Truyện của trạng thái cũ đã bị xóa; đang chờ worker chọn bộ tiếp theo."
+          };
+        }
+      }
     }
     if (!status && env.NOVEL_ARCHIVE) {
       const archive = createR2BindingStorage(env.NOVEL_ARCHIVE);

@@ -8562,6 +8562,11 @@ body.zen-mode .document-paper {
   box-shadow: 0 12px 30px -5px rgba(0, 0, 0, 0.5), 0 0 25px -5px rgba(168, 85, 247, 0.2);
   position: relative;
   overflow: hidden;
+  /* This card lives in a constrained column flexbox. Without an explicit
+     shrink rule, the browser compresses it to the available height and its
+     own overflow clips the cover, progress bar and stats. The panel itself is
+     the scroll container, so the complete card must keep its content height. */
+  flex: 0 0 auto;
 }
 
 .trans-focus-card::before {
@@ -8940,7 +8945,6 @@ body.zen-mode .document-paper {
   .trans-focus-picker-controls { flex-direction: column; }
   .trans-focus-picker-hint { grid-column: auto; }
 }
-
 
 
 

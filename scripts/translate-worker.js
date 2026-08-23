@@ -484,6 +484,11 @@ function isCloudflareTranslationKey(key) {
 
 async function listJobs(storage, onlyBook) {
   if (onlyBook) {
+    // A deletion removes the published index. Old installations may still have
+    // left a queue object behind, so index existence is the authority for
+    // whether a book may consume translation capacity.
+    const index = await readJson(storage, `books/${onlyBook}/index.json`);
+    if (!index) return [];
     const state = await readJson(storage, jobStateKey(onlyBook));
     if (!state || !Array.isArray(state.chapters)) return [];
     const counts = summarize(state);
@@ -504,6 +509,8 @@ async function listJobs(storage, onlyBook) {
     if (!object.key.endsWith("/translation.json")) continue;
     const state = await readJson(storage, object.key);
     if (!state || !Array.isArray(state.chapters)) continue;
+    const index = await readJson(storage, `books/${state.bookId}/index.json`);
+    if (!index) continue;
 
     const counts = summarize(state);
     if (counts.completed === counts.total) continue;

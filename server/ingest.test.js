@@ -445,10 +445,12 @@ test("listJobs skips fully translated books and reports the high-priority count"
   const done = createJobState({ bookId: "b-done", revision: 1, chapters: [{ chapterNumber: 1 }] });
   done.chapters[0].status = "completed";
   await storage.put(jobStateKey("b-done"), JSON.stringify(done));
+  await storage.put("books/b-done/index.json", JSON.stringify({ bookId: "b-done" }));
 
   const busy = createJobState({ bookId: "b-busy", revision: 1, chapters: [{ chapterNumber: 1 }, { chapterNumber: 2 }] });
   busy.chapters[1].priority = "high";
   await storage.put(jobStateKey("b-busy"), JSON.stringify(busy));
+  await storage.put("books/b-busy/index.json", JSON.stringify({ bookId: "b-busy" }));
 
   const jobs = await listJobs(storage, "");
   assert.deepEqual(jobs.map((job) => job.bookId), ["b-busy"]);
@@ -493,10 +495,22 @@ test("listJobs returns only the dashboard-focused book when one is selected", as
   for (const bookId of ["book-a", "book-b"]) {
     const state = createJobState({ bookId, revision: 1, chapters: [{ chapterNumber: 1 }] });
     await storage.put(jobStateKey(bookId), JSON.stringify(state));
+    await storage.put(`books/${bookId}/index.json`, JSON.stringify({ bookId }));
   }
 
   const jobs = await listJobs(storage, "book-b");
   assert.deepEqual(jobs.map((job) => job.bookId), ["book-b"]);
+});
+
+test("listJobs ignores an orphan queue after its published book was deleted", async () => {
+  const { storage } = tempStorage();
+  const { listJobs } = require("../scripts/translate-worker");
+  const { jobStateKey } = require("./ingest/translation-queue");
+  const orphan = createJobState({ bookId: "deleted-book", revision: 1, chapters: [{ chapterNumber: 1 }] });
+  await storage.put(jobStateKey("deleted-book"), JSON.stringify(orphan));
+
+  assert.deepEqual(await listJobs(storage, ""), []);
+  assert.deepEqual(await listJobs(storage, "deleted-book"), []);
 });
 
 test("nextBatchChapters groups consecutive pending chapters and runTranslationJobs executes batch", async () => {

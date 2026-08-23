@@ -710,9 +710,13 @@ function renderTranslateStatus(status = {}) {
   }
 
   // 3. Next In Line Teaser
-  let queue = Array.isArray(status.queue) && status.queue.length ? status.queue : [];
-  if (!queue.length && Array.isArray(adminCatalog.books) && adminCatalog.books.length) {
-    queue = adminCatalog.books
+  const catalogBooks = Array.isArray(adminCatalog.books) ? adminCatalog.books : [];
+  const publishedBookIds = new Set(catalogBooks.map((book) => book.id));
+  let queue = Array.isArray(status.queue) && status.queue.length
+    ? status.queue.filter((job) => publishedBookIds.has(job.bookId))
+    : [];
+  if (!queue.length && catalogBooks.length) {
+    queue = catalogBooks
       .map((b) => {
         const totalCh = Number(b.chapterCount || b.totalChapters || 0);
         const doneCh = Number(b.translatedChapters || 0);
