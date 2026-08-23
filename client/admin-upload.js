@@ -657,6 +657,8 @@ function renderTranslateStatus(status = {}) {
   if (els.transLiveState) {
     const label = heartbeatStale && isRunning
       ? "Worker có thể đã dừng"
+      : activityState === "waiting_quota"
+        ? "Đang chờ quota · không gửi request"
       : activityState === "translating"
       ? "Đang gọi AI"
       : activityState === "progress"
@@ -685,7 +687,9 @@ function renderTranslateStatus(status = {}) {
   if (els.transCurrentChapterNameBadge) {
     const chapters = Array.isArray(status.activeChapters) ? status.activeChapters : [];
     const chapterText = chapters.length > 1 ? `${chapters[0]}–${chapters[chapters.length - 1]}` : currentCh;
-    const verb = activityState === "retrying" ? "Đang retry" : activityState === "progress" ? "Vừa xong" : "Đang xử lý";
+    const verb = activityState === "waiting_quota"
+      ? "Đang chờ quota"
+      : activityState === "retrying" ? "Đang retry" : activityState === "progress" ? "Vừa xong" : "Đang xử lý";
     els.transCurrentChapterNameBadge.textContent = chapterText ? `📖 ${verb}: Chương ${chapterText}` : "📖 Đang sẵn sàng";
   }
   if (els.transAttemptCountBadge) {
@@ -752,7 +756,10 @@ function renderTranslateStatus(status = {}) {
   }
   if (els.transStatKeysActive) {
     const keys = Number(status.activeKeyCount || 0);
-    els.transStatKeysActive.textContent = keys ? `${keys} Keys đủ điều kiện` : "Đang kiểm tra Keys";
+    const ready = Number(status.readyKeyCount);
+    els.transStatKeysActive.textContent = keys
+      ? (Number.isFinite(ready) ? `${ready}/${keys} Keys sẵn sàng` : `${keys} Keys đủ điều kiện`)
+      : "Đang kiểm tra Keys";
   }
 
   // 3. Next In Line Teaser

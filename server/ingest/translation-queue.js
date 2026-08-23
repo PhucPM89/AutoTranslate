@@ -290,7 +290,6 @@ async function runTranslationJobs({
       if (quotaExhausted) {
         state.updatedAt = new Date(now()).toISOString();
         await saveState(state);
-        break;
       }
     }
 
@@ -324,6 +323,7 @@ async function runTranslationJobs({
 }
 
 function isQuotaError(error) {
+  if (error?.code === "key_pool_slice_exhausted") return true;
   if (!error) return false;
   if (error.code === "quota_exceeded") return true;
   if (error.status === 429 || error.status === 503) return true;

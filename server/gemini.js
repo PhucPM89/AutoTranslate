@@ -17,6 +17,7 @@ const OPENROUTER_FALLBACK_MODELS = parseCsv(
 );
 const TRANSLATE_CHUNK_SIZE = Number(process.env.GEMINI_CHUNK_SIZE || 1800);
 const TRANSLATE_CONCURRENCY = Number(process.env.GEMINI_TRANSLATE_CONCURRENCY || 1);
+const MAX_KEYS_PER_CHUNK = Math.max(1, Number(process.env.TRANSLATE_MAX_KEYS_PER_CHUNK || 3));
 const REQUEST_TIMEOUT_MS = Number(process.env.GROQ_REQUEST_TIMEOUT_MS || process.env.GEMINI_REQUEST_TIMEOUT_MS || 90000);
 
 const defaultEngine = createTranslationEngine();
@@ -425,6 +426,9 @@ function parseGroqRetryDurationMs(errorMsg) {
   if (errorMsg.includes("TPM") || errorMsg.includes("tokens per minute")) {
     return 20000; // 20s default for TPM
   }
+  if (errorMsg.includes("generativelanguage.googleapis") || errorMsg.toLowerCase().includes("current quota")) {
+    return 15 * 60 * 1000;
+  }
   return 60000;
 }
 
@@ -457,6 +461,46 @@ function getKeyPoolStats(keyList = []) {
       lastUsed: health.lastUsed ? new Date(health.lastUsed).toISOString() : null
     };
   });
+}
+
+function keyFingerprint(key) {
+  const value = String(key || "");
+  return `${value.slice(0, 8)}...${value.slice(-6)}`;
+}
+
+function exportKeyPoolState(keyList = []) {
+  return {
+    schema: 1,
+    updatedAt: new Date().toISOString(),
+    cursor: globalKeyIndex,
+    keys: keyList.map((key) => {
+      const health = getKeyHealth(key);
+      return {
+        id: keyFingerprint(key),
+        cooldownUntil: Number(health.cooldownUntil || 0),
+        consecutiveErrors: Number(health.consecutiveErrors || 0),
+        lastUsed: Number(health.lastUsed || 0),
+        tokensUsedSession: Number(health.tokensUsedSession || 0),
+        lastErrorMsg: String(health.lastErrorMsg || "").slice(0, 300)
+      };
+    })
+  };
+}
+
+function importKeyPoolState(snapshot, keyList = []) {
+  if (!snapshot || !Array.isArray(snapshot.keys)) return;
+  const byId = new Map(snapshot.keys.map((entry) => [entry.id, entry]));
+  globalKeyIndex = Math.max(0, Number(snapshot.cursor || 0));
+  for (const key of keyList) {
+    const saved = byId.get(keyFingerprint(key));
+    if (!saved) continue;
+    const health = getKeyHealth(key);
+    health.cooldownUntil = Math.max(0, Number(saved.cooldownUntil || 0));
+    health.consecutiveErrors = Math.max(0, Number(saved.consecutiveErrors || 0));
+    health.lastUsed = Math.max(0, Number(saved.lastUsed || 0));
+    health.tokensUsedSession = Math.max(0, Number(saved.tokensUsedSession || 0));
+    health.lastErrorMsg = String(saved.lastErrorMsg || "").slice(0, 300);
+  }
 }
 
 function isContentSafetyRefusal(data, error) {
@@ -497,7 +541,8 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
   const sortedCooldownKeys = [...cooldownKeys].sort((a, b) => getKeyHealth(a.key).cooldownUntil - getKeyHealth(b.key).cooldownUntil);
   const prioritizedKeys = [...readyKeys, ...sortedCooldownKeys];
 
-  for (const { key: apiKey, index: keyIdx } of prioritizedKeys) {
+  let triedKeys = 0;
+  for (const { key: apiKey } of prioritizedKeys) {
     const health = getKeyHealth(apiKey);
     const timeUntilReady = health.cooldownUntil - Date.now();
     if (timeUntilReady > 5000) {
@@ -506,6 +551,8 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
     if (timeUntilReady > 0) {
       await wait(timeUntilReady + 100);
     }
+    if (triedKeys >= MAX_KEYS_PER_CHUNK) break;
+    triedKeys += 1;
 
     const models = getModelsForApiKey(apiKey);
     for (let modelIndex = 0; modelIndex < models.length; modelIndex += 1) {
@@ -550,7 +597,9 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
         }
 
         if (error.status === 429 || error.status === 403 || error.status === 401) {
-          const cooldownDuration = parseGroqRetryDurationMs(error.message);
+          const cooldownDuration = error.status === 401 || error.status === 403
+            ? 6 * 60 * 60 * 1000
+            : parseGroqRetryDurationMs(error.message);
           markKeyCooldown(apiKey, cooldownDuration, error.message);
           break; // Switch to next key in pool immediately
         }
@@ -560,9 +609,16 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
   }
 
   // If initial pass failed, check if any key is nearing cooldown reset
-  const earliestCooldown = Math.min(...keyList.map((k) => getKeyHealth(k).cooldownUntil));
+  const futureCooldowns = keyList
+    .map((key) => getKeyHealth(key).cooldownUntil)
+    .filter((until) => until > Date.now());
+  const readyKeysRemaining = keyList.filter((key) => getKeyHealth(key).cooldownUntil <= Date.now()).length;
+  const earliestCooldown = readyKeysRemaining > 0
+    ? Date.now() + 2000
+    : futureCooldowns.length ? Math.min(...futureCooldowns) : Date.now() + 30000;
   const err = lastError || new Error("Tất cả các API key đều đang trong thời gian chờ hoặc hết hạn mức.");
   err.earliestCooldown = earliestCooldown;
+  err.code = err.code || "key_pool_slice_exhausted";
   throw err;
 }
 
@@ -589,7 +645,7 @@ function reserveKeyOrder(keyList) {
   const nKeys = keyList.length;
   if (!nKeys) return [];
   const startIndex = globalKeyIndex % nKeys;
-  globalKeyIndex = (globalKeyIndex + 1) % nKeys;
+  globalKeyIndex = (globalKeyIndex + Math.min(nKeys, MAX_KEYS_PER_CHUNK)) % nKeys;
   return Array.from({ length: nKeys }, (_, offset) => {
     const index = (startIndex + offset) % nKeys;
     return { key: keyList[index], index };
@@ -1166,5 +1222,8 @@ module.exports = {
   parseGroqRetryDurationMs,
   reserveKeyOrder,
   outputTokenBudget,
-  buildResidualHanRepairPrompt
+  buildResidualHanRepairPrompt,
+  exportKeyPoolState,
+  importKeyPoolState,
+  keyFingerprint
 };

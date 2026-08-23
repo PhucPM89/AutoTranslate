@@ -36,7 +36,14 @@ const {
   summarize,
   isDone
 } = require("../server/ingest/translation-queue");
-const { translateText, translateBatchChapters, parseApiKeys, getKeyPoolStats } = require("../server/gemini");
+const {
+  translateText,
+  translateBatchChapters,
+  parseApiKeys,
+  getKeyPoolStats,
+  exportKeyPoolState,
+  importKeyPoolState
+} = require("../server/gemini");
 const { createTranslationEngine } = require("../server/translation-engine");
 const {
   readTranslationConfig,
@@ -61,6 +68,7 @@ const PUBLISH_EVERY = Math.max(1, Number(process.env.TRANSLATE_PUBLISH_EVERY || 
 const CHAPTERS_PER_TURN = Math.max(1, Number(process.env.TRANSLATE_CHAPTERS_PER_TURN || 5));
 const ROTATION_KEY = "jobs/translate-rotation.json";
 const TRANSLATE_STATUS_KEY = "jobs/translate-status.json";
+const TRANSLATE_KEY_HEALTH_KEY = "jobs/translate-key-health.json";
 
 let lastChapterTokens = 2200;
 
@@ -134,8 +142,14 @@ async function main() {
   const allowCloudflare = process.env.TRANSLATE_ALLOW_CLOUDFLARE === "true";
   const allUniqueKeys = Array.from(new Set([...keyList, ...envKeys]))
     .filter(Boolean)
-    .filter((key) => allowCloudflare || !isCloudflareTranslationKey(key));
+    .filter((key) => allowCloudflare || !isCloudflareTranslationKey(key))
+    .sort((a, b) => translationKeyPriority(a) - translationKeyPriority(b));
   if (!allUniqueKeys.length) throw new Error("Thiếu API Keys (Cloudflare AI / Gemini / Groq).");
+  importKeyPoolState(await readJson(storage, TRANSLATE_KEY_HEALTH_KEY), allUniqueKeys);
+  const persistKeyHealth = () => storage.put(
+    TRANSLATE_KEY_HEALTH_KEY,
+    JSON.stringify(exportKeyPoolState(allUniqueKeys))
+  ).catch((error) => console.warn(`Không lưu được cooldown API key: ${error.message}`));
   const apiKey = allUniqueKeys.join(",");
   const db = createSupabase();
   const engine = createTranslationEngine({ storage });
@@ -342,12 +356,16 @@ async function main() {
             const elapsedMin = Math.max(0.05, (Date.now() - new Date(startedAt).getTime()) / 60000);
             const currentSpeed = Math.round((currentTotalSession / elapsedMin) * 10) / 10;
             const currentSpacing = computeAdaptiveSpacing(allUniqueKeys);
+            const keyStats = getKeyPoolStats(allUniqueKeys);
+            const readyKeyCount = keyStats.filter((entry) => entry.ready).length;
             if (completed > lastKnownCompleted) {
               lastKnownCompleted = completed;
               lastSuccessAt = new Date().toISOString();
               lastSuccessfulChapter = chapter;
             }
-            const activityState = status === "translating"
+            const activityState = readyKeyCount === 0 && status !== "completed"
+              ? "waiting_quota"
+              : status === "translating"
               ? "translating"
               : status === "completed"
                 ? "progress"
@@ -360,6 +378,8 @@ async function main() {
               ? `Đang gửi chương ${chapterLabel} tới AI.`
               : activityState === "progress"
                 ? `Đã dịch và lưu thành công chương ${chapter}.`
+                : activityState === "waiting_quota"
+                  ? `Chương ${chapter} đang chờ quota; 0/${allUniqueKeys.length} key sẵn sàng, worker không gửi thêm request.`
                 : `Chương ${chapter} chưa thành công; worker đang chờ để thử lại.`;
             console.log(`  [${bTitle}] ch ${chapter}: ${status}  (${completed}/${total}) [Phiên này: +${currentTotalSession} ch] [Điều tốc: ${Math.round(currentSpacing/1000)}s/ch]`);
             await writeTranslateStatus(storage, {
@@ -367,6 +387,8 @@ async function main() {
               focusBookId: configuredFocus,
               selectionMode,
               activeKeyCount: allUniqueKeys.length,
+              readyKeyCount,
+              cooldownKeyCount: allUniqueKeys.length - readyKeyCount,
               spacingMs: currentSpacing,
               startedAt,
               speed: currentSpeed,
@@ -401,10 +423,12 @@ async function main() {
                 };
               })
             });
+            if (status !== "translating") await persistKeyHealth();
           }
         });
 
         spentTotal += result.spent;
+        await persistKeyHealth();
         translatedTotal += result.translated;
         translatedThisCycle += result.translated;
 
@@ -484,11 +508,16 @@ async function main() {
     await publishBook(job);
   }
 
+  const finalKeyStats = getKeyPoolStats(allUniqueKeys);
+  const finalReadyKeyCount = finalKeyStats.filter((entry) => entry.ready).length;
+  await persistKeyHealth();
   await writeTranslateStatus(storage, {
     state: stoppedForQuota ? "paused_quota" : "idle",
     focusBookId: translationConfig.focusBookId,
     selectionMode: translationConfig.focusBookId ? "focused" : "automatic",
     activeKeyCount: allUniqueKeys.length,
+    readyKeyCount: finalReadyKeyCount,
+    cooldownKeyCount: allUniqueKeys.length - finalReadyKeyCount,
     spacingMs: computeAdaptiveSpacing(allUniqueKeys),
     finishedAt: new Date().toISOString(),
     currentBookId: "",
@@ -524,6 +553,14 @@ async function main() {
 function isCloudflareTranslationKey(key) {
   const value = String(key || "");
   return value.startsWith("cf_") || value.startsWith("cfut_") || value.includes(":") || value.includes("@");
+}
+
+function translationKeyPriority(key) {
+  const value = String(key || "");
+  if (value.startsWith("gsk_")) return 0;
+  if (value.startsWith("sk-or-v1-")) return 1;
+  if (isCloudflareTranslationKey(value)) return 3;
+  return 2;
 }
 
 async function listJobs(storage, onlyBook) {

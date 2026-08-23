@@ -219,20 +219,24 @@ test("a chapter is never completed when the upload fails", async () => {
 test("quota exhaustion pauses the run without burning an attempt", async () => {
   const state = createJobState({ bookId: "b", revision: 1, chapters: [{ chapterNumber: 1 }, { chapterNumber: 2 }] });
   const quota = Object.assign(new Error("Resource exhausted"), { code: "quota_exceeded" });
+  const events = [];
   const result = await runTranslationJobs({
     state,
     loadChapter: async (n) => ({ chapterNumber: n, title: "t", content: "c" }),
     translateChapter: async () => { throw quota; },
     publishChapter: async () => {},
     saveState: async () => {},
-    backoffBaseMs: 1
+    backoffBaseMs: 1,
+    onProgress: async (event) => events.push(event)
   });
   assert.equal(result.quotaExhausted, true);
   assert.equal(state.chapters[0].status, "pending", "returned to the queue");
   assert.equal(state.chapters[0].attempts, 0, "attempt refunded");
   assert.equal(state.chapters[1].status, "pending", "run stopped instead of hammering");
+  assert.equal(events.at(-1).status, "pending", "dashboard sees the quota wait instead of stale translating state");
   assert.ok(isQuotaError({ status: 429 }));
   assert.ok(!isQuotaError(new Error("mạng lỗi")));
+  assert.ok(isQuotaError({ code: "key_pool_slice_exhausted" }));
 });
 
 test("a request budget stops the run early and leaves the rest resumable", async () => {

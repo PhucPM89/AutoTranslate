@@ -66,6 +66,8 @@ jobs:
       # 1,800 Chinese characters frequently expand beyond Groq's 4,096 output
       # tokens. Smaller chunks avoid publishing truncated translations.
       GEMINI_CHUNK_SIZE: "800"
+      GEMINI_TRANSLATE_CONCURRENCY: "1"
+      TRANSLATE_MAX_KEYS_PER_CHUNK: "3"
       TRANSLATE_ALLOW_CLOUDFLARE: "false"
       TRANSLATE_SPACING_MS: ${{ vars.TRANSLATE_SPACING_MS || '500' }}
     steps:
@@ -86,5 +88,5 @@ jobs:
           node scripts/translate-worker.js
           --minutes 14
           --budget ${{ github.event.inputs.budget || '5000' }}
-          --batch-size 4
+          --batch-size 1
           ${{ github.event.inputs.book && format('--book {0}', github.event.inputs.book) || '' }}

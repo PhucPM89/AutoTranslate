@@ -1,6 +1,16 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { translateText, translateMetadata, assessTranslation, splitTextIntoChunks, reserveKeyOrder, outputTokenBudget } = require("./gemini");
+const {
+  translateText,
+  translateMetadata,
+  assessTranslation,
+  splitTextIntoChunks,
+  reserveKeyOrder,
+  outputTokenBudget,
+  exportKeyPoolState,
+  importKeyPoolState,
+  keyFingerprint
+} = require("./gemini");
 
 const chineseSource = "这是一个需要翻译成越南语的中文段落。".repeat(20);
 
@@ -202,7 +212,7 @@ test("hard-splits a long paragraph without punctuation", () => {
 });
 
 test("concurrent work reserves different starting keys before awaiting a response", () => {
-  const keys = ["key-a", "key-b", "key-c"];
+  const keys = ["key-a", "key-b", "key-c", "key-d", "key-e"];
   const first = reserveKeyOrder(keys);
   const second = reserveKeyOrder(keys);
   assert.notEqual(first[0].key, second[0].key);
@@ -213,4 +223,47 @@ test("translation output budget follows source size instead of repeated prompt s
   assert.equal(outputTokenBudget("中".repeat(100)), 1200);
   assert.equal(outputTokenBudget("中".repeat(800)), 2400);
   assert.equal(outputTokenBudget("中".repeat(2000)), 4096);
+});
+
+test("one chunk tries only a bounded slice of the key pool", async () => {
+  const originalFetch = global.fetch;
+  const authorizations = [];
+  global.fetch = async (_url, options) => {
+    authorizations.push(options.headers.Authorization);
+    return {
+      ok: false,
+      status: 429,
+      json: async () => ({ error: { message: "tokens per minute; retry in 30s" } })
+    };
+  };
+
+  try {
+    await assert.rejects(
+      translateText(chineseSource, ["gsk_slice-a", "gsk_slice-b", "gsk_slice-c", "gsk_slice-d", "gsk_slice-e"]),
+      (error) => error.code === "key_pool_slice_exhausted"
+    );
+    assert.equal(new Set(authorizations).size, 3);
+    assert.equal(authorizations.length, 6, "each selected key gets the provider's one HTTP retry");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("key cooldown and rotation cursor survive a worker restart snapshot", () => {
+  const keys = ["gsk_persist-a", "gsk_persist-b"];
+  const future = Date.now() + 60_000;
+  importKeyPoolState({
+    cursor: 7,
+    keys: [{
+      id: keyFingerprint(keys[0]),
+      cooldownUntil: future,
+      consecutiveErrors: 2,
+      lastErrorMsg: "quota"
+    }]
+  }, keys);
+  const saved = exportKeyPoolState(keys);
+  const first = saved.keys.find((entry) => entry.id === keyFingerprint(keys[0]));
+  assert.equal(saved.cursor, 7);
+  assert.equal(first.cooldownUntil, future);
+  assert.equal(first.consecutiveErrors, 2);
 });

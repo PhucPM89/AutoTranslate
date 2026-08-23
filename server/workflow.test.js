@@ -20,6 +20,13 @@ test("an admin focus dispatch is the only translation run allowed to replace act
   assert.match(workflow, /cancel-in-progress:\s*\$\{\{[^\n]*inputs\.replace_current == 'true'/);
 });
 
+test("focused translation bounds concurrency and key failover", () => {
+  const workflow = fs.readFileSync(path.join(WORKFLOWS, "translate-worker.yml"), "utf8");
+  assert.match(workflow, /--batch-size 1/);
+  assert.match(workflow, /GEMINI_TRANSLATE_CONCURRENCY:\s*"1"/);
+  assert.match(workflow, /TRANSLATE_MAX_KEYS_PER_CHUNK:\s*"3"/);
+});
+
 test("ingest workflow leaves translation to the dedicated worker", () => {
   const yaml = fs.readFileSync(path.join(__dirname, "..", ".github", "workflows", "ingest-book.yml"), "utf8");
   assert.doesNotMatch(yaml, /node scripts\/translate-worker\.js/);
