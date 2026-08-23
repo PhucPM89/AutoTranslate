@@ -786,7 +786,12 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
       if (generationConfig.responseFormat === "json") {
         bodyPayload.response_format = { type: "json_object" };
       } else if (model.includes("qwen")) {
-        bodyPayload.reasoning_format = "hidden";
+        // `reasoning_format: hidden` still spends reasoning tokens; it merely
+        // hides them. Translation needs non-thinking mode so the output budget
+        // is reserved for the Vietnamese text itself.
+        bodyPayload.reasoning_effort = "none";
+      } else if (model.includes("gpt-oss")) {
+        bodyPayload.reasoning_effort = "low";
       }
 
       const authHeader = `Bearer ${apiKey.trim()}`;

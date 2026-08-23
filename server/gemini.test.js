@@ -88,6 +88,31 @@ test("tries the next model when a model echoes Chinese text", async () => {
   }
 });
 
+test("Groq Qwen translation disables reasoning instead of only hiding it", async () => {
+  const originalFetch = global.fetch;
+  const vietnamese = "Đây là nội dung đã được dịch đầy đủ sang tiếng Việt, rõ ràng và tự nhiên. ".repeat(14);
+  let requestBody;
+  global.fetch = async (_url, options) => {
+    requestBody = JSON.parse(options.body);
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{ finish_reason: "stop", message: { content: vietnamese } }],
+        usage: { total_tokens: 100 }
+      })
+    };
+  };
+
+  try {
+    const result = await translateText(chineseSource, "gsk_test-key");
+    assert.equal(result.translation, vietnamese.trim());
+    assert.equal(requestBody.reasoning_effort, "none");
+    assert.equal(requestBody.reasoning_format, undefined);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test("injects matching translation-memory terminology without an extra AI call", async () => {
   const originalFetch = global.fetch;
   const source = "众人倒吸一口凉气，谁也不敢继续向前。".repeat(20);
