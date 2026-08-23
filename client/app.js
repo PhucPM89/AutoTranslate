@@ -1285,9 +1285,13 @@ function createBookCard(book, index = 0) {
   if (translated > 0) {
     const badge = document.createElement("span");
     badge.className = "catalog-translate-badge";
-    const rawPct = total > 0 ? (translated / total) * 100 : 0;
-    const pctLabel = rawPct >= 1 ? `${rawPct.toFixed(0)}%` : `${rawPct.toFixed(1)}%`;
-    badge.innerHTML = `<svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px;display:inline"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Dịch ${translated}/${total} (${pctLabel})`;
+    if (total > 0) {
+      const rawPct = (translated / total) * 100;
+      const pctLabel = rawPct >= 1 ? `${rawPct.toFixed(0)}%` : `${rawPct.toFixed(1)}%`;
+      badge.innerHTML = `<svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px;display:inline"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Dịch ${translated}/${total} (${pctLabel})`;
+    } else {
+      badge.innerHTML = `<svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px;display:inline"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Đã dịch ${translated} ch`;
+    }
     footer.appendChild(badge);
   } else {
     appendTextElement(footer, "span", "", total ? `${total} chương` : "EPUB");

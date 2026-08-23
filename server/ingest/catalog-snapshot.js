@@ -27,29 +27,48 @@ function resolveCoverUrl(bookId, coverUrl, env = process.env) {
   return bookId ? `/covers/${bookId}.jpg` : "";
 }
 
-async function buildSnapshotFromSupabase(env = process.env) {
+async function buildSnapshotFromSupabase(env = process.env, storage = null) {
   const db = createSupabase(env);
   if (!db) return null;
   const rows = await db.listBooks({ limit: 1000, order: "updated_at.desc" });
   if (!Array.isArray(rows)) return null;
   const filtered = rows.filter((row) => row && row.id && row.title && !hasHan(row.title) && !hasHan(row.author));
-  return filtered.map((row) => ({
-    id: row.id,
-    title: row.title,
-    author: row.author || "",
-    description: row.description || "",
-    cover: resolveCoverUrl(row.id, row.cover_url, env),
-    status: row.status || "",
-    // Flattened from the embedded join; "" when a book has no category yet, which
-    // the client treats as uncategorised rather than inventing a label.
-    genre: row.book_categories?.[0]?.categories?.name || "",
-    chapterCount: row.total_chapters || 0,
-    translatedChapters: row.translated_chapters || 0,
-    revision: row.revision || 1,
-    featured: Boolean(row.featured),
-    updatedAt: row.updated_at || "",
-    createdAt: row.created_at || ""
-  }));
+  
+  return Promise.all(
+    filtered.map(async (row) => {
+      let totalChapters = row.total_chapters || 0;
+      let translatedChapters = row.translated_chapters || 0;
+
+      if (totalChapters <= 0 && storage) {
+        try {
+          const raw = await storage.get(`books/${row.id}/index.json`);
+          if (raw) {
+            const idx = JSON.parse(raw.toString("utf8"));
+            totalChapters = Number(idx.totalChapters || idx.chapters?.length || 0);
+            translatedChapters = Number(idx.translatedChapters || translatedChapters || 0);
+          }
+        } catch {}
+      }
+
+      return {
+        id: row.id,
+        title: row.title,
+        author: row.author || "",
+        description: row.description || "",
+        cover: resolveCoverUrl(row.id, row.cover_url, env),
+        status: row.status || "",
+        // Flattened from the embedded join; "" when a book has no category yet, which
+        // the client treats as uncategorised rather than inventing a label.
+        genre: row.book_categories?.[0]?.categories?.name || "",
+        chapterCount: totalChapters,
+        translatedChapters,
+        revision: row.revision || 1,
+        featured: Boolean(row.featured),
+        updatedAt: row.updated_at || "",
+        createdAt: row.created_at || ""
+      };
+    })
+  );
 }
 
 // Fallback: every ingested book has an index.json, so the catalogue can be
@@ -89,7 +108,7 @@ async function publishCatalogSnapshot({ storage, site = {}, env = process.env, l
   let books = null;
   let source = "supabase";
   try {
-    books = await buildSnapshotFromSupabase(env);
+    books = await buildSnapshotFromSupabase(env, storage);
   } catch (error) {
     log({ event: "catalog.supabase_failed", message: error.message });
   }
