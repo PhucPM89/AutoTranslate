@@ -75,7 +75,7 @@ jobs:
           node scripts/translate-worker.js
           --minutes 300
           --budget ${{ github.event.inputs.budget || '5000' }}
-          --batch-size 4
+          --batch-size 8
           ${{ github.event.inputs.book && format('--book {0}', github.event.inputs.book) || '' }}
 
       - name: Auto-chain next continuous translation run
