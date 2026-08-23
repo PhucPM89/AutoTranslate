@@ -1206,15 +1206,13 @@ async function handleAdminGeminiTranslate({ request, env }) {
   const apiKeys = studioApiKeys(env);
   if (!apiKeys.length) throw fail(503, "Cụm API Key riêng của EPUB Studio chưa được cấu hình.");
 
-  const rawModel = String(body?.model || "gemini-3.7-flash").trim();
+  const rawModel = String(body?.model || "gemini-3.6-flash").trim();
   const allowedModels = new Set([
     "gemini-3.7-flash",
     "gemini-3.6-flash",
     "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
-    "gemini-3.1-flash-lite",
-    "gemini-2.5-flash",
-    "gemini-2.5-pro"
+    "gemini-3.1-flash-lite"
   ]);
   if (!allowedModels.has(rawModel)) throw fail(400, "Model Gemini không được EPUB Studio hỗ trợ.");
   const model = rawModel;
