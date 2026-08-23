@@ -576,6 +576,9 @@ async function refreshBookOutputs({ storage, db, job, state }) {
         revision: job.revision
       })
       .catch((error) => console.warn(`  (Supabase book update lỗi: ${error.message})`));
+
+    await publishCatalogSnapshot({ storage, db, site: siteSettings() })
+      .catch((error) => console.warn(`  (Catalog snapshot update lỗi: ${error.message})`));
   }
 }
 
