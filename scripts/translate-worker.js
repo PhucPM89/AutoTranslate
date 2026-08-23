@@ -450,7 +450,7 @@ async function listJobs(storage, onlyBook) {
     if (!state || !Array.isArray(state.chapters)) return [];
     let healed = false;
     for (const entry of state.chapters) {
-      if (entry.status !== "completed" && entry.attempts > 0) {
+      if (entry.status !== "completed") {
         entry.status = "pending";
         entry.attempts = 0;
         entry.lastError = "";
@@ -483,7 +483,7 @@ async function listJobs(storage, onlyBook) {
     // Auto-heal any chapters that were stalled by previous failed attempts or rate limits
     let healed = false;
     for (const entry of state.chapters) {
-      if (entry.status !== "completed" && entry.attempts > 0) {
+      if (entry.status !== "completed") {
         entry.status = "pending";
         entry.attempts = 0;
         entry.lastError = "";
