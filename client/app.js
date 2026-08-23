@@ -1999,7 +1999,7 @@ function preloadNextChapter(nextIndex) {
   const nextChapter = state.chapters[nextIndex];
   if (state.mode === "cdn" && state.cdnTemplate && nextChapter) {
     const url = chapterUrlFor({ bookId: bookIdFromState(), revision: revisionFromState(), chapterUrlTemplate: state.cdnTemplate }, nextChapter.chapterNumber);
-    fetch(url)
+    fetch(url, { cache: "no-cache" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.content && data.translationStatus === "completed") {
@@ -3829,7 +3829,8 @@ async function loadCdnChapter(index) {
   els.outputStatus.textContent = "Đang tải";
 
   try {
-    const response = await fetch(chapterUrlFor({ bookId: bookIdFromState(), revision: revisionFromState(), chapterUrlTemplate: state.cdnTemplate }, chapter.chapterNumber));
+    const chapterUrl = chapterUrlFor({ bookId: bookIdFromState(), revision: revisionFromState(), chapterUrlTemplate: state.cdnTemplate }, chapter.chapterNumber);
+    const response = await fetch(chapterUrl, { cache: "no-cache" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const document_ = await response.json();
     if (index !== state.currentIndex) return;
