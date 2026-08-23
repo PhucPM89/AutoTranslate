@@ -57,7 +57,7 @@ function getModelsForApiKey(apiKey) {
     return [primary, ...fallbacks].filter((m, i, l) => m && l.indexOf(m) === i);
   }
   const primary = process.env.GEMINI_MODEL || "gemini-3.6-flash";
-  const fallbacks = parseCsv(process.env.GEMINI_FALLBACK_MODELS || "gemini-2.5-flash,gemini-flash-latest,gemini-3.7-flash,gemini-1.5-flash");
+  const fallbacks = parseCsv(process.env.GEMINI_FALLBACK_MODELS || "gemini-2.5-flash,gemini-flash-latest,gemini-2.5-pro,gemini-3.7-flash");
   return [primary, ...fallbacks].filter((m, i, l) => m && l.indexOf(m) === i);
 }
 
