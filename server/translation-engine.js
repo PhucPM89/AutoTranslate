@@ -32,7 +32,12 @@ const DEFAULT_TM_PATTERNS = [
   { zh: "微不足道", vi: "không đáng kể" },
   { zh: "魂飞魄散", vi: "hồn phi phách tán" },
   { zh: "千真万确", vi: "hoàn toàn chính xác" },
-  { zh: "不翼而飞", vi: "không cánh mà bay" }
+  { zh: "不翼而飞", vi: "không cánh mà bay" },
+  { zh: "剑拔弩张", vi: "giương cung bạt kiếm" },
+  { zh: "火药味十足", vi: "sặc mùi thuốc súng" },
+  { zh: "看不顺眼", vi: "chướng tai gai mắt" },
+  { zh: "扬眉吐气", vi: "dương mi thổ khí" },
+  { zh: "小人得志", vi: "tiểu nhân đắc chí" }
 ];
 
 function glossaryKey(bookId) {
@@ -139,12 +144,14 @@ function createTranslationEngine({ storage = null } = {}) {
     return [
       "Bạn là dịch giả văn học và tiểu thuyết mạng Trung - Việt chuyên nghiệp và tận tụy nhất (Tiên hiệp, Huyền huyễn, Đô thị, Mạt thế, Khoa huyễn, Võng du).",
       "Hãy dịch toàn bộ văn bản tiếng Trung sau sang tiếng Việt tự nhiên, văn phong mượt mà, thuần chất tiểu thuyết mạng.",
+      bookTitle ? `Tác phẩm: ${sanitizeContentSafety(bookTitle)}` : "",
       "",
       "QUY TẮC BẮT BUỘC ĐỂ ĐẢM BẢO CHẤT LƯỢNG:",
       "1. NGUYÊN VĂN 1:1 - TUYỆT ĐỐI KHÔNG TÓM TẮT:",
       "   - Dịch đầy đủ 100% từng câu, từng chữ, từng lời thoại và từng đoạn miêu tả.",
       "   - TUYỆT ĐỐI KHÔNG tóm tắt, KHÔNG lược bớt, KHÔNG gộp các đoạn văn, KHÔNG bỏ qua cảnh chiến đấu hay hội thoại dù dài.",
       "   - Giữ nguyên cấu trúc số đoạn văn tương ứng với bản gốc.",
+      "   - Giữ nguyên mọi con số, số lượng, ngày tháng, cấp bậc và đơn vị; chỉ Việt hóa cách viết đơn vị khi cần.",
       "2. DANH TỪ RIÊNG & THUẬT NGỮ (Hán-Việt 100%):",
       "   - BẮT BUỘC chuyển toàn bộ tên nhân vật, địa danh, cảnh giới, chiêu thức, công pháp, tông môn sang âm Hán-Việt chuẩn mực (Ví dụ: 李子夜 ➔ Lý Tử Dạ, 白忘语 ➔ Bạch Vọng Ngữ, 云影圣主 ➔ Vân Ảnh Thánh Chủ, 冥土 ➔ Minh Thổ, 夕阳西落 ➔ Tà dương lặn về tây / Hoàng hôn buông xuống).",
       "   - Tuyệt đối KHÔNG để sót chữ Hán hay Pinyin trong bản dịch.",
@@ -185,6 +192,11 @@ function createTranslationEngine({ storage = null } = {}) {
       // Remove double blank lines
       .replace(/\n{3,}/g, "\n\n")
       .trim();
+
+    // Remove any preamble chatter from LLMs
+    clean = clean
+      .replace(/^(?:Bản dịch|Dưới đây là|Sau đây là|Dịch nghĩa|Bản dịch chuẩn)[^:\n]*:?\s*\n*/i, "")
+      .replace(/^[\*\-_~]{3,}\s*\n*/gm, "");
 
     // Ensure matched glossary terms are strictly applied if LLM mistakenly used Pinyin
     for (const [zh, vi] of Object.entries(glossary)) {

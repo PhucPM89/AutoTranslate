@@ -456,6 +456,49 @@ test("listJobs skips fully translated books and reports the high-priority count"
   assert.equal(jobs[0].highPriority, 1);
 });
 
+test("parallel quota exhaustion stops after the active batch", async () => {
+  const state = createJobState({
+    bookId: "parallel-quota",
+    revision: 1,
+    chapters: Array.from({ length: 4 }, (_, index) => ({ chapterNumber: index + 1 }))
+  });
+  const quota = Object.assign(new Error("tokens per day exhausted"), {
+    status: 429,
+    earliestCooldown: 50_000
+  });
+  let calls = 0;
+  const result = await runTranslationJobs({
+    state,
+    batchSize: 2,
+    now: () => 10_000,
+    loadChapter: async (n) => ({ chapterNumber: n, content: `source ${n}` }),
+    translateChapter: async () => {
+      calls += 1;
+      throw quota;
+    },
+    publishChapter: async () => assert.fail("quota output must not publish"),
+    saveState: async () => {}
+  });
+
+  assert.equal(calls, 2, "must not start a second batch after the key pool is exhausted");
+  assert.equal(result.quotaExhausted, true);
+  assert.equal(result.earliestCooldown, 50_000);
+  assert.deepEqual(state.chapters.map((entry) => entry.attempts), [0, 0, 0, 0]);
+});
+
+test("listJobs returns only the dashboard-focused book when one is selected", async () => {
+  const { storage } = tempStorage();
+  const { listJobs } = require("../scripts/translate-worker");
+  const { jobStateKey } = require("./ingest/translation-queue");
+  for (const bookId of ["book-a", "book-b"]) {
+    const state = createJobState({ bookId, revision: 1, chapters: [{ chapterNumber: 1 }] });
+    await storage.put(jobStateKey(bookId), JSON.stringify(state));
+  }
+
+  const jobs = await listJobs(storage, "book-b");
+  assert.deepEqual(jobs.map((job) => job.bookId), ["book-b"]);
+});
+
 test("nextBatchChapters groups consecutive pending chapters and runTranslationJobs executes batch", async () => {
   const state = createJobState({
     bookId: "b-batch",

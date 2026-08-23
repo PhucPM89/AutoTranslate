@@ -24,9 +24,9 @@ on:
         default: "true"
 
 concurrency:
-  # Serialised against itself so two uploads cannot publish conflicting
-  # catalogue snapshots, but independent of the crawler and translate workers.
-  group: ingest-book
+  # Shared with crawler and translator: all three update the same R2 job/index
+  # objects, which cannot be merged atomically across processes.
+  group: novel-pipeline-storage-writes
   cancel-in-progress: false
 
 permissions:
@@ -83,6 +83,7 @@ jobs:
           BOOK_GENRE: ${{ inputs.genre }}
           BOOK_COVER: ${{ inputs.cover_key }}
 
-      - name: Queue translation
-        if: inputs.translate == 'true'
-        run: node scripts/translate-worker.js --budget 40 --minutes 20
+      # Translation is intentionally not started in this workflow. The dedicated
+      # translate-worker workflow owns the only translation concurrency group and
+      # will pick this queue up on its next scheduled run. Starting a second
+      # worker here could translate the same chapter twice and race on job state.

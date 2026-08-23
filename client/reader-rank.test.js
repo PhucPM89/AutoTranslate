@@ -10,6 +10,8 @@ const {
   setReaderNickname,
   getStoredChaptersRead,
   incrementChaptersRead,
+  safeRankBadgeClass,
+  safeAvatarUrl,
   fetchLeaderboard,
   syncReaderLeaderboard
 } = require("./reader-rank.js");
@@ -48,6 +50,43 @@ test("reader-rank: formatRankBadge outputs valid badge span", () => {
   const html = formatRankBadge("Kim Đan", "rank-4");
   assert.ok(html.includes("Kim Đan"));
   assert.ok(html.includes("rank-4"));
+});
+
+test("reader-rank: rejects unsafe badge classes and avatar URLs", () => {
+  assert.equal(safeRankBadgeClass('rank-4\" onmouseover="alert(1)'), "rank-1");
+  assert.equal(safeAvatarUrl("javascript:alert(1)"), "");
+  assert.equal(safeAvatarUrl("https://images.example/avatar.png"), "https://images.example/avatar.png");
+  assert.doesNotMatch(formatRankBadge("</span><script>alert(1)</script>", "bad-class"), /<script>/);
+});
+
+test("reader-rank: authenticated writes use the user token, not the anon key", async () => {
+  let authorization = "";
+  let payload = null;
+  const originalFetch = global.fetch;
+  global.fetch = async (_url, options) => {
+    authorization = options.headers.Authorization;
+    payload = JSON.parse(options.body)[0];
+    return { ok: true };
+  };
+  try {
+    const ok = await syncReaderLeaderboard({
+      supabaseUrl: "https://project.supabase.co",
+      supabaseKey: "anon-key",
+      accessToken: "reader-jwt",
+      user: {
+        id: "00000000-0000-4000-8000-000000000001",
+        fullName: "Độc Giả Google",
+        avatarUrl: "https://images.example/google-avatar.png"
+      },
+      force: true
+    });
+    assert.equal(ok, true);
+    assert.equal(authorization, "Bearer reader-jwt");
+    assert.equal(payload.display_name, "Độc Giả Google");
+    assert.equal(payload.avatar_url, "https://images.example/google-avatar.png");
+  } finally {
+    global.fetch = originalFetch;
+  }
 });
 
 test("reader-rank: nickname and chapters read storage", () => {

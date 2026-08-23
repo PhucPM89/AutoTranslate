@@ -38,6 +38,10 @@ const {
 } = require("../server/ingest/translation-queue");
 const { translateText, translateBatchChapters, parseApiKeys, getKeyPoolStats } = require("../server/gemini");
 const { createTranslationEngine } = require("../server/translation-engine");
+const {
+  readTranslationConfig,
+  writeTranslationConfig
+} = require("../server/translation-config");
 
 const args = process.argv.slice(2);
 const flag = (name, fallback) => {
@@ -127,18 +131,33 @@ async function main() {
     process.env.GROQ_API_KEY
   ].filter(Boolean).flatMap(k => parseApiKeys(k));
 
-  const allUniqueKeys = Array.from(new Set([...keyList, ...envKeys])).filter(Boolean);
+  const allowCloudflare = process.env.TRANSLATE_ALLOW_CLOUDFLARE === "true";
+  const allUniqueKeys = Array.from(new Set([...keyList, ...envKeys]))
+    .filter(Boolean)
+    .filter((key) => allowCloudflare || !isCloudflareTranslationKey(key));
   if (!allUniqueKeys.length) throw new Error("Thiếu API Keys (Cloudflare AI / Gemini / Groq).");
   const apiKey = allUniqueKeys.join(",");
   const db = createSupabase();
   const engine = createTranslationEngine({ storage });
   const deadlineAt = Date.now() + Math.max(0, RUN_MINUTES * 60 * 1000 - RESERVE_MS);
 
-  const jobs = await listJobs(storage, ONLY_BOOK);
+  let translationConfig = await readTranslationConfig(storage);
+  let configuredFocus = ONLY_BOOK || translationConfig.focusBookId;
+  let jobs = await listJobs(storage, configuredFocus);
+  if (!jobs.length && translationConfig.focusBookId && !ONLY_BOOK) {
+    console.log(`Bộ ưu tiên ${translationConfig.focusBookId} không còn chương chờ; chuyển về chế độ tự động.`);
+    translationConfig = await writeTranslationConfig(storage, { focusBookId: "" });
+    configuredFocus = "";
+    jobs = await listJobs(storage, "");
+  }
   if (!jobs.length) {
     console.log("Không có job dịch nào đang chờ.");
     await writeTranslateStatus(storage, {
       state: "idle",
+      focusBookId: translationConfig.focusBookId,
+      selectionMode: translationConfig.focusBookId ? "focused" : "automatic",
+      activeKeyCount: allUniqueKeys.length,
+      spacingMs: computeAdaptiveSpacing(allUniqueKeys),
       finishedAt: new Date().toISOString(),
       message: "Tất cả các bộ truyện đã được dịch đầy đủ. Không có job chờ."
     });
@@ -215,6 +234,7 @@ async function main() {
   let recentActivity = Array.isArray(existingStatus.recentActivity) ? existingStatus.recentActivity : [];
   const catalog = (await readJson(storage, "catalog/latest.json")) || {};
   const titleMap = new Map((catalog.books || []).map((b) => [b.id, b.title]));
+  const selectionMode = configuredFocus ? "focused" : "automatic";
 
   let spentTotal = 0;
   let translatedTotal = 0;
@@ -274,6 +294,7 @@ async function main() {
             const glossary = await engine.loadGlossary(job.bookId);
             const output = await translateText(chapter.content, apiKey, {
               bookId: job.bookId,
+              bookTitle: bTitle,
               glossary,
               engine
             });
@@ -307,6 +328,10 @@ async function main() {
             console.log(`  [${bTitle}] ch ${chapter}: ${status}  (${completed}/${total}) [Phiên này: +${currentTotalSession} ch] [Điều tốc: ${Math.round(currentSpacing/1000)}s/ch]`);
             await writeTranslateStatus(storage, {
               state: "running",
+              focusBookId: configuredFocus,
+              selectionMode,
+              activeKeyCount: allUniqueKeys.length,
+              spacingMs: currentSpacing,
               startedAt,
               speed: currentSpeed,
               currentBookId: job.bookId,
@@ -356,6 +381,10 @@ async function main() {
           if (isDone(job.state)) {
             sincePublish.set(job.bookId, 0);
             await publishBook(job);
+            if (!ONLY_BOOK && translationConfig.focusBookId === job.bookId) {
+              translationConfig = await writeTranslationConfig(storage, { focusBookId: "" });
+              console.log(`  Đã hoàn tất bộ ưu tiên; trả dashboard về chế độ tự động.`);
+            }
             console.log(`\n🎉🎉🎉 [${bTitle}] ĐÃ DỊCH HOÀN TẤT TRỌN VẸN 100% (${job.total}/${job.total} chương)! Đã xuất bản lên thư viện.`);
             break;
           } else if (waiting >= PUBLISH_EVERY_CHAPTERS) {
@@ -413,6 +442,10 @@ async function main() {
 
   await writeTranslateStatus(storage, {
     state: stoppedForQuota ? "paused_quota" : "idle",
+    focusBookId: translationConfig.focusBookId,
+    selectionMode: translationConfig.focusBookId ? "focused" : "automatic",
+    activeKeyCount: allUniqueKeys.length,
+    spacingMs: computeAdaptiveSpacing(allUniqueKeys),
     finishedAt: new Date().toISOString(),
     currentBookId: "",
     translatedThisRun: translatedTotal,
@@ -444,23 +477,15 @@ async function main() {
   console.log(`\nXong: dịch ${translatedTotal} chương, dùng ${spentTotal} lượt gọi.${reason}`);
 }
 
+function isCloudflareTranslationKey(key) {
+  const value = String(key || "");
+  return value.startsWith("cf_") || value.startsWith("cfut_") || value.includes(":") || value.includes("@");
+}
+
 async function listJobs(storage, onlyBook) {
   if (onlyBook) {
     const state = await readJson(storage, jobStateKey(onlyBook));
     if (!state || !Array.isArray(state.chapters)) return [];
-    let healed = false;
-    for (const entry of state.chapters) {
-      if (entry.status !== "completed") {
-        entry.status = "pending";
-        entry.attempts = 0;
-        entry.lastError = "";
-        entry.nextAttemptAt = 0;
-        healed = true;
-      }
-    }
-    if (healed) {
-      storage.put(jobStateKey(onlyBook), JSON.stringify(state)).catch(() => {});
-    }
     const counts = summarize(state);
     if (counts.completed === counts.total) return [];
     return [{
@@ -479,21 +504,6 @@ async function listJobs(storage, onlyBook) {
     if (!object.key.endsWith("/translation.json")) continue;
     const state = await readJson(storage, object.key);
     if (!state || !Array.isArray(state.chapters)) continue;
-
-    // Auto-heal any chapters that were stalled by previous failed attempts or rate limits
-    let healed = false;
-    for (const entry of state.chapters) {
-      if (entry.status !== "completed") {
-        entry.status = "pending";
-        entry.attempts = 0;
-        entry.lastError = "";
-        entry.nextAttemptAt = 0;
-        healed = true;
-      }
-    }
-    if (healed) {
-      storage.put(object.key, JSON.stringify(state)).catch(() => {});
-    }
 
     const counts = summarize(state);
     if (counts.completed === counts.total) continue;

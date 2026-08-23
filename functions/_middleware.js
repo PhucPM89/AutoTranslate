@@ -26,6 +26,7 @@ const CDN_BASE = "https://cdn.tram-chu.online";
 const SITE_NAME = "Trạm Chữ";
 const SITE_URL = "https://tram-chu.online";
 const DEFAULT_COVER = "https://tram-chu.online/library/covers/misty-pagoda-hero.webp";
+const { escapeHtmlAttribute, safeJsonLd } = require("../server/seo-security.js");
 
 export async function onRequest(context) {
   const { request, next } = context;
@@ -42,7 +43,7 @@ export async function onRequest(context) {
   const chapterParam = url.searchParams.get("chapter");
 
   // If not a crawler or no book specified, pass through to normal static handling
-  if (!bookId) {
+  if (!isCrawler || !bookId) {
     return next();
   }
 
@@ -186,7 +187,7 @@ export async function onRequest(context) {
     ]
   };
 
-  const jsonLdString = JSON.stringify(schemaGraph);
+  const jsonLdString = safeJsonLd(schemaGraph);
 
   // Use HTMLRewriter on Cloudflare Edge to update meta tags and inject Schema.org JSON-LD
   return new HTMLRewriter()
@@ -252,7 +253,7 @@ export async function onRequest(context) {
     })
     .on("head", {
       element(e) {
-        e.append(`<meta name="keywords" content="${keywords}">`, { html: true });
+        e.append(`<meta name="keywords" content="${escapeHtmlAttribute(keywords)}">`, { html: true });
         e.append(`<script type="application/ld+json">${jsonLdString}</script>`, { html: true });
       }
     })

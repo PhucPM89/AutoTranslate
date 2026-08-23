@@ -55,11 +55,16 @@ function bucket(initial = {}) {
     async head(key) {
       return objects.has(key) ? {} : null;
     },
-    async list() {
-      return { objects: [], truncated: false };
+    async list({ prefix = "" } = {}) {
+      return {
+        objects: [...objects.entries()]
+          .filter(([key]) => key.startsWith(prefix))
+          .map(([key, body]) => ({ key, size: body.length })),
+        truncated: false
+      };
     },
     async delete(key) {
-      objects.delete(key);
+      for (const item of Array.isArray(key) ? key : [key]) objects.delete(item);
     }
   };
 }
@@ -127,6 +132,16 @@ test("an unknown path falls through to the assets binding, not a 404", async () 
   assert.equal(response.status, 200);
 });
 
+test("public catalog reads the configured NOVEL_STORAGE binding", async () => {
+  const storage = bucket({
+    "catalog/latest.json": JSON.stringify({ schema: 1, books: [{ id: "book-from-r2" }] })
+  });
+  const response = await call("/api/catalog", {}, env({ NOVEL_STORAGE: storage }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { schema: 1, books: [{ id: "book-from-r2" }] });
+  assert.match(response.headers.get("cache-control"), /s-maxage=300/);
+});
+
 test("login rejects a wrong password and issues a locked-down cookie for the right one", async () => {
   const wrong = await call("/api/admin/login", { method: "POST", body: { password: "sai" } });
   assert.equal(wrong.status, 401);
@@ -177,6 +192,7 @@ test("every admin route refuses an anonymous caller", async () => {
   for (const [pathname, method] of [
     ["/api/admin/upload", "POST"],
     ["/api/admin/crawler", "GET"],
+    ["/api/admin/translate", "GET"],
     ["/api/admin/catalog", "POST"],
     ["/api/admin/analytics", "GET"]
   ]) {
@@ -194,6 +210,24 @@ test("a cross-origin request is refused even with a valid cookie", async () => {
     body: { kind: "epub", filename: "a.epub", size: 10 }
   });
   assert.equal(response.status, 403);
+});
+
+test("same host on a different scheme is not accepted as same-origin", async () => {
+  const response = await call("/api/admin/upload", {
+    method: "POST",
+    cookie: cookie(),
+    origin: "http://tram-chu.online",
+    body: { kind: "epub", filename: "book.epub", size: 10, contentType: "application/epub+zip" }
+  });
+  assert.equal(response.status, 403);
+});
+
+test("JSON bodies are bounded before parsing", async () => {
+  const response = await call("/api/admin/login", {
+    method: "POST",
+    body: { password: "x".repeat(70 * 1024) }
+  });
+  assert.equal(response.status, 413);
 });
 
 test("a signed-in admin gets a presigned PUT into the private bucket", async () => {
@@ -333,6 +367,92 @@ test("the crawler form cannot clear the exclusion list by omitting it", async ()
   );
   const config = (await response.json()).config;
   assert.deepEqual(config.excludedSourceIds, [], "form không được set, nên vẫn rỗng");
+});
+
+test("translation focus persists and is returned with worker status", async () => {
+  const environment = env();
+  environment.NOVEL_STORAGE.objects.set(
+    "catalog/latest.json",
+    Buffer.from(JSON.stringify({ books: [{ id: "book-1", title: "Truyện Một" }] }))
+  );
+
+  const saved = await call(
+    "/api/admin/translate",
+    { method: "POST", cookie: cookie(), body: { action: "focus", focusBookId: "book-1" } },
+    environment
+  );
+  assert.equal(saved.status, 200);
+  assert.equal((await saved.json()).config.focusBookId, "book-1");
+  assert.ok(environment.NOVEL_STORAGE.objects.has("config/translation.json"));
+
+  const loaded = await call("/api/admin/translate", { cookie: cookie() }, environment);
+  const body = await loaded.json();
+  assert.equal(body.config.focusBookId, "book-1");
+  assert.equal(body.status.selectionMode, "focused");
+});
+
+test("translation focus refuses a book outside the published catalog", async () => {
+  const environment = env();
+  environment.NOVEL_STORAGE.objects.set("catalog/latest.json", Buffer.from('{"books":[]}'));
+  const response = await call(
+    "/api/admin/translate",
+    { method: "POST", cookie: cookie(), body: { action: "focus", focusBookId: "missing-book" } },
+    environment
+  );
+  assert.equal(response.status, 400);
+});
+
+test("admin deletion permanently removes book objects, job state and database row", async () => {
+  const environment = env({
+    SUPABASE_URL: "https://project.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test"
+  });
+  for (const [key, value] of Object.entries({
+    "books/fanqie-123/index.json": '{"bookId":"fanqie-123","title":"Truyện Xóa"}',
+    "books/fanqie-123/r1/ch/1.json": "{}",
+    "jobs/fanqie-123/translation.json": "{}",
+    "covers/fanqie-123.webp": "cover",
+    "config/translation.json": '{"focusBookId":"fanqie-123"}',
+    "catalog/latest.json": '{"books":[{"id":"fanqie-123","title":"Truyện Xóa"}]}'
+  })) environment.NOVEL_STORAGE.objects.set(key, Buffer.from(value));
+
+  const originalFetch = global.fetch;
+  const databaseDeletes = [];
+  global.fetch = async (url, options = {}) => {
+    const target = String(url);
+    if (target.includes("/rest/v1/books") && options.method === "DELETE") {
+      databaseDeletes.push(target);
+      return new Response(null, { status: 204 });
+    }
+    if (target.includes("/rest/v1/chapters") || target.includes("/rest/v1/book_categories")) {
+      databaseDeletes.push(target);
+      return new Response(null, { status: 204 });
+    }
+    if (target.includes("select=id%2Ctitle%2Csource%2Csource_id") || target.includes("select=id,title,source,source_id")) {
+      return new Response(JSON.stringify([{ id: "fanqie-123", title: "Truyện Xóa", source: "fanqie", source_id: "123" }]), {
+        headers: { "content-type": "application/json" }
+      });
+    }
+    if (target.includes("/rest/v1/books")) {
+      return new Response("[]", { headers: { "content-type": "application/json" } });
+    }
+    throw new Error(`Unexpected fetch ${target}`);
+  };
+
+  try {
+    const response = await call(
+      "/api/admin/catalog",
+      { method: "DELETE", cookie: cookie(), body: { id: "fanqie-123" } },
+      environment
+    );
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).cleanupFailed, false);
+    assert.ok(![...environment.NOVEL_STORAGE.objects.keys()].some((key) => key.includes("fanqie-123")));
+    assert.equal(JSON.parse(environment.NOVEL_STORAGE.objects.get("config/translation.json")).focusBookId, "");
+    assert.equal(databaseDeletes.length, 3);
+  } finally {
+    global.fetch = originalFetch;
+  }
 });
 
 test("analytics degrades to an explicit empty answer without Supabase", async () => {

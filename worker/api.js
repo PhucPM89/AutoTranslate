@@ -21,6 +21,10 @@ import { createCrawlerState } from "../server/crawler-state.js";
 import { createSupabase } from "../server/supabase.js";
 import { publishCatalogSnapshot } from "../server/ingest/catalog-snapshot.js";
 import {
+  readTranslationConfig,
+  writeTranslationConfig
+} from "../server/translation-config.js";
+import {
   CATEGORY_DEFINITIONS,
   WORD_COUNT_BUCKETS,
   CREATION_STATUSES
@@ -74,15 +78,17 @@ export async function handleApiRequest({ request, env }) {
   try {
     return withSecurityHeaders(await route({ request, env, url }), env);
   } catch (error) {
-    console.error(`${url.pathname} lỗi:`, error.message);
-    return withSecurityHeaders(json({ error: error.publicMessage || error.message }, error.status || 500), env);
+    const status = error.status || 500;
+    if (status >= 500) console.error(`${url.pathname} lỗi:`, error.message);
+    const message = error.publicMessage || (status < 500 ? error.message : "Hệ thống đang gặp lỗi. Vui lòng thử lại sau.");
+    return withSecurityHeaders(json({ error: message }, status), env);
   }
 }
 
 // ---- public catalog --------------------------------------------------------
 async function handlePublicCatalog({ request, env }) {
   if (request.method !== "GET" && request.method !== "HEAD") return methodNotAllowed("GET, HEAD");
-  const bucket = env.R2_READER || env.R2_BUCKET;
+  const bucket = env.NOVEL_STORAGE || env.R2_READER;
   if (bucket) {
     const reader = createR2BindingStorage(bucket);
     const raw = await reader.get("catalog/latest.json").catch(() => null);
@@ -99,7 +105,8 @@ async function handlePublicCatalog({ request, env }) {
   }
 
   try {
-    const cdnRes = await fetch("https://cdn.tram-chu.online/catalog/latest.json");
+    const cdnBase = String(env.R2_PUBLIC_BASE_URL || "https://cdn.tram-chu.online").replace(/\/$/, "");
+    const cdnRes = await fetch(`${cdnBase}/catalog/latest.json`, { signal: AbortSignal.timeout(10000) });
     if (cdnRes.ok) {
       const data = await cdnRes.text();
       return new Response(data, {
@@ -239,7 +246,8 @@ async function dispatchIngest(body, env) {
           cover_key: String(body.coverKey || "").slice(0, 300),
           translate: body.translate === false ? "false" : "true"
         }
-      })
+      }),
+      signal: AbortSignal.timeout(15000)
     }
   );
 
@@ -296,10 +304,6 @@ async function handleCatalog({ request, env }) {
     const book = rows?.[0];
     if (!book) throw fail(404, "Không tìm thấy truyện cần xóa.");
 
-    // Unpublished rather than deleted: chapter objects on R2 stay where they are,
-    // so this is reversible and no reader gets a broken link mid-read.
-    await db.upsertBook({ id, title: book.title, published: false });
-
     // Stop the crawler picking it straight back up.
     if (book.source === "fanqie" && /^\d{10,30}$/.test(String(book.source_id || ""))) {
       const state = crawlerState(env);
@@ -309,7 +313,57 @@ async function handleCatalog({ request, env }) {
       });
     }
 
-    return json({ deleted: { id, title: book.title }, catalog: await republish(env) });
+    const cleanupErrors = [];
+    const storage = readerStorage(env);
+    try {
+      const [bookObjects, jobObjects] = await Promise.all([
+        storage.list(`books/${id}/`),
+        storage.list(`jobs/${id}/`)
+      ]);
+      const keys = [
+        ...bookObjects.map((object) => object.key),
+        ...jobObjects.map((object) => object.key),
+        `covers/${id}.jpg`,
+        `covers/${id}.jpeg`,
+        `covers/${id}.png`,
+        `covers/${id}.webp`
+      ];
+      await storage.removeMany(keys);
+
+      const translationConfig = await readTranslationConfig(storage);
+      if (translationConfig.focusBookId === id) {
+        await writeTranslationConfig(storage, { focusBookId: "" });
+      }
+    } catch (error) {
+      cleanupErrors.push(`R2 reader: ${error.message}`);
+    }
+
+    if (env.NOVEL_ARCHIVE) {
+      try {
+        const archive = createR2BindingStorage(env.NOVEL_ARCHIVE);
+        const objects = await archive.list(`archives/${id}`);
+        await archive.removeMany(objects.map((object) => object.key));
+      } catch (error) {
+        cleanupErrors.push(`R2 archive: ${error.message}`);
+      }
+    }
+
+    try {
+      await db.request("chapters", { method: "DELETE", query: `?book_id=eq.${encodeURIComponent(id)}` });
+      await db.request("book_categories", { method: "DELETE", query: `?book_id=eq.${encodeURIComponent(id)}` });
+      await db.request("books", { method: "DELETE", query: `?id=eq.${encodeURIComponent(id)}` });
+    } catch (error) {
+      cleanupErrors.push(`Supabase: ${error.message}`);
+      // Keep it invisible even if a related table prevented permanent deletion.
+      await db.upsertBook({ id, title: book.title, published: false }).catch(() => {});
+    }
+
+    return json({
+      deleted: { id, title: book.title },
+      cleanupFailed: cleanupErrors.length > 0,
+      cleanupErrors,
+      catalog: await republish(env)
+    });
   }
 
   if (request.method !== "POST") return methodNotAllowed("POST, DELETE");
@@ -366,10 +420,31 @@ async function handleTranslateStatus({ request, env }) {
 
   if (request.method === "POST") {
     requireSameOrigin(request);
+    const body = await readJson(request).catch(() => ({}));
+    if (body?.action === "focus") {
+      if (!env.NOVEL_STORAGE) throw fail(503, "Chưa cấu hình NOVEL_STORAGE để lưu bộ truyện ưu tiên.");
+      const storage = createR2BindingStorage(env.NOVEL_STORAGE);
+      const focusBookId = String(body?.focusBookId || "").trim();
+      if (focusBookId) {
+        const catalogRaw = await storage.get("catalog/latest.json").catch(() => null);
+        const catalog = catalogRaw ? JSON.parse(catalogRaw.toString("utf8")) : { books: [] };
+        if (!(catalog.books || []).some((book) => book.id === focusBookId)) {
+          throw fail(400, "Bộ truyện được chọn không còn trong thư viện.");
+        }
+      }
+      const config = await writeTranslationConfig(storage, { focusBookId });
+      return json({
+        success: true,
+        config,
+        message: focusBookId
+          ? "Đã lưu bộ truyện ưu tiên. Worker sẽ chỉ dịch bộ này cho đến khi hoàn tất."
+          : "Đã chuyển về chế độ tự động chọn bộ truyện."
+      });
+    }
+
     if (!env.GITHUB_DISPATCH_TOKEN || !env.GITHUB_REPOSITORY) {
       throw fail(503, "Chưa cấu hình GITHUB_DISPATCH_TOKEN / GITHUB_REPOSITORY.");
     }
-    const body = await readJson(request).catch(() => ({}));
     const book = String(body?.book || "").trim();
     const budget = String(body?.budget || "5000").trim();
 
@@ -390,7 +465,8 @@ async function handleTranslateStatus({ request, env }) {
             book,
             budget
           }
-        })
+        }),
+        signal: AbortSignal.timeout(15000)
       }
     );
 
@@ -400,13 +476,15 @@ async function handleTranslateStatus({ request, env }) {
       throw fail(502, `Không gọi được GitHub Actions translate worker (HTTP ${response.status}).`);
     }
 
-    return json({ success: true, message: "Đã kích hoạt 5 Worker Shards dịch trên GitHub Actions thành công!" }, 202);
+    return json({ success: true, message: "Đã kích hoạt worker dịch trên GitHub Actions thành công!" }, 202);
   }
 
   let status = null;
+  let config = { schema: 1, focusBookId: "", updatedAt: "" };
   try {
     if (env.NOVEL_STORAGE) {
       const storage = createR2BindingStorage(env.NOVEL_STORAGE);
+      config = await readTranslationConfig(storage);
       const raw = await storage.get("jobs/translate-status.json").catch(() => null);
       if (raw) status = JSON.parse(raw.toString("utf8"));
     }
@@ -437,7 +515,9 @@ async function handleTranslateStatus({ request, env }) {
     }
   }
 
-  return json({ status });
+  status.focusBookId = config.focusBookId;
+  status.selectionMode = config.focusBookId ? "focused" : "automatic";
+  return json({ status, config });
 }
 
 // ---- analytics -------------------------------------------------------------
@@ -513,15 +593,15 @@ async function handleAdminUsers({ request, env }) {
 
   // 1. Fetch Auth Users, Leaderboard profiles & Bookmarks concurrently
   const [authUsersRes, profilesRes, bookmarksRes] = await Promise.all([
-    fetch(`${url}/auth/v1/admin/users`, {
+    fetch(`${url}/auth/v1/admin/users?page=1&per_page=1000`, {
       headers: { apikey: key, Authorization: `Bearer ${key}` },
       signal: AbortSignal.timeout(10000)
     }).catch(() => null),
-    fetch(`${url}/rest/v1/reader_leaderboard?select=*`, {
+    fetch(`${url}/rest/v1/reader_leaderboard?select=id,display_name,school,exp,chapters_read,level_title,badge_class,avatar_url,updated_at&limit=1000`, {
       headers: { apikey: key, Authorization: `Bearer ${key}` },
       signal: AbortSignal.timeout(10000)
     }).catch(() => null),
-    fetch(`${url}/rest/v1/user_bookmarks?select=user_id,book_id`, {
+    fetch(`${url}/rest/v1/user_bookmark_counts?select=user_id,bookmark_count&limit=1000`, {
       headers: { apikey: key, Authorization: `Bearer ${key}` },
       signal: AbortSignal.timeout(10000)
     }).catch(() => null)
@@ -543,13 +623,28 @@ async function handleAdminUsers({ request, env }) {
   if (bookmarksRes && bookmarksRes.ok) {
     bookmarks = await bookmarksRes.json().catch(() => []);
     if (!Array.isArray(bookmarks)) bookmarks = [];
+  } else {
+    // Rolling-deploy compatibility: code may reach Pages a few minutes before
+    // migration 0005 creates the aggregate view.
+    const legacy = await fetch(`${url}/rest/v1/user_bookmarks?select=user_id&limit=1000`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(10000)
+    }).catch(() => null);
+    if (legacy?.ok) {
+      const rows = await legacy.json().catch(() => []);
+      const counts = new Map();
+      for (const row of Array.isArray(rows) ? rows : []) {
+        if (row.user_id) counts.set(row.user_id, (counts.get(row.user_id) || 0) + 1);
+      }
+      bookmarks = [...counts].map(([user_id, bookmark_count]) => ({ user_id, bookmark_count }));
+    }
   }
 
   // Map bookmarks by user_id
   const bookmarkCounts = {};
   for (const bm of bookmarks) {
     if (bm.user_id) {
-      bookmarkCounts[bm.user_id] = (bookmarkCounts[bm.user_id] || 0) + 1;
+      bookmarkCounts[bm.user_id] = Number(bm.bookmark_count) || 0;
     }
   }
 
@@ -688,7 +783,7 @@ function requireSameOrigin(request) {
   const origin = request.headers.get("origin");
   if (!origin) return;
   try {
-    if (new URL(origin).host !== new URL(request.url).host) throw fail(403, "Yêu cầu không hợp lệ.");
+    if (new URL(origin).origin !== new URL(request.url).origin) throw fail(403, "Yêu cầu không hợp lệ.");
   } catch (error) {
     throw error.status ? error : fail(403, "Yêu cầu không hợp lệ.");
   }
@@ -759,8 +854,8 @@ async function handleAdminKeys({ request, env }) {
   await requireAdmin(request, env);
 
   const keyList = await getActiveKeyList(env);
-  const model = env.GROQ_MODEL || env.OPENROUTER_MODEL || "openai/gpt-oss-120b";
-  const fallbackModels = env.GROQ_FALLBACK_MODELS || env.OPENROUTER_FALLBACK_MODELS || "meta-llama/llama-3.3-70b-instruct";
+  const model = env.GROQ_MODEL || env.OPENROUTER_MODEL || "qwen/qwen3.6-27b";
+  const fallbackModels = env.GROQ_FALLBACK_MODELS || env.OPENROUTER_FALLBACK_MODELS || "openai/gpt-oss-120b";
 
   if (request.method === "POST") {
     const body = await readJson(request);
@@ -845,7 +940,7 @@ async function handleAdminKeys({ request, env }) {
               Authorization: `Bearer ${key}`
             },
             body: JSON.stringify({
-              model: "openai/gpt-oss-120b",
+              model: env.GROQ_MODEL || "qwen/qwen3.6-27b",
               messages: [{ role: "user", content: "hi" }],
               max_tokens: 1
             })
@@ -854,7 +949,7 @@ async function handleAdminKeys({ request, env }) {
           const ok = resp.ok;
           const status = ok ? "ready" : (resp.status === 429 ? "cooldown" : "error");
           const statusMessage = ok
-            ? "Sẵn sàng (Groq LPU 120B)"
+            ? "Sẵn sàng (Groq Qwen 3.6 27B)"
             : (resp.status === 429 ? "Tạm hết TPM/TPD" : (data?.error?.message || `Lỗi HTTP ${resp.status}`));
 
           const remTokens = resp.headers.get("x-ratelimit-remaining-tokens");
@@ -965,11 +1060,31 @@ async function handleAdminKeys({ request, env }) {
 }
 
 async function readJson(request) {
+  const limit = 64 * 1024;
+  const declared = Number(request.headers.get("content-length") || 0);
+  if (declared > limit) throw fail(413, "Body vượt giới hạn 64 KB.");
+
   try {
-    const text = await request.text();
-    if (!text || !text.trim()) return {};
+    if (!request.body) return {};
+    const reader = request.body.getReader();
+    const decoder = new TextDecoder();
+    let size = 0;
+    let text = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit) {
+        await reader.cancel();
+        throw fail(413, "Body vượt giới hạn 64 KB.");
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+    if (!text.trim()) return {};
     return JSON.parse(text);
-  } catch {
+  } catch (error) {
+    if (error?.status) throw error;
     throw fail(400, "Body không đúng định dạng JSON.");
   }
 }

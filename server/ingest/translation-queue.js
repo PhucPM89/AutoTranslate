@@ -72,15 +72,18 @@ function isDone(state) {
   return state.chapters.every((entry) => entry.status === "completed");
 }
 
-// Always pick chapters in strict ascending numerical order (1, 2, 3, 4...)
-// so novels are translated and readable from beginning to end without jumping!
+// Newly crawled chapters lead so an ongoing book stays current. Every fairness
+// interval gives the oldest normal-priority backlog a turn, so a long book still
+// progresses toward 100% instead of being starved by updates.
 function nextChapter(state, { now = Date.now(), maxAttempts = DEFAULT_MAX_ATTEMPTS, picked = 0, fairnessEvery = 4 } = {}) {
   const candidates = state.chapters
-    .filter((entry) => entry.status !== "completed")
+    .filter((entry) => isEntryReady(entry, { now, maxAttempts }))
     .sort((a, b) => a.n - b.n);
   if (!candidates.length) return null;
-
-  return candidates[0];
+  const high = candidates.filter((entry) => entry.priority === "high");
+  const normal = candidates.filter((entry) => entry.priority !== "high");
+  const preferNormal = fairnessEvery > 0 && picked > 0 && picked % fairnessEvery === 0;
+  return preferNormal ? (normal[0] || high[0]) : (high[0] || normal[0]);
 }
 
 function nextBatchChapters(state, { now = Date.now(), maxAttempts = DEFAULT_MAX_ATTEMPTS, batchSize = 2, picked = 0 } = {}) {
@@ -94,12 +97,18 @@ function nextBatchChapters(state, { now = Date.now(), maxAttempts = DEFAULT_MAX_
     const candidate = state.chapters.find(
       (entry) =>
         entry.n === nextNum &&
-        entry.status !== "completed"
+        isEntryReady(entry, { now, maxAttempts })
     );
     if (!candidate) break;
     batch.push(candidate);
   }
   return batch;
+}
+
+function isEntryReady(entry, { now, maxAttempts }) {
+  if (!entry || entry.status === "completed") return false;
+  if (Number(entry.attempts || 0) >= maxAttempts) return false;
+  return Number(entry.nextAttemptAt || 0) <= now;
 }
 
 function backoffFor(attempts, base = DEFAULT_BACKOFF_MS) {
@@ -207,6 +216,12 @@ async function runTranslationJobs({
               const errMsg = String(err && err.message ? err.message : err).slice(0, 300);
               entry.lastError = errMsg;
               if (isQuotaError(err)) {
+                quotaExhausted = true;
+                if (err && err.earliestCooldown) {
+                  earliestCooldown = earliestCooldown
+                    ? Math.min(earliestCooldown, err.earliestCooldown)
+                    : err.earliestCooldown;
+                }
                 entry.attempts = Math.max(0, entry.attempts - 1);
                 entry.status = "pending";
                 entry.nextAttemptAt = now() + backoffFor(1, backoffBaseMs);
@@ -289,6 +304,9 @@ async function runTranslationJobs({
         await onProgress({ chapter: entry.n, status: entry.status, ...summarize(state) });
       }
     }
+    // translateChapter already rotates through the available key pool. A quota
+    // error here means continuing with more chapters would create a retry storm.
+    if (quotaExhausted) break;
     const currentSpacing = typeof spacingMs === "function" ? spacingMs() : spacingMs;
     if (currentSpacing) {
       const jitter = Math.floor(Math.random() * 300);

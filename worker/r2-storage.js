@@ -55,6 +55,14 @@ function createR2BindingStorage(bucket, { publicBase = "" } = {}) {
       await bucket.delete(key);
     },
 
+    async removeMany(keys) {
+      const unique = [...new Set((keys || []).filter(Boolean))];
+      for (let index = 0; index < unique.length; index += 1000) {
+        await bucket.delete(unique.slice(index, index + 1000));
+      }
+      return unique.length;
+    },
+
     publicUrl(key) {
       if (!base) throw new Error("Chưa cấu hình R2_PUBLIC_BASE_URL.");
       return `${base}/${key}`;

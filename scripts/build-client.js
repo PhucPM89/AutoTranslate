@@ -38,7 +38,7 @@ const jszipUrl = copyVendor(
 
 // The admin bundle is only useful to the site owner, so it ships as a separate
 const cdnBase = (process.env.R2_PUBLIC_BASE_URL || "https://cdn.tram-chu.online").replace(/\/$/, "");
-const readerCdnEnabled = process.env.READER_CDN_ENABLED !== undefined ? process.env.READER_CDN_ENABLED === "true" : true;
+const readerCdnEnabled = process.env.READER_CDN_ENABLED === "true";
 const supabaseUrl = (process.env.SUPABASE_URL || "https://bckwrfucultwxirorglv.supabase.co").replace(/\/$/, "");
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || "sb_publishable_S2l6AfkJg1ehDzY0GmnZxg_7jGI0vCq";
 
@@ -94,10 +94,9 @@ main().catch((err) => {
 // the bundle, so nothing about the built files shows which way it went. Printing
 // it means a deploy log is enough to tell.
 function reportReaderMode() {
-  const enabled = process.env.READER_CDN_ENABLED === "true";
   const base = process.env.R2_PUBLIC_BASE_URL || "";
   console.log(
-    `reader: chapter từ ${enabled && base ? "CDN" : "EPUB"}` +
+    `reader: chapter từ ${readerCdnEnabled && base ? "CDN" : "EPUB"}` +
       ` (READER_CDN_ENABLED=${process.env.READER_CDN_ENABLED ?? "(không đặt)"})`
   );
 }
@@ -289,4 +288,3 @@ async function writeSitemapAndRobots() {
 function formatKb(bytes) {
   return `${(bytes / 1024).toFixed(1)} KB`;
 }
-

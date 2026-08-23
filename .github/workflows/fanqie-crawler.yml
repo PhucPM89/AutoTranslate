@@ -19,7 +19,9 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: fanqie-crawler
+  # Crawler ingest and translator both update book indexes and translation job
+  # objects. R2 has no transaction around those writes, so they must not overlap.
+  group: novel-pipeline-storage-writes
   cancel-in-progress: false
 
 permissions:
@@ -130,4 +132,3 @@ jobs:
             } catch (err) {
               console.log('Workflow dispatch notice:', err.message);
             }
-

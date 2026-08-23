@@ -43,7 +43,9 @@ const {
   getStoredChaptersRead,
   incrementChaptersRead,
   fetchLeaderboard,
-  syncReaderLeaderboard
+  syncReaderLeaderboard,
+  safeRankBadgeClass,
+  safeAvatarUrl
 } = require("./reader-rank.js");
 const {
   fetchChapterComments,
@@ -1972,7 +1974,12 @@ function goToChapter(index) {
   if (getAuthUser()) {
     const expResult = addReaderExp(5, "read_chapter");
     incrementChaptersRead();
-    syncReaderLeaderboard({ supabaseUrl: SUPABASE_URL, supabaseKey: SUPABASE_ANON_KEY, user: getAuthUser() }).catch(() => {});
+    syncReaderLeaderboard({
+      supabaseUrl: SUPABASE_URL,
+      supabaseKey: SUPABASE_ANON_KEY,
+      accessToken: authClient?.getSession()?.accessToken || "",
+      user: getAuthUser()
+    }).catch(() => {});
     if (expResult.leveledUp) {
       showToast(`🎉 CHÚC MỪNG! Đột phá cảnh giới: ${expResult.title}!`, 4000);
     }
@@ -2003,12 +2010,14 @@ function preloadNextChapter(nextIndex) {
   const nextChapter = state.chapters[nextIndex];
   if (state.mode === "cdn" && state.cdnTemplate && nextChapter) {
     const url = chapterUrlFor({ bookId: bookIdFromState(), revision: revisionFromState(), chapterUrlTemplate: state.cdnTemplate }, nextChapter.chapterNumber);
-    fetch(url, { cache: "no-cache" })
+    fetch(url)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.content && data.translationStatus === "completed") {
           nextChapter.text = data.content;
           nextChapter.status = data.translationStatus;
+          nextChapter.words = countWords(nextChapter.text);
+          nextChapter._loaded = true;
         }
       })
       .catch(() => {});
@@ -2566,13 +2575,14 @@ function initGlossarySuggestionController() {
 
     const bookId = state.mode === "cdn" ? bookIdFromState() : (state.bookId || "general");
 
-    if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+    const accessToken = authClient?.getSession()?.accessToken || "";
+    if (SUPABASE_URL && SUPABASE_ANON_KEY && accessToken) {
       try {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/glossary_suggestions`, {
           method: "POST",
           headers: {
             apikey: SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+            Authorization: `Bearer ${accessToken}`,
             "Content-Type": "application/json",
             Prefer: "return=minimal"
           },
@@ -2619,6 +2629,7 @@ function initCommentsController() {
       await postComment({
         supabaseUrl: SUPABASE_URL,
         supabaseKey: SUPABASE_ANON_KEY,
+        accessToken: authClient?.getSession()?.accessToken || "",
         bookId,
         chapterIndex: chIdx,
         paragraphIndex: parIdx,
@@ -2991,14 +3002,16 @@ async function renderLeaderboardData(school = "all") {
         if (!item) return;
         const slot = document.createElement("div");
         slot.className = `podium-slot ${cls}`;
-        const avatarLetter = (item.display_name || "Đ")[0].toUpperCase();
+        const avatarLetter = escapeHtml((item.display_name || "Đ")[0].toUpperCase());
+        const avatarUrl = safeAvatarUrl(item.avatar_url);
+        const badgeClass = safeRankBadgeClass(item.badge_class);
         slot.innerHTML = `
           <span class="podium-medal">${medal}</span>
           <div class="podium-avatar">
-            ${item.avatar_url ? `<img src="${item.avatar_url}" alt="" style="width:100%;height:100%;object-fit:cover;">` : `<span>${avatarLetter}</span>`}
+            ${avatarUrl ? `<img src="${escapeHtml(avatarUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;">` : `<span>${avatarLetter}</span>`}
           </div>
           <strong class="podium-name">${escapeHtml(item.display_name || "Ẩn danh")}</strong>
-          <span class="reader-rank-badge ${item.badge_class || 'rank-1'} podium-badge">[${item.level_title || 'Phàm Nhân'}]</span>
+          <span class="reader-rank-badge ${badgeClass} podium-badge">[${escapeHtml(item.level_title || 'Phàm Nhân')}]</span>
           <span class="podium-exp">${Number(item.exp || 0).toLocaleString("vi-VN")} Tu Vi</span>
           <small class="podium-chapters">${Number(item.chapters_read || 0)} chương</small>
         `;
@@ -3017,16 +3030,18 @@ async function renderLeaderboardData(school = "all") {
       const rank = idx + 4;
       const li = document.createElement("li");
       li.className = `leaderboard-item ${item.id === myUid ? 'is-me' : ''}`;
-      const avatarLetter = (item.display_name || "Đ")[0].toUpperCase();
+      const avatarLetter = escapeHtml((item.display_name || "Đ")[0].toUpperCase());
+      const avatarUrl = safeAvatarUrl(item.avatar_url);
+      const badgeClass = safeRankBadgeClass(item.badge_class);
       li.innerHTML = `
         <span class="lb-rank">#${rank}</span>
         <div class="lb-avatar">
-          ${item.avatar_url ? `<img src="${item.avatar_url}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">` : `<span>${avatarLetter}</span>`}
+          ${avatarUrl ? `<img src="${escapeHtml(avatarUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">` : `<span>${avatarLetter}</span>`}
         </div>
         <div class="lb-info">
           <div class="lb-name-row">
             <strong class="lb-name">${escapeHtml(item.display_name || "Ẩn danh")}</strong>
-            <span class="reader-rank-badge ${item.badge_class || 'rank-1'}">[${item.level_title || 'Phàm Nhân'}]</span>
+            <span class="reader-rank-badge ${badgeClass}">[${escapeHtml(item.level_title || 'Phàm Nhân')}]</span>
           </div>
           <small class="lb-meta">${Number(item.chapters_read || 0)} chương đã luyện</small>
         </div>
@@ -3047,7 +3062,7 @@ function initReaderRankController() {
     updateRankBadgeUI();
     switchRankHubTab(defaultTab);
     els.rankSchoolDialog?.showModal();
-    syncReaderLeaderboard({ supabaseUrl: SUPABASE_URL, supabaseKey: SUPABASE_ANON_KEY, user: getAuthUser() }).catch(() => {});
+    syncReaderRank(false).catch(() => {});
   }
 
   function closeRankModal() {
@@ -3079,7 +3094,7 @@ function initReaderRankController() {
     if (els.commentAuthorInput) els.commentAuthorInput.value = clean;
     updateRankBadgeUI();
     showToast(clean ? `✓ Đã lưu đạo hiệu: ${clean}` : "✓ Đã đặt lại đạo hiệu mặc định", 2500);
-    await syncReaderLeaderboard({ supabaseUrl: SUPABASE_URL, supabaseKey: SUPABASE_ANON_KEY, user: getAuthUser(), force: true });
+    await syncReaderRank(true);
   }
 
   els.saveNicknameBtn?.addEventListener("click", handleSaveNickname);
@@ -3103,7 +3118,17 @@ function initReaderRankController() {
     const newProfile = setRankSchool(schoolId);
     updateRankBadgeUI();
     showToast(`✓ Đã chuyển sang ${newProfile.schoolName}: [${newProfile.title}]`, 3000);
-    await syncReaderLeaderboard({ supabaseUrl: SUPABASE_URL, supabaseKey: SUPABASE_ANON_KEY, user: getAuthUser(), force: true });
+    await syncReaderRank(true);
+  });
+}
+
+function syncReaderRank(force = false) {
+  return syncReaderLeaderboard({
+    supabaseUrl: SUPABASE_URL,
+    supabaseKey: SUPABASE_ANON_KEY,
+    accessToken: authClient?.getSession()?.accessToken || "",
+    user: getAuthUser(),
+    force
   });
 }
 
@@ -3834,8 +3859,9 @@ async function loadCdnChapter(index, force = false) {
 
   try {
     const chapterUrl = chapterUrlFor({ bookId: bookIdFromState(), revision: revisionFromState(), chapterUrlTemplate: state.cdnTemplate }, chapter.chapterNumber);
-    const busterUrl = `${chapterUrl}${chapterUrl.includes("?") ? "&" : "?"}_t=${Date.now()}`;
-    const response = await fetch(busterUrl, { cache: "no-store" });
+    // Revisioned chapter URLs are immutable. Let the browser and Cloudflare use
+    // that cache; a timestamp query here turned every navigation into a cache miss.
+    const response = await fetch(chapterUrl, force ? { cache: "reload" } : undefined);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const document_ = await response.json();
     if (index !== state.currentIndex) return;

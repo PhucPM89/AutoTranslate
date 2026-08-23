@@ -46,6 +46,15 @@ test("translation-engine: buildContextualPrompt injects glossary section", () =>
   assert.ok(prompt.includes("林枫到达了大板机场。"));
 });
 
+test("translation-engine: prompt carries book context and numeric fidelity rule", () => {
+  const prompt = createTranslationEngine().buildContextualPrompt({
+    text: "他有1200块灵石。",
+    bookTitle: "Kiếm Đạo Trường Sinh"
+  });
+  assert.match(prompt, /Tác phẩm: Kiếm Đạo Trường Sinh/);
+  assert.match(prompt, /Giữ nguyên mọi con số/);
+});
+
 test("translation-engine: postProcessTranslation cleans markdown & enforces glossary", () => {
   const engine = createTranslationEngine();
   const glossary = {

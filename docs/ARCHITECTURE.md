@@ -15,16 +15,16 @@ Với dữ liệu đọc nhiều: **CDN > object storage > API > database**.
 | Chapter/index JSON + cache policy theo key | Xong, có test |
 | Translation queue (retry / backoff / resume / quota) | Xong, có test |
 | `ingestBook()` dùng chung admin + crawler | Xong, có test |
-| Supabase schema | SQL đã viết, **chưa apply** — thiếu credential |
+| Supabase base schema (`0001`–`0004`) | **Đã apply** |
 | R2 bucket `novel-storage` | **Đã có**, S3 read/write đã verify |
 | Reader đọc chapter từ CDN | **Xong**, có feature flag + fallback, đã verify bằng Chrome |
 | `_headers` cho Cloudflare Pages | **Xong**, CSP tự nhận CDN origin lúc build |
 | R2 ingest thật | **Xong** — 1 truyện, 2.854 object, 33.2 MB, cache header đúng |
-| Cloudflare Pages project | **Chưa tạo** — token Cloudflare không hợp lệ |
-| R2 public CDN domain | **Chưa có** — cần control plane |
+| Cloudflare Pages project | **Đã có**, project `tram-chu-web` |
+| R2 public CDN domain | **Đã có**, `cdn.tram-chu.online` |
 | Migration 49 truyện | **Đã bỏ** — crawl lại từ đầu |
 | Cache Rule CDN | **Đã có**, `cf-cache-status: HIT` xác nhận |
-| Supabase schema | **Đã apply**, 6 object verify 200 |
+| Security migration `0005` | **Đã apply production** và ghi nhận trong remote migration history |
 | Crawler / translation | **Đã tách**, hai workflow riêng |
 
 Reader giờ có hai đường: CDN (mới) và EPUB (cũ). Mặc định `READER_CDN_ENABLED`

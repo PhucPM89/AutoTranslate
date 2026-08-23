@@ -187,7 +187,30 @@ function getRankSchools() {
 }
 
 function formatRankBadge(title, badgeClass = "rank-1") {
-  return `<span class="reader-rank-badge ${badgeClass}">[${title}]</span>`;
+  return `<span class="reader-rank-badge ${safeRankBadgeClass(badgeClass)}">[${escapeHtml(title)}]</span>`;
+}
+
+function safeRankBadgeClass(value) {
+  const candidate = String(value || "");
+  return /^rank-(?:[1-9]|10)$/.test(candidate) ? candidate : "rank-1";
+}
+
+function safeAvatarUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return url.protocol === "https:" && url.href.length <= 1000 ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
+function escapeHtml(value) {
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 // ------------------------------------------------------------- LEADERBOARD
@@ -232,16 +255,16 @@ async function fetchLeaderboard({ supabaseUrl, supabaseKey, school = "all", limi
 }
 
 let lastSyncTime = 0;
-async function syncReaderLeaderboard({ supabaseUrl, supabaseKey, user = null, force = false } = {}) {
-  if (!supabaseUrl || !supabaseKey) return false;
+async function syncReaderLeaderboard({ supabaseUrl, supabaseKey, accessToken = "", user = null, force = false } = {}) {
+  if (!supabaseUrl || !supabaseKey || !accessToken || !user?.id) return false;
   const now = Date.now();
   if (!force && now - lastSyncTime < 10000) return false; // Throttled 10s
 
   const profile = getReaderProfile();
   const id = user?.id || getReaderId();
   const nickname = getReaderNickname();
-  const displayName = nickname || user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Ẩn danh đạo hữu";
-  const avatarUrl = user?.user_metadata?.avatar_url || "";
+  const displayName = nickname || user?.fullName || user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Ẩn danh đạo hữu";
+  const avatarUrl = user?.avatarUrl || user?.user_metadata?.avatar_url || "";
   const chaptersRead = getStoredChaptersRead();
 
   const payload = {
@@ -263,7 +286,7 @@ async function syncReaderLeaderboard({ supabaseUrl, supabaseKey, user = null, fo
       method: "POST",
       headers: {
         apikey: supabaseKey,
-        Authorization: `Bearer ${supabaseKey}`,
+        Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
         Prefer: "resolution=merge-duplicates"
       },
@@ -289,6 +312,8 @@ module.exports = {
   setReaderNickname,
   getStoredChaptersRead,
   incrementChaptersRead,
+  safeRankBadgeClass,
+  safeAvatarUrl,
   fetchLeaderboard,
   syncReaderLeaderboard,
   invalidateLeaderboardCache

@@ -14,6 +14,44 @@ test("rejects output that is still mostly Chinese", () => {
   assert.equal(result.acceptable, false);
 });
 
+test("rejects even isolated Chinese characters in a published translation", () => {
+  const vietnamese = "Đây là bản dịch đầy đủ nhưng còn sót một chữ 漢 trong nội dung. ".repeat(12);
+  const result = assessTranslation(chineseSource, vietnamese);
+  assert.equal(result.acceptable, false);
+  assert.match(result.reason, /chữ Hán/);
+});
+
+test("rejects output whose abnormal length indicates repetition", () => {
+  const repeated = "Đây là một câu bị lặp lại ngoài ý muốn. ".repeat(100);
+  const result = assessTranslation(chineseSource, repeated);
+  assert.equal(result.acceptable, false);
+  assert.match(result.reason, /dài bất thường/);
+});
+
+test("rejects a translation that collapses most source paragraphs", () => {
+  const source = Array.from({ length: 6 }, (_, i) => `第${i + 1}段，这是需要完整翻译的中文内容。`.repeat(5)).join("\n\n");
+  const output = "Đây là một khối văn bản tiếng Việt đủ dài nhưng đã gộp toàn bộ cấu trúc đoạn của nguyên tác. ".repeat(12);
+  const result = assessTranslation(source, output);
+  assert.equal(result.acceptable, false);
+  assert.match(result.reason, /cấu trúc đoạn/);
+});
+
+test("rejects duplicated long paragraphs", () => {
+  const source = "这是一个需要完整翻译的中文段落。".repeat(50);
+  const paragraph = "Đây là một đoạn dịch dài bị mô hình lặp nguyên văn ngoài ý muốn, làm nội dung sai lệch dù tổng chiều dài vẫn có vẻ hợp lệ. ".repeat(4);
+  const result = assessTranslation(source, `${paragraph}\n\n${paragraph}`);
+  assert.equal(result.acceptable, false);
+  assert.match(result.reason, /lặp nguyên đoạn/);
+});
+
+test("rejects a translation that drops Arabic quantities", () => {
+  const source = `${"这是中文内容。".repeat(40)}他得到了1200块灵石。`;
+  const output = "Đây là bản dịch tiếng Việt đầy đủ về việc nhân vật nhận được rất nhiều linh thạch. ".repeat(12);
+  const result = assessTranslation(source, output);
+  assert.equal(result.acceptable, false);
+  assert.match(result.reason, /làm mất số 1200/);
+});
+
 test("accepts a substantial Vietnamese translation", () => {
   const vietnamese = "Đây là một đoạn văn đã được dịch đầy đủ sang tiếng Việt, giữ nguyên nội dung và cấu trúc. ".repeat(12);
   const result = assessTranslation(chineseSource, vietnamese);
@@ -45,6 +83,31 @@ test("tries the next model when a model echoes Chinese text", async () => {
     assert.match(firstPrompt, /Pinyin/i);
     assert.match(firstPrompt, /Lý Tử Dạ/);
     assert.doesNotMatch(firstPrompt, /Phiên âm tên riêng sang chữ Latin/);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("injects matching translation-memory terminology without an extra AI call", async () => {
+  const originalFetch = global.fetch;
+  const source = "众人倒吸一口凉气，谁也不敢继续向前。".repeat(20);
+  const vietnamese = "Mọi người hít sâu một hơi khí lạnh, không ai dám tiếp tục tiến lên phía trước. ".repeat(15);
+  let prompt = "";
+  let calls = 0;
+  global.fetch = async (_url, options) => {
+    calls += 1;
+    prompt = JSON.parse(options.body).contents[0].parts[0].text;
+    return {
+      ok: true,
+      json: async () => ({ candidates: [{ content: { parts: [{ text: vietnamese }] } }] })
+    };
+  };
+  try {
+    const result = await translateText(source, "test-key", { bookTitle: "Khí Lạnh Trường Sinh" });
+    assert.equal(result.translation, vietnamese.trim());
+    assert.equal(calls, 1);
+    assert.match(prompt, /"倒吸一口凉气" ➔ "hít sâu một hơi khí lạnh"/);
+    assert.match(prompt, /Tác phẩm: Khí Lạnh Trường Sinh/);
   } finally {
     global.fetch = originalFetch;
   }

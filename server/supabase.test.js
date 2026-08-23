@@ -2,7 +2,20 @@
 
 const test = require("node:test");
 const assert = require("node:assert");
+const fs = require("node:fs");
+const path = require("node:path");
 const { createSupabase } = require("./supabase");
+
+test("security migration binds community writes to authenticated readers", () => {
+  const sql = fs.readFileSync(
+    path.join(__dirname, "..", "supabase", "migrations", "0005_security_hardening.sql"),
+    "utf8"
+  );
+  assert.match(sql, /auth\.uid\(\)\)::text = id/);
+  assert.match(sql, /paragraph_comments_insert[\s\S]*to authenticated/);
+  assert.match(sql, /glossary_suggestions_insert[\s\S]*to authenticated/);
+  assert.match(sql, /revoke all on analytics_daily from anon, authenticated/);
+});
 
 // The PostgREST calls are checked by intercepting fetch. These assertions exist
 // because a wrong upsert here fails at runtime as an HTTP 409 that the callers
@@ -70,6 +83,34 @@ test("an analytics insert asks for nothing back", () =>
       const db = createSupabase(ENV);
       await db.insertAnalyticsEvent({ type: "visit", bookId: "", sessionId: "abc" });
       assert.match(calls[0].options.headers.Prefer, /return=minimal/);
+    }
+  ));
+
+test("top-book analytics uses the aggregate view instead of downloading raw events", () =>
+  withFakeFetch(
+    () => new Response(JSON.stringify([{ book_id: "book-1", reads: 42 }]), {
+      status: 200,
+      headers: { "content-type": "application/json" }
+    }),
+    async (calls) => {
+      const rows = await createSupabase(ENV).readTopBooks({ limit: 5 });
+      assert.deepEqual(rows, [{ bookId: "book-1", reads: 42 }]);
+      assert.match(calls[0].url, /analytics_book_totals/);
+      assert.doesNotMatch(calls[0].url, /analytics_events/);
+    }
+  ));
+
+test("bookmark statistics uses an exact HEAD count with no row payload", () =>
+  withFakeFetch(
+    (_url, options) => new Response(null, {
+      status: 200,
+      headers: { "content-range": "0-0/2345" }
+    }),
+    async (calls) => {
+      const count = await createSupabase(ENV).readUserBookmarkCount();
+      assert.equal(count, 2345);
+      assert.equal(calls[0].options.method, "HEAD");
+      assert.equal(calls[0].options.headers.Prefer, "count=exact");
     }
   ));
 

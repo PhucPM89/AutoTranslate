@@ -215,26 +215,39 @@ function createSupabase(env = process.env, { role = "service" } = {}) {
 
     async readTopBooks({ limit = 10 } = {}) {
       try {
-        const rows = await request("analytics_events", {
-          query: "?select=book_id&event_type=eq.read&book_id=not.is.null&limit=2000"
+        const rows = await request("analytics_book_totals", {
+          query: `?select=book_id,reads&order=reads.desc&limit=${Math.max(1, Math.min(100, Number(limit) || 10))}`
         });
-        const counts = {};
-        for (const row of rows || []) {
-          if (row.book_id) counts[row.book_id] = (counts[row.book_id] || 0) + 1;
-        }
-        return Object.entries(counts)
-          .map(([bookId, reads]) => ({ bookId, reads }))
-          .sort((a, b) => b.reads - a.reads)
-          .slice(0, limit);
+        return (rows || []).map((row) => ({ bookId: row.book_id, reads: Number(row.reads) || 0 }));
       } catch {
-        return [];
+        // Rolling-deploy fallback until migration 0005 creates the aggregate view.
+        try {
+          const rows = await request("analytics_events", {
+            query: "?select=book_id&event_type=eq.read&book_id=not.is.null&limit=2000"
+          });
+          const counts = {};
+          for (const row of rows || []) {
+            if (row.book_id) counts[row.book_id] = (counts[row.book_id] || 0) + 1;
+          }
+          return Object.entries(counts)
+            .map(([bookId, reads]) => ({ bookId, reads }))
+            .sort((a, b) => b.reads - a.reads)
+            .slice(0, limit);
+        } catch {
+          return [];
+        }
       }
     },
 
     async readUserBookmarkCount() {
       try {
-        const rows = await request("user_bookmarks", { query: "?select=book_id&limit=2000" });
-        return Array.isArray(rows) ? rows.length : 0;
+        const response = await fetch(`${url}/rest/v1/user_bookmarks?select=book_id`, {
+          method: "HEAD",
+          headers: { apikey: key, Authorization: `Bearer ${key}`, Prefer: "count=exact" },
+          signal: AbortSignal.timeout(15000)
+        });
+        if (!response.ok) return 0;
+        return Number((response.headers.get("content-range") || "").split("/")[1]) || 0;
       } catch {
         return 0;
       }

@@ -46,8 +46,9 @@ async function fetchChapterComments({ supabaseUrl, supabaseKey, bookId, chapterI
   }
 }
 
-async function postComment({ supabaseUrl, supabaseKey, bookId, chapterIndex, paragraphIndex, authorName, content }) {
+async function postComment({ supabaseUrl, supabaseKey, accessToken, bookId, chapterIndex, paragraphIndex, authorName, content }) {
   if (!supabaseUrl || !supabaseKey) throw new Error("Chưa cấu hình cơ sở dữ liệu");
+  if (!accessToken) throw new Error("Vui lòng đăng nhập để gửi bình luận");
 
   // Client rate-limiting
   const now = Date.now();
@@ -74,7 +75,7 @@ async function postComment({ supabaseUrl, supabaseKey, bookId, chapterIndex, par
     method: "POST",
     headers: {
       apikey: supabaseKey,
-      Authorization: `Bearer ${supabaseKey}`,
+      Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
       Prefer: "return=representation"
     },

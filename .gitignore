@@ -23,3 +23,6 @@ public/vendor/
 
 # wrangler local state, cache and bundles
 .wrangler/
+
+# Supabase CLI link/cache metadata
+supabase/.temp/

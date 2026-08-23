@@ -464,6 +464,20 @@
           </div>
         </div>
 
+        <div class="trans-focus-picker">
+          <label for="adminTranslateFocusBook">
+            <strong>Bộ truyện ưu tiên</strong>
+            <small>Chọn một bộ để worker chỉ dịch bộ đó đến 100%. Chọn tự động để hệ thống tự quyết định bộ tiếp theo.</small>
+          </label>
+          <div class="trans-focus-picker-controls">
+            <select id="adminTranslateFocusBook">
+              <option value="">Tự động chọn khi không có bộ ưu tiên</option>
+            </select>
+            <button id="adminTranslateFocusSave" class="primary-action" type="button">Lưu ưu tiên</button>
+          </div>
+          <p id="adminTranslateFocusHint" class="trans-focus-picker-hint">Đang tải cấu hình...</p>
+        </div>
+
         <!-- THE MAIN FOCUS HERO CARD: Single Novel Center -->
         <div id="transActiveCard" class="trans-focus-card">
           <div class="trans-focus-topbar">
@@ -514,13 +528,13 @@
             </div>
             <div class="trans-spec-item">
               <span class="trans-spec-label">🔑 Cụm AI Keys</span>
-              <strong id="transStatKeysActive" class="trans-spec-val text-accent-purple">17 Keys Hoạt động</strong>
-              <small class="trans-spec-sub">9 Groq LPU + 8 OpenRouter</small>
+              <strong id="transStatKeysActive" class="trans-spec-val text-accent-purple">Đang kiểm tra Keys</strong>
+              <small class="trans-spec-sub">Chỉ dùng model đã qua cổng chất lượng</small>
             </div>
             <div class="trans-spec-item">
               <span class="trans-spec-label">⚡ Cơ chế điều tốc</span>
               <strong class="trans-spec-val text-accent-cyan">Tự động 24/7</strong>
-              <small id="translateStateMeta" class="trans-spec-sub">600ms / request xoay vòng</small>
+              <small id="translateStateMeta" class="trans-spec-sub">Điều tốc tự động theo quota</small>
             </div>
           </div>
         </div>
@@ -549,7 +563,7 @@
           </div>
           <div class="keys-summary-item">
             <span>Model chính</span>
-            <strong id="keysActiveModel">openai/gpt-oss-120b</strong>
+            <strong id="keysActiveModel">qwen/qwen3.6-27b</strong>
           </div>
           <div class="keys-summary-item">
             <span>Tổng hạn mức ngày</span>

@@ -8882,6 +8882,64 @@ body.zen-mode .document-paper {
   white-space: nowrap;
 }
 
+.trans-focus-picker {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(300px, 1.5fr);
+  gap: 0.8rem 1.25rem;
+  align-items: center;
+  margin-top: 1rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.trans-focus-picker label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.trans-focus-picker label strong {
+  color: #f8fafc;
+  font-size: 0.92rem;
+}
+
+.trans-focus-picker label small,
+.trans-focus-picker-hint {
+  color: #94a3b8;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.trans-focus-picker-controls {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.trans-focus-picker select {
+  min-width: 0;
+  flex: 1;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 9px;
+  background: #0b1220;
+  color: #e2e8f0;
+}
+
+.trans-focus-picker-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.trans-focus-picker-hint[data-mode="focused"] { color: #c084fc; }
+.trans-focus-picker-hint[data-mode="automatic"] { color: #38bdf8; }
+
+@media (max-width: 700px) {
+  .trans-focus-picker { grid-template-columns: 1fr; }
+  .trans-focus-picker-controls { flex-direction: column; }
+  .trans-focus-picker-hint { grid-column: auto; }
+}
 
 
 

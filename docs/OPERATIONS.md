@@ -49,12 +49,14 @@ Ingest phát: `ingest.started`, `ingest.chapters_extracted`,
 ## Hai workload tách rời
 
 ```
-Crawler        (*/15 phút)  phát hiện -> tách chương -> xếp hàng -> thoát nhanh
-Translate      (:05, :35)   rút hàng đợi -> Gemini -> R2 -> Supabase -> checkpoint
+Crawler        (mỗi 10 phút) phát hiện -> tách chương -> xếp hàng -> thoát nhanh
+Translate      (mỗi 15 phút) rút hàng đợi -> AI -> R2 -> Supabase -> checkpoint
 ```
 
-Crawler gọi `runIngest({ translateEnabled: false })` nên **không bao giờ** chờ Gemini.
-Hai workflow có `concurrency` group riêng, chạy song song an toàn.
+Crawler gọi `runIngest({ translateEnabled: false })` nên **không bao giờ** chờ AI.
+Crawler, admin ingest và translator dùng chung concurrency group
+`novel-pipeline-storage-writes`: cả ba đều ghi book index/job state trên R2, nên
+không được chạy chồng lên nhau khi chưa có compare-and-swap/transaction.
 
 ## Số đo Gemini thật (19 chương thật)
 

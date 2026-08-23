@@ -34,6 +34,9 @@ const els = {
   translatePanel: document.getElementById("adminTranslatePanel"),
   translateStartBtn: document.getElementById("adminTranslateStartBtn"),
   translateRefresh: document.getElementById("adminTranslateRefresh"),
+  translateFocusBook: document.getElementById("adminTranslateFocusBook"),
+  translateFocusSave: document.getElementById("adminTranslateFocusSave"),
+  translateFocusHint: document.getElementById("adminTranslateFocusHint"),
   translateStateBadge: document.getElementById("translateStateBadge"),
   translateStateMessage: document.getElementById("translateStateMessage"),
   translateStateMeta: document.getElementById("translateStateMeta"),
@@ -132,6 +135,7 @@ export function mountAdmin() {
     els.addKeyForm?.addEventListener("submit", handleAddKeySubmit);
     els.translateStartBtn?.addEventListener("click", handleStartTranslate);
     els.translateRefresh?.addEventListener("click", loadTranslateStatus);
+    els.translateFocusSave?.addEventListener("click", saveTranslationFocus);
     els.statsRefresh?.addEventListener("click", loadAnalytics);
     els.usersRefresh?.addEventListener("click", loadAdminUsers);
     els.usersSearch?.addEventListener("input", filterAdminUsers);
@@ -309,6 +313,7 @@ async function deleteSelectedBook() {
     });
     adminCatalog = result.catalog;
     renderBookOptions();
+    renderTranslationFocusOptions();
     startNewBook();
     setStatus(
       result.cleanupFailed ? "Đã gỡ truyện khỏi thư viện, nhưng có file Blob chưa xóa được." : `Đã xóa ${result.deleted.title} khỏi thư viện.`,
@@ -330,6 +335,7 @@ async function loadAdminCatalog() {
     ? await requestJson(`${CDN_BASE}/catalog/latest.json?admin=${Date.now()}`)
     : { books: [] };
   renderBookOptions();
+  renderTranslationFocusOptions();
   startNewBook();
 }
 
@@ -512,13 +518,13 @@ async function handleStartTranslate() {
       method: "POST",
       body: JSON.stringify({ budget: "5000" })
     });
-    setStatus(res.message || "Đã kích hoạt 5 Worker Shards dịch trên GitHub Actions thành công!");
+    setStatus(res.message || "Đã kích hoạt worker dịch trên GitHub Actions.");
     if (els.translateStateBadge) {
       els.translateStateBadge.textContent = "Khởi động";
       els.translateStateBadge.dataset.state = "running";
     }
     if (els.translateStateMessage) {
-      els.translateStateMessage.textContent = "Đang kết nối 5 Worker Shards dịch tự động trên GitHub Actions...";
+      els.translateStateMessage.textContent = "Đang kết nối worker dịch trên GitHub Actions...";
     }
     setTimeout(loadTranslateStatus, 3000);
   } catch (err) {
@@ -532,9 +538,66 @@ async function handleStartTranslate() {
 async function loadTranslateStatus() {
   try {
     const res = await requestJson("/api/admin/translate");
+    renderTranslationFocusOptions(res.config?.focusBookId || "");
+    renderTranslationFocusHint(res.config || {});
     renderTranslateStatus(res.status);
   } catch (err) {
     console.warn("Unable to load translate status:", err);
+  }
+}
+
+function renderTranslationFocusOptions(selectedId) {
+  if (!els.translateFocusBook) return;
+  const current = selectedId === undefined ? els.translateFocusBook.value : selectedId;
+  const fragment = document.createDocumentFragment();
+  const automatic = document.createElement("option");
+  automatic.value = "";
+  automatic.textContent = "Tự động chọn khi không có bộ ưu tiên";
+  fragment.appendChild(automatic);
+  [...(adminCatalog.books || [])]
+    .filter((book) => {
+      const total = Number(book.chapterCount || book.totalChapters || 0);
+      const translated = Number(book.translatedChapters || 0);
+      return total > translated;
+    })
+    .sort((a, b) => String(a.title).localeCompare(String(b.title), "vi"))
+    .forEach((book) => {
+      const total = Number(book.chapterCount || book.totalChapters || 0);
+      const translated = Number(book.translatedChapters || 0);
+      const option = document.createElement("option");
+      option.value = book.id;
+      option.textContent = `${book.title} — ${translated}/${total} chương`;
+      fragment.appendChild(option);
+    });
+  els.translateFocusBook.replaceChildren(fragment);
+  els.translateFocusBook.value = [...els.translateFocusBook.options].some((option) => option.value === current) ? current : "";
+}
+
+function renderTranslationFocusHint(config = {}) {
+  if (!els.translateFocusHint) return;
+  const focusBookId = String(config.focusBookId || "");
+  const book = (adminCatalog.books || []).find((item) => item.id === focusBookId);
+  els.translateFocusHint.dataset.mode = focusBookId ? "focused" : "automatic";
+  els.translateFocusHint.textContent = focusBookId
+    ? `Đang khóa ưu tiên: ${book?.title || focusBookId}. Khi dịch đủ 100%, worker sẽ tự trả về chế độ tự động.`
+    : "Chế độ tự động: worker sẽ chọn bộ phù hợp nhất trong hàng đợi.";
+}
+
+async function saveTranslationFocus() {
+  if (!els.translateFocusBook || !els.translateFocusSave) return;
+  els.translateFocusSave.disabled = true;
+  try {
+    const result = await requestJson("/api/admin/translate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "focus", focusBookId: els.translateFocusBook.value })
+    });
+    renderTranslationFocusHint(result.config || {});
+    setStatus(result.message || "Đã lưu lựa chọn ưu tiên.");
+  } catch (error) {
+    setStatus(`Không lưu được bộ ưu tiên: ${error.message}`, true);
+  } finally {
+    els.translateFocusSave.disabled = false;
   }
 }
 
@@ -576,7 +639,7 @@ function renderTranslateStatus(status = {}) {
     }
   }
   if (els.translateStateMessage) {
-    els.translateStateMessage.textContent = bookTitle
+    els.translateStateMessage.textContent = isRunning && bookTitle
       ? `Hệ thống đang dồn toàn bộ cụm AI Keys để dịch dứt điểm bộ [${bookTitle}].`
       : (status.message || "Chưa có tác vụ dịch đang chạy.");
   }
@@ -635,7 +698,15 @@ function renderTranslateStatus(status = {}) {
     els.transHourlySummaryText.textContent = status.startedAt ? `bắt đầu từ ${describeAge(status.startedAt)}` : "trong phiên hiện tại";
   }
   if (els.translateStateMeta) {
-    els.translateStateMeta.textContent = "600ms / request xoay vòng (17 Keys)";
+    const spacing = Number(status.spacingMs || 0);
+    const keys = Number(status.activeKeyCount || 0);
+    els.translateStateMeta.textContent = spacing
+      ? `${spacing.toLocaleString("vi-VN")}ms / lượt (${keys || "?"} keys)`
+      : "Điều tốc tự động theo quota";
+  }
+  if (els.transStatKeysActive) {
+    const keys = Number(status.activeKeyCount || 0);
+    els.transStatKeysActive.textContent = keys ? `${keys} Keys hoạt động` : "Đang kiểm tra Keys";
   }
 
   // 3. Next In Line Teaser
@@ -823,10 +894,10 @@ async function loadAdminKeys() {
   try {
     const data = await requestJson("/api/admin/keys");
     if (els.keysTotalCount) els.keysTotalCount.textContent = `${data.totalKeys || 0} Keys`;
-    if (els.keysActiveModel) els.keysActiveModel.textContent = data.activeModel || "openai/gpt-oss-120b";
+    if (els.keysActiveModel) els.keysActiveModel.textContent = data.activeModel || "qwen/qwen3.6-27b";
     renderKeysList(data.keys || []);
   } catch (error) {
-    els.keysList.innerHTML = `<p class="stats-empty text-error">Không tải được thông tin key: ${error.message}</p>`;
+    els.keysList.innerHTML = `<p class="stats-empty text-error">Không tải được thông tin key: ${escapeHtml(error.message)}</p>`;
   }
 }
 
@@ -1243,4 +1314,3 @@ function escapeHtml(str) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
-
