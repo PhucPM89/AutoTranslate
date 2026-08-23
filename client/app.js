@@ -140,6 +140,8 @@ const els = {
   libraryView: document.getElementById("libraryView"),
   readerView: document.getElementById("readerView"),
   bookView: document.getElementById("bookView"),
+  epubStudioView: document.getElementById("epubStudioView"),
+  studioBackToLibrary: document.getElementById("studioBackToLibrary"),
   bookBackToLibrary: document.getElementById("bookBackToLibrary"),
   bookThemeToggle: document.getElementById("bookThemeToggle"),
   bookViewBackdrop: document.getElementById("bookViewBackdrop"),
@@ -521,7 +523,8 @@ function bindEvents() {
     if (isAutoScrolling && !e.target.closest("#autoScrollBtn")) stopAutoScroll();
   }, { passive: true });
   els.adminOpen?.addEventListener("click", () => bootstrapAdminPanel());
-  els.navEpubStudioBtn?.addEventListener("click", () => bootstrapAdminPanel({ tab: "epubStudio" }));
+  els.navEpubStudioBtn?.addEventListener("click", () => showEpubStudioView());
+  els.studioBackToLibrary?.addEventListener("click", showLibrary);
   els.featuredRead?.addEventListener("click", openFeaturedBook);
   els.supportQrOpen?.addEventListener("click", () => els.supportDialog?.showModal());
   els.supportQrClose?.addEventListener("click", () => els.supportDialog?.close());
@@ -869,7 +872,15 @@ async function applyLibraryManifest(manifest) {
 }
 
 async function handleHashChange() {
+  if (window.location.hash === "#epub-studio" || window.location.hash === "#vip-epub") {
+    showEpubStudioView({ updateHash: false });
+    return;
+  }
   if (await openFromUrl()) return;
+  if (els.epubStudioView && !els.epubStudioView.hidden && (window.location.hash === "#catalog" || window.location.hash === "" || window.location.hash === "#request" || window.location.hash === "#support")) {
+    showLibrary();
+    return;
+  }
   if (!els.bookView.hidden) showLibrary();
   alignHashedSection();
 }
@@ -1335,10 +1346,36 @@ function normalizeSearch(value) {
   return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 }
 
+function showEpubStudioView({ updateHash = true } = {}) {
+  updateContinueReading();
+  if (ttsEngine) ttsEngine.stop();
+  if (isZenMode) {
+    isZenMode = false;
+    document.body.classList.remove("zen-mode");
+    if (els.zenExitBtn) els.zenExitBtn.hidden = true;
+    if (els.zenModeBtn) els.zenModeBtn.classList.remove("is-active");
+  }
+  if (els.libraryView) els.libraryView.hidden = true;
+  if (els.bookView) els.bookView.hidden = true;
+  if (els.readerView) els.readerView.hidden = true;
+  if (els.epubStudioView) els.epubStudioView.hidden = false;
+  libraryState.detailBook = null;
+  if (updateHash) {
+    history.replaceState(null, "", `${window.location.pathname}#epub-studio`);
+  }
+  updatePageMeta({
+    title: "VIP Dịch EPUB Cá Nhân · Trạm Chữ",
+    description: "Công cụ đọc & dịch EPUB tức thời bằng Gemini AI dành cho Quản trị viên Trạm Chữ."
+  });
+  window.scrollTo({ top: 0 });
+  bootstrapAdminPanel({ view: "epubStudio" });
+}
+
 function showReader() {
-  els.libraryView.hidden = true;
-  els.bookView.hidden = true;
-  els.readerView.hidden = false;
+  if (els.libraryView) els.libraryView.hidden = true;
+  if (els.bookView) els.bookView.hidden = true;
+  if (els.epubStudioView) els.epubStudioView.hidden = true;
+  if (els.readerView) els.readerView.hidden = false;
   window.scrollTo({ top: 0 });
 }
 
@@ -1351,12 +1388,13 @@ function showLibrary() {
     if (els.zenExitBtn) els.zenExitBtn.hidden = true;
     if (els.zenModeBtn) els.zenModeBtn.classList.remove("is-active");
   }
-  els.readerView.hidden = true;
-  els.bookView.hidden = true;
-  els.libraryView.hidden = false;
+  if (els.readerView) els.readerView.hidden = true;
+  if (els.bookView) els.bookView.hidden = true;
+  if (els.epubStudioView) els.epubStudioView.hidden = true;
+  if (els.libraryView) els.libraryView.hidden = false;
   libraryState.detailBook = null;
   updatePageMeta();
-  if (window.location.hash.startsWith("#book/")) {
+  if (window.location.hash.startsWith("#book/") || window.location.hash === "#epub-studio" || window.location.hash === "#vip-epub") {
     history.replaceState(null, "", `${window.location.pathname}#catalog`);
   }
   window.scrollTo({ top: 0 });
@@ -1382,9 +1420,10 @@ function showToast(message, duration = 2500) {
 // the catalog manifest, so no EPUB is downloaded until the reader asks for it.
 async function showBookDetail(book, { updateHash = true } = {}) {
   libraryState.detailBook = book;
-  els.libraryView.hidden = true;
-  els.readerView.hidden = true;
-  els.bookView.hidden = false;
+  if (els.libraryView) els.libraryView.hidden = true;
+  if (els.readerView) els.readerView.hidden = true;
+  if (els.epubStudioView) els.epubStudioView.hidden = true;
+  if (els.bookView) els.bookView.hidden = false;
   if (updateHash) history.replaceState(null, "", `${window.location.pathname}#book/${encodeURIComponent(book.id)}`);
   
   const fallbackCover = fallbackCoverForBook(book);
@@ -1522,6 +1561,11 @@ function updateBookViewBookmark(book) {
 }
 
 async function openFromUrl() {
+  if (window.location.hash === "#epub-studio" || window.location.hash === "#vip-epub") {
+    showEpubStudioView({ updateHash: false });
+    return true;
+  }
+
   function findBookById(rawId) {
     if (!rawId) return null;
     const cleanId = cleanBookId(rawId);

@@ -1,5 +1,15 @@
 
 const CDN_BASE = String(__CDN_BASE__ || "").replace(/\/$/, "");
+const {
+  DEFAULT_STUDIO_MODEL,
+  normalizeStudioModel,
+  extractStudioDocumentText,
+  splitStudioText,
+  buildStudioTranslationPrompt,
+  assessStudioTranslation,
+  countStudioTextUnits,
+  mergeStoredStudioTranslations
+} = require("./epub-studio-core.js");
 
 const els = {
   open: document.getElementById("adminOpen"),
@@ -110,8 +120,16 @@ const els = {
   progressBar: document.getElementById("adminProgressBar"),
 
   // EPUB VIP Studio Elements
-  epubStudioTab: document.getElementById("adminEpubStudioTab"),
-  epubStudioPanel: document.getElementById("adminEpubStudioPanel"),
+  studioAuthGate: document.getElementById("studioAuthGate"),
+  studioAuthForm: document.getElementById("studioAuthForm"),
+  studioAuthPassword: document.getElementById("studioAuthPassword"),
+  studioAuthError: document.getElementById("studioAuthError"),
+  studioMainContent: document.getElementById("studioMainContent"),
+  studioTopKeyGroup: document.getElementById("studioTopKeyGroup"),
+  studioTopActions: document.getElementById("studioTopActions"),
+  studioHeaderBookMeta: document.getElementById("studioHeaderBookMeta"),
+  studioNotice: document.getElementById("studioNotice"),
+  studioKeyForm: document.getElementById("studioKeyForm"),
   studioGeminiKey: document.getElementById("studioGeminiKey"),
   studioToggleKey: document.getElementById("studioToggleKey"),
   studioGeminiModel: document.getElementById("studioGeminiModel"),
@@ -120,7 +138,6 @@ const els = {
   studioUploadZone: document.getElementById("studioUploadZone"),
   studioEpubFileInput: document.getElementById("studioEpubFileInput"),
   studioSelectFileBtn: document.getElementById("studioSelectFileBtn"),
-  studioBookMetaBar: document.getElementById("studioBookMetaBar"),
   studioBookTitle: document.getElementById("studioBookTitle"),
   studioBookStats: document.getElementById("studioBookStats"),
   studioProgressText: document.getElementById("studioProgressText"),
@@ -165,11 +182,43 @@ let translateTimer = null;
 
 let pendingAdminTab = null;
 
-export function mountAdmin(options = {}) {
-  if (options?.tab) {
-    pendingAdminTab = options.tab;
-    selectAdminTab(options.tab);
+function setStudioAuth(authenticated) {
+  if (els.studioAuthGate) els.studioAuthGate.hidden = authenticated;
+  if (els.studioMainContent) els.studioMainContent.hidden = !authenticated;
+  if (els.studioTopKeyGroup) els.studioTopKeyGroup.hidden = !authenticated;
+  if (els.studioTopActions) els.studioTopActions.hidden = !authenticated;
+  if (authenticated) {
+    initEpubStudio();
+  } else if (els.studioAuthPassword) {
+    requestAnimationFrame(() => els.studioAuthPassword?.focus());
   }
+}
+
+async function handleStudioLogin(e) {
+  e?.preventDefault();
+  if (els.studioAuthError) els.studioAuthError.hidden = true;
+  const pass = String(els.studioAuthPassword?.value || "").trim();
+  if (!pass) return;
+  try {
+    const res = await requestJson("/api/admin/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: pass })
+    });
+    if (res?.authenticated) {
+      if (els.studioAuthPassword) els.studioAuthPassword.value = "";
+      setStudioAuth(true);
+      showAuthenticated(true);
+    }
+  } catch (err) {
+    if (els.studioAuthError) {
+      els.studioAuthError.hidden = false;
+      els.studioAuthError.textContent = err.message || "Mật khẩu không chính xác.";
+    }
+  }
+}
+
+export function mountAdmin(options = {}) {
   if (!mounted) {
     mounted = true;
     els.open?.addEventListener("click", () => openAdmin());
@@ -178,10 +227,10 @@ export function mountAdmin(options = {}) {
       if (event.target === els.dialog) els.dialog.close();
     });
     els.loginForm?.addEventListener("submit", login);
+    els.studioAuthForm?.addEventListener("submit", handleStudioLogin);
     els.uploadForm?.addEventListener("submit", submitBook);
     els.crawlerForm?.addEventListener("submit", saveCrawlerConfig);
     els.libraryTab?.addEventListener("click", () => selectAdminTab("library"));
-    els.epubStudioTab?.addEventListener("click", () => selectAdminTab("epubStudio"));
     els.translateTab?.addEventListener("click", () => selectAdminTab("translate"));
     els.keysTab?.addEventListener("click", () => selectAdminTab("keys"));
     els.crawlerTab?.addEventListener("click", () => selectAdminTab("crawler"));
@@ -232,6 +281,10 @@ export function mountAdmin(options = {}) {
       els.studioGeminiKey.type = els.studioGeminiKey.type === "password" ? "text" : "password";
     });
     els.studioPingKeyBtn?.addEventListener("click", pingStudioGeminiKey);
+    els.studioKeyForm?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      pingStudioGeminiKey();
+    });
     els.studioGeminiKey?.addEventListener("change", () => {
       localStorage.setItem("tangthu_gemini_api_key", els.studioGeminiKey.value.trim());
     });
@@ -262,14 +315,16 @@ export function mountAdmin(options = {}) {
       selectStudioChapter(studioState.activeChapterIndex + 1);
     });
     els.studioTranslateCurrentBtn?.addEventListener("click", translateCurrentStudioChapter);
+    els.studioPromptTranslateBtn?.addEventListener("click", translateCurrentStudioChapter);
     els.studioViewTranslated?.addEventListener("click", () => setStudioViewMode("translated"));
     els.studioViewOriginal?.addEventListener("click", () => setStudioViewMode("original"));
     els.studioViewSplit?.addEventListener("click", () => setStudioViewMode("split"));
 
     // Keyboard navigation in EPUB Studio
     window.addEventListener("keydown", (e) => {
-      if (!els.dialog?.open || activeAdminTab !== "epubStudio") return;
-      if (["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName)) return;
+      const epubView = document.getElementById("epubStudioView");
+      if (!epubView || epubView.hidden) return;
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(e.target?.tagName)) return;
       if (e.key === "ArrowLeft") {
         e.preventDefault();
         selectStudioChapter(studioState.activeChapterIndex - 1);
@@ -282,6 +337,19 @@ export function mountAdmin(options = {}) {
       }
     });
   }
+
+  if (options?.view === "epubStudio") {
+    requestJson("/api/admin/session")
+      .then((session) => setStudioAuth(Boolean(session?.authenticated)))
+      .catch(() => setStudioAuth(false));
+    return;
+  }
+
+  if (options?.tab) {
+    pendingAdminTab = options.tab;
+    selectAdminTab(options.tab);
+  }
+
   return openAdmin(options);
 }
 
@@ -1070,7 +1138,6 @@ function renderCrawlerStatus(status = {}) {
 
 const ADMIN_TABS = [
   { key: "library", tab: "libraryTab", panel: "uploadForm" },
-  { key: "epubStudio", tab: "epubStudioTab", panel: "epubStudioPanel" },
   { key: "translate", tab: "translateTab", panel: "translatePanel" },
   { key: "keys", tab: "keysTab", panel: "keysPanel" },
   { key: "crawler", tab: "crawlerTab", panel: "crawlerForm" },
@@ -1534,6 +1601,8 @@ let studioState = {
   activeChapterIndex: 0,
   viewMode: "translated",
   isTranslating: false,
+  isInitializing: false,
+  requestController: null,
   searchTerm: "",
   filterUntranslated: false,
   pageRange: "all"
@@ -1662,6 +1731,25 @@ async function loadLatestStudioBookFromDb() {
   });
 }
 
+async function loadStudioBookFromDb(bookId) {
+  const db = await openStudioDb();
+  if (!db || !bookId) return null;
+  return new Promise((resolve) => {
+    const tx = db.transaction(["books", "chapters"], "readonly");
+    const bookReq = tx.objectStore("books").get(bookId);
+    bookReq.onsuccess = () => {
+      if (!bookReq.result) return resolve(null);
+      const chapterReq = tx.objectStore("chapters").index("bookId").getAll(bookId);
+      chapterReq.onsuccess = () => resolve({
+        ...bookReq.result,
+        chapters: (chapterReq.result || []).sort((a, b) => a.chapterIndex - b.chapterIndex)
+      });
+      chapterReq.onerror = () => resolve(null);
+    };
+    bookReq.onerror = () => resolve(null);
+  });
+}
+
 async function deleteStudioBookFromDb(bookId) {
   const db = await openStudioDb();
   if (!db) return;
@@ -1685,22 +1773,36 @@ async function deleteStudioBookFromDb(bookId) {
 
 function initEpubStudio() {
   const savedKey = localStorage.getItem("tangthu_gemini_api_key") || "";
-  let savedModel = localStorage.getItem("tangthu_gemini_model") || "gemini-3.6-flash";
-  if (savedModel === "gemini-2.5-flash" || savedModel === "gemini-2.0-flash" || savedModel === "gemini-1.5-flash") {
-    savedModel = "gemini-3.6-flash";
-    localStorage.setItem("tangthu_gemini_model", savedModel);
-  }
+  const savedModel = normalizeStudioModel(localStorage.getItem("tangthu_gemini_model"));
+  localStorage.setItem("tangthu_gemini_model", savedModel);
   if (els.studioGeminiKey && !els.studioGeminiKey.value) els.studioGeminiKey.value = savedKey;
   if (els.studioGeminiModel) els.studioGeminiModel.value = savedModel;
 
-  if (!studioState.currentBook) {
+  if (!studioState.currentBook && !studioState.isInitializing) {
+    studioState.isInitializing = true;
+    setStudioNotice("Đang khôi phục EPUB và các bản dịch đã lưu trên thiết bị...");
     loadLatestStudioBookFromDb().then((book) => {
       if (book && book.chapters && book.chapters.length) {
         studioState.currentBook = book;
         renderStudioBookLoaded();
+        setStudioNotice(`Đã khôi phục “${book.title}” cùng ${book.chapters.filter((chapter) => chapter.translatedText).length} chương đã dịch.`, "success");
+      } else {
+        renderStudioBookLoaded();
+        setStudioNotice("");
       }
+    }).catch((error) => {
+      setStudioNotice(`Không khôi phục được dữ liệu cục bộ: ${error.message}`, "error");
+    }).finally(() => {
+      studioState.isInitializing = false;
     });
   }
+}
+
+function setStudioNotice(message, type = "") {
+  if (!els.studioNotice) return;
+  els.studioNotice.hidden = !message;
+  els.studioNotice.textContent = message || "";
+  els.studioNotice.className = `studio-notice${type ? ` is-${type}` : ""}`;
 }
 
 let jszipModulePromise = null;
@@ -1724,14 +1826,21 @@ async function handleStudioEpubFile(file) {
     alert("Vui lòng chọn đúng tệp có đuôi định dạng .epub");
     return;
   }
+  if (file.size > 200 * 1024 * 1024) {
+    alert("Tệp EPUB vượt quá giới hạn 200 MB.");
+    return;
+  }
 
-  setStatus(`Đang giải mã file EPUB [${file.name}]...`);
+  setStudioNotice(`Đang giải mã EPUB “${file.name}”...`);
+  if (els.studioSelectFileBtn) els.studioSelectFileBtn.disabled = true;
   try {
     const arrayBuffer = await file.arrayBuffer();
     const parsed = await parseStudioEpub(arrayBuffer, file.name);
     if (!parsed.chapters.length) throw new Error("Không tìm thấy chương văn bản nào trong tệp EPUB này.");
 
-    const bookId = "epub_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 7);
+    const bookId = await createStudioBookId(file, arrayBuffer);
+    const storedBook = await loadStudioBookFromDb(bookId);
+    parsed.chapters = mergeStoredStudioTranslations(parsed.chapters, storedBook?.chapters);
     const totalWords = parsed.chapters.reduce((sum, ch) => sum + (ch.words || 0), 0);
 
     const book = {
@@ -1746,11 +1855,27 @@ async function handleStudioEpubFile(file) {
     studioState.activeChapterIndex = 0;
     await saveStudioBookToDb(book);
     renderStudioBookLoaded();
-    setStatus(`Đã mở thành công bộ truyện "${book.title}" (${book.chapters.length.toLocaleString("vi-VN")} chương).`);
+    const restored = book.chapters.filter((chapter) => chapter.translatedText).length;
+    setStudioNotice(
+      `Đã mở “${book.title}”: ${book.chapters.length.toLocaleString("vi-VN")} chương${restored ? `, khôi phục ${restored} bản dịch` : ""}.`,
+      "success"
+    );
   } catch (error) {
     alert(`Lỗi đọc file EPUB: ${error.message}`);
-    setStatus(`Lỗi đọc file EPUB: ${error.message}`, true);
+    setStudioNotice(`Lỗi đọc EPUB: ${error.message}`, "error");
+  } finally {
+    if (els.studioSelectFileBtn) els.studioSelectFileBtn.disabled = false;
+    if (els.studioEpubFileInput) els.studioEpubFileInput.value = "";
   }
+}
+
+async function createStudioBookId(file, arrayBuffer) {
+  if (globalThis.crypto?.subtle) {
+    const digest = await crypto.subtle.digest("SHA-256", arrayBuffer);
+    const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    return `epub_${hash.slice(0, 24)}`;
+  }
+  return `epub_${file.name}_${file.size}`.toLowerCase().replace(/[^a-z0-9_-]+/g, "_").slice(0, 100);
 }
 
 async function parseStudioEpub(arrayBuffer, fileName) {
@@ -1803,20 +1928,13 @@ async function parseStudioEpub(arrayBuffer, fileName) {
     const doc = domParser.parseFromString(html, "text/html");
     doc.querySelectorAll("script, style, nav, header, footer, aside").forEach((n) => n.remove());
 
-    const blocks = Array.from(
-      doc.body.querySelectorAll("h1, h2, h3, h4, h5, h6, p, div, section, article, blockquote, li")
-    );
-    const paragraphs = blocks
-      .map((n) => (n.textContent || "").replace(/\s+/g, " ").trim())
-      .filter((t, idx, list) => t && t.length > 0 && t !== list[idx - 1]);
-
-    const text = paragraphs.length ? paragraphs.join("\n\n") : (doc.body.textContent || "").replace(/\s+/g, " ").trim();
+    const text = extractStudioDocumentText(doc);
     if (!text || text.length < 5) continue;
 
     const chapterHeading = (doc.querySelector("h1, h2, h3, title")?.textContent || "").replace(/\s+/g, " ").trim();
     const chapterTitle = chapterHeading || `Chương ${chapters.length + 1}`;
 
-    const words = text.match(/\S+/g)?.length || 0;
+    const words = countStudioTextUnits(text);
     chapters.push({
       chapterIndex: chapters.length,
       title: chapterTitle,
@@ -1848,7 +1966,7 @@ async function pingStudioGeminiKey() {
     alert("Vui lòng nhập Gemini API Key để kiểm tra.");
     return;
   }
-  const model = String(els.studioGeminiModel?.value || "gemini-3.6-flash").trim();
+  const model = normalizeStudioModel(els.studioGeminiModel?.value || DEFAULT_STUDIO_MODEL);
   if (els.studioPingKeyBtn) els.studioPingKeyBtn.disabled = true;
   if (els.studioKeyStatus) {
     els.studioKeyStatus.hidden = false;
@@ -1858,7 +1976,7 @@ async function pingStudioGeminiKey() {
 
   const startTime = Date.now();
   try {
-    const directUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
+    const directUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 12000);
 
@@ -1866,7 +1984,7 @@ async function pingStudioGeminiKey() {
     try {
       const res = await fetch(directUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
         signal: controller.signal,
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: "Ping. Respond with 'OK'." }] }],
@@ -1877,10 +1995,13 @@ async function pingStudioGeminiKey() {
       ok = res.ok;
       if (!ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err?.error?.message || `HTTP ${res.status}`);
+        const providerError = new Error(err?.error?.message || `HTTP ${res.status}`);
+        providerError.providerError = true;
+        throw providerError;
       }
     } catch (e) {
       clearTimeout(timeout);
+      if (e.providerError) throw e;
       const proxyRes = await requestJson("/api/admin/gemini-translate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1915,7 +2036,8 @@ async function pingStudioGeminiKey() {
 async function translateCurrentStudioChapter() {
   const book = studioState.currentBook;
   if (!book || !book.chapters || !book.chapters.length) return;
-  const chapter = book.chapters[studioState.activeChapterIndex];
+  const chapterIndex = studioState.activeChapterIndex;
+  const chapter = book.chapters[chapterIndex];
   if (!chapter) return;
 
   if (studioState.isTranslating) return;
@@ -1927,108 +2049,118 @@ async function translateCurrentStudioChapter() {
     return;
   }
 
-  const model = String(els.studioGeminiModel?.value || "gemini-3.6-flash").trim();
+  const model = normalizeStudioModel(els.studioGeminiModel?.value || DEFAULT_STUDIO_MODEL);
   localStorage.setItem("tangthu_gemini_api_key", key);
   localStorage.setItem("tangthu_gemini_model", model);
 
   studioState.isTranslating = true;
+  studioState.requestController = new AbortController();
   setStudioTranslatingUI(true, chapter.title);
 
-  const prompt = [
-    "Bạn là một dịch giả tiểu thuyết Trung Quốc sang tiếng Việt chuyên nghiệp.",
-    "Hãy dịch trọn vẹn chương truyện sau đây sang tiếng Việt tự nhiên, chuẩn văn phong tiểu thuyết Tiên Hiệp/Huyền Huyễn/Đô Thị.",
-    "QUY TẮC BẮT BUỘC:",
-    "- Chuyển toàn bộ tên người, địa danh, môn phái, chiêu thức, cảnh giới sang âm Hán-Việt phù hợp, quen thuộc.",
-    "- Tuyệt đối không dùng Pinyin hoặc để sót chữ Hán.",
-    "- Giữ nguyên cấu trúc phân đoạn văn bản, hội thoại rõ ràng, xưng hô tự nhiên (huynh-đệ, sư đồ, ta-ngươi, hắn-nàng).",
-    "- Không tóm tắt, không thêm lời bình luận bên ngoài, chỉ trả về duy nhất nội dung bản dịch tiếng Việt.",
-    "",
-    chapter.title ? `Tiêu đề chương: ${chapter.title}\n` : "",
-    "Nội dung cần dịch:",
-    chapter.originalText
-  ].join("\n");
-
-  let translatedText = "";
-  let usedModel = model;
-
   try {
-    const directUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60000);
-
-    try {
-      const res = await fetch(directUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-client": "gl-js/gemini-epub-studio"
-        },
-        signal: controller.signal,
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          safetySettings: [
-            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
-            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
-            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
-            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" }
-          ],
-          generationConfig: {
-            temperature: 0.2,
-            maxOutputTokens: 8192
-          }
-        })
-      });
-
-      clearTimeout(timeout);
-
-      if (res.ok) {
-        const data = await res.json();
-        let raw = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("").trim() || "";
-        translatedText = raw.replace(/^```[a-z]*\n?/i, "").replace(/\n?```$/i, "").trim();
-      } else {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData?.error?.message || `HTTP ${res.status}`);
-      }
-    } catch (directErr) {
-      clearTimeout(timeout);
-      console.warn("Direct Gemini call failed, trying proxy:", directErr.message);
-
-      const proxyRes = await requestJson("/api/admin/gemini-translate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          apiKey: key,
+    const chunks = splitStudioText(chapter.originalText, 10000);
+    if (!chunks.length) throw new Error("Chương hiện tại không có nội dung để dịch.");
+    const translatedChunks = [];
+    let usedModel = model;
+    for (let index = 0; index < chunks.length; index += 1) {
+      setStudioTranslatingUI(true, chapter.title, index + 1, chunks.length);
+      const timeout = setTimeout(() => studioState.requestController?.abort(), 120000);
+      let result;
+      try {
+        result = await requestStudioGeminiPart({
+          key,
           model,
-          content: chapter.originalText,
-          title: chapter.title
-        })
-      });
-      translatedText = proxyRes.translation;
-      usedModel = proxyRes.model || model;
+          bookTitle: book.title,
+          chapterTitle: chapter.title,
+          content: chunks[index],
+          part: index + 1,
+          totalParts: chunks.length,
+          signal: studioState.requestController.signal
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
+      translatedChunks.push(result.translation);
+      usedModel = result.model;
     }
-
-    if (!translatedText) throw new Error("Bản dịch trả về rỗng.");
+    const translatedText = translatedChunks.join("\n\n").trim();
 
     chapter.translatedText = translatedText;
     chapter.translatedAt = Date.now();
     chapter.model = usedModel;
 
-    await saveStudioTranslationToDb(book.bookId, studioState.activeChapterIndex, translatedText, usedModel);
+    await saveStudioTranslationToDb(book.bookId, chapterIndex, translatedText, usedModel);
 
-    renderStudioChapterContent();
+    if (studioState.activeChapterIndex === chapterIndex) renderStudioChapterContent();
     renderStudioChapterList();
     renderStudioProgress();
-    setStatus(`Đã dịch xong chương ${studioState.activeChapterIndex + 1} (${usedModel}).`);
+    setStudioNotice(`Đã dịch và lưu chương ${chapterIndex + 1} bằng ${usedModel}.`, "success");
   } catch (error) {
-    alert(`Không thể dịch chương: ${error.message}`);
-    setStatus(`Lỗi dịch: ${error.message}`, true);
+    const message = error.name === "AbortError" ? "Yêu cầu dịch đã bị huỷ hoặc quá thời gian." : error.message;
+    alert(`Không thể dịch chương: ${message}`);
+    setStudioNotice(`Lỗi dịch chương ${chapterIndex + 1}: ${message}`, "error");
   } finally {
     studioState.isTranslating = false;
+    studioState.requestController = null;
     setStudioTranslatingUI(false);
+    renderStudioChapterContent();
   }
 }
 
+async function requestStudioGeminiPart({ key, model, bookTitle, chapterTitle, content, part, totalParts, signal }) {
+  const prompt = buildStudioTranslationPrompt({ bookTitle, chapterTitle, content, part, totalParts });
+  const directUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  let response;
+  try {
+    response = await fetch(directUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": key,
+        "x-goog-api-client": "gl-js/gemini-epub-studio"
+      },
+      signal,
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        safetySettings: [
+          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
+          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
+          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" }
+        ],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 32768 }
+      })
+    });
+  } catch (networkError) {
+    if (networkError.name === "AbortError") throw networkError;
+    const proxy = await requestJson("/api/admin/gemini-translate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal,
+      body: JSON.stringify({
+        apiKey: key,
+        model,
+        content,
+        title: `${chapterTitle}${totalParts > 1 ? ` (phần ${part}/${totalParts})` : ""}`
+      })
+    });
+    const assessment = assessStudioTranslation(content, proxy.translation, proxy.finishReason);
+    if (!assessment.ok) throw new Error(assessment.reason);
+    return { translation: assessment.output, model: proxy.model || model };
+  }
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error?.message || `Gemini trả HTTP ${response.status}.`);
+  const candidate = data?.candidates?.[0];
+  if (candidate?.finishReason === "SAFETY") throw new Error("Nội dung bị bộ lọc an toàn của Gemini từ chối.");
+  const raw = candidate?.content?.parts?.map((partItem) => partItem.text || "").join("") || "";
+  const assessment = assessStudioTranslation(content, raw, candidate?.finishReason);
+  if (!assessment.ok) throw new Error(assessment.reason);
+  return { translation: assessment.output, model };
+}
+
 function selectStudioChapter(index) {
+  if (studioState.isTranslating) return;
   if (!studioState.currentBook || !studioState.currentBook.chapters) return;
   if (index < 0 || index >= studioState.currentBook.chapters.length) return;
   studioState.activeChapterIndex = index;
@@ -2134,16 +2266,24 @@ function renderStudioBookLoaded() {
   const book = studioState.currentBook;
   if (!book) {
     if (els.studioUploadZone) els.studioUploadZone.hidden = false;
-    if (els.studioBookMetaBar) els.studioBookMetaBar.hidden = true;
     if (els.studioWorkspace) els.studioWorkspace.hidden = true;
+    if (els.studioExportBtn) els.studioExportBtn.hidden = true;
+    if (els.studioChangeFileBtn) els.studioChangeFileBtn.hidden = true;
+    if (els.studioClearCacheBtn) els.studioClearCacheBtn.hidden = true;
+    if (els.studioHeaderBookMeta) els.studioHeaderBookMeta.textContent = "Tải file EPUB & Dịch tức thời từng chương bằng Gemini AI";
     return;
   }
 
   if (els.studioUploadZone) els.studioUploadZone.hidden = true;
-  if (els.studioBookMetaBar) els.studioBookMetaBar.hidden = false;
   if (els.studioWorkspace) els.studioWorkspace.hidden = false;
+  if (els.studioExportBtn) els.studioExportBtn.hidden = false;
+  if (els.studioChangeFileBtn) els.studioChangeFileBtn.hidden = false;
+  if (els.studioClearCacheBtn) els.studioClearCacheBtn.hidden = false;
 
   if (els.studioBookTitle) els.studioBookTitle.textContent = book.title;
+  if (els.studioHeaderBookMeta) {
+    els.studioHeaderBookMeta.textContent = `${book.title} · ${book.chapters.length.toLocaleString("vi-VN")} chương`;
+  }
   if (els.studioBookStats) {
     els.studioBookStats.textContent = `${book.chapters.length.toLocaleString("vi-VN")} chương · ${(book.totalWords || 0).toLocaleString("vi-VN")} chữ (${book.fileName || "EPUB"})`;
   }
@@ -2256,12 +2396,17 @@ function updateStudioActiveListItem() {
   });
 }
 
-function setStudioTranslatingUI(isTranslating, chapterTitle = "") {
+function setStudioTranslatingUI(isTranslating, chapterTitle = "", part = 1, totalParts = 1) {
   if (els.studioTransStateBanner) {
     els.studioTransStateBanner.hidden = !isTranslating;
   }
   if (els.studioTransTitle && isTranslating) {
     els.studioTransTitle.textContent = `Đang dịch "${chapterTitle || "Chương"}" với Gemini...`;
+  }
+  if (els.studioTransDesc && isTranslating) {
+    els.studioTransDesc.textContent = totalParts > 1
+      ? `Đang chuyển ngữ phần ${part}/${totalParts}; bản dịch chỉ được lưu khi toàn chương hoàn tất.`
+      : "Đang chuyển ngữ và kiểm tra độ đầy đủ của bản dịch...";
   }
   if (els.studioTranslateCurrentBtn) {
     els.studioTranslateCurrentBtn.disabled = isTranslating;
@@ -2269,6 +2414,11 @@ function setStudioTranslatingUI(isTranslating, chapterTitle = "") {
       els.studioTranslateCurrentBtn.innerHTML = '<svg class="icon spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/></svg><span>Đang dịch...</span>';
     }
   }
+  if (els.studioPrevChBtn) els.studioPrevChBtn.disabled = isTranslating || studioState.activeChapterIndex === 0;
+  if (els.studioNextChBtn) {
+    els.studioNextChBtn.disabled = isTranslating || !studioState.currentBook || studioState.activeChapterIndex >= studioState.currentBook.chapters.length - 1;
+  }
+  if (els.studioChangeFileBtn) els.studioChangeFileBtn.disabled = isTranslating;
 }
 
 function exportStudioTranslations() {
@@ -2312,7 +2462,7 @@ async function clearStudioCache() {
   if (!confirm(`Bạn có chắc muốn xoá toàn bộ bản dịch đã lưu của truyện "${book.title}" khỏi bộ nhớ cục bộ?`)) return;
   await deleteStudioBookFromDb(book.bookId);
   studioState.currentBook = null;
+  studioState.activeChapterIndex = 0;
   renderStudioBookLoaded();
-  setStatus("Đã xoá bộ nhớ đệm bản dịch của truyện.");
+  setStudioNotice("Đã xoá EPUB và các bản dịch cục bộ của truyện.", "success");
 }
-

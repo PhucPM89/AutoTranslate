@@ -1190,8 +1190,18 @@ async function handleAdminGeminiTranslate({ request, env }) {
   const apiKey = String(body?.apiKey || env.GEMINI_API_KEY || "").trim();
   if (!apiKey) throw fail(400, "Chưa cung cấp Gemini API Key.");
 
-  const rawModel = String(body?.model || "gemini-3.6-flash").trim();
-  const model = rawModel || "gemini-3.6-flash";
+  const rawModel = String(body?.model || "gemini-3.7-flash").trim();
+  const allowedModels = new Set([
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro"
+  ]);
+  if (!allowedModels.has(rawModel)) throw fail(400, "Model Gemini không được EPUB Studio hỗ trợ.");
+  const model = rawModel;
   const title = String(body?.title || "").trim();
 
   const prompt = [
@@ -1208,16 +1218,17 @@ async function handleAdminGeminiTranslate({ request, env }) {
     content
   ].join("\n");
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60000);
+  const timeout = setTimeout(() => controller.abort(), 120000);
 
   try {
     const response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
         "x-goog-api-client": "gl-node/gemini-epub-studio"
       },
       signal: controller.signal,
@@ -1231,7 +1242,7 @@ async function handleAdminGeminiTranslate({ request, env }) {
         ],
         generationConfig: {
           temperature: 0.2,
-          maxOutputTokens: 8192
+          maxOutputTokens: 32768
         }
       })
     });
@@ -1245,18 +1256,23 @@ async function handleAdminGeminiTranslate({ request, env }) {
     if (data?.candidates?.[0]?.finishReason === "SAFETY") {
       throw fail(400, "Nội dung chương bị bộ lọc an toàn của Gemini từ chối xử lý.");
     }
+    if (data?.candidates?.[0]?.finishReason === "MAX_TOKENS") {
+      throw fail(502, "Bản dịch bị cắt do hết giới hạn output token.");
+    }
 
     let text = data?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim() || "";
     text = text.replace(/^```[a-z]*\n?/i, "").replace(/\n?```$/i, "").trim();
+    if (!text) throw fail(502, "Gemini không trả về nội dung bản dịch.");
 
     return json({
       ok: true,
       translation: text,
       model,
+      finishReason: data?.candidates?.[0]?.finishReason || "",
       usage: data?.usageMetadata || null
     });
   } catch (error) {
-    if (error.name === "AbortError") throw fail(504, "Gemini API phản hồi quá lâu (quá 60 giây).");
+    if (error.name === "AbortError") throw fail(504, "Gemini API phản hồi quá lâu (quá 120 giây).");
     throw error;
   } finally {
     clearTimeout(timeout);

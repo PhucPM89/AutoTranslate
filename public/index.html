@@ -82,8 +82,8 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/style.css?v=a808ed9a175a">
-    <script src="/app.js?v=a30430333ab4" defer></script>
+    <link rel="stylesheet" href="/style.css?v=4cfd7456c665">
+    <script src="/app.js?v=21852594f839" defer></script>
   </head>
   <body class="dark">
     <section id="libraryView" class="library-view">
@@ -415,7 +415,6 @@
 
       <div id="adminTabs" class="admin-tabs" role="tablist" aria-label="Khu vực quản trị" hidden>
         <button id="adminLibraryTab" class="admin-tab active" type="button" role="tab" aria-selected="true" aria-controls="adminUploadForm"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2Z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7Z"></path></svg>Thư viện</button>
-        <button id="adminEpubStudioTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminEpubStudioPanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3z"></path></svg><span>Dịch EPUB Cá Nhân (VIP)</span></button>
         <button id="adminTranslateTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminTranslatePanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>Tiến trình AI</button>
         <button id="adminKeysTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminKeysPanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg><span id="adminKeysTabTitle">Sức khỏe API Keys</span></button>
         <button id="adminCrawlerTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminCrawlerForm"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path><circle cx="12" cy="12" r="4"></circle></svg>Crawler Fanqie</button>
@@ -726,215 +725,249 @@
         </div>
       </section>
 
-      <!-- EPUB VIP Studio: Personal EPUB Reader & Gemini On-Demand Translator -->
-      <section id="adminEpubStudioPanel" class="admin-epub-studio-panel" hidden aria-labelledby="epubStudioTitle">
-        <!-- Top Toolbar / Config Bar -->
-        <div class="epub-studio-topbar">
-          <div class="epub-studio-header-info">
-            <div class="trans-header-badge-row">
-              <p class="eyebrow">Đặc Quyền Quản Trị Viên (VIP)</p>
-              <span class="trans-mode-badge highlight-gold">⚡ Gemini On-Demand AI</span>
-            </div>
-            <h3 id="epubStudioTitle">Dịch EPUB Tức Thời &amp; Đọc Trực Tiếp</h3>
-            <p class="epub-studio-subtitle">Tải file EPUB bất kỳ, duyệt danh sách chương và nhấn dịch tức thời từng chương theo nhu cầu trong khi chờ truyện tự động trên web.</p>
-          </div>
-
-          <!-- API Key & Model Config Box -->
-          <div class="epub-studio-key-card">
-            <div class="epub-studio-key-row">
-              <label class="epub-studio-input-wrap">
-                <span class="epub-studio-label">🔑 Gemini API Key:</span>
-                <div class="epub-key-input-group">
-                  <input id="studioGeminiKey" type="password" placeholder="AIzaSy... (Lưu cục bộ an toàn)" autocomplete="off">
-                  <button id="studioToggleKey" class="icon-button" type="button" title="Ẩn/Hiện API Key" aria-label="Ẩn hiện key">
-                    <svg class="icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                  </button>
-                </div>
-              </label>
-
-              <label class="epub-studio-input-wrap">
-                <span class="epub-studio-label">🤖 Model:</span>
-                <select id="studioGeminiModel">
-                  <option value="gemini-3.6-flash" selected>Gemini 3.6 Flash (Khuyên dùng · Mới nhất &amp; Nhanh)</option>
-                  <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
-                  <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite (Tiết kiệm token)</option>
-                  <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
-                  <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                  <option value="gemini-2.5-pro">Gemini 2.5 Pro (Sâu sắc &amp; Kỹ lưỡng)</option>
-                </select>
-              </label>
-
-              <button id="studioPingKeyBtn" class="secondary-action" type="button" title="Kiểm tra kết nối Gemini API">
-                <svg class="icon" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-                <span>Kiểm tra Key</span>
-              </button>
-            </div>
-            <div id="studioKeyStatus" class="epub-studio-key-status" hidden></div>
-          </div>
-        </div>
-
-        <!-- EPUB File Upload Dropzone / Active Book Card -->
-        <div id="studioUploadZone" class="epub-studio-dropzone">
-          <input id="studioEpubFileInput" type="file" accept=".epub,application/epub+zip" hidden>
-          <div class="dropzone-content">
-            <div class="dropzone-icon">
-              <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-            </div>
-            <div class="dropzone-text">
-              <h4>Kéo thả file EPUB vào đây hoặc nhấp để chọn file</h4>
-              <p>Hỗ trợ file EPUB tiếng Trung/tiếng Anh dung lượng lớn (1000+ chương), giải mã tức thì trong trình duyệt</p>
-            </div>
-            <button id="studioSelectFileBtn" class="primary-action" type="button">Chọn file EPUB từ máy</button>
-          </div>
-        </div>
-
-        <!-- Book Meta & Summary Bar (when book loaded) -->
-        <div id="studioBookMetaBar" class="epub-studio-book-bar" hidden>
-          <div class="studio-book-info">
-            <span class="studio-book-badge">📖 Đang mở</span>
-            <h4 id="studioBookTitle">Tên bộ truyện</h4>
-            <span id="studioBookStats" class="studio-book-meta-text">0 chương · 0 từ</span>
-          </div>
-          <div class="studio-book-actions">
-            <div class="studio-progress-pill">
-              <span id="studioProgressText">Đã dịch: 0/0 (0%)</span>
-              <div class="studio-mini-progress">
-                <div id="studioMiniProgressFill" class="studio-mini-progress-fill" style="width: 0%"></div>
-              </div>
-            </div>
-            <button id="studioExportBtn" class="secondary-action" type="button" title="Xuất toàn bộ các chương đã dịch ra file text">
-              <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-              <span>Xuất bản dịch</span>
-            </button>
-            <button id="studioChangeFileBtn" class="secondary-action" type="button" title="Chọn file EPUB khác">
-              <svg class="icon" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-              <span>Đổi file khác</span>
-            </button>
-            <button id="studioClearCacheBtn" class="danger-action" type="button" title="Xoá bản dịch đã lưu của truyện này">
-              <svg class="icon" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-            </button>
-          </div>
-        </div>
-
-        <!-- Main Studio Workspace: 2-Column Split View -->
-        <div id="studioWorkspace" class="epub-studio-workspace" hidden>
-          <!-- Left Column: Chapter List Navigator -->
-          <aside class="studio-sidebar">
-            <div class="studio-sidebar-header">
-              <div class="studio-search-wrap">
-                <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                <input id="studioChapterSearch" type="search" placeholder="Tìm tên/số chương..." autocomplete="off">
-              </div>
-              <div class="studio-filter-row">
-                <label class="studio-check">
-                  <input id="studioFilterUntranslated" type="checkbox">
-                  <span>Chưa dịch</span>
-                </label>
-                <select id="studioPageRange">
-                  <option value="all">Tất cả chương</option>
-                </select>
-              </div>
-            </div>
-            <div id="studioChapterList" class="studio-chapter-list" role="list">
-              <!-- Dynamically populated chapters -->
-            </div>
-          </aside>
-
-          <!-- Right Column: Reading & Live Translation Center -->
-          <main class="studio-reader">
-            <!-- Reader Control Bar -->
-            <div class="studio-reader-toolbar">
-              <div class="studio-nav-group">
-                <button id="studioPrevChBtn" class="secondary-action" type="button" title="Chương trước (Phím ←)">
-                  <svg class="icon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
-                  <span>Trước</span>
-                </button>
-                <span id="studioChapterIndicator" class="studio-ch-indicator">Chương 1 / 1000</span>
-                <button id="studioNextChBtn" class="secondary-action" type="button" title="Chương kế tiếp (Phím →)">
-                  <span>Sau</span>
-                  <svg class="icon" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                </button>
-              </div>
-
-              <!-- Main Translation CTA Button -->
-              <div class="studio-action-center">
-                <button id="studioTranslateCurrentBtn" class="primary-action studio-translate-btn" type="button" title="Dịch chương hiện tại bằng Gemini (Phím T)">
-                  <svg class="icon" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-                  <span>⚡ Dịch chương này với Gemini</span>
-                </button>
-              </div>
-
-              <!-- View Mode Switcher -->
-              <div class="studio-view-tabs" role="tablist">
-                <button id="studioViewTranslated" class="studio-view-tab active" type="button" role="tab" aria-selected="true" title="Xem bản dịch tiếng Việt">📖 Bản dịch</button>
-                <button id="studioViewOriginal" class="studio-view-tab" type="button" role="tab" aria-selected="false" title="Xem văn bản gốc">📜 Gốc</button>
-                <button id="studioViewSplit" class="studio-view-tab" type="button" role="tab" aria-selected="false" title="Xem song ngữ đối chiếu">🌓 Song ngữ</button>
-              </div>
-            </div>
-
-            <!-- Translation Status & Info Banner -->
-            <div id="studioTransStateBanner" class="studio-trans-banner" hidden>
-              <div class="studio-banner-inner">
-                <span id="studioTransIcon" class="studio-banner-icon">⏳</span>
-                <div class="studio-banner-text">
-                  <strong id="studioTransTitle">Đang dịch chương với Gemini...</strong>
-                  <p id="studioTransDesc">Đang chuyển ngữ văn phong tiểu thuyết Tiên Hiệp Hán-Việt...</p>
-                </div>
-              </div>
-            </div>
-
-            <!-- Reader Document Container -->
-            <div id="studioReaderContent" class="studio-reader-canvas">
-              <div id="studioPaperTranslated" class="studio-paper studio-paper-translated">
-                <header class="studio-paper-header">
-                  <h3 id="studioCurrentTitleDisplay">Tiêu đề chương</h3>
-                  <div class="studio-paper-meta">
-                    <span id="studioCurrentMetaDisplay">0 chữ</span>
-                    <span id="studioTranslationTimestamp" class="studio-meta-badge" hidden>✓ Đã lưu cục bộ</span>
-                  </div>
-                </header>
-                <div id="studioTranslatedBody" class="studio-document-text">
-                  <div class="studio-untranslated-prompt">
-                    <div class="untranslated-icon">📖</div>
-                    <h4>Chương này chưa được dịch</h4>
-                    <p>Nhấp vào nút bên dưới hoặc nhấn phím <kbd>T</kbd> để dịch tức thời chương này bằng Gemini API</p>
-                    <button id="studioPromptTranslateBtn" class="primary-action" type="button">
-                      <svg class="icon" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-                      <span>Dịch chương này ngay</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div id="studioPaperOriginal" class="studio-paper studio-paper-original" hidden>
-                <header class="studio-paper-header">
-                  <h3 id="studioOriginalTitleDisplay">Văn bản gốc</h3>
-                  <div class="studio-paper-meta">
-                    <span id="studioOriginalMetaDisplay">Tiếng Trung</span>
-                  </div>
-                </header>
-                <div id="studioOriginalBody" class="studio-document-text original-text">
-                  <!-- Original raw text -->
-                </div>
-              </div>
-            </div>
-
-            <!-- Reader Bottom Bar -->
-            <div class="studio-reader-bottombar">
-              <label class="studio-check">
-                <input id="studioAutoTranslateNext" type="checkbox">
-                <span>Tự động dịch khi chuyển sang chương tiếp theo (nếu chưa dịch)</span>
-              </label>
-              <div class="studio-shortcuts-hint">
-                <span>Phím tắt: <kbd>←</kbd> / <kbd>→</kbd> Chuyển chương · <kbd>T</kbd> Dịch nhanh</span>
-              </div>
-            </div>
-          </main>
-        </div>
-      </section>
-
       <p id="adminStatus" class="admin-status" role="status" aria-live="polite"></p>
     </dialog>
+
+    <!-- EPUB VIP Studio: Dedicated Full-Screen Personal EPUB Reader & Gemini On-Demand AI Translator -->
+    <section id="epubStudioView" class="app-shell epub-studio-app-shell" hidden aria-label="Studio Dịch EPUB Cá Nhân">
+      <!-- Top Navigation Bar -->
+      <header class="topbar studio-topbar">
+        <div class="brand-block studio-brand-block">
+          <button id="studioBackToLibrary" class="back-button" type="button" aria-label="Quay lại thư viện" title="Quay lại thư viện">
+            <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"></path></svg>
+          </button>
+          <span class="brand-seal" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3z"></path></svg>
+          </span>
+          <div class="brand-copy">
+            <div class="studio-title-badge-row">
+              <h1 class="studio-main-heading">VIP Dịch EPUB</h1>
+              <span class="trans-mode-badge highlight-gold">⚡ Gemini On-Demand</span>
+            </div>
+            <p id="studioHeaderBookMeta">Tải file EPUB &amp; Dịch tức thời từng chương bằng Gemini AI</p>
+          </div>
+        </div>
+
+        <!-- Center: Gemini API Key & Model Config Bar -->
+        <form id="studioKeyForm" class="studio-top-key-group" hidden>
+          <input name="username" type="text" value="gemini-api" autocomplete="username" hidden>
+          <label class="studio-top-input-wrap" title="Gemini API Key của bạn (lưu cục bộ an toàn trên trình duyệt)">
+            <span class="studio-top-label">🔑 Gemini Key:</span>
+            <div class="epub-key-input-group">
+              <input id="studioGeminiKey" type="password" placeholder="AIzaSy... (Nhập Key)" autocomplete="off">
+              <button id="studioToggleKey" class="icon-button" type="button" title="Ẩn/Hiện API Key" aria-label="Ẩn hiện key">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              </button>
+            </div>
+          </label>
+
+          <label class="studio-top-input-wrap" title="Chọn Model AI">
+            <span class="studio-top-label">🤖 Model:</span>
+            <select id="studioGeminiModel">
+              <option value="gemini-3.7-flash" selected>Gemini 3.7 Flash (Khuyên dùng)</option>
+              <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
+              <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+              <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite</option>
+              <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
+              <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+              <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+            </select>
+          </label>
+
+          <button id="studioPingKeyBtn" class="secondary-action studio-ping-btn" type="button" title="Kiểm tra kết nối Gemini API">
+            <svg class="icon" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+            <span>Kiểm tra Key</span>
+          </button>
+
+          <div id="studioKeyStatus" class="epub-studio-key-status" hidden></div>
+        </form>
+
+        <!-- Right: Book Actions & Utilities -->
+        <div id="studioTopActions" class="topbar-actions studio-top-actions" hidden>
+          <button id="studioExportBtn" class="secondary-action studio-btn-pill" type="button" title="Xuất toàn bộ bản dịch ra file .txt" hidden>
+            <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            <span>Xuất .txt</span>
+          </button>
+          <button id="studioChangeFileBtn" class="secondary-action studio-btn-pill" type="button" title="Đổi sang file EPUB khác" hidden>
+            <svg class="icon" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            <span>Đổi file</span>
+          </button>
+          <button id="studioClearCacheBtn" class="icon-button studio-danger-icon-btn" type="button" title="Xoá bản dịch đã lưu của truyện này" hidden>
+            <svg class="icon" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Page Body Container: Either Auth Gate or Full Studio Layout -->
+      <div class="studio-page-container">
+        <!-- 1. Auth Gate (when not logged in as Admin) -->
+        <div id="studioAuthGate" class="studio-auth-gate" hidden>
+          <div class="studio-auth-card">
+            <div class="studio-auth-icon">
+              <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            </div>
+            <p class="eyebrow">Khu Vực VIP / Quản Trị Viên</p>
+            <h2>Mở khoá VIP EPUB Studio</h2>
+            <p class="studio-auth-desc">Tính năng tải file EPUB cá nhân và dịch tức thời từng chương bằng Gemini API dành riêng cho Quản trị viên trong lúc chờ các bộ truyện trên web được dịch tự động.</p>
+            <form id="studioAuthForm" class="studio-auth-form">
+              <input name="username" type="text" value="admin" autocomplete="username" hidden>
+              <input id="studioAuthPassword" name="password" type="password" placeholder="Nhập mật khẩu quản trị..." required autocomplete="current-password">
+              <button class="primary-action" type="submit">Mở quyền VIP Studio</button>
+            </form>
+            <p id="studioAuthError" class="studio-auth-error" hidden></p>
+          </div>
+        </div>
+
+        <!-- 2. Main Studio Content (visible when authenticated) -->
+        <div id="studioMainContent" class="studio-main-content" hidden>
+          <p id="studioNotice" class="studio-notice" role="status" aria-live="polite" hidden></p>
+          <!-- EPUB File Upload Dropzone (when no book loaded) -->
+          <div id="studioUploadZone" class="epub-studio-dropzone-large">
+            <input id="studioEpubFileInput" type="file" accept=".epub,application/epub+zip" hidden>
+            <div class="dropzone-content">
+              <div class="dropzone-icon-large">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+              </div>
+              <div class="dropzone-text">
+                <h3>Kéo thả file EPUB vào đây hoặc nhấp để chọn</h3>
+                <p>Hỗ trợ file EPUB tiếng Trung/tiếng Anh dung lượng lớn (1.000+ chương), giải nén và phân tích cấu trúc chương tức thì ngay trong trình duyệt.</p>
+              </div>
+              <button id="studioSelectFileBtn" class="primary-action btn-large" type="button">Chọn file EPUB từ máy tính</button>
+            </div>
+          </div>
+
+          <!-- Full 2-Column Studio Workspace (when book is loaded) -->
+          <div id="studioWorkspace" class="layout studio-layout" hidden>
+            <!-- Left Column: Chapter List & Book Stats -->
+            <aside class="sidebar studio-sidebar" aria-label="Mục lục EPUB">
+              <div class="studio-sidebar-top">
+                <div class="studio-book-meta-header">
+                  <span class="studio-book-badge">📖 Đang mở</span>
+                  <h3 id="studioBookTitle" class="studio-sidebar-book-title">Tên bộ truyện</h3>
+                  <span id="studioBookStats" class="studio-book-meta-text">0 chương · 0 từ</span>
+                </div>
+                <div class="studio-progress-box">
+                  <div class="studio-progress-label-row">
+                    <span id="studioProgressText">Đã dịch: 0/0 (0%)</span>
+                  </div>
+                  <div class="studio-mini-progress">
+                    <div id="studioMiniProgressFill" class="studio-mini-progress-fill" style="width: 0%"></div>
+                  </div>
+                </div>
+                <div class="studio-search-bar">
+                  <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                  <input id="studioChapterSearch" type="search" placeholder="Tìm tên / số chương..." autocomplete="off">
+                </div>
+                <div class="studio-filter-row">
+                  <label class="studio-check">
+                    <input id="studioFilterUntranslated" type="checkbox">
+                    <span>Chưa dịch</span>
+                  </label>
+                  <select id="studioPageRange">
+                    <option value="all">Tất cả chương</option>
+                  </select>
+                </div>
+              </div>
+              <nav id="studioChapterList" class="chapter-list studio-chapter-list" aria-label="Danh sách chương EPUB">
+                <!-- Dynamically populated -->
+              </nav>
+            </aside>
+
+            <!-- Right Column: Reader & Translation Canvas -->
+            <main class="workspace-main studio-workspace-main">
+              <!-- Reader Action & Navigation Toolbar -->
+              <header class="reader-bar studio-reader-bar">
+                <div class="studio-reader-toolbar">
+                  <div class="studio-nav-group">
+                    <button id="studioPrevChBtn" class="tool-button" type="button" title="Chương trước (Phím ←)">
+                      <svg class="icon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                      <span>Trước</span>
+                    </button>
+                    <span id="studioChapterIndicator" class="studio-ch-indicator">Chương 1 / 1000</span>
+                    <button id="studioNextChBtn" class="tool-button" type="button" title="Chương kế tiếp (Phím →)">
+                      <span>Sau</span>
+                      <svg class="icon" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </button>
+                  </div>
+
+                  <!-- Big Translate Button -->
+                  <div class="studio-action-center">
+                    <button id="studioTranslateCurrentBtn" class="primary-action studio-translate-btn" type="button" title="Dịch chương hiện tại bằng Gemini (Phím T)">
+                      <svg class="icon" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                      <span>⚡ Dịch chương này với Gemini</span>
+                    </button>
+                  </div>
+
+                  <!-- View Mode Tabs -->
+                  <div class="studio-view-tabs" role="tablist">
+                    <button id="studioViewTranslated" class="studio-view-tab active" type="button" role="tab" aria-selected="true" title="Xem bản dịch tiếng Việt">📖 Bản dịch</button>
+                    <button id="studioViewOriginal" class="studio-view-tab" type="button" role="tab" aria-selected="false" title="Xem văn bản gốc">📜 Gốc</button>
+                    <button id="studioViewSplit" class="studio-view-tab" type="button" role="tab" aria-selected="false" title="Xem song ngữ đối chiếu 2 cột">🌓 Song ngữ</button>
+                  </div>
+                </div>
+
+                <!-- Translation Status Banner -->
+                <div id="studioTransStateBanner" class="studio-trans-banner" hidden>
+                  <div class="studio-banner-inner">
+                    <span id="studioTransIcon" class="studio-banner-icon">⏳</span>
+                    <div class="studio-banner-text">
+                      <strong id="studioTransTitle">Đang dịch chương với Gemini...</strong>
+                      <p id="studioTransDesc">Đang chuyển ngữ văn phong tiểu thuyết Tiên Hiệp Hán-Việt...</p>
+                    </div>
+                  </div>
+                </div>
+              </header>
+
+              <!-- Document Text Canvas -->
+              <div id="studioReaderContent" class="studio-reader-canvas">
+                <div id="studioPaperTranslated" class="studio-paper studio-paper-translated">
+                  <header class="paper-header studio-paper-header">
+                    <h2 id="studioCurrentTitleDisplay">Tiêu đề chương</h2>
+                    <div class="studio-paper-meta">
+                      <span id="studioCurrentMetaDisplay">0 chữ</span>
+                      <span id="studioTranslationTimestamp" class="studio-meta-badge" hidden>✓ Đã lưu cục bộ</span>
+                    </div>
+                  </header>
+                  <div id="studioTranslatedBody" class="document-text studio-document-text">
+                    <div class="studio-untranslated-prompt">
+                      <div class="untranslated-icon">📖</div>
+                      <h4>Chương này chưa được dịch</h4>
+                      <p>Nhấp vào nút bên dưới hoặc nhấn phím <kbd>T</kbd> để dịch tức thời chương này bằng Gemini API</p>
+                      <button id="studioPromptTranslateBtn" class="primary-action" type="button">
+                        <svg class="icon" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                        <span>Dịch chương này ngay</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div id="studioPaperOriginal" class="studio-paper studio-paper-original" hidden>
+                  <header class="paper-header studio-paper-header">
+                    <h2 id="studioOriginalTitleDisplay">Văn bản gốc</h2>
+                    <div class="studio-paper-meta">
+                      <span id="studioOriginalMetaDisplay">Tiếng Trung</span>
+                    </div>
+                  </header>
+                  <div id="studioOriginalBody" class="document-text studio-document-text original-text">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Reader Bottom Controls -->
+              <footer class="studio-reader-bottombar">
+                <label class="studio-check">
+                  <input id="studioAutoTranslateNext" type="checkbox">
+                  <span>Tự động dịch khi chuyển sang chương tiếp theo (nếu chưa dịch)</span>
+                </label>
+                <div class="studio-shortcuts-hint">
+                  <span>Phím tắt: <kbd>←</kbd> / <kbd>→</kbd> Chuyển chương · <kbd>T</kbd> Dịch nhanh</span>
+                </div>
+              </footer>
+            </main>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <div id="readerView" class="app-shell" hidden>
       <header class="topbar">

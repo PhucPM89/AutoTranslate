@@ -574,9 +574,11 @@ test("admin gemini translate requires admin auth and validates inputs", async ()
 
 test("admin gemini translate proxies translation successfully", async () => {
   const originalFetch = global.fetch;
+  let geminiRequest = null;
   global.fetch = async (url, options) => {
     const target = String(url);
     if (target.includes("generativelanguage.googleapis.com")) {
+      geminiRequest = { target, options };
       return new Response(
         JSON.stringify({
           candidates: [
@@ -611,8 +613,24 @@ test("admin gemini translate proxies translation successfully", async () => {
     assert.equal(data.ok, true);
     assert.ok(data.translation.includes("Chương 1: Tiên Đạo Khởi Đầu"));
     assert.equal(data.model, "gemini-3.6-flash");
+    assert.equal(geminiRequest.options.headers["x-goog-api-key"], "AIzaSyTestKey123");
+    assert.ok(!geminiRequest.target.includes("AIzaSyTestKey123"), "API key must not be placed in the URL");
+    assert.equal(JSON.parse(geminiRequest.options.body).generationConfig.maxOutputTokens, 32768);
   } finally {
     global.fetch = originalFetch;
   }
 });
 
+test("admin gemini translate rejects an unsupported model before contacting Gemini", async () => {
+  const response = await call("/api/admin/gemini-translate", {
+    method: "POST",
+    cookie: cookie(),
+    body: {
+      apiKey: "AIzaSyTestKey123",
+      model: "gemini-made-up-model",
+      content: "第一章"
+    }
+  });
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /không được EPUB Studio hỗ trợ/);
+});
