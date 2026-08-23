@@ -594,11 +594,11 @@ async function translateWithCloudflareWorkersAi(apiKey, model, prompt, generatio
             {
               role: "system",
               content:
-                "Bạn là dịch giả văn học mạng Trung - Việt xuất sắc. Hãy dịch toàn bộ sang tiếng Việt tự nhiên, đúng chất tiên hiệp/huyền huyễn."
+                "Bạn là dịch giả văn học mạng Trung - Việt xuất sắc nhất. Dịch nguyên văn 1:1, đầy đủ 100% từng câu từng chữ, tuyệt đối KHÔNG tóm tắt, KHÔNG lược bỏ bất kỳ câu thoại hay tình tiết nào. Giữ nguyên cấu trúc các đoạn văn."
             },
             { role: "user", content: prompt }
           ],
-          max_tokens: generationConfig.maxTokens || 4000
+          max_tokens: generationConfig.maxTokens || 4096
         })
       });
       const data = await response.json();
@@ -649,14 +649,14 @@ async function translateWithOpenRouter(apiKey, model, prompt, generationConfig =
         messages: [
           {
             role: "system",
-            content: "Bạn là dịch giả văn học tiểu thuyết mạng Trung - Việt xuất sắc nhất (Tiên hiệp, Huyền huyễn, Đô thị, Mạt thế). Hãy dịch toàn bộ sang tiếng Việt tự nhiên, văn phong mượt mà, thuần Việt và chuẩn Hán-Việt 100% cho tên riêng/thuật ngữ. Xưng hô chuẩn mực (ta-ngươi, huynh-đệ, sư phụ-đồ nhi). TUYỆT ĐỐI KHÔNG để sót bất kỳ chữ Hán nào trong bản dịch, mọi từ đều phải chuyển sang tiếng Việt hoặc âm Hán-Việt chuẩn xác. Chỉ trả về duy nhất nội dung đã dịch, không kèm suy nghĩ, lời giải thích hay ghi chú."
+            content: "Bạn là dịch giả văn học tiểu thuyết mạng Trung - Việt xuất sắc nhất (Tiên hiệp, Huyền huyễn, Đô thị, Mạt thế). Dịch nguyên văn 1:1, đầy đủ 100% từng câu từng chữ, thuần Việt và chuẩn Hán-Việt 100% cho tên riêng/thuật ngữ. Xưng hô chuẩn mực (ta-ngươi, huynh-đệ, sư phụ-đồ nhi). TUYỆT ĐỐI KHÔNG tóm tắt, KHÔNG lược bớt, KHÔNG để sót bất kỳ chữ Hán nào trong bản dịch. Chỉ trả về duy nhất nội dung đã dịch, không kèm lời giải thích hay ghi chú."
           },
           {
             role: "user",
             content: prompt
           }
         ],
-        temperature: generationConfig.temperature ?? 0.3,
+        temperature: generationConfig.temperature ?? 0.2,
         max_tokens: maxTokens
       };
 
@@ -728,7 +728,6 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
-      // Dynamic max_tokens based on actual chapter content length
       const dynamicMaxTokens = Math.min(4096, Math.max(1500, Math.ceil(prompt.length * 1.8)));
       const maxTokens = generationConfig.maxTokens || dynamicMaxTokens;
 
@@ -737,14 +736,14 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
         messages: [
           {
             role: "system",
-            content: "Bạn là dịch giả văn học tiểu thuyết mạng Trung - Việt xuất sắc nhất (Tiên hiệp, Huyền huyễn, Đô thị, Mạt thế). Hãy dịch toàn bộ sang tiếng Việt tự nhiên, văn phong mượt mà, thuần Việt và chuẩn Hán-Việt 100% cho tên riêng/thuật ngữ. Xưng hô chuẩn mực (ta-ngươi, huynh-đệ, sư phụ-đồ nhi). Dịch trọn vẹn toàn bộ đoạn văn, tuyệt đối không được bỏ sót hay tóm tắt. Chỉ trả về duy nhất nội dung đã dịch, không kèm lời giải thích hay ghi chú thêm."
+            content: "Bạn là dịch giả văn học tiểu thuyết mạng Trung - Việt xuất sắc nhất (Tiên hiệp, Huyền huyễn, Đô thị, Mạt thế). Dịch nguyên văn 1:1, đầy đủ 100% từng câu từng chữ, thuần Việt và chuẩn Hán-Việt 100% cho tên riêng/thuật ngữ. Xưng hô chuẩn mực (ta-ngươi, huynh-đệ, sư phụ-đồ nhi). TUYỆT ĐỐI KHÔNG tóm tắt, KHÔNG lược bớt, giữ nguyên cấu trúc phân đoạn. Chỉ trả về duy nhất nội dung đã dịch, không kèm lời giải thích hay ghi chú."
           },
           {
             role: "user",
             content: prompt
           }
         ],
-        temperature: generationConfig.temperature ?? 0.3,
+        temperature: generationConfig.temperature ?? 0.2,
         max_tokens: maxTokens
       };
 
@@ -766,24 +765,16 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
       const data = await response.json();
 
       if (!response.ok) {
-        const retryable = response.status >= 500;
+        const retryable = response.status === 429 || response.status >= 500;
         if (retryable && attempt < 1) {
-          await wait(500 * (attempt + 1));
+          await wait(800 * (attempt + 1));
           continue;
         }
 
-        const message = `${data?.error?.message || `Groq API HTTP ${response.status}`} [Key: ${apiKey.slice(0, 15)}...] (Status: ${response.status})`;
+        const message = `${data?.error?.message || "Groq API trả về lỗi."} [Key: ${apiKey.slice(0, 10)}...] (Status: ${response.status})`;
         const error = new Error(message);
         error.status = response.status;
         error.model = model;
-        throw error;
-      }
-
-      // Check content safety finish reason
-      if (data?.choices?.[0]?.finish_reason === "content_filter") {
-        const error = new Error("Nội dung bị chặn bởi content filter.");
-        error.status = 400;
-        error.isContentFilter = true;
         throw error;
       }
 
@@ -832,7 +823,8 @@ async function translateWithGemini(apiKey, model, prompt, generationConfig = {})
             { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" }
           ],
           generationConfig: {
-            temperature: generationConfig.temperature ?? 0.3,
+            temperature: generationConfig.temperature ?? 0.2,
+            maxOutputTokens: 8192,
             ...(generationConfig.responseFormat === "json" ? { responseMimeType: "application/json" } : {})
           }
         })
@@ -880,7 +872,7 @@ function assessTranslation(source, translation) {
   const compactSource = normalizeForComparison(source);
   const compactOutput = normalizeForComparison(output);
   if (compactSource && compactSource === compactOutput) {
-    return { acceptable: false, reason: "kết quả trùng nguyên văn" };
+    return { acceptable: false, reason: "kết quả trùng nguyên văn bản gốc" };
   }
 
   const sourceStats = getScriptStats(source);
@@ -888,12 +880,25 @@ function assessTranslation(source, translation) {
   const sourceIsChinese = sourceStats.han >= 20 && sourceStats.hanRatio >= 0.3;
   if (!sourceIsChinese) return { acceptable: true };
 
-  if (outputStats.han >= 12 && outputStats.hanRatio >= 0.25) {
-    return { acceptable: false, reason: "còn quá nhiều chữ Trung" };
+  // 1. Kiểm tra sót chữ Hán
+  if (outputStats.han >= 10 && outputStats.hanRatio >= 0.15) {
+    return { acceptable: false, reason: "còn sót quá nhiều chữ Hán chưa dịch" };
   }
 
-  if (compactOutput.length < Math.max(20, compactSource.length * 0.2)) {
-    return { acceptable: false, reason: "bản dịch bị thiếu nội dung" };
+  // 2. Kiểm tra tỷ lệ độ dài nghiêm ngặt (chống tóm tắt / lược bớt / đứt đoạn)
+  // Bản dịch tiếng Việt chuẩn luôn dài ít nhất 85% - 160% so với bản gốc chữ Hán.
+  if (source.length >= 200) {
+    const ratio = output.length / Math.max(1, source.length);
+    if (ratio < 0.85) {
+      return { acceptable: false, reason: `bản dịch bị lược bớt/cụt câu (độ dài chỉ đạt ${Math.round(ratio * 100)}% so với bản gốc)` };
+    }
+  }
+
+  // 3. Kiểm tra câu cụt / đứt gãy ở cuối đoạn
+  const lastLine = output.split("\n").filter(Boolean).pop() || "";
+  const endsWithIncompleteQuote = /["'“‘][^"'“”’]*$/.test(lastLine) && !/[.!?…~]["'”’]?$/.test(lastLine);
+  if (source.length > 500 && endsWithIncompleteQuote && !/[.!?…~]$/.test(output)) {
+    return { acceptable: false, reason: "câu cuối bị đứt gãy / cụt dấu đóng ngoặc" };
   }
 
   return { acceptable: true };
