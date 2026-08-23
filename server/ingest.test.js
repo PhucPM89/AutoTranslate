@@ -458,6 +458,39 @@ test("listJobs skips fully translated books and reports the high-priority count"
   assert.equal(jobs[0].highPriority, 1);
 });
 
+test("translation progress reports real batch activity, attempts and errors", async () => {
+  const state = createJobState({
+    bookId: "progress-details",
+    revision: 1,
+    chapters: [{ chapterNumber: 1 }, { chapterNumber: 2 }]
+  });
+  const events = [];
+  const result = await runTranslationJobs({
+    state,
+    batchSize: 2,
+    requestBudget: 2,
+    loadChapter: async (n) => ({ chapterNumber: n, content: `source ${n}` }),
+    translateChapter: async (chapter) => {
+      if (chapter.chapterNumber === 2) throw new Error("provider unavailable");
+      return "bản dịch";
+    },
+    publishChapter: async () => {},
+    saveState: async () => {},
+    onProgress: async (event) => events.push(event)
+  });
+
+  assert.deepEqual(events[0].chapters, [1, 2]);
+  assert.equal(events[0].status, "translating");
+  assert.equal(events[0].spentDelta, 0);
+  const success = events.find((event) => event.chapter === 1 && event.status === "completed");
+  const retry = events.find((event) => event.chapter === 2 && event.status === "retrying");
+  assert.equal(success.sessionDelta, 1);
+  assert.equal(success.spentDelta, 2);
+  assert.equal(retry.attempts, 1);
+  assert.match(retry.lastError, /provider unavailable/);
+  assert.equal(result.translated, 1);
+});
+
 test("parallel quota exhaustion stops after the active batch", async () => {
   const state = createJobState({
     bookId: "parallel-quota",

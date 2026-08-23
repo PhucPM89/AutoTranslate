@@ -61,6 +61,9 @@ const els = {
   transActiveEtaBadge: document.getElementById("transActiveEtaBadge"),
   transSessionCountBadge: document.getElementById("transSessionCountBadge"),
   transCurrentChapterNameBadge: document.getElementById("transCurrentChapterNameBadge"),
+  transAttemptCountBadge: document.getElementById("transAttemptCountBadge"),
+  transLastSuccessBadge: document.getElementById("transLastSuccessBadge"),
+  transLiveState: document.getElementById("transLiveState"),
   transHeartbeatText: document.getElementById("transHeartbeatText"),
   transHourlySummaryText: document.getElementById("transHourlySummaryText"),
   transNextBookTitle: document.getElementById("transNextBookTitle"),
@@ -617,8 +620,11 @@ function renderTranslateStatus(status = {}) {
   els.translateStateBadge.dataset.state = status.state || "idle";
 
   const beat = status.updatedAt || status.finishedAt;
+  const heartbeatStale = Boolean(beat && Date.now() - new Date(beat).getTime() > 5 * 60 * 1000);
   if (els.transHeartbeatText) {
-    els.transHeartbeatText.textContent = beat ? `Nhịp tim: ${describeAge(beat)}` : "Nhịp tim: Đang chờ";
+    els.transHeartbeatText.textContent = beat
+      ? `${heartbeatStale ? "⚠️ Mất tín hiệu" : "Nhịp tim"}: ${describeAge(beat)}`
+      : "Nhịp tim: Đang chờ";
   }
 
   // 1. Current Active Focus Novel Info
@@ -628,6 +634,8 @@ function renderTranslateStatus(status = {}) {
   const bookTitle = status.currentBookTitle || (matched ? matched.title : status.currentBookId) || "Đang chờ lượt...";
   const percent = total ? Math.min(100, Math.round((saved / total) * 1000) / 10) : 0;
   const isRunning = status.state === "running";
+  const activityState = String(status.activityState || "");
+  const hasProgressThisRun = Number(status.translatedThisRun || status.sessionChaptersTranslated || 0) > 0;
 
   if (els.transActiveBookTitle) {
     els.transActiveBookTitle.textContent = isRunning ? bookTitle : (status.state === "idle" ? "Hệ thống đang sẵn sàng" : "Đang tạm dừng");
@@ -643,8 +651,21 @@ function renderTranslateStatus(status = {}) {
   }
   if (els.translateStateMessage) {
     els.translateStateMessage.textContent = isRunning && bookTitle
-      ? `Hệ thống đang dồn toàn bộ cụm AI Keys để dịch dứt điểm bộ [${bookTitle}].`
+      ? (status.activityMessage || `Worker đang xử lý bộ [${bookTitle}], nhưng chưa nhận được chi tiết lượt dịch.`)
       : (status.message || "Chưa có tác vụ dịch đang chạy.");
+  }
+  if (els.transLiveState) {
+    const label = heartbeatStale && isRunning
+      ? "Worker có thể đã dừng"
+      : activityState === "translating"
+      ? "Đang gọi AI"
+      : activityState === "progress"
+        ? "Vừa lưu chương mới"
+        : activityState === "retrying"
+          ? "Đang retry · chưa có đầu ra"
+          : isRunning ? "Worker còn hoạt động" : "Không có lượt dịch";
+    els.transLiveState.lastChild.textContent = ` ${label}`;
+    els.transLiveState.dataset.activity = heartbeatStale && isRunning ? "stale" : activityState || (isRunning ? "alive" : "idle");
   }
   if (els.transActiveChapterBadge) {
     els.transActiveChapterBadge.textContent = total > 0 ? `Chương ${saved.toLocaleString("vi-VN")} / ${total.toLocaleString("vi-VN")}` : `Chương ${saved || 0}`;
@@ -662,7 +683,25 @@ function renderTranslateStatus(status = {}) {
   }
   const currentCh = status.currentChapter || status.currentChapterNum || "";
   if (els.transCurrentChapterNameBadge) {
-    els.transCurrentChapterNameBadge.textContent = currentCh ? `📖 Đang dịch: Chương ${currentCh}` : "📖 Đang sẵn sàng";
+    const chapters = Array.isArray(status.activeChapters) ? status.activeChapters : [];
+    const chapterText = chapters.length > 1 ? `${chapters[0]}–${chapters[chapters.length - 1]}` : currentCh;
+    const verb = activityState === "retrying" ? "Đang retry" : activityState === "progress" ? "Vừa xong" : "Đang xử lý";
+    els.transCurrentChapterNameBadge.textContent = chapterText ? `📖 ${verb}: Chương ${chapterText}` : "📖 Đang sẵn sàng";
+  }
+  if (els.transAttemptCountBadge) {
+    const attempts = Number(status.spentRequests || 0);
+    const currentAttempt = Number(status.currentAttempt || 0);
+    els.transAttemptCountBadge.textContent = `🔄 Lượt xử lý: ${attempts}${currentAttempt ? ` · lần ${currentAttempt} của chương` : ""}`;
+  }
+  if (els.transLastSuccessBadge) {
+    if (status.lastSuccessAt) {
+      const chapter = Number(status.lastSuccessfulChapter || 0);
+      els.transLastSuccessBadge.textContent = `✅ Thành công gần nhất${chapter ? `: Chương ${chapter}` : ""} · ${describeAge(status.lastSuccessAt)}`;
+    } else {
+      els.transLastSuccessBadge.textContent = hasProgressThisRun
+        ? `✅ Phiên này đã lưu ${sessionCount} chương`
+        : `⚠️ Chưa có chương thành công${status.startedAt ? ` sau ${describeAge(status.startedAt)}` : " trong phiên"}`;
+    }
   }
 
   // Speed & ETA
@@ -678,7 +717,11 @@ function renderTranslateStatus(status = {}) {
   if (els.transActiveEtaBadge) els.transActiveEtaBadge.textContent = etaText;
 
   if (els.transStatSpeed) {
-    els.transStatSpeed.textContent = speed > 0 ? `Tốc độ: ${speed} ch/phút (~${Math.round(speed * 60).toLocaleString("vi-VN")} ch/giờ)` : "Tốc độ: ~1.8s / chương (~1.200 ch/giờ)";
+    els.transStatSpeed.textContent = speed > 0
+      ? `Tốc độ thực: ${speed} ch/phút (~${Math.round(speed * 60).toLocaleString("vi-VN")} ch/giờ)`
+      : isRunning
+        ? "Tốc độ thực: 0 chương/giờ · chưa có đầu ra thành công"
+        : "Tốc độ thực: 0 chương/giờ";
   }
 
   // Progress Bar
@@ -709,7 +752,7 @@ function renderTranslateStatus(status = {}) {
   }
   if (els.transStatKeysActive) {
     const keys = Number(status.activeKeyCount || 0);
-    els.transStatKeysActive.textContent = keys ? `${keys} Keys hoạt động` : "Đang kiểm tra Keys";
+    els.transStatKeysActive.textContent = keys ? `${keys} Keys đủ điều kiện` : "Đang kiểm tra Keys";
   }
 
   // 3. Next In Line Teaser

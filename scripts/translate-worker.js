@@ -244,6 +244,8 @@ async function main() {
   let stoppedForQuota = false;
   let stop = false;
   let cycle = 0;
+  let lastSuccessAt = "";
+  let lastSuccessfulChapter = 0;
 
   // Publishing is throttled per book: every 5 chapters published immediately
   const PUBLISH_EVERY_CHAPTERS = 5;
@@ -275,6 +277,7 @@ async function main() {
       }
 
       const bTitle = titleMap.get(job.bookId) || job.bookId;
+      let lastKnownCompleted = summarize(job.state).completed;
       console.log(`\n===============================================================`);
       console.log(`>>> [KHÓA CHẶT DỊCH 100%] Bộ truyện: "${bTitle}" (${job.bookId})`);
       console.log(`===============================================================`);
@@ -322,12 +325,32 @@ async function main() {
             );
           },
           saveState: (next) => storage.put(jobStateKey(job.bookId), JSON.stringify(next)),
-          onProgress: async ({ chapter, status, completed, total, sessionDelta }) => {
+          onProgress: async ({ chapter, chapters, status, completed, total, sessionDelta, spentDelta, attempts, lastError }) => {
             const currentTotalSession = translatedTotal + (sessionDelta || 0);
+            const currentSpent = spentTotal + (spentDelta || 0);
             const bTitle = titleMap.get(job.bookId) || job.bookId;
             const elapsedMin = Math.max(0.05, (Date.now() - new Date(startedAt).getTime()) / 60000);
             const currentSpeed = Math.round((currentTotalSession / elapsedMin) * 10) / 10;
             const currentSpacing = computeAdaptiveSpacing(allUniqueKeys);
+            if (completed > lastKnownCompleted) {
+              lastKnownCompleted = completed;
+              lastSuccessAt = new Date().toISOString();
+              lastSuccessfulChapter = chapter;
+            }
+            const activityState = status === "translating"
+              ? "translating"
+              : status === "completed"
+                ? "progress"
+                : "retrying";
+            const activeChapters = Array.isArray(chapters) && chapters.length ? chapters : [chapter].filter(Boolean);
+            const chapterLabel = activeChapters.length > 1
+              ? `${activeChapters[0]}–${activeChapters[activeChapters.length - 1]}`
+              : String(chapter || "?");
+            const activityMessage = activityState === "translating"
+              ? `Đang gửi chương ${chapterLabel} tới AI.`
+              : activityState === "progress"
+                ? `Đã dịch và lưu thành công chương ${chapter}.`
+                : `Chương ${chapter} chưa thành công; worker đang chờ để thử lại.`;
             console.log(`  [${bTitle}] ch ${chapter}: ${status}  (${completed}/${total}) [Phiên này: +${currentTotalSession} ch] [Điều tốc: ${Math.round(currentSpacing/1000)}s/ch]`);
             await writeTranslateStatus(storage, {
               state: "running",
@@ -340,12 +363,20 @@ async function main() {
               currentBookId: job.bookId,
               currentBookTitle: bTitle,
               currentChapter: chapter,
+              activeChapters,
               currentCompleted: completed,
               currentTotalChapters: total,
               translatedThisRun: currentTotalSession,
-              spentRequests: spentTotal + (sessionDelta || 0),
+              spentRequests: currentSpent,
+              currentAttempt: Number(attempts || 0),
+              activityState,
+              activityMessage,
+              lastAttemptAt: new Date().toISOString(),
+              lastSuccessAt,
+              lastSuccessfulChapter,
+              lastError: String(lastError || "").slice(0, 300),
               recentActivity,
-              message: `Đang dịch [${bTitle}] — Chương ${chapter} (${completed}/${total}) [Phiên này: +${currentTotalSession} chương]`,
+              message: `${activityMessage} Tiến độ thật ${completed}/${total}; phiên này +${currentTotalSession} chương.`,
               queue: queue.map((j) => {
                 const isCurrent = j.bookId === job.bookId;
                 const doneCh = isCurrent ? completed : (j.total || 0) - (j.pending || 0);

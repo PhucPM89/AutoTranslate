@@ -483,7 +483,7 @@
           <div class="trans-focus-topbar">
             <div class="trans-focus-status-badge">
               <span id="translateStateBadge" class="crawler-state-badge">Đang dịch AI</span>
-              <span class="trans-live-pulse"><span class="pulse-dot"></span> Tập trung 100% băng thông</span>
+              <span id="transLiveState" class="trans-live-pulse"><span class="pulse-dot"></span> Đang kiểm tra tiến trình</span>
             </div>
             <span id="transHeartbeatText" class="trans-heartbeat">Nhịp tim: Vừa xong</span>
           </div>
@@ -503,6 +503,8 @@
                 <span id="transActiveRemainingBadge" class="trans-focus-pill">Còn lại: --</span>
                 <span id="transSessionCountBadge" class="trans-focus-pill highlight-green">⚡ Phiên này: +0 chương</span>
                 <span id="transCurrentChapterNameBadge" class="trans-focus-pill highlight-blue">📖 Đang dịch: Chương 1</span>
+                <span id="transAttemptCountBadge" class="trans-focus-pill">🔄 Lượt thử: 0</span>
+                <span id="transLastSuccessBadge" class="trans-focus-pill">✅ Chưa có chương thành công trong phiên</span>
                 <span id="transActiveEtaBadge" class="trans-focus-pill highlight-gold">Dự kiến xong: --</span>
               </div>
             </div>
@@ -515,7 +517,7 @@
             </div>
             <div class="trans-focus-progress-labels">
               <span id="translateProgressLabel">Đã dịch: 0 / 0 chương (0%)</span>
-              <span id="transStatSpeed">Tốc độ: ~1.8s / chương (~1.200 ch/giờ)</span>
+              <span id="transStatSpeed">Tốc độ thực: 0 chương/giờ</span>
             </div>
           </div>
 

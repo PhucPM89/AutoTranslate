@@ -168,10 +168,12 @@ async function runTranslationJobs({
         const doneCount = state.chapters.filter((c) => c.status === "completed").length;
         await onProgress({
           chapter: entries[0]?.n || 0,
+          chapters: entries.map((entry) => entry.n),
           status: "translating",
           completed: doneCount,
           total: state.chapters.length,
-          sessionDelta: translated
+          sessionDelta: translated,
+          spentDelta: spent
         });
       } catch {}
     }
@@ -253,18 +255,6 @@ async function runTranslationJobs({
         translated += 1;
       }
 
-      if (typeof onProgress === "function") {
-        try {
-          const doneCount = state.chapters.filter((c) => c.status === "completed").length;
-          await onProgress({
-            chapter: entries[entries.length - 1]?.n || 0,
-            status: "completed",
-            completed: doneCount,
-            total: state.chapters.length,
-            sessionDelta: translated
-          });
-        } catch {}
-      }
     } catch (error) {
       spent += 1;
       const errMsg = String(error && error.message ? error.message : error).slice(0, 300);
@@ -301,7 +291,16 @@ async function runTranslationJobs({
     await saveState(state);
     if (onProgress) {
       for (const entry of entries) {
-        await onProgress({ chapter: entry.n, status: entry.status, ...summarize(state) });
+        await onProgress({
+          chapter: entry.n,
+          chapters: entries.map((item) => item.n),
+          status: entry.status,
+          attempts: entry.attempts,
+          lastError: entry.lastError,
+          sessionDelta: translated,
+          spentDelta: spent,
+          ...summarize(state)
+        });
       }
     }
     // translateChapter already rotates through the available key pool. A quota

@@ -8607,6 +8607,35 @@ body.zen-mode .document-paper {
   border: 1px solid rgba(34, 197, 94, 0.3);
 }
 
+.trans-live-pulse[data-activity="retrying"] {
+  color: #fde047;
+  background: rgba(234, 179, 8, 0.14);
+  border-color: rgba(234, 179, 8, 0.35);
+}
+
+.trans-live-pulse[data-activity="retrying"] .pulse-dot {
+  background: #eab308;
+  box-shadow: 0 0 10px #eab308;
+}
+
+.trans-live-pulse[data-activity="idle"] {
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.1);
+  border-color: rgba(148, 163, 184, 0.25);
+}
+
+.trans-live-pulse[data-activity="stale"] {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.trans-live-pulse[data-activity="stale"] .pulse-dot {
+  background: #ef4444;
+  box-shadow: 0 0 10px #ef4444;
+  animation: none;
+}
+
 .pulse-dot {
   width: 8px;
   height: 8px;
@@ -8945,8 +8974,6 @@ body.zen-mode .document-paper {
   .trans-focus-picker-controls { flex-direction: column; }
   .trans-focus-picker-hint { grid-column: auto; }
 }
-
-
 
 
 
