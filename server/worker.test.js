@@ -557,3 +557,62 @@ test("no response ever carries an R2 secret", async () => {
     assert.ok(!text.includes("AKIDTEST"), `${pathname} lộ access key id`);
   }
 });
+
+test("admin gemini translate requires admin auth and validates inputs", async () => {
+  const unauth = await call("/api/admin/gemini-translate", { method: "POST", body: { content: "test" } });
+  assert.equal(unauth.status, 401);
+
+  const getReq = await call("/api/admin/gemini-translate", { method: "GET", cookie: cookie() });
+  assert.equal(getReq.status, 405);
+
+  const noContent = await call("/api/admin/gemini-translate", { method: "POST", cookie: cookie(), body: {} });
+  assert.equal(noContent.status, 400);
+
+  const noKey = await call("/api/admin/gemini-translate", { method: "POST", cookie: cookie(), body: { content: "Chương 1..." } });
+  assert.equal(noKey.status, 400);
+});
+
+test("admin gemini translate proxies translation successfully", async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async (url, options) => {
+    const target = String(url);
+    if (target.includes("generativelanguage.googleapis.com")) {
+      return new Response(
+        JSON.stringify({
+          candidates: [
+            {
+              content: {
+                parts: [{ text: "Chương 1: Tiên Đạo Khởi Đầu\n\nTrời cao vạn dặm, mây gió cuồn cuộn." }]
+              },
+              finishReason: "STOP"
+            }
+          ]
+        }),
+        { headers: { "content-type": "application/json" } }
+      );
+    }
+    return originalFetch(url, options);
+  };
+
+  try {
+    const response = await call("/api/admin/gemini-translate", {
+      method: "POST",
+      cookie: cookie(),
+      body: {
+        apiKey: "AIzaSyTestKey123",
+        model: "gemini-2.5-flash",
+        content: "第一章 仙道起步\n\n万里长空，风云变幻。",
+        title: "第一章 仙道起步"
+      }
+    });
+
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.equal(data.ok, true);
+    assert.ok(data.translation.includes("Chương 1: Tiên Đạo Khởi Đầu"));
+    assert.equal(data.model, "gemini-2.5-flash");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+

@@ -121,6 +121,7 @@ const FALLBACK_BOOK_COVERS = [
 ];
 const els = {
   adminOpen: document.getElementById("adminOpen"),
+  navEpubStudioBtn: document.getElementById("navEpubStudioBtn"),
   accountOpen: document.getElementById("accountOpen"),
   accountIcon: document.getElementById("accountIcon"),
   accountInitial: document.getElementById("accountInitial"),
@@ -519,7 +520,8 @@ function bindEvents() {
   window.addEventListener("touchstart", (e) => {
     if (isAutoScrolling && !e.target.closest("#autoScrollBtn")) stopAutoScroll();
   }, { passive: true });
-  els.adminOpen?.addEventListener("click", bootstrapAdminPanel);
+  els.adminOpen?.addEventListener("click", () => bootstrapAdminPanel());
+  els.navEpubStudioBtn?.addEventListener("click", () => bootstrapAdminPanel({ tab: "epubStudio" }));
   els.featuredRead?.addEventListener("click", openFeaturedBook);
   els.supportQrOpen?.addEventListener("click", () => els.supportDialog?.showModal());
   els.supportQrClose?.addEventListener("click", () => els.supportDialog?.close());
@@ -596,17 +598,17 @@ function loadScript(url) {
   });
 }
 
-function bootstrapAdminPanel() {
-  els.adminOpen.removeEventListener("click", bootstrapAdminPanel);
-  els.adminOpen.disabled = true;
+function bootstrapAdminPanel(options = {}) {
+  if (els.adminOpen) els.adminOpen.disabled = true;
+  if (els.navEpubStudioBtn) els.navEpubStudioBtn.disabled = true;
   import(ADMIN_MODULE_URL)
-    .then((module) => module.mountAdmin())
+    .then((module) => module.mountAdmin(options))
     .catch((error) => {
       console.warn("Unable to load the admin bundle.", error);
-      els.adminOpen.addEventListener("click", bootstrapAdminPanel);
     })
     .finally(() => {
-      els.adminOpen.disabled = false;
+      if (els.adminOpen) els.adminOpen.disabled = false;
+      if (els.navEpubStudioBtn) els.navEpubStudioBtn.disabled = false;
     });
 }
 

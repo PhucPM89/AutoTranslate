@@ -65,7 +65,8 @@ const ROUTES = {
   "/api/admin/translate": handleTranslateStatus,
   "/api/admin/catalog": handleCatalog,
   "/api/admin/analytics": handleAnalytics,
-  "/api/admin/users": handleAdminUsers
+  "/api/admin/users": handleAdminUsers,
+  "/api/admin/gemini-translate": handleAdminGeminiTranslate
 };
 
 // Returns a Response for an API path, or null when the request is for something
@@ -1117,10 +1118,9 @@ async function handleAdminKeys({ request, env }) {
   });
 }
 
-async function readJson(request) {
-  const limit = 64 * 1024;
+async function readJson(request, limit = 64 * 1024) {
   const declared = Number(request.headers.get("content-length") || 0);
-  if (declared > limit) throw fail(413, "Body vượt giới hạn 64 KB.");
+  if (declared > limit) throw fail(413, `Body vượt giới hạn ${Math.round(limit / 1024)} KB.`);
 
   try {
     if (!request.body) return {};
@@ -1134,7 +1134,7 @@ async function readJson(request) {
       size += value.byteLength;
       if (size > limit) {
         await reader.cancel();
-        throw fail(413, "Body vượt giới hạn 64 KB.");
+        throw fail(413, `Body vượt giới hạn ${Math.round(limit / 1024)} KB.`);
       }
       text += decoder.decode(value, { stream: true });
     }
@@ -1176,6 +1176,93 @@ function fail(status, message) {
   return error;
 }
 
+// ---- admin gemini translate (VIP EPUB Studio) -------------------------------
+async function handleAdminGeminiTranslate({ request, env }) {
+  if (request.method !== "POST") return methodNotAllowed("POST");
+  requireSameOrigin(request);
+  await requireAdmin(request, env);
+
+  const body = await readJson(request, 1024 * 1024);
+  const content = String(body?.content || "").trim();
+  if (!content) throw fail(400, "Thiếu nội dung chương cần dịch.");
+  if (content.length > 500000) throw fail(400, "Nội dung chương quá dài (tối đa 500.000 ký tự).");
+
+  const apiKey = String(body?.apiKey || env.GEMINI_API_KEY || "").trim();
+  if (!apiKey) throw fail(400, "Chưa cung cấp Gemini API Key.");
+
+  const rawModel = String(body?.model || "gemini-2.5-flash").trim();
+  const model = rawModel || "gemini-2.5-flash";
+  const title = String(body?.title || "").trim();
+
+  const prompt = [
+    "Bạn là một dịch giả tiểu thuyết Trung Quốc sang tiếng Việt chuyên nghiệp.",
+    "Hãy dịch trọn vẹn chương truyện sau đây sang tiếng Việt tự nhiên, chuẩn văn phong tiểu thuyết Tiên Hiệp/Huyền Huyễn/Đô Thị.",
+    "QUY TẮC BẮT BUỘC:",
+    "- Chuyển toàn bộ tên người, địa danh, môn phái, chiêu thức, cảnh giới sang âm Hán-Việt phù hợp, quen thuộc.",
+    "- Tuyệt đối không dùng Pinyin hoặc để sót chữ Hán.",
+    "- Giữ nguyên cấu trúc phân đoạn văn bản, hội thoại rõ ràng, xưng hô tự nhiên (huynh-đệ, sư đồ, ta-ngươi, hắn-nàng).",
+    "- Không tóm tắt, không thêm lời bình luận bên ngoài, chỉ trả về duy nhất nội dung bản dịch tiếng Việt.",
+    "",
+    title ? `Tiêu đề chương: ${title}\n` : "",
+    "Nội dung cần dịch:",
+    content
+  ].join("\n");
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60000);
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-client": "gl-node/gemini-epub-studio"
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        safetySettings: [
+          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
+          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
+          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" }
+        ],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 8192
+        }
+      })
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const errMsg = data?.error?.message || `Lỗi Gemini API (HTTP ${response.status})`;
+      throw fail(response.status >= 500 ? 502 : response.status || 400, errMsg);
+    }
+
+    if (data?.candidates?.[0]?.finishReason === "SAFETY") {
+      throw fail(400, "Nội dung chương bị bộ lọc an toàn của Gemini từ chối xử lý.");
+    }
+
+    let text = data?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim() || "";
+    text = text.replace(/^```[a-z]*\n?/i, "").replace(/\n?```$/i, "").trim();
+
+    return json({
+      ok: true,
+      translation: text,
+      model,
+      usage: data?.usageMetadata || null
+    });
+  } catch (error) {
+    if (error.name === "AbortError") throw fail(504, "Gemini API phản hồi quá lâu (quá 60 giây).");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 // Workers Assets does serve and honour public/_headers, so static responses
 // already carry these. This covers the JSON responses above, which are generated
 // here and never touch that file, and acts as a backstop if _headers is missing.
@@ -1208,9 +1295,8 @@ function contentSecurityPolicy(env) {
     `img-src 'self' data:${cdn ? ` ${cdn}` : ""}`,
     "script-src 'self'",
     "style-src 'self'",
-    // The CDN for chapters, Supabase for analytics, and the R2 S3 endpoint for
-    // the admin page's presigned upload.
-    `connect-src 'self'${cdn ? ` ${cdn}` : ""} https://*.supabase.co https://*.r2.cloudflarestorage.com`,
+    // The CDN for chapters, Supabase for analytics, R2 S3 endpoint, and Gemini API.
+    `connect-src 'self'${cdn ? ` ${cdn}` : ""} https://*.supabase.co https://*.r2.cloudflarestorage.com https://generativelanguage.googleapis.com`,
     "media-src 'none'",
     "object-src 'none'",
     "base-uri 'self'",
