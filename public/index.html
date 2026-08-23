@@ -83,7 +83,7 @@
       })();
     </script>
     <link rel="stylesheet" href="/style.css?v=4cfd7456c665">
-    <script src="/app.js?v=035993bf9b6c" defer></script>
+    <script src="/app.js?v=62160f9fadd8" defer></script>
   </head>
   <body class="dark">
     <section id="libraryView" class="library-view">
@@ -748,18 +748,9 @@
           </div>
         </div>
 
-        <!-- Center: Gemini API Key & Model Config Bar -->
+        <!-- Server-managed VIP model pool. Credentials never reach the browser. -->
         <form id="studioKeyForm" class="studio-top-key-group" hidden>
-          <input name="username" type="text" value="gemini-api" autocomplete="username" hidden>
-          <label class="studio-top-input-wrap" title="Gemini API Key của bạn (lưu cục bộ an toàn trên trình duyệt)">
-            <span class="studio-top-label">🔑 Gemini Key:</span>
-            <div class="epub-key-input-group">
-              <input id="studioGeminiKey" type="password" placeholder="AIzaSy... (Nhập Key)" autocomplete="off">
-              <button id="studioToggleKey" class="icon-button" type="button" title="Ẩn/Hiện API Key" aria-label="Ẩn hiện key">
-                <svg class="icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-              </button>
-            </div>
-          </label>
+          <span class="studio-top-label" title="Key được mã hóa trong Cloudflare và chỉ route quản trị EPUB Studio sử dụng">🔐 Cụm VIP: 2 server keys</span>
 
           <label class="studio-top-input-wrap" title="Chọn Model AI">
             <span class="studio-top-label">🤖 Model:</span>
@@ -774,9 +765,9 @@
             </select>
           </label>
 
-          <button id="studioPingKeyBtn" class="secondary-action studio-ping-btn" type="button" title="Kiểm tra kết nối Gemini API">
+          <button id="studioPingKeyBtn" class="secondary-action studio-ping-btn" type="button" title="Kiểm tra cụm API riêng của EPUB Studio">
             <svg class="icon" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-            <span>Kiểm tra Key</span>
+            <span>Kiểm tra cụm VIP</span>
           </button>
 
           <div id="studioKeyStatus" class="epub-studio-key-status" hidden></div>

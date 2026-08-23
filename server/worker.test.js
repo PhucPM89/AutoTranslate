@@ -569,7 +569,7 @@ test("admin gemini translate requires admin auth and validates inputs", async ()
   assert.equal(noContent.status, 400);
 
   const noKey = await call("/api/admin/gemini-translate", { method: "POST", cookie: cookie(), body: { content: "Chương 1..." } });
-  assert.equal(noKey.status, 400);
+  assert.equal(noKey.status, 503);
 });
 
 test("admin gemini translate proxies translation successfully", async () => {
@@ -601,20 +601,21 @@ test("admin gemini translate proxies translation successfully", async () => {
       method: "POST",
       cookie: cookie(),
       body: {
-        apiKey: "AIzaSyTestKey123",
+        apiKey: "CLIENT_KEY_MUST_BE_IGNORED",
         model: "gemini-3.6-flash",
         content: "第一章 仙道起步\n\n万里长空，风云变幻。",
         title: "第一章 仙道起步"
       }
-    });
+    }, env({ EPUB_STUDIO_API_KEYS: "VIP_SERVER_KEY_1,VIP_SERVER_KEY_2" }));
 
     assert.equal(response.status, 200);
     const data = await response.json();
     assert.equal(data.ok, true);
     assert.ok(data.translation.includes("Chương 1: Tiên Đạo Khởi Đầu"));
     assert.equal(data.model, "gemini-3.6-flash");
-    assert.equal(geminiRequest.options.headers["x-goog-api-key"], "AIzaSyTestKey123");
-    assert.ok(!geminiRequest.target.includes("AIzaSyTestKey123"), "API key must not be placed in the URL");
+    assert.ok(["VIP_SERVER_KEY_1", "VIP_SERVER_KEY_2"].includes(geminiRequest.options.headers["x-goog-api-key"]));
+    assert.notEqual(geminiRequest.options.headers["x-goog-api-key"], "CLIENT_KEY_MUST_BE_IGNORED");
+    assert.ok(!geminiRequest.target.includes("VIP_SERVER_KEY"), "API key must not be placed in the URL");
     assert.equal(JSON.parse(geminiRequest.options.body).generationConfig.maxOutputTokens, 32768);
   } finally {
     global.fetch = originalFetch;
@@ -630,7 +631,7 @@ test("admin gemini translate rejects an unsupported model before contacting Gemi
       model: "gemini-made-up-model",
       content: "第一章"
     }
-  });
+  }, env({ EPUB_STUDIO_API_KEYS: "VIP_SERVER_KEY" }));
   assert.equal(response.status, 400);
   assert.match((await response.json()).error, /không được EPUB Studio hỗ trợ/);
 });

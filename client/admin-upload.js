@@ -276,17 +276,10 @@ export function mountAdmin(options = {}) {
       const file = e.target.files?.[0];
       if (file) handleStudioEpubFile(file);
     });
-    els.studioToggleKey?.addEventListener("click", () => {
-      if (!els.studioGeminiKey) return;
-      els.studioGeminiKey.type = els.studioGeminiKey.type === "password" ? "text" : "password";
-    });
     els.studioPingKeyBtn?.addEventListener("click", pingStudioGeminiKey);
     els.studioKeyForm?.addEventListener("submit", (event) => {
       event.preventDefault();
       pingStudioGeminiKey();
-    });
-    els.studioGeminiKey?.addEventListener("change", () => {
-      localStorage.setItem("tangthu_gemini_api_key", els.studioGeminiKey.value.trim());
     });
     els.studioGeminiModel?.addEventListener("change", () => {
       localStorage.setItem("tangthu_gemini_model", els.studioGeminiModel.value);
@@ -1775,10 +1768,9 @@ async function deleteStudioBookFromDb(bookId) {
 }
 
 function initEpubStudio() {
-  const savedKey = localStorage.getItem("tangthu_gemini_api_key") || "";
   const savedModel = normalizeStudioModel(localStorage.getItem("tangthu_gemini_model"));
   localStorage.setItem("tangthu_gemini_model", savedModel);
-  if (els.studioGeminiKey && !els.studioGeminiKey.value) els.studioGeminiKey.value = savedKey;
+  localStorage.removeItem("tangthu_gemini_api_key");
   if (els.studioGeminiModel) els.studioGeminiModel.value = savedModel;
 
   if (!studioState.currentBook && !studioState.isInitializing) {
@@ -1964,11 +1956,6 @@ function normalizePathHelper(path) {
 }
 
 async function pingStudioGeminiKey() {
-  const key = String(els.studioGeminiKey?.value || "").trim();
-  if (!key) {
-    alert("Vui lòng nhập Gemini API Key để kiểm tra.");
-    return;
-  }
   const model = normalizeStudioModel(els.studioGeminiModel?.value || DEFAULT_STUDIO_MODEL);
   if (els.studioPingKeyBtn) els.studioPingKeyBtn.disabled = true;
   if (els.studioKeyStatus) {
@@ -1979,57 +1966,24 @@ async function pingStudioGeminiKey() {
 
   const startTime = Date.now();
   try {
-    const directUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12000);
-
-    let ok = false;
-    try {
-      const res = await fetch(directUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-        signal: controller.signal,
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: "Ping. Respond with 'OK'." }] }],
-          generationConfig: { maxOutputTokens: 10 }
-        })
-      });
-      clearTimeout(timeout);
-      ok = res.ok;
-      if (!ok) {
-        const err = await res.json().catch(() => ({}));
-        const providerError = new Error(err?.error?.message || `HTTP ${res.status}`);
-        providerError.providerError = true;
-        throw providerError;
-      }
-    } catch (e) {
-      clearTimeout(timeout);
-      if (e.providerError) throw e;
-      const proxyRes = await requestJson("/api/admin/gemini-translate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          apiKey: key,
-          model,
-          content: "Ping test",
-          title: "Test"
-        })
-      });
-      ok = Boolean(proxyRes.ok);
-    }
+    const proxyRes = await requestJson("/api/admin/gemini-translate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model, content: "Ping test", title: "Test" })
+    });
+    const ok = Boolean(proxyRes.ok);
 
     const latency = Date.now() - startTime;
-    localStorage.setItem("tangthu_gemini_api_key", key);
     localStorage.setItem("tangthu_gemini_model", model);
 
     if (els.studioKeyStatus) {
       els.studioKeyStatus.className = "epub-studio-key-status is-valid";
-      els.studioKeyStatus.textContent = `🟢 Key hoạt động tốt (${latency}ms) · Model: ${model}`;
+      els.studioKeyStatus.textContent = `🟢 Cụm VIP hoạt động tốt (${latency}ms) · Model: ${model}`;
     }
   } catch (error) {
     if (els.studioKeyStatus) {
       els.studioKeyStatus.className = "epub-studio-key-status is-invalid";
-      els.studioKeyStatus.textContent = `🔴 Lỗi Key: ${error.message}`;
+      els.studioKeyStatus.textContent = `🔴 Lỗi cụm VIP: ${error.message}`;
     }
   } finally {
     if (els.studioPingKeyBtn) els.studioPingKeyBtn.disabled = false;
@@ -2045,15 +1999,7 @@ async function translateCurrentStudioChapter() {
 
   if (studioState.isTranslating) return;
 
-  const key = String(els.studioGeminiKey?.value || localStorage.getItem("tangthu_gemini_api_key") || "").trim();
-  if (!key) {
-    alert("Vui lòng nhập Gemini API Key của bạn trước khi dịch.");
-    els.studioGeminiKey?.focus();
-    return;
-  }
-
   const model = normalizeStudioModel(els.studioGeminiModel?.value || DEFAULT_STUDIO_MODEL);
-  localStorage.setItem("tangthu_gemini_api_key", key);
   localStorage.setItem("tangthu_gemini_model", model);
 
   studioState.isTranslating = true;
@@ -2071,7 +2017,6 @@ async function translateCurrentStudioChapter() {
       let result;
       try {
         result = await requestStudioGeminiPart({
-          key,
           model,
           bookTitle: book.title,
           chapterTitle: chapter.title,
@@ -2110,56 +2055,20 @@ async function translateCurrentStudioChapter() {
   }
 }
 
-async function requestStudioGeminiPart({ key, model, bookTitle, chapterTitle, content, part, totalParts, signal }) {
-  const prompt = buildStudioTranslationPrompt({ bookTitle, chapterTitle, content, part, totalParts });
-  const directUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-  let response;
-  try {
-    response = await fetch(directUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": key,
-        "x-goog-api-client": "gl-js/gemini-epub-studio"
-      },
-      signal,
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        safetySettings: [
-          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
-          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
-          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
-          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" }
-        ],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 32768 }
-      })
-    });
-  } catch (networkError) {
-    if (networkError.name === "AbortError") throw networkError;
-    const proxy = await requestJson("/api/admin/gemini-translate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      signal,
-      body: JSON.stringify({
-        apiKey: key,
-        model,
-        content,
-        title: `${chapterTitle}${totalParts > 1 ? ` (phần ${part}/${totalParts})` : ""}`
-      })
-    });
-    const assessment = assessStudioTranslation(content, proxy.translation, proxy.finishReason);
-    if (!assessment.ok) throw new Error(assessment.reason);
-    return { translation: assessment.output, model: proxy.model || model };
-  }
-
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data?.error?.message || `Gemini trả HTTP ${response.status}.`);
-  const candidate = data?.candidates?.[0];
-  if (candidate?.finishReason === "SAFETY") throw new Error("Nội dung bị bộ lọc an toàn của Gemini từ chối.");
-  const raw = candidate?.content?.parts?.map((partItem) => partItem.text || "").join("") || "";
-  const assessment = assessStudioTranslation(content, raw, candidate?.finishReason);
+async function requestStudioGeminiPart({ model, chapterTitle, content, part, totalParts, signal }) {
+  const proxy = await requestJson("/api/admin/gemini-translate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal,
+    body: JSON.stringify({
+      model,
+      content,
+      title: `${chapterTitle}${totalParts > 1 ? ` (phần ${part}/${totalParts})` : ""}`
+    })
+  });
+  const assessment = assessStudioTranslation(content, proxy.translation, proxy.finishReason);
   if (!assessment.ok) throw new Error(assessment.reason);
-  return { translation: assessment.output, model };
+  return { translation: assessment.output, model: proxy.model || model };
 }
 
 function selectStudioChapter(index) {

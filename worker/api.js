@@ -1177,6 +1177,22 @@ function fail(status, message) {
 }
 
 // ---- admin gemini translate (VIP EPUB Studio) -------------------------------
+let epubStudioKeyCursor = 0;
+const epubStudioKeyCooldowns = new Map();
+
+function studioApiKeys(env) {
+  return String(env.EPUB_STUDIO_API_KEYS || "")
+    .split(/[\r\n,;]+/)
+    .map((key) => key.trim())
+    .filter(Boolean);
+}
+
+function studioKeyCooldownMs(status, message) {
+  if (status === 401 || status === 403) return 24 * 60 * 60_000;
+  if (/\b(tpd|rpd)\b|tokens? per day|requests? per day|daily quota/i.test(message)) return 24 * 60 * 60_000;
+  return 10 * 60_000;
+}
+
 async function handleAdminGeminiTranslate({ request, env }) {
   if (request.method !== "POST") return methodNotAllowed("POST");
   requireSameOrigin(request);
@@ -1187,8 +1203,8 @@ async function handleAdminGeminiTranslate({ request, env }) {
   if (!content) throw fail(400, "Thiếu nội dung chương cần dịch.");
   if (content.length > 500000) throw fail(400, "Nội dung chương quá dài (tối đa 500.000 ký tự).");
 
-  const apiKey = String(body?.apiKey || env.GEMINI_API_KEY || "").trim();
-  if (!apiKey) throw fail(400, "Chưa cung cấp Gemini API Key.");
+  const apiKeys = studioApiKeys(env);
+  if (!apiKeys.length) throw fail(503, "Cụm API Key riêng của EPUB Studio chưa được cấu hình.");
 
   const rawModel = String(body?.model || "gemini-3.7-flash").trim();
   const allowedModels = new Set([
@@ -1224,33 +1240,48 @@ async function handleAdminGeminiTranslate({ request, env }) {
   const timeout = setTimeout(() => controller.abort(), 120000);
 
   try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
-        "x-goog-api-client": "gl-node/gemini-epub-studio"
-      },
-      signal: controller.signal,
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        safetySettings: [
-          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
-          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
-          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
-          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" }
-        ],
-        generationConfig: {
-          temperature: 0.2,
-          maxOutputTokens: 32768
-        }
-      })
-    });
+    const now = Date.now();
+    const orderedKeys = apiKeys.map((_, offset) => apiKeys[(epubStudioKeyCursor + offset) % apiKeys.length]);
+    epubStudioKeyCursor = (epubStudioKeyCursor + 1) % apiKeys.length;
+    let data = null;
+    let lastProviderError = null;
 
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
+    for (const apiKey of orderedKeys) {
+      if ((epubStudioKeyCooldowns.get(apiKey) || 0) > now) continue;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+          "x-goog-api-client": "gl-node/gemini-epub-studio-vip"
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          safetySettings: [
+            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
+            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
+            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" }
+          ],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 32768 }
+        })
+      });
+      data = await response.json().catch(() => ({}));
+      if (response.ok) break;
+
       const errMsg = data?.error?.message || `Lỗi Gemini API (HTTP ${response.status})`;
-      throw fail(response.status >= 500 ? 502 : response.status || 400, errMsg);
+      lastProviderError = fail(response.status >= 500 ? 502 : response.status || 400, errMsg);
+      if ([401, 403, 429].includes(response.status) || response.status >= 500) {
+        epubStudioKeyCooldowns.set(apiKey, Date.now() + studioKeyCooldownMs(response.status, errMsg));
+        data = null;
+        continue;
+      }
+      throw lastProviderError;
+    }
+
+    if (!data) {
+      throw lastProviderError || fail(429, "Toàn bộ key VIP EPUB Studio đang chờ hồi quota.");
     }
 
     if (data?.candidates?.[0]?.finishReason === "SAFETY") {

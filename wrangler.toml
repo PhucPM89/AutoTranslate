@@ -65,6 +65,8 @@ bucket_name = "novel-archive"
 #   LIBRARY_UPLOAD_PASSWORD_HASH  scrypt hash from `npm run setup:admin`
 #   GITHUB_DISPATCH_TOKEN      fine-grained PAT, Actions: read and write, this
 #                              repository only
+#   EPUB_STUDIO_API_KEYS       server-only pool used exclusively by the
+#                              authenticated VIP EPUB Studio
 #   SUPABASE_URL               also needed at build time
 #   SUPABASE_ANON_KEY          also needed at build time; publishable by design
 #   SUPABASE_SERVICE_ROLE_KEY  only if the admin panel must write book metadata
