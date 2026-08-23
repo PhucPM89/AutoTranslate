@@ -3814,11 +3814,11 @@ async function openBookFromCdn(book, cover, { startAtFirstChapter = false } = {}
 
 // Fetches and renders one chapter. Immutable URL, so the CDN and the browser
 // cache do the work on every revisit.
-async function loadCdnChapter(index) {
+async function loadCdnChapter(index, force = false) {
   const chapter = state.chapters[index];
   if (!chapter) return;
 
-  if (typeof chapter.text === "string") {
+  if (!force && typeof chapter.text === "string" && chapter._loaded) {
     renderCdnChapter(chapter, index);
     return;
   }
@@ -3830,13 +3830,15 @@ async function loadCdnChapter(index) {
 
   try {
     const chapterUrl = chapterUrlFor({ bookId: bookIdFromState(), revision: revisionFromState(), chapterUrlTemplate: state.cdnTemplate }, chapter.chapterNumber);
-    const response = await fetch(chapterUrl, { cache: "no-cache" });
+    const busterUrl = `${chapterUrl}${chapterUrl.includes("?") ? "&" : "?"}_t=${Date.now()}`;
+    const response = await fetch(busterUrl, { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const document_ = await response.json();
     if (index !== state.currentIndex) return;
     chapter.text = String(document_.content || "");
     chapter.status = document_.translationStatus || chapter.status;
     chapter.words = countWords(chapter.text);
+    chapter._loaded = true;
     renderCdnChapter(chapter, index);
   } catch (error) {
     if (index !== state.currentIndex) return;
