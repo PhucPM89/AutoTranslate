@@ -1793,11 +1793,23 @@ function initEpubStudio() {
   }
 }
 
+let studioNoticeTimer = null;
 function setStudioNotice(message, type = "") {
   if (!els.studioNotice) return;
+  if (studioNoticeTimer) {
+    clearTimeout(studioNoticeTimer);
+    studioNoticeTimer = null;
+  }
   els.studioNotice.hidden = !message;
   els.studioNotice.textContent = message || "";
   els.studioNotice.className = `studio-notice${type ? ` is-${type}` : ""}`;
+  if (message && type === "success") {
+    studioNoticeTimer = setTimeout(() => {
+      els.studioNotice.hidden = true;
+      els.studioNotice.textContent = "";
+      studioNoticeTimer = null;
+    }, 4500);
+  }
 }
 
 let jszipModulePromise = null;
