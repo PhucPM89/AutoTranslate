@@ -75,7 +75,13 @@ function isDone(state) {
 // Newly crawled chapters lead so an ongoing book stays current. Every fairness
 // interval gives the oldest normal-priority backlog a turn, so a long book still
 // progresses toward 100% instead of being starved by updates.
-function nextChapter(state, { now = Date.now(), maxAttempts = DEFAULT_MAX_ATTEMPTS, picked = 0, fairnessEvery = 4 } = {}) {
+function nextChapter(state, { now = Date.now(), maxAttempts = DEFAULT_MAX_ATTEMPTS, picked = 0, fairnessEvery = 4, strictSequential = false } = {}) {
+  if (strictSequential) {
+    const firstUnfinished = state.chapters
+      .filter((entry) => entry.status !== "completed")
+      .sort((a, b) => a.n - b.n)[0];
+    return isEntryReady(firstUnfinished, { now, maxAttempts }) ? firstUnfinished : null;
+  }
   const candidates = state.chapters
     .filter((entry) => isEntryReady(entry, { now, maxAttempts }))
     .sort((a, b) => a.n - b.n);
@@ -86,8 +92,8 @@ function nextChapter(state, { now = Date.now(), maxAttempts = DEFAULT_MAX_ATTEMP
   return preferNormal ? (normal[0] || high[0]) : (high[0] || normal[0]);
 }
 
-function nextBatchChapters(state, { now = Date.now(), maxAttempts = DEFAULT_MAX_ATTEMPTS, batchSize = 2, picked = 0 } = {}) {
-  const first = nextChapter(state, { now, maxAttempts, picked });
+function nextBatchChapters(state, { now = Date.now(), maxAttempts = DEFAULT_MAX_ATTEMPTS, batchSize = 2, picked = 0, strictSequential = false } = {}) {
+  const first = nextChapter(state, { now, maxAttempts, picked, strictSequential });
   if (!first) return [];
   if (batchSize <= 1) return [first];
 
@@ -138,6 +144,7 @@ async function runTranslationJobs({
   deadlineAt = Infinity,
   spacingMs = 0,
   batchSize = 1,
+  strictSequential = false,
   onProgress = null
 }) {
   let translated = 0;
@@ -151,8 +158,8 @@ async function runTranslationJobs({
     if (now() >= deadlineAt) break;
 
     const entries = (batchSize > 1)
-      ? nextBatchChapters(state, { now: now(), maxAttempts, batchSize, picked: spent })
-      : [nextChapter(state, { now: now(), maxAttempts, picked: spent })].filter(Boolean);
+      ? nextBatchChapters(state, { now: now(), maxAttempts, batchSize, picked: spent, strictSequential })
+      : [nextChapter(state, { now: now(), maxAttempts, picked: spent, strictSequential })].filter(Boolean);
 
     if (!entries.length) break;
 

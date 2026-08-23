@@ -483,12 +483,10 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
   let lastError = null;
 
   // Build candidate order starting from globalKeyIndex in strict round-robin fashion
-  const startIndex = globalKeyIndex % nKeys;
-  const keyOrder = [];
-  for (let i = 0; i < nKeys; i++) {
-    const idx = (startIndex + i) % nKeys;
-    keyOrder.push({ key: keyList[idx], index: idx });
-  }
+  // Reserve the starting key synchronously. Concurrent chunks used to read the
+  // same pointer before any response arrived, then stampede every key in the
+  // same order instead of spreading work across the pool.
+  const keyOrder = reserveKeyOrder(keyList);
 
   // Separate keys into: ready (not on cooldown) vs on cooldown
   const readyKeys = keyOrder.filter(({ key }) => getKeyHealth(key).cooldownUntil <= now);
@@ -526,8 +524,6 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
         const quality = assessTranslation(text, processedText);
         if (quality.acceptable) {
           markKeySuccess(apiKey, result.usage?.total_tokens || 0);
-          // Advance global key pointer so the NEXT request uses the next key
-          globalKeyIndex = (keyIdx + 1) % nKeys;
           return { text: processedText, model: result.model, usage: result.usage };
         }
 
@@ -560,6 +556,17 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
   const err = lastError || new Error("Tất cả các API key đều đang trong thời gian chờ hoặc hết hạn mức.");
   err.earliestCooldown = earliestCooldown;
   throw err;
+}
+
+function reserveKeyOrder(keyList) {
+  const nKeys = keyList.length;
+  if (!nKeys) return [];
+  const startIndex = globalKeyIndex % nKeys;
+  globalKeyIndex = (globalKeyIndex + 1) % nKeys;
+  return Array.from({ length: nKeys }, (_, offset) => {
+    const index = (startIndex + offset) % nKeys;
+    return { key: keyList[index], index };
+  });
 }
 
 async function translateChunkWithModel(apiKey, model, prompt, generationConfig = {}) {
@@ -1124,5 +1131,6 @@ module.exports = {
   splitTextIntoChunks,
   parseApiKeys,
   getKeyPoolStats,
-  parseGroqRetryDurationMs
+  parseGroqRetryDurationMs,
+  reserveKeyOrder
 };

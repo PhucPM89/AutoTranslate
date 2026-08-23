@@ -252,6 +252,7 @@ async function main() {
   const sincePublish = new Map();
   const touched = new Map();
   const rowChecked = new Set();
+  const outputsChecked = new Set();
 
   const publishBook = (job) =>
     refreshBookOutputs({ storage, db, job, state: job.state }).catch((error) =>
@@ -275,6 +276,14 @@ async function main() {
         await ensureBookRow({ storage, db, job });
         rowChecked.add(job.bookId);
       }
+      if (!outputsChecked.has(job.bookId)) {
+        const index = await readJson(storage, `books/${job.bookId}/index.json`);
+        if (bookOutputsNeedRefresh(index, job.state)) {
+          console.log(`  [${job.bookId}] Index đọc bị lệch queue; đồng bộ lại trước khi dịch tiếp.`);
+          await refreshBookOutputs({ storage, db, job, state: job.state });
+        }
+        outputsChecked.add(job.bookId);
+      }
 
       const bTitle = titleMap.get(job.bookId) || job.bookId;
       let lastKnownCompleted = summarize(job.state).completed;
@@ -290,6 +299,7 @@ async function main() {
           deadlineAt,
           spacingMs: () => computeAdaptiveSpacing(allUniqueKeys),
           batchSize: BATCH_SIZE,
+          strictSequential: Boolean(configuredFocus),
           loadChapter: (n) => readJson(storage, originalKey(job.bookId, job.revision, n)),
           translateChapter: async (chapter) => {
             const existing = await readJson(storage, chapterKey(job.bookId, job.revision, chapter.chapterNumber));
@@ -641,6 +651,12 @@ function siteSettings() {
   };
 }
 
+function bookOutputsNeedRefresh(index, state) {
+  if (!index || !Array.isArray(index.chapters) || !state || !Array.isArray(state.chapters)) return false;
+  const published = new Map(index.chapters.map((entry) => [entry.n, entry.status]));
+  return state.chapters.some((entry) => published.get(entry.n) !== entry.status);
+}
+
 async function readJson(storage, key) {
   const buffer = await storage.get(key).catch(() => null);
   if (!buffer) return null;
@@ -651,7 +667,7 @@ async function readJson(storage, key) {
   }
 }
 
-module.exports = { listJobs, refreshBookOutputs, ensureBookRow };
+module.exports = { listJobs, refreshBookOutputs, ensureBookRow, bookOutputsNeedRefresh };
 
 if (require.main === module) {
   main().catch((error) => {

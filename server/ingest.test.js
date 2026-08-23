@@ -186,6 +186,20 @@ test("queue respects backoff and gives up after max attempts", () => {
   assert.equal(nextChapter(state, { now: 20_000, maxAttempts: 4 }), null, "exhausted");
 });
 
+test("strict sequential mode waits for the earliest gap instead of skipping ahead", () => {
+  const state = createJobState({
+    bookId: "strict",
+    revision: 1,
+    chapters: [{ chapterNumber: 1 }, { chapterNumber: 2 }, { chapterNumber: 3 }]
+  });
+  state.chapters[0].status = "retrying";
+  state.chapters[0].nextAttemptAt = 10_000;
+
+  assert.equal(nextChapter(state, { now: 5_000, strictSequential: true }), null);
+  assert.equal(nextChapter(state, { now: 5_000 }).n, 2, "automatic mode may keep other work moving");
+  assert.equal(nextChapter(state, { now: 10_000, strictSequential: true }).n, 1);
+});
+
 test("a chapter is never completed when the upload fails", async () => {
   const state = createJobState({ bookId: "b", revision: 1, chapters: [{ chapterNumber: 1 }] });
   const result = await runTranslationJobs({
@@ -544,6 +558,17 @@ test("listJobs ignores an orphan queue after its published book was deleted", as
 
   assert.deepEqual(await listJobs(storage, ""), []);
   assert.deepEqual(await listJobs(storage, "deleted-book"), []);
+});
+
+test("worker detects a reader index whose chapter statuses lag behind the queue", () => {
+  const { bookOutputsNeedRefresh } = require("../scripts/translate-worker");
+  const state = createJobState({ bookId: "stale-index", revision: 1, chapters: [{ chapterNumber: 1 }, { chapterNumber: 2 }] });
+  state.chapters[0].status = "completed";
+  const stale = { chapters: [{ n: 1, status: "pending" }, { n: 2, status: "pending" }] };
+  const current = { chapters: [{ n: 1, status: "completed" }, { n: 2, status: "pending" }] };
+
+  assert.equal(bookOutputsNeedRefresh(stale, state), true);
+  assert.equal(bookOutputsNeedRefresh(current, state), false);
 });
 
 test("nextBatchChapters groups consecutive pending chapters and runTranslationJobs executes batch", async () => {

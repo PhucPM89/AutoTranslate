@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { translateText, translateMetadata, assessTranslation, splitTextIntoChunks } = require("./gemini");
+const { translateText, translateMetadata, assessTranslation, splitTextIntoChunks, reserveKeyOrder } = require("./gemini");
 
 const chineseSource = "这是一个需要翻译成越南语的中文段落。".repeat(20);
 
@@ -148,4 +148,12 @@ test("translates crawler metadata to strict Vietnamese JSON", async () => {
 test("hard-splits a long paragraph without punctuation", () => {
   const chunks = splitTextIntoChunks("中".repeat(9500), 4000);
   assert.deepEqual(chunks.map((chunk) => chunk.length), [4000, 4000, 1500]);
+});
+
+test("concurrent work reserves different starting keys before awaiting a response", () => {
+  const keys = ["key-a", "key-b", "key-c"];
+  const first = reserveKeyOrder(keys);
+  const second = reserveKeyOrder(keys);
+  assert.notEqual(first[0].key, second[0].key);
+  assert.deepEqual(new Set(first.map((entry) => entry.key)), new Set(keys));
 });
