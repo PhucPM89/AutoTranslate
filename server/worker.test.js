@@ -600,7 +600,7 @@ test("admin gemini translate proxies translation successfully", async () => {
       cookie: cookie(),
       body: {
         apiKey: "AIzaSyTestKey123",
-        model: "gemini-2.5-flash",
+        model: "gemini-3.6-flash",
         content: "第一章 仙道起步\n\n万里长空，风云变幻。",
         title: "第一章 仙道起步"
       }
@@ -610,7 +610,7 @@ test("admin gemini translate proxies translation successfully", async () => {
     const data = await response.json();
     assert.equal(data.ok, true);
     assert.ok(data.translation.includes("Chương 1: Tiên Đạo Khởi Đầu"));
-    assert.equal(data.model, "gemini-2.5-flash");
+    assert.equal(data.model, "gemini-3.6-flash");
   } finally {
     global.fetch = originalFetch;
   }

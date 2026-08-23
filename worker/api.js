@@ -1190,8 +1190,8 @@ async function handleAdminGeminiTranslate({ request, env }) {
   const apiKey = String(body?.apiKey || env.GEMINI_API_KEY || "").trim();
   if (!apiKey) throw fail(400, "Chưa cung cấp Gemini API Key.");
 
-  const rawModel = String(body?.model || "gemini-2.5-flash").trim();
-  const model = rawModel || "gemini-2.5-flash";
+  const rawModel = String(body?.model || "gemini-3.6-flash").trim();
+  const model = rawModel || "gemini-3.6-flash";
   const title = String(body?.title || "").trim();
 
   const prompt = [

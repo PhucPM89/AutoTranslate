@@ -1685,7 +1685,11 @@ async function deleteStudioBookFromDb(bookId) {
 
 function initEpubStudio() {
   const savedKey = localStorage.getItem("tangthu_gemini_api_key") || "";
-  const savedModel = localStorage.getItem("tangthu_gemini_model") || "gemini-2.5-flash";
+  let savedModel = localStorage.getItem("tangthu_gemini_model") || "gemini-3.6-flash";
+  if (savedModel === "gemini-2.5-flash" || savedModel === "gemini-2.0-flash" || savedModel === "gemini-1.5-flash") {
+    savedModel = "gemini-3.6-flash";
+    localStorage.setItem("tangthu_gemini_model", savedModel);
+  }
   if (els.studioGeminiKey && !els.studioGeminiKey.value) els.studioGeminiKey.value = savedKey;
   if (els.studioGeminiModel) els.studioGeminiModel.value = savedModel;
 
@@ -1844,7 +1848,7 @@ async function pingStudioGeminiKey() {
     alert("Vui lòng nhập Gemini API Key để kiểm tra.");
     return;
   }
-  const model = String(els.studioGeminiModel?.value || "gemini-2.5-flash").trim();
+  const model = String(els.studioGeminiModel?.value || "gemini-3.6-flash").trim();
   if (els.studioPingKeyBtn) els.studioPingKeyBtn.disabled = true;
   if (els.studioKeyStatus) {
     els.studioKeyStatus.hidden = false;
@@ -1923,7 +1927,7 @@ async function translateCurrentStudioChapter() {
     return;
   }
 
-  const model = String(els.studioGeminiModel?.value || "gemini-2.5-flash").trim();
+  const model = String(els.studioGeminiModel?.value || "gemini-3.6-flash").trim();
   localStorage.setItem("tangthu_gemini_api_key", key);
   localStorage.setItem("tangthu_gemini_model", model);
 
