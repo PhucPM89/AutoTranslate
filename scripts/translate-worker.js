@@ -505,6 +505,7 @@ async function main() {
     // A full pass that translated nothing means every queue is finished or
     // waiting on a backoff.
     if (!translatedThisCycle) {
+      if (stop) break;
       if (CONTINUOUS_MODE) {
         console.log("  [24/7 Continuous Mode] Hàng đợi tạm thời không còn chương chờ. Nghỉ 30s trước vòng lặp tiếp theo...");
         await new Promise((r) => setTimeout(r, 30000));

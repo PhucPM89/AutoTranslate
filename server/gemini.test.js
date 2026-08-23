@@ -303,6 +303,12 @@ test("minute quota gets a quiet recovery window", () => {
   assert.ok(recovery.durationMs >= 10 * 60_000);
 });
 
+test("unknown quota dimension waits a conservative full cycle", () => {
+  const recovery = computeQuotaRecovery(new Error("RESOURCE_EXHAUSTED: current quota unavailable"), "gemini-key");
+  assert.equal(recovery.policy, "wait_conservative_full_cycle");
+  assert.ok(recovery.durationMs >= 24 * 60 * 60_000);
+});
+
 test("Gemini daily quota resumes only after the next Pacific midnight", () => {
   const now = Date.parse("2026-08-23T12:00:00Z");
   const reset = nextPacificMidnightMs(now);

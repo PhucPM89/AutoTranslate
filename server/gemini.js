@@ -491,9 +491,9 @@ function computeQuotaRecovery(error, apiKey, now = Date.now()) {
     return { quotaClass, durationMs: Math.max(providerWait, MINUTE_QUOTA_RECOVERY_MS) + 30_000, policy: "wait_full_minute_window" };
   }
 
-  const consecutiveErrors = Math.max(0, Number(error?.consecutiveErrors || 0));
-  const circuitWait = Math.min(6 * 60 * 60_000, 15 * 60_000 * (2 ** Math.min(4, consecutiveErrors)));
-  return { quotaClass, durationMs: Math.max(providerWait, circuitWait) + QUOTA_SAFETY_MS, policy: "exponential_quota_circuit" };
+  // If the provider omits the exhausted dimension, guessing a short window can
+  // recreate the refill-drain loop. A full conservative cycle is safer.
+  return { quotaClass, durationMs: Math.max(providerWait, DAILY_QUOTA_RECOVERY_MS) + QUOTA_SAFETY_MS, policy: "wait_conservative_full_cycle" };
 }
 
 function markKeyCooldown(key, durationMs = 60000, errorMsg = "", details = {}) {
@@ -577,7 +577,8 @@ function importKeyPoolState(snapshot, keyList = []) {
     health.recoveryPolicy = String(saved.recoveryPolicy || "");
     // Schema 1 used the provider's "next request" delay. Upgrade an existing
     // quota lock before this process can call the provider again.
-    if (Number(snapshot.schema || 1) < 2 && /quota|rate limit|\b(tpd|tpm|rpd|rpm)\b|tokens? per|requests? per|retry in|try again in/i.test(health.lastErrorMsg)) {
+    const needsQuotaUpgrade = Number(snapshot.schema || 1) < 2 || health.recoveryPolicy === "exponential_quota_circuit";
+    if (needsQuotaUpgrade && /quota|rate limit|\b(tpd|tpm|rpd|rpm)\b|tokens? per|requests? per|retry in|try again in/i.test(health.lastErrorMsg)) {
       const recovery = computeQuotaRecovery({
         message: health.lastErrorMsg,
         consecutiveErrors: health.consecutiveErrors
