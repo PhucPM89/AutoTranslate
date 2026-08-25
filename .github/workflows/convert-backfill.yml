@@ -1,0 +1,51 @@
+name: Convert backfill
+
+# One-off / repeatable: render the offline Hán-Việt convert onto chapters that
+# were published before the convert tier existed, so old books stop showing raw
+# Chinese. Convert is fully offline (dictionaries are committed in data/convert),
+# so this job needs only R2 credentials — no AI keys, no quota.
+#
+# Safe to re-run: it skips chapters already "convert" or "completed", so a run
+# that hits the time limit just resumes where it left off next time.
+on:
+  workflow_dispatch:
+    inputs:
+      book:
+        description: "Chỉ backfill một bookId (để trống = toàn bộ thư viện)"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  backfill:
+    name: Convert backfill
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    concurrency:
+      # Share the pipeline write lock so it never races the crawler/translator.
+      group: novel-pipeline-storage-writes
+      cancel-in-progress: false
+    env:
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # --ignore-scripts skips the client build (postinstall); the convert
+      # dictionaries live in data/convert and are all this job needs.
+      - run: npm ci --ignore-scripts
+
+      - name: Backfill convert onto old chapters
+        run: >
+          node scripts/convert-backfill.js
+          --all --commit
+          ${{ github.event.inputs.book && format('--book {0}', github.event.inputs.book) || '' }}
