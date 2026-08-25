@@ -11,6 +11,7 @@ const {
   isDone
 } = require("./translation-queue");
 const { LAYOUT } = require("../storage/keys");
+const { CONVERT_VERSION } = require("../convert");
 
 // The single ingest path. Both the admin upload and the Fanqie crawler call this
 // so there is exactly one implementation of "EPUB in, readable book out".
@@ -136,7 +137,8 @@ async function ingestBook({
             revision: rev,
             chapter: source,
             translation: converted,
-            translationStatus: converted ? "convert" : "pending"
+            translationStatus: converted ? "convert" : "pending",
+            convertVersion: converted ? CONVERT_VERSION : undefined
           })
         )
       );

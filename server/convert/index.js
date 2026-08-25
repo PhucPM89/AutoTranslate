@@ -6,6 +6,12 @@ const { createConvertEngine } = require("./convert-engine");
 const { loadPhraseDict, loadHanvietChars } = require("./load-dictionaries");
 const { loadLexicon, readSet } = require("./lexicon");
 
+// Bump when the convert engine or its data changes enough that already-converted
+// chapters should be re-rendered. The backfill re-converts any "convert" chapter
+// stamped with an older version, so a full re-pass resumes across runs instead of
+// restarting from the top. 1 = pre-grammar; 2 = normalization + grammar layers.
+const CONVERT_VERSION = 2;
+
 const DEFAULT_HANVIET = path.join("data", "convert", "hanviet-chars.txt");
 const DEFAULT_PHRASE_DIR = path.join("data", "convert", "phrases");
 // Normalization overrides load LAST so they win over the base dictionaries:
@@ -66,4 +72,4 @@ function getConvertFunction(env = process.env) {
   return cached;
 }
 
-module.exports = { buildConvertEngineFromDisk, getConvertFunction, defaultPhraseFiles };
+module.exports = { buildConvertEngineFromDisk, getConvertFunction, defaultPhraseFiles, CONVERT_VERSION };

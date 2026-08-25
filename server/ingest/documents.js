@@ -13,12 +13,12 @@ const SCHEMA_VERSION = 1;
 //               produced instantly at ingest so no chapter is ever unreadable.
 //   completed — LLM translation; the fluent tier that upgrades convert on demand.
 // `convert` and `completed` both supply a `translation`; `pending` does not.
-function buildChapterDocument({ bookId, revision, chapter, translation, translationStatus }) {
+function buildChapterDocument({ bookId, revision, chapter, translation, translationStatus, convertVersion }) {
   if (!bookId) throw new Error("Chapter document cần bookId.");
   const status = translationStatus || (translation ? "completed" : "pending");
   const hasRendered = translation && (status === "completed" || status === "convert");
   const content = hasRendered ? translation : chapter.content;
-  return {
+  const doc = {
     schema: SCHEMA_VERSION,
     bookId,
     revision,
@@ -32,6 +32,10 @@ function buildChapterDocument({ bookId, revision, chapter, translation, translat
     characters: content.length,
     updatedAt: new Date().toISOString()
   };
+  // Stamp convert output with the engine version, so a later backfill can tell a
+  // stale convert from a current one and re-render only what changed.
+  if (status === "convert" && convertVersion != null) doc.convertVersion = convertVersion;
+  return doc;
 }
 
 function buildOriginalDocument({ bookId, revision, chapter }) {

@@ -37,7 +37,7 @@ loadEnvFile(path.join(__dirname, "..", ".env.local"));
 const { createStorage } = require("../server/storage");
 const { buildChapterDocument, chapterKey, originalKey } = require("../server/ingest/documents");
 const { jobStateKey } = require("../server/ingest/translation-queue");
-const { getConvertFunction } = require("../server/convert");
+const { getConvertFunction, CONVERT_VERSION } = require("../server/convert");
 
 function flag(name) {
   return process.argv.includes(name);
@@ -98,12 +98,14 @@ async function backfillBook(storage, convert, bookId, { commit, force }) {
   await pool(candidates, async (entry) => {
     const n = entry.n;
     const published = await readJson(storage, chapterKey(bookId, revision, n));
-    // Completed LLM chapters are never touched. A chapter already in "convert"
-    // is re-converted only with --force (e.g. after the normalization rules
-    // improve), so an ordinary run stays cheap and idempotent.
+    // Completed LLM chapters are never touched. A chapter already converted at
+    // the current engine version is skipped — so a re-pass after the rules
+    // improve resumes across runs instead of restarting from the top, and only
+    // stale convert (older or unstamped version) is re-rendered. --force
+    // re-renders every convert chapter regardless of version.
     if (published) {
       if (published.translationStatus === "completed") return;
-      if (published.translationStatus === "convert" && !force) return;
+      if (published.translationStatus === "convert" && !force && (published.convertVersion || 0) >= CONVERT_VERSION) return;
     }
     const source = await readJson(storage, originalKey(bookId, revision, n));
     if (!source || !source.content) {
@@ -126,7 +128,8 @@ async function backfillBook(storage, convert, bookId, { commit, force }) {
             revision,
             chapter: source,
             translation: text,
-            translationStatus: "convert"
+            translationStatus: "convert",
+            convertVersion: CONVERT_VERSION
           })
         )
       );
