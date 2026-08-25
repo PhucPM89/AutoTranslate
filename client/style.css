@@ -99,63 +99,57 @@
 :root {
   color-scheme: dark;
 
-  /* Ground and surfaces, darkest to lightest. The base carries a violet cast so
-     the accent gradient sits in the same family as the background instead of
-     floating on top of a neutral grey. */
-  --bg: #08060f;
+  /* Ground and surfaces — Mực Mun & Sơn Mài Hoàng Gia */
+  --bg: #0c0a10;
   --app-bg: var(--bg);
-  --bg-sunken: #050409;
-  --topbar: rgba(14, 10, 27, 0.72);
-  --sidebar: #0d0a19;
-  --surface: #120e22;
-  --surface-raised: #1a1434;
-  --surface-hover: #241c45;
+  --bg-sunken: #070509;
+  --topbar: rgba(16, 13, 22, 0.82);
+  --sidebar: #120e18;
+  --surface: #171320;
+  --surface-raised: #211c2e;
+  --surface-hover: #2e2640;
 
   /* Reading sheet */
-  --paper: #100d1e;
-  --paper-text: #eceaff;
+  --paper: #130f1c;
+  --paper-text: #fbf8f2;
 
-  /* Ink */
-  --text: #f4f1ff;
-  --text-soft: #cbc4ec;
-  --muted: #948cbe;
-  --faint: #6f6890;
+  /* Ink & Typography */
+  --text: #fbf8f2;
+  --text-soft: #ddd3c3;
+  --muted: #a89c8a;
+  --faint: #786e5e;
 
-  /* Lines. Tinted rather than grey, so a border reads as part of the palette. */
-  --border: rgba(167, 139, 250, 0.16);
-  --border-soft: rgba(167, 139, 250, 0.09);
-  --border-strong: rgba(167, 139, 250, 0.32);
+  /* Lines — Khung viền thếp vàng cổ điển */
+  --border: rgba(229, 169, 60, 0.18);
+  --border-soft: rgba(229, 169, 60, 0.09);
+  --border-strong: rgba(229, 169, 60, 0.4);
 
-  /* Accents */
-  --accent: #a855f7;
-  --accent-strong: #c084fc;
-  --accent-2: #22d3ee;
-  --accent-hot: #f472b6;
-  --accent-ink: #0a0616;
-  --accent-wash: rgba(168, 85, 247, 0.14);
-  --vermilion: #fb7185;
-  --warm: #fbbf24;
-  --gold: #facc15;
-  --danger: #fb7185;
+  /* Accents — Hoàng Kim & Hổ Phách & Chu Sa & Lam Ngọc */
+  --accent: #e5a93c;
+  --accent-strong: #f6c05d;
+  --accent-2: #38bdf8;
+  --accent-hot: #f43f5e;
+  --accent-ink: #140d04;
+  --accent-wash: rgba(229, 169, 60, 0.15);
+  --vermilion: #ef4444;
+  --warm: #f59e0b;
+  --gold: #e5a93c;
+  --danger: #f43f5e;
 
-  /* The one gradient the whole interface borrows from, so every accented
-     surface belongs to the same light source. */
-  --gradient: linear-gradient(135deg, #7c3aed 0%, #c026d3 48%, #06b6d4 100%);
-  --gradient-soft: linear-gradient(135deg, rgba(124, 58, 237, 0.22), rgba(6, 182, 212, 0.14));
-  --gradient-text: linear-gradient(120deg, #e9d5ff 0%, #c084fc 42%, #67e8f9 100%);
+  /* The one royal gold gradient the whole interface borrows from */
+  --gradient: linear-gradient(135deg, #d97706 0%, #f59e0b 50%, #fbbf24 100%);
+  --gradient-soft: linear-gradient(135deg, rgba(229, 169, 60, 0.22), rgba(245, 158, 11, 0.12));
+  --gradient-text: linear-gradient(120deg, #fffbeb 0%, #fde68a 35%, #f59e0b 80%, #d97706 100%);
 
-  /* Elevation: three steps, plus two glow steps for accented surfaces. A glow
-     rather than a drop shadow is what makes a dark interface feel lit. */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
-  --shadow-md: 0 10px 30px rgba(4, 2, 12, 0.5);
-  --shadow-lg: 0 30px 80px rgba(4, 2, 12, 0.62);
+  /* Elevation: Royal gold edge glow and deep shadow */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.6);
+  --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.65);
+  --shadow-lg: 0 30px 80px rgba(0, 0, 0, 0.85);
   --shadow: var(--shadow-lg);
-  --glow: 0 0 0 1px rgba(168, 85, 247, 0.3), 0 14px 44px rgba(124, 58, 237, 0.26);
-  --glow-strong: 0 0 0 1px rgba(192, 132, 252, 0.5), 0 20px 64px rgba(124, 58, 237, 0.45);
+  --glow: 0 0 0 1px rgba(229, 169, 60, 0.35), 0 14px 44px rgba(217, 119, 6, 0.28);
+  --glow-strong: 0 0 0 1px rgba(246, 192, 93, 0.6), 0 20px 64px rgba(245, 158, 11, 0.42);
 
-  /* Type. One family throughout: Be Vietnam Pro is built for Vietnamese, so the
-     double-diacritic vowels have real glyphs at every weight used here. The old
-     serif display face is what made the interface read as a printed catalogue. */
+  /* Type */
   --font-sans: "Be Vietnam Pro", Inter, "Segoe UI", Arial, "Noto Sans", "Microsoft YaHei", sans-serif;
   --font-display: var(--font-sans);
   --font-read: var(--font-sans);
