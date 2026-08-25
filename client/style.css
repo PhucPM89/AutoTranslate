@@ -10100,3 +10100,382 @@ body.zen-mode .document-paper {
 }
 
 
+
+
+/* ============================================================================
+   READER REDESIGN (2026)
+   The reading bar was overloaded with ~11 control groups. Display controls now
+   live in a settings popover (#readerSettingsPanel); the bar keeps only the
+   quick actions. All ids are unchanged, so app.js bindings are untouched.
+   Everything below is token-driven — no new hardcoded colours.
+   ============================================================================ */
+
+/* --- Reading bar: calm quick actions ------------------------------------- */
+.reader-bar-tools {
+  position: static;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.reader-quick-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 3px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+}
+
+.reader-quick-actions .reader-bar-nav {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-left: 2px;
+  padding-left: 4px;
+  border-left: 1px solid var(--border-soft);
+}
+
+.reader-quick-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: var(--r-sm);
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+
+.reader-quick-btn .icon {
+  width: 17px;
+  height: 17px;
+}
+
+.reader-quick-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.reader-quick-btn:disabled {
+  color: var(--faint);
+}
+
+.reader-settings-trigger span {
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.reader-settings-trigger.is-active {
+  background: var(--accent-wash);
+  color: var(--accent-strong);
+}
+
+/* --- Reading settings popover -------------------------------------------- */
+.reader-settings-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 60;
+  width: min(340px, calc(100vw - 2rem));
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--surface-raised) 96%, transparent);
+  backdrop-filter: blur(20px) saturate(1.1);
+  box-shadow: var(--shadow-md);
+  animation: reader-settings-in var(--fast) var(--ease);
+}
+
+@keyframes reader-settings-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.reader-settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.reader-settings-title {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.reader-settings-close {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
+}
+
+.reader-settings-close:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.reader-settings-close .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.reader-settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.setting-row {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 4px;
+  border-radius: var(--r-sm);
+}
+
+.setting-row + .setting-row {
+  border-top: 1px solid var(--border-soft);
+}
+
+.setting-label {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+/* Relocated controls: full-width, quiet, consistent inside the panel. */
+.reader-settings-panel .toolbar-group {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 4px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+
+.reader-settings-panel .toolbar-group select {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 1.8rem 0 var(--space-2);
+  font-size: var(--text-xs);
+}
+
+.reader-settings-panel .font-controls {
+  justify-content: space-between;
+}
+
+.reader-settings-panel .font-controls span {
+  flex: 1;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.setting-row-utilities {
+  grid-template-columns: 1fr;
+  gap: var(--space-2);
+}
+
+.setting-utilities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.setting-utilities .toolbar-group,
+.setting-utilities .tool-button {
+  width: auto;
+}
+
+.setting-utilities .reader-top-rank-btn,
+.setting-utilities .qr-device-button {
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+/* --- Premium reading canvas typography ----------------------------------- */
+.document-paper {
+  padding: clamp(1.5rem, 3.5vw, 3.25rem) clamp(1.25rem, 4vw, 3.5rem);
+}
+
+.paper-header {
+  margin-bottom: clamp(1.5rem, 3vw, 2.5rem);
+  text-align: center;
+}
+
+.paper-header .eyebrow {
+  letter-spacing: 0.18em;
+}
+
+#paperTitle,
+.paper-header h2 {
+  font-family: var(--font-read, var(--font-sans));
+  font-size: clamp(1.4rem, 1rem + 1.4vw, 2rem);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.document-text {
+  /* Cap the line length for reading comfort even when the frame is wide. */
+  max-width: 70ch;
+  margin-inline: auto;
+  text-wrap: pretty;
+  hanging-punctuation: first last;
+}
+
+.document-text p {
+  margin: 0 0 1.05em;
+  /* Slightly looser tracking helps Vietnamese diacritics breathe. */
+  letter-spacing: 0.003em;
+}
+
+/* First paragraph of a chapter gets a quiet lead-in, no jarring drop cap. */
+.document-text > p:first-of-type {
+  margin-top: 0.25rem;
+}
+
+/* --- Responsive: bottom sheet on phones ---------------------------------- */
+@media (max-width: 720px) {
+  .reader-settings-panel {
+    position: fixed;
+    inset: auto 0 0 0;
+    top: auto;
+    width: 100%;
+    padding: var(--space-4) var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom));
+    border-inline: none;
+    border-bottom: none;
+    border-radius: var(--r-xl) var(--r-xl) 0 0;
+    box-shadow: var(--shadow-lg);
+    animation: reader-sheet-in var(--normal, 0.24s) var(--ease);
+  }
+
+  @keyframes reader-sheet-in {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .setting-row {
+    grid-template-columns: 96px minmax(0, 1fr);
+  }
+
+  .reader-quick-btn span {
+    display: none;
+  }
+
+  .reader-settings-trigger span,
+  .reader-quick-btn.tts-toggle-button #ttsToggleLabel {
+    display: inline;
+  }
+
+  .document-text {
+    max-width: 100%;
+  }
+}
+
+/* --- Accessibility -------------------------------------------------------- */
+.reader-quick-btn:focus-visible,
+.reader-settings-close:focus-visible,
+.setting-utilities .tool-button:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reader-settings-panel {
+    animation: none;
+  }
+}
+
+
+/* ============================================================================
+   LIBRARY + BOOK DETAIL REFINEMENT (2026)
+   The shelf and detail page were already close to the bar; this is a cohesive
+   polish pass to match the redesigned reader — a quiet progress hairline on
+   covers, consistent focus states, and calmer detail actions. Token-driven.
+   ============================================================================ */
+
+/* Progress hairline along the bottom of each cover. */
+.book-cover-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  height: 3px;
+  background: color-mix(in srgb, #000 55%, transparent);
+}
+
+.book-cover-progress > span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--gradient);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 55%, transparent);
+  transition: width var(--slow) var(--ease);
+}
+
+/* Consistent, visible focus rings across the shelf (matches the reader). */
+.book-cover:focus-visible,
+.book-read-button:focus-visible,
+.book-view-related-item:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 3px;
+}
+
+/* Keep the running-number badge off, but let the play affordance read as a
+   clear "open" cue on hover without competing with the artwork. */
+.book-card:hover .book-cover-progress > span {
+  filter: saturate(1.15);
+}
+
+/* --- Book detail: calmer, more intentional actions --------------------- */
+.book-view-actions {
+  gap: var(--space-3);
+}
+
+.book-view-actions .primary-action {
+  box-shadow: var(--glow);
+}
+
+.book-view-facts {
+  gap: var(--space-4) var(--space-5);
+}
+
+.book-view-facts dt {
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: var(--text-2xs);
+}
+
+.book-view-facts dd {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Reduced-motion: no cover zoom / lift on users who ask for calm. */
+@media (prefers-reduced-motion: reduce) {
+  .book-card:hover { transform: none; }
+  .book-card:hover .book-cover img { transform: none; }
+  .book-cover-progress > span { transition: none; }
+}

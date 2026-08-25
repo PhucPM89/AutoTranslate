@@ -376,6 +376,7 @@ initSecurityGuards();
 registerServiceWorker();
 initTTSController();
 initZenModeController();
+initReaderSettingsController();
 
 function initDialogScrollLock() {
   if (typeof document === "undefined") return;
@@ -1281,6 +1282,17 @@ function createBookCard(book, index = 0) {
   // The cover opens the preview; the explicit button below still reads directly.
   coverButton.addEventListener("click", () => showBookDetail(book));
 
+  // A quiet progress hairline along the bottom of the cover. It reads at any
+  // ratio (a 1% sliver still looks intentional, unlike a mostly-empty bar) and
+  // uses the same accent gradient as the reader, tying the shelf to the reading
+  // surface. Populated from the catalog totals computed just below.
+  const coverProgress = document.createElement("span");
+  coverProgress.className = "book-cover-progress";
+  coverProgress.setAttribute("aria-hidden", "true");
+  const coverProgressFill = document.createElement("span");
+  coverProgress.appendChild(coverProgressFill);
+  coverButton.appendChild(coverProgress);
+
   const body = document.createElement("div");
   body.className = "book-card-body";
   const meta = document.createElement("div");
@@ -1297,6 +1309,11 @@ function createBookCard(book, index = 0) {
   const catalogBook = libraryState.books.find((b) => b.id === book.id) || book;
   const translated = Number(catalogBook.translatedChapters || book.translatedChapters || 0);
   const total = Number(catalogBook.chapterCount || book.chapterCount || catalogBook.totalChapters || book.totalChapters || 0);
+  if (total > 0 && translated > 0) {
+    coverProgressFill.style.width = `${Math.max(2, Math.min(100, (translated / total) * 100))}%`;
+  } else {
+    coverProgress.remove();
+  }
   if (translated > 0) {
     const badge = document.createElement("span");
     badge.className = "catalog-translate-badge";
@@ -2263,6 +2280,52 @@ function initZenModeController() {
       toggleZenMode();
     } else if (e.key === "Escape" && isZenMode) {
       toggleZenMode();
+    }
+  });
+}
+
+// Reading-settings popover: the display controls (font, theme, spacing, width,
+// utilities) were moved out of the reading bar into a panel so the bar stays
+// calm. This only opens/closes that panel — the controls inside keep their own
+// ids and their existing listeners, so behaviour is unchanged.
+function initReaderSettingsController() {
+  const trigger = document.getElementById("readerSettingsBtn");
+  const panel = document.getElementById("readerSettingsPanel");
+  const closeBtn = document.getElementById("readerSettingsClose");
+  if (!trigger || !panel) return;
+
+  function isOpen() {
+    return !panel.hidden;
+  }
+  function open() {
+    panel.hidden = false;
+    trigger.setAttribute("aria-expanded", "true");
+    trigger.classList.add("is-active");
+    // Defer so the click that opened it does not immediately close it.
+    requestAnimationFrame(() => document.addEventListener("pointerdown", onOutside));
+  }
+  function close() {
+    panel.hidden = true;
+    trigger.setAttribute("aria-expanded", "false");
+    trigger.classList.remove("is-active");
+    document.removeEventListener("pointerdown", onOutside);
+  }
+  function toggle() {
+    isOpen() ? close() : open();
+  }
+  function onOutside(event) {
+    if (!panel.contains(event.target) && !trigger.contains(event.target)) close();
+  }
+
+  trigger.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggle();
+  });
+  closeBtn?.addEventListener("click", close);
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && isOpen()) {
+      close();
+      trigger.focus();
     }
   });
 }

@@ -985,39 +985,73 @@
             <div class="reader-bar-row">
               <p class="reader-bar-position"><span id="chapterCounter">Chưa có mục lục</span><strong id="progressLabel">0%</strong></p>
               <div class="reader-bar-tools">
-                <div class="toolbar-group font-controls" aria-label="Cỡ chữ"><button id="fontDecrease" class="tool-button" type="button" aria-label="Giảm cỡ chữ" title="Giảm cỡ chữ">A−</button><span id="fontSizeLabel">20px</span><button id="fontIncrease" class="tool-button" type="button" aria-label="Tăng cỡ chữ" title="Tăng cỡ chữ">A＋</button></div>
-                <label class="toolbar-group font-family-control" title="Kiểu font chữ"><span class="sr-only">Kiểu chữ</span><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7V4h16v3M9 20h6M12 4v16"></path></svg><select id="readerFontFamily" aria-label="Kiểu font chữ"><option value="literata">📖 Literata (Chuyên đọc sách)</option><option value="lora">✨ Lora (Thanh lịch, êm mắt)</option><option value="merriweather">📜 Merriweather (Cổ điển)</option><option value="bevietnam">💎 Be Vietnam Pro (Hiện đại)</option><option value="inter">⚡ Inter (Rõ nét)</option><option value="sans">Không chân (Sans)</option><option value="serif">Có chân (Serif)</option></select></label>
-                <label class="toolbar-group theme-select-control" title="Màu nền đọc sách"><span class="sr-only">Chủ đề đọc</span><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 0 20z"></path></svg><select id="readerThemeSelect" aria-label="Màu nền đọc sách"><option value="dark">🌙 Tối trầm (Êm mắt)</option><option value="sepia">📜 Vàng Sepia (Chống mỏi)</option><option value="forest">🌲 Xanh Rừng (Dịu nhẹ)</option><option value="oled">⚫ Đen OLED (Tiết kiệm pin)</option><option value="light">☀️ Sáng giấy</option></select></label>
-                <label class="toolbar-group spacing-control" title="Giãn dòng & khoảng cách đoạn"><span class="sr-only">Giãn dòng</span><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M21 6H3M21 12H3M21 18H3M7 9l5-5 5 5M7 15l5 5 5-5"></path></svg><select id="readerSpacingSelect" aria-label="Giãn dòng & khoảng cách đoạn"><option value="comfortable">🌿 Giãn dòng thoáng</option><option value="loose">✨ Siêu thoáng (Chống mỏi mắt)</option><option value="compact">📐 Tiêu chuẩn</option></select></label>
-                <label class="toolbar-group width-control" title="Độ rộng khung đọc"><span class="sr-only">Độ rộng nội dung</span><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"></path></svg><select id="widthPreset"><option value="comfortable">Khung vừa</option><option value="compact">Khung gọn</option><option value="wide">Khung rộng</option></select></label>
-                <div class="toolbar-group auto-scroll-group">
-                  <button id="autoScrollBtn" class="tool-button auto-scroll-button" type="button" aria-label="Cuộn tự động" title="Bật/Tắt cuộn rảnh tay">
-                    <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                    <span id="autoScrollLabel">Cuộn</span>
-                  </button>
-                  <label class="auto-scroll-speed-wrap"><span class="sr-only">Tốc độ cuộn</span><select id="autoScrollSpeed" class="auto-scroll-speed-select" title="Tốc độ cuộn"><option value="1">1x</option><option value="2">2x</option><option value="3">3x</option></select></label>
-                </div>
-                <div class="toolbar-group tts-zen-group">
-                  <button id="ttsToggleBtn" class="tool-button tts-toggle-button" type="button" aria-label="Nghe đọc giọng AI" title="Nghe đọc giọng AI (Text-to-Speech)">
+                <!-- Always-visible quick actions. Display controls live in the
+                     settings popover below so the reading bar stays calm. -->
+                <div class="reader-quick-actions">
+                  <button id="readerSettingsBtn" class="tool-button reader-quick-btn reader-settings-trigger" type="button" aria-label="Tùy chỉnh hiển thị" title="Cỡ chữ · phông · chủ đề · khung đọc" aria-expanded="false" aria-controls="readerSettingsPanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M5 20V7M5 7l3.5 8M8.5 15H1.5M13 20V9a3.5 3.5 0 0 1 7 0v11M13 15h7"></path></svg><span>Aa</span></button>
+                  <button id="ttsToggleBtn" class="tool-button reader-quick-btn tts-toggle-button" type="button" aria-label="Nghe đọc giọng AI" title="Nghe đọc giọng AI (Text-to-Speech)">
                     <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path></svg>
                     <span id="ttsToggleLabel">Nghe đọc</span>
                   </button>
-                  <button id="zenModeBtn" class="tool-button zen-mode-button" type="button" aria-label="Chế độ đọc tập trung (Zen Mode)" title="Đọc tập trung (Phím Z hoặc F)">
+                  <button id="zenModeBtn" class="tool-button reader-quick-btn zen-mode-button" type="button" aria-label="Chế độ đọc tập trung (Zen Mode)" title="Đọc tập trung (Phím Z hoặc F)">
                     <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
                     <span>Zen</span>
                   </button>
-                  <button id="readerTopRankBtn" class="tool-button reader-top-rank-btn" type="button" aria-label="Cảnh giới độc giả" title="Cảnh giới độc giả (Nhấp để xem & đổi trường phái)">
-                    <span id="readerTopRankIcon">🔮</span>
-                    <span id="readerTopRankTitle">Phàm Nhân</span>
-                  </button>
-                  <button id="crossDeviceQrBtn" class="tool-button qr-device-button" type="button" aria-label="Đọc trên điện thoại" title="Chuyển sang đọc trên điện thoại (Quét QR)">
-                    <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><rect width="5" height="5" x="3" y="3" rx="1"></rect><rect width="5" height="5" x="16" y="3" rx="1"></rect><rect width="5" height="5" x="3" y="16" rx="1"></rect><path d="M21 16h-3a2 2 0 0 0-2 2v3m5-5v5m-9-9h1m4 0h1m-5 4h5"></path></svg>
-                    <span>📱 QR</span>
-                  </button>
+                  <div class="reader-bar-nav"><button id="prevChapter" class="tool-button reader-quick-btn" type="button" disabled aria-label="Chương trước" title="Chương trước"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"></path></svg></button><button id="nextChapter" class="tool-button reader-quick-btn" type="button" disabled aria-label="Chương sau" title="Chương sau"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg></button></div>
                 </div>
-                <div class="toolbar-group reader-bar-nav"><button id="prevChapter" class="tool-button" type="button" disabled aria-label="Chương trước" title="Chương trước"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"></path></svg></button><button id="nextChapter" class="tool-button" type="button" disabled aria-label="Chương sau" title="Chương sau"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg></button></div>
                 <button id="translateButton" class="primary-action" type="button" disabled><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m5 3 14 9-14 9V3Z"></path></svg>Dịch chương</button>
                 <button id="retranslateButton" class="secondary-action" type="button" hidden><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v6h-6M4 18v-6h6"></path><path d="M18.49 9A7 7 0 0 0 5.64 6.64L4 9M20 15l-1.64 2.36A7 7 0 0 1 5.51 15"></path></svg>Dịch lại</button>
+
+                <!-- Reading settings popover. Every control keeps its original id,
+                     so the existing app.js bindings are untouched. -->
+                <div id="readerSettingsPanel" class="reader-settings-panel" role="dialog" aria-label="Tùy chỉnh đọc sách" aria-modal="false" hidden>
+                  <div class="reader-settings-head">
+                    <p class="reader-settings-title">Tùy chỉnh đọc</p>
+                    <button id="readerSettingsClose" class="reader-settings-close" type="button" aria-label="Đóng tùy chỉnh"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"></path></svg></button>
+                  </div>
+                  <div class="reader-settings-body">
+                    <div class="setting-row">
+                      <span class="setting-label">Cỡ chữ</span>
+                      <div class="toolbar-group font-controls" aria-label="Cỡ chữ"><button id="fontDecrease" class="tool-button" type="button" aria-label="Giảm cỡ chữ" title="Giảm cỡ chữ">A−</button><span id="fontSizeLabel">20px</span><button id="fontIncrease" class="tool-button" type="button" aria-label="Tăng cỡ chữ" title="Tăng cỡ chữ">A＋</button></div>
+                    </div>
+                    <div class="setting-row">
+                      <span class="setting-label">Phông chữ</span>
+                      <label class="toolbar-group font-family-control" title="Kiểu font chữ"><span class="sr-only">Kiểu chữ</span><select id="readerFontFamily" aria-label="Kiểu font chữ"><option value="literata">📖 Literata (Chuyên đọc sách)</option><option value="lora">✨ Lora (Thanh lịch, êm mắt)</option><option value="merriweather">📜 Merriweather (Cổ điển)</option><option value="bevietnam">💎 Be Vietnam Pro (Hiện đại)</option><option value="inter">⚡ Inter (Rõ nét)</option><option value="sans">Không chân (Sans)</option><option value="serif">Có chân (Serif)</option></select></label>
+                    </div>
+                    <div class="setting-row">
+                      <span class="setting-label">Chủ đề</span>
+                      <label class="toolbar-group theme-select-control" title="Màu nền đọc sách"><span class="sr-only">Chủ đề đọc</span><select id="readerThemeSelect" aria-label="Màu nền đọc sách"><option value="dark">🌙 Tối trầm (Êm mắt)</option><option value="sepia">📜 Vàng Sepia (Chống mỏi)</option><option value="forest">🌲 Xanh Rừng (Dịu nhẹ)</option><option value="oled">⚫ Đen OLED (Tiết kiệm pin)</option><option value="light">☀️ Sáng giấy</option></select></label>
+                    </div>
+                    <div class="setting-row">
+                      <span class="setting-label">Giãn dòng</span>
+                      <label class="toolbar-group spacing-control" title="Giãn dòng & khoảng cách đoạn"><span class="sr-only">Giãn dòng</span><select id="readerSpacingSelect" aria-label="Giãn dòng & khoảng cách đoạn"><option value="comfortable">🌿 Giãn dòng thoáng</option><option value="loose">✨ Siêu thoáng (Chống mỏi mắt)</option><option value="compact">📐 Tiêu chuẩn</option></select></label>
+                    </div>
+                    <div class="setting-row">
+                      <span class="setting-label">Khung đọc</span>
+                      <label class="toolbar-group width-control" title="Độ rộng khung đọc"><span class="sr-only">Độ rộng nội dung</span><select id="widthPreset"><option value="comfortable">Khung vừa</option><option value="compact">Khung gọn</option><option value="wide">Khung rộng</option></select></label>
+                    </div>
+                    <div class="setting-row setting-row-utilities">
+                      <span class="setting-label">Tiện ích</span>
+                      <div class="setting-utilities">
+                        <div class="toolbar-group auto-scroll-group">
+                          <button id="autoScrollBtn" class="tool-button auto-scroll-button" type="button" aria-label="Cuộn tự động" title="Bật/Tắt cuộn rảnh tay">
+                            <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                            <span id="autoScrollLabel">Cuộn</span>
+                          </button>
+                          <label class="auto-scroll-speed-wrap"><span class="sr-only">Tốc độ cuộn</span><select id="autoScrollSpeed" class="auto-scroll-speed-select" title="Tốc độ cuộn"><option value="1">1x</option><option value="2">2x</option><option value="3">3x</option></select></label>
+                        </div>
+                        <button id="readerTopRankBtn" class="tool-button reader-top-rank-btn" type="button" aria-label="Cảnh giới độc giả" title="Cảnh giới độc giả (Nhấp để xem & đổi trường phái)">
+                          <span id="readerTopRankIcon">🔮</span>
+                          <span id="readerTopRankTitle">Phàm Nhân</span>
+                        </button>
+                        <button id="crossDeviceQrBtn" class="tool-button qr-device-button" type="button" aria-label="Đọc trên điện thoại" title="Chuyển sang đọc trên điện thoại (Quét QR)">
+                          <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><rect width="5" height="5" x="3" y="3" rx="1"></rect><rect width="5" height="5" x="16" y="3" rx="1"></rect><rect width="5" height="5" x="3" y="16" rx="1"></rect><path d="M21 16h-3a2 2 0 0 0-2 2v3m5-5v5m-9-9h1m4 0h1m-5 4h5"></path></svg>
+                          <span>📱 QR</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </header>
