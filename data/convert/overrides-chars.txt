@@ -76,3 +76,56 @@
 唉=haizz
 呀=a
 哈=ha
+# Everyday action verbs whose bare Hán-Việt reading is archaic or opaque (跑
+# "bào", 吃 "ngật"), where the plain meaning reads far more naturally. Only fires
+# standalone — compounds (跑步, 吃饭) are matched by the phrase dictionary first.
+# Cultivation/convert-standard readings (修 tu, 打 đả, 走 tẩu, 坐 tọa) are left
+# alone deliberately.
+跑=chạy
+跳=nhảy
+爬=leo
+吃=ăn
+喝=uống
+哭=khóc
+叫=gọi
+喊=hét
+摸=sờ
+抓=nắm
+推=đẩy
+拉=kéo
+踢=đá
+找=tìm
+扔=ném
+偷=trộm
+买=mua
+卖=bán
+挖=đào
+洗=rửa
+擦=lau
+扫=quét
+骂=mắng
+夸=khen
+猜=đoán
+藏=giấu
+抢=cướp
+借=mượn
+拆=tháo
+埋=chôn
+种=trồng
+摘=hái
+挂=treo
+贴=dán
+撕=xé
+剪=cắt
+躺=nằm
+睡=ngủ
+爱=yêu
+恨=hận
+怕=sợ
+等=đợi
+帮=giúp
+救=cứu
+骗=lừa
+偷=trộm
+输=thua
+赢=thắng

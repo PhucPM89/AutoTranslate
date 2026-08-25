@@ -85,3 +85,42 @@
 缓缓=chậm rãi
 凶兽=hung thú
 喘着粗气=thở hổn hển
+# Reduplicated body-language actions (V了V+part). VietPhrase covers some; these
+# are the common ones it renders with the reduplication showing (皱了皱眉 ->
+# "nhíu nhíu mày").
+点了点头=gật đầu
+点点头=gật đầu
+皱了皱眉=nhíu mày
+皱皱眉=nhíu mày
+挥了挥手=phất tay
+挥挥手=phất tay
+摆了摆手=xua tay
+眨了眨眼=chớp mắt
+撇了撇嘴=bĩu môi
+舔了舔嘴唇=liếm môi
+搓了搓手=xoa tay
+拍了拍=vỗ
+歪了歪头=nghiêng đầu
+努了努嘴=trề môi
+耸耸肩=nhún vai
+# "V 得 + complement" describing manner/degree. The bare 长 reads "trường"; here
+# it means how someone looks.
+长得很帅=rất đẹp trai
+长得帅=đẹp trai
+长得漂亮=xinh đẹp
+长得很漂亮=rất xinh đẹp
+来得及=kịp
+来不及=không kịp
+恨不得=hận không thể
+巴不得=mong không được
+怪不得=thảo nào
+说不定=không chừng
+# Abstract-noun 之X: the literary genitive particle 之 before a feeling/thought.
+之情=tình cảm
+仰慕之情=lòng ngưỡng mộ
+爱慕之情=lòng ái mộ
+感激之情=lòng cảm kích
+之心=tấm lòng
+之意=ý
+杀意=sát ý
+敬意=kính ý
