@@ -127,6 +127,13 @@ const PUNCT = {
 const SENTENCE_END = /[.!?…:]/;
 const OPEN_QUOTE = new Set(["“", "‘", "["]);
 
+// Terminal marker for the trie. A Symbol, not a character, because VietPhrase
+// keys can contain any byte — an entry whose key held a literal "$" made a
+// character terminal collide with a real child node, and node.get("$") returned
+// that Map instead of a reading (it surfaced as "[object Map]" in output). A
+// Symbol can never equal a phrase character, so the collision is impossible.
+const TERMINAL = Symbol("terminal");
+
 // A phrase dictionary can be huge (VietPhrase ships hundreds of thousands of
 // entries). A trie keeps longest-match lookup at O(match length).
 function buildTrie(phraseDict) {
@@ -142,7 +149,7 @@ function buildTrie(phraseDict) {
       }
       node = next;
     }
-    node.set("$", phraseDict[zh]); // terminal marker holds the Vietnamese
+    node.set(TERMINAL, phraseDict[zh]); // holds the Vietnamese reading
   }
   return { root };
 }
@@ -162,7 +169,7 @@ function matchPhrase(trie, chars, i, reject) {
     if (!next) break;
     node = next;
     j++;
-    const terminal = node.get("$");
+    const terminal = node.get(TERMINAL);
     if (terminal === undefined) continue;
     if (reject && reject(chars, i, j - i)) continue;
     best = { vi: terminal, length: j - i };

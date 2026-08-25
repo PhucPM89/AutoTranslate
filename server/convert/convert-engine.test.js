@@ -80,6 +80,16 @@ test("trie returns null when the first char does not start any phrase", () => {
   assert.strictEqual(matchPhrase(trie, Array.from("你好"), 0), null);
 });
 
+test("a phrase key containing $ does not collide with the terminal marker", () => {
+  // Regression: "$" was the terminal marker, so a VietPhrase key holding a
+  // literal "$" made node.get("$") return a child Map — it surfaced as
+  // "[object Map]" and crashed capitalisation. A Symbol marker can't collide.
+  const trie = buildTrie({ "千$x": "X", 千万: "nghìn vạn" });
+  assert.strictEqual(matchPhrase(trie, Array.from("千"), 0), null);
+  const e = raw({ phraseDict: { "千$x": "X" }, hanvietChars: { 千: { hv: "thiên" } } });
+  assert.strictEqual(e.convert("千"), "thiên");
+});
+
 test("parseTxt ignores comments, blanks, empty values and strips BOM", () => {
   const dict = parseTxt("﻿修仙=tu tiên\n# comment\n\n空=\n天玄宗=Thiên Huyền Tông\n");
   assert.deepStrictEqual(dict, { 修仙: "tu tiên", 天玄宗: "Thiên Huyền Tông" });
