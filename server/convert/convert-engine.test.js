@@ -69,6 +69,19 @@ test("names read phonetically, not by meaning, and capitalise at sentence start"
   assert.strictEqual(e.convert("叶辰"), "Diệp thần");
 });
 
+test("a name glossary locks segmentation so a verb cannot eat its surname", () => {
+  const HVN = { ...FULL_HV, 对: { hv: "đối" }, 付: { hv: "phó" }, 宇: { hv: "vũ" }, 茜: { hv: "thiến" } };
+  const gloss = { 付宇茜: "Phó Vũ Yên" };
+  const e = createConvertEngine({
+    phraseDict: { 对付: "đối phó" }, hanvietChars: HVN, nameGlossary: gloss, capitalizeSentences: false
+  });
+  // 对付 must break so 付宇茜 reads as the name, not "đối phó" + a fragment.
+  assert.strictEqual(e.convert("对付宇茜"), "đối Phó Vũ Yên");
+  // Without the name in the glossary, 对付 stays intact.
+  const plain = createConvertEngine({ phraseDict: { 对付: "đối phó" }, hanvietChars: HVN, capitalizeSentences: false });
+  assert.strictEqual(plain.convert("对付"), "đối phó");
+});
+
 test("trie matchPhrase returns the longest terminal", () => {
   const trie = buildTrie({ 天: "X", 天玄: "Y", 天玄宗: "Z" });
   const m = matchPhrase(trie, Array.from("天玄宗门"), 0);

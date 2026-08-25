@@ -21,7 +21,7 @@ const HAN = /\p{Script=Han}/u;
 // person with one of these surnames is rare enough to lose for the sake of not
 // promoting 高考 or 习惯 to a name.
 const AMBIGUOUS_SURNAMES = new Set([
-  "能", "常", "习", "去", "会", "同", "成", "长", "对", "祖", "家", "关", "向", "古"
+  "能", "常", "习", "去", "会", "同", "成", "长", "对", "祖", "家", "关", "向", "古", "师"
 ]);
 
 // Kinship and honorific characters that trail a surname as an address, not a

@@ -99,9 +99,13 @@ async function backfillBook(storage, bookId, { commit, force }) {
 
   // Mine this book's character names from a sample, then convert every chapter
   // with them merged in, so a character reads identically across the whole book
-  // (Consistency Engine). Falls back to the plain engine if mining finds nothing.
+  // (Consistency Engine). The sample is spread EVENLY across the novel, not taken
+  // from the front — a lead introduced at chapter 400 is invisible to the first
+  // forty (付宇茜: 0 hits in ch1-40, 323 in ch1-200).
+  const step = Math.max(1, Math.floor(candidates.length / NAME_SAMPLE));
+  const sampleEntries = candidates.filter((_, idx) => idx % step === 0).slice(0, NAME_SAMPLE);
   const sample = [];
-  for (const entry of candidates.slice(0, NAME_SAMPLE)) {
+  for (const entry of sampleEntries) {
     const src = await readJson(storage, originalKey(bookId, revision, entry.n));
     if (src && src.content) sample.push(src.content);
   }

@@ -12,8 +12,8 @@ const { mineNames } = require("./name-mining");
 // chapters should be re-rendered. The backfill re-converts any "convert" chapter
 // stamped with an older version, so a full re-pass resumes across runs instead of
 // restarting from the top. 1 = pre-grammar; 2 = normalization + grammar layers;
-// 3 = "$" terminal fix, surname table, degree adjectives, per-book name mining.
-const CONVERT_VERSION = 3;
+// 3 = name mining; 4 = name-locked segmentation + even-spread mining sample.
+const CONVERT_VERSION = 4;
 
 const DEFAULT_HANVIET = path.join("data", "convert", "hanviet-chars.txt");
 const DEFAULT_PHRASE_DIR = path.join("data", "convert", "phrases");
@@ -60,8 +60,11 @@ function loadBase(env = process.env) {
 function buildConvertEngineFromDisk(env = process.env, { nameGlossary = null } = {}) {
   const b = loadBase(env);
   if (!b) return null;
-  const phraseDict = nameGlossary ? { ...b.phraseDict, ...nameGlossary } : b.phraseDict;
-  return createConvertEngine({ phraseDict, hanvietChars: b.hanvietChars, lexicon: b.lexicon });
+  // The engine merges the glossary into its phrase dictionary AND locks
+  // segmentation around the names, so pass it through rather than pre-merging.
+  return createConvertEngine({
+    phraseDict: b.phraseDict, hanvietChars: b.hanvietChars, lexicon: b.lexicon, nameGlossary
+  });
 }
 
 // Mine a per-book name glossary { zh -> "Tên Hán Việt" } from a sample of the

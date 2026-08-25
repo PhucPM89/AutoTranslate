@@ -218,11 +218,18 @@ function createConvertEngine({
   phraseDict = {},
   hanvietChars = {},
   lexicon = {},
+  nameGlossary = null,
   normalizePunctuation = true,
   capitalizeSentences = true,
   applyGrammarRules = true
 } = {}) {
-  const trie = buildTrie(phraseDict);
+  // A per-book name glossary reads inside the phrase dictionary (so the name
+  // renders), and also seeds a separate trie used to lock segmentation: a
+  // dictionary phrase may not cross the start of a name, so 对付宇茜 splits
+  // 对 | 付宇茜 ("với Phó Vũ Yên") instead of 对付 | 宇茜 ("đối phó" + a fragment).
+  const merged = nameGlossary ? { ...phraseDict, ...nameGlossary } : phraseDict;
+  const trie = buildTrie(merged);
+  const nameTrie = nameGlossary && Object.keys(nameGlossary).length ? buildTrie(nameGlossary) : null;
   const adjectives = lexicon.adjectives || new Set();
   const verbs = lexicon.verbs || new Set();
   const functionWords = lexicon.functionWords || new Set();
@@ -302,6 +309,19 @@ function createConvertEngine({
     const tokens = [];
     let i = 0;
 
+    // Positions where a glossary name begins. A phrase may not cross one, so a
+    // verb that would swallow a surname (对付 over 付宇茜) is broken at the name.
+    const nameStarts = new Set();
+    if (nameTrie) {
+      for (let p = 0; p < chars.length; p++) {
+        if (matchPhrase(nameTrie, chars, p)) nameStarts.add(p);
+      }
+    }
+    const crossesName = (start, len) => {
+      for (let k = start + 1; k < start + len; k++) if (nameStarts.has(k)) return true;
+      return false;
+    };
+
     const lastWord = () => {
       for (let j = tokens.length - 1; j >= 0; j--) if (tokens[j].t === "w") return tokens[j];
       return null;
@@ -328,7 +348,8 @@ function createConvertEngine({
       //    every tie: 苏醒 stays "tỉnh lại", 苏落雪 becomes "Tô Lạc Tuyết".
       const prevWord = lastWord();
       const postposed = !!prevWord && (prevWord.k === "adj" || prevWord.k === "fn" || prevWord.k === "verb");
-      const phrase = matchPhrase(trie, chars, i, (c, at, len) => particleBoundary(c, at, len, postposed, deWords));
+      const phrase = matchPhrase(trie, chars, i, (c, at, len) =>
+        particleBoundary(c, at, len, postposed, deWords) || crossesName(at, len));
       const name = properNouns.match(chars, i);
       if (name && (!phrase || name.length > phrase.length)) {
         tokens.push({ t: "w", s: name.vi, zh: chars.slice(i, i + name.length).join(""), k: "name" });
