@@ -367,3 +367,11 @@
 独孤=Độc Cô
 西门=Tây Môn
 北堂=Bắc Đường
+# Common surnames missing from the base list. Readings are the SURNAME reading,
+# which can differ from the character's ordinary reading (曾 surname = Tăng, not
+# "tằng"/từng). Compound (复姓) surnames take their special reading too.
+付=Phó
+肖=Tiêu
+曾=Tăng
+令狐=Lệnh Hồ
+万俟=Mặc Kỳ
