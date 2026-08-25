@@ -12,8 +12,8 @@ const { mineNames } = require("./name-mining");
 // chapters should be re-rendered. The backfill re-converts any "convert" chapter
 // stamped with an older version, so a full re-pass resumes across runs instead of
 // restarting from the top. 1 = pre-grammar; 2 = normalization + grammar layers;
-// 3 = name mining; 4 = name-locked segmentation; 5 = natural verbs + constructions; 6 = surname-scan-first mining; 7 = adjectives; 8 = genre-aware modern nouns.
-const CONVERT_VERSION = 8;
+// 3 = name mining; 4 = name-locked segmentation; 5 = natural verbs + constructions; 6 = surname-scan-first mining; 7 = adjectives; 8 = genre nouns; 9 = Example-Based MT (learned clause translations).
+const CONVERT_VERSION = 9;
 
 const DEFAULT_HANVIET = path.join("data", "convert", "hanviet-chars.txt");
 const DEFAULT_PHRASE_DIR = path.join("data", "convert", "phrases");
@@ -22,6 +22,10 @@ const OVERRIDE_CHARS = path.join("data", "convert", "overrides-chars.txt");
 const OVERRIDE_PHRASES = path.join("data", "convert", "overrides-phrases.txt");
 const PHRASE_BLOCKLIST = path.join("data", "convert", "phrase-blocklist.txt");
 const MODERN_NOUNS = path.join("data", "convert", "genre", "modern-nouns.txt");
+// Example-Based MT memory: fluent Gemini clause translations mined from the
+// completed chapters (scripts/build-tm.js). Loaded LAST so a learned formula
+// wins over VietPhrase's literal rendering. Optional — absent until built.
+const TM_PHRASES = path.join("data", "convert", "tm.txt.gz");
 
 // Genres set in a cultivation/classical world, where everyday characters keep
 // their Hán-Việt reading (门 = "môn phái", 刀 = the weapon "đao"). Everything else
@@ -57,7 +61,8 @@ function loadBase(env = process.env) {
   const hanvietChars = loadHanvietChars(hanvietFiles);
   if (!Object.keys(hanvietChars).length) return (base = null);
   const phraseFiles = env.CONVERT_PHRASES ? splitList(env.CONVERT_PHRASES) : defaultPhraseFiles();
-  const phraseDict = loadPhraseDict([...phraseFiles, OVERRIDE_PHRASES]);
+  // TM last so its learned formulas win over VietPhrase's literal versions.
+  const phraseDict = loadPhraseDict([...phraseFiles, OVERRIDE_PHRASES, TM_PHRASES]);
   for (const zh of readSet(PHRASE_BLOCKLIST)) delete phraseDict[zh];
   const lexicon = loadLexicon();
   // Modern-genre single-char overrides, loaded once and applied per book.

@@ -13,7 +13,8 @@
     "build:convert": "node scripts/build-convert-dicts.js",
     "deploy": "node scripts/deploy-pages.js",
     "test": "node --test \"server/**/*.test.js\" \"client/**/*.test.js\"",
-    "convert:backfill": "node scripts/convert-backfill.js"
+    "convert:backfill": "node scripts/convert-backfill.js",
+    "build:tm": "node scripts/build-tm.js"
   },
   "dependencies": {
     "jszip": "^3.10.1",
