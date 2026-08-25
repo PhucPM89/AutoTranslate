@@ -843,10 +843,10 @@ async function translateBookMetadata(source) {
   } catch {}
 
   if (!apiKey) {
-    apiKey = process.env.GROQ_API_KEYS || process.env.GROQ_API_KEY || process.env.OPENROUTER_API_KEYS || process.env.OPENROUTER_API_KEY;
+    apiKey = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || process.env.GROQ_API_KEYS || process.env.GROQ_API_KEY;
   }
   if (!apiKey) {
-    throw new Error("Không dịch được metadata: thiếu GROQ_API_KEY / OPENROUTER_API_KEY.");
+    throw new Error("Không dịch được metadata: thiếu GROQ_API_KEY / GEMINI_API_KEY.");
   }
   return translateMetadata(source, apiKey);
 }

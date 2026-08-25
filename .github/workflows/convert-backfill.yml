@@ -27,8 +27,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     concurrency:
-      # Share the pipeline write lock so it never races the crawler/translator.
-      group: novel-pipeline-storage-writes
+      # Its own lock, NOT the shared pipeline one. A backfill run lasts up to
+      # 350 minutes; holding the shared lock that long starved the translator and
+      # crawler (their 15/10-minute runs queued, then GitHub cancelled them). The
+      # backfill only writes convert chapter objects and skips completed ones, so
+      # it does not touch the job/index objects the other three serialize on —
+      # a rare same-chapter overlap is guarded by the completed-status check.
+      group: convert-backfill-writes
       cancel-in-progress: false
     env:
       R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}

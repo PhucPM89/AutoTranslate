@@ -138,8 +138,6 @@ async function main() {
     process.env.GEMINI_API_KEY,
     process.env.GROQ_API_KEYS,
     process.env.GROQ_API_KEY,
-    process.env.OPENROUTER_API_KEYS,
-    process.env.OPENROUTER_API_KEY
   ].filter(Boolean).flatMap(k => parseApiKeys(k));
 
   const allowCloudflare = process.env.TRANSLATE_ALLOW_CLOUDFLARE === "true";
@@ -581,7 +579,6 @@ function isCloudflareTranslationKey(key) {
 function translationKeyPriority(key) {
   const value = String(key || "");
   if (value.startsWith("gsk_")) return 0;
-  if (value.startsWith("sk-or-v1-")) return 1;
   if (isCloudflareTranslationKey(value)) return 3;
   return 2;
 }

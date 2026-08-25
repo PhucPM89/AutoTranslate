@@ -11,10 +11,6 @@ const GROQ_MODEL = process.env.GROQ_MODEL || "qwen/qwen3.6-27b";
 const GROQ_FALLBACK_MODELS = parseCsv(
   process.env.GROQ_FALLBACK_MODELS || "openai/gpt-oss-120b"
 );
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct";
-const OPENROUTER_FALLBACK_MODELS = parseCsv(
-  process.env.OPENROUTER_FALLBACK_MODELS || "deepseek/deepseek-chat,qwen/qwen-2.5-72b-instruct"
-);
 const TRANSLATE_CHUNK_SIZE = Number(process.env.GEMINI_CHUNK_SIZE || 1800);
 const TRANSLATE_CONCURRENCY = Number(process.env.GEMINI_TRANSLATE_CONCURRENCY || 1);
 const MAX_KEYS_PER_CHUNK = Math.max(1, Number(process.env.TRANSLATE_MAX_KEYS_PER_CHUNK || 3));
@@ -59,11 +55,6 @@ function getModelsForApiKey(apiKey) {
       .filter((m) => m && !DEPRECATED_GROQ_MODELS.has(m));
     return [primary, ...fallbacks].filter((m, i, l) => m && l.indexOf(m) === i);
   }
-  if (apiKey.startsWith("sk-or-v1-")) {
-    const primary = process.env.OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct";
-    const fallbacks = parseCsv(process.env.OPENROUTER_FALLBACK_MODELS || "deepseek/deepseek-chat,qwen/qwen-2.5-72b-instruct");
-    return [primary, ...fallbacks].filter((m, i, l) => m && l.indexOf(m) === i);
-  }
   if (isCloudflareKey(apiKey)) {
     const primary = process.env.CLOUDFLARE_AI_MODEL || "@cf/meta/llama-3.1-8b-instruct";
     const fallbacks = parseCsv(
@@ -92,7 +83,7 @@ function parseApiKeys(keys) {
   for (let token of rawTokens) {
     token = token.trim();
     if (!token) continue;
-    if (token.startsWith("gsk_") || token.startsWith("sk-or-v1-") || token.startsWith("AQ.") || token.startsWith("AIza") || result.length === 0) {
+    if (token.startsWith("gsk_") || token.startsWith("AQ.") || token.startsWith("AIza") || result.length === 0) {
       result.push(token);
     } else {
       result.push(token);
@@ -136,16 +127,14 @@ function getActiveKeys(apiKeys) {
 
   const fromEnv = [
     process.env.GROQ_API_KEYS,
-    process.env.GROQ_API_KEY,
-    process.env.OPENROUTER_API_KEYS,
-    process.env.OPENROUTER_API_KEY
+    process.env.GROQ_API_KEY
   ].filter(Boolean).join(",");
   return parseApiKeys(fromEnv);
 }
 
 async function translateText(text, apiKeys, options = {}) {
   const keyList = getActiveKeys(apiKeys);
-  if (!keyList.length) throw new Error("Thiếu GROQ_API_KEY / OPENROUTER_API_KEY.");
+  if (!keyList.length) throw new Error("Thiếu GROQ_API_KEY / GEMINI_API_KEY.");
 
   const bookGlossary = options.glossary || {};
   const bookTitle = options.bookTitle || "";
@@ -198,7 +187,7 @@ async function translateBatchChapters(chapters, apiKeys, options = {}) {
   }
 
   const keyList = getActiveKeys(apiKeys);
-  if (!keyList.length) throw new Error("Thiếu GROQ_API_KEY / OPENROUTER_API_KEY.");
+  if (!keyList.length) throw new Error("Thiếu GROQ_API_KEY / GEMINI_API_KEY.");
 
   const glossary = options.glossary || {};
   const bookTitle = options.bookTitle || "";
@@ -479,7 +468,7 @@ function computeQuotaRecovery(error, apiKey, now = Date.now()) {
   const message = String(error?.message || error || "");
   const quotaClass = classifyQuotaError(message);
   const providerWait = Math.max(0, Number(error?.retryAfterMs || 0), parseGroqRetryDurationMs(message));
-  const isGemini = !String(apiKey || "").startsWith("gsk_") && !String(apiKey || "").startsWith("sk-or-v1-") && !isCloudflareKey(apiKey);
+  const isGemini = !String(apiKey || "").startsWith("gsk_") && !isCloudflareKey(apiKey);
 
   if (quotaClass === "daily") {
     const fullResetWait = isGemini
@@ -745,13 +734,10 @@ function reserveKeyOrder(keyList) {
 
 async function translateChunkWithModel(apiKey, model, prompt, generationConfig = {}) {
   const isGroq = apiKey.startsWith("gsk_");
-  const isOpenRouter = apiKey.startsWith("sk-or-v1-");
   const isCloudflare = isCloudflareKey(apiKey);
-  
+
   if (isGroq) {
     return translateWithGroq(apiKey, model, prompt, generationConfig);
-  } else if (isOpenRouter) {
-    return translateWithOpenRouter(apiKey, model, prompt, generationConfig);
   } else if (isCloudflare) {
     return translateWithCloudflareWorkersAi(apiKey, model, prompt, generationConfig);
   } else {
@@ -823,101 +809,6 @@ async function translateWithCloudflareWorkersAi(apiKey, model, prompt, generatio
     return { text: text.trim(), model: cfModel, usage: null };
   } finally {
     clearTimeout(timeout);
-  }
-}
-
-async function translateWithOpenRouter(apiKey, model, prompt, generationConfig = {}) {
-  const url = "https://openrouter.ai/api/v1/chat/completions";
-  const openRouterModel = model && model.includes("/") ? model : OPENROUTER_MODEL;
-
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-    try {
-      const dynamicMaxTokens = Math.min(4096, Math.max(1024, Math.ceil(prompt.length * 1.8)));
-      const maxTokens = generationConfig.maxTokens || dynamicMaxTokens;
-
-      const bodyPayload = {
-        model: openRouterModel,
-        messages: [
-          {
-            role: "system",
-            content: "Bạn là dịch giả văn học tiểu thuyết mạng Trung - Việt xuất sắc nhất (Tiên hiệp, Huyền huyễn, Đô thị, Mạt thế). Dịch nguyên văn 1:1, đầy đủ 100% từng câu từng chữ, thuần Việt và chuẩn Hán-Việt 100% cho tên riêng/thuật ngữ. Xưng hô chuẩn mực (ta-ngươi, huynh-đệ, sư phụ-đồ nhi). TUYỆT ĐỐI KHÔNG tóm tắt, KHÔNG lược bớt, KHÔNG để sót bất kỳ chữ Hán nào trong bản dịch. Chỉ trả về duy nhất nội dung đã dịch, không kèm lời giải thích hay ghi chú."
-          },
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-        temperature: generationConfig.temperature ?? 0.2,
-        max_tokens: maxTokens
-      };
-
-      if (generationConfig.responseFormat === "json") {
-        bodyPayload.response_format = { type: "json_object" };
-      }
-
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": "https://tram-chu.online",
-          "X-Title": "Tram Chu Translator"
-        },
-        signal: controller.signal,
-        body: JSON.stringify(bodyPayload)
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        const retryable = response.status >= 500;
-        if (retryable && attempt < 1) {
-          await wait(500 * (attempt + 1));
-          continue;
-        }
-
-        const message = data?.error?.message || `OpenRouter API HTTP ${response.status}`;
-        const error = new Error(message);
-        error.status = response.status;
-        error.model = openRouterModel;
-        throw error;
-      }
-
-      if (data?.choices?.[0]?.finish_reason === "length") {
-        const lengthError = new Error("OpenRouter dừng vì chạm giới hạn output token; không xuất bản bản dịch cụt.");
-        lengthError.status = 502;
-        lengthError.model = openRouterModel;
-        throw lengthError;
-      }
-
-      let text = data?.choices?.[0]?.message?.content || "";
-      if (!text.trim()) {
-        const emptyError = new Error("OpenRouter API trả về kết quả rỗng.");
-        emptyError.model = openRouterModel;
-        throw emptyError;
-      }
-
-      text = stripThinkTags(text);
-      text = stripMarkdown(text);
-      return {
-        text,
-        model: openRouterModel,
-        usage: data.usage || {}
-      };
-    } catch (err) {
-      if (err.name === "AbortError") {
-        const timeoutError = new Error(`Hết thời gian chờ kết nối OpenRouter (${REQUEST_TIMEOUT_MS}ms).`);
-        timeoutError.status = 504;
-        timeoutError.model = openRouterModel;
-        throw timeoutError;
-      }
-      throw err;
-    } finally {
-      clearTimeout(timeout);
-    }
   }
 }
 
