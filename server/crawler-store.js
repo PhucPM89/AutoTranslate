@@ -33,7 +33,17 @@ const DEFAULT_CONFIG = {
   enabled: false,
   categories: Object.keys(CATEGORY_DEFINITIONS),
   maxNewBooksPerRun: 2,
-  maxPendingBooksBacklog: 5,
+  // The convert tier makes every ingested chapter readable immediately, so a
+  // book waiting on the LLM tier is no longer unreadable dead weight. This
+  // backpressure is therefore a soft "don't let the LLM polish queue grow
+  // unboundedly" signal, not a readability gate — hence higher than it was when
+  // pending meant unreadable Chinese.
+  maxPendingBooksBacklog: 15,
+  // The real ceiling now: stop acquiring NEW novels once the library reaches
+  // this many books (existing novels keep updating). This bounds R2 storage,
+  // which is the actual scarce resource once convert removes the readability
+  // bottleneck. 0 disables the cap.
+  maxLibraryBooks: 800,
   wordCountBucket: 4,
   creationStatus: -1,
   updateExisting: true,
@@ -71,7 +81,8 @@ function sanitizeCrawlerConfig(value) {
     enabled: Boolean(value?.enabled),
     categories: categories.length ? categories : [...DEFAULT_CONFIG.categories],
     maxNewBooksPerRun: clampInteger(value?.maxNewBooksPerRun, 1, 3, DEFAULT_CONFIG.maxNewBooksPerRun),
-    maxPendingBooksBacklog: clampInteger(value?.maxPendingBooksBacklog, 1, 50, DEFAULT_CONFIG.maxPendingBooksBacklog),
+    maxPendingBooksBacklog: clampInteger(value?.maxPendingBooksBacklog, 1, 200, DEFAULT_CONFIG.maxPendingBooksBacklog),
+    maxLibraryBooks: clampInteger(value?.maxLibraryBooks, 0, 100000, DEFAULT_CONFIG.maxLibraryBooks),
     // The word-count bucket is the single length control; Fanqie applies it
     // server-side, so a separate chapter minimum is redundant.
     wordCountBucket: allowedChoice(value?.wordCountBucket, WORD_COUNT_BUCKETS, DEFAULT_CONFIG.wordCountBucket),

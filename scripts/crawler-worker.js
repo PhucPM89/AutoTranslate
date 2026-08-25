@@ -233,13 +233,27 @@ async function main() {
     let discovery = null;
     let newCandidateCount = 0;
     
-    // Backpressure: check translation queue backlog before crawling new novels
+    // Backpressure before crawling new novels. Two independent ceilings:
+    //   1. maxLibraryBooks — total library size (the real storage ceiling now
+    //      that convert makes every crawled book readable). Existing novels keep
+    //      updating above it; only new-book acquisition stops.
+    //   2. maxPendingBooksBacklog — a soft cap on the LLM-polish queue.
     const storage = createStorage();
+    const librarySize = existingBooks.length;
+    const maxLibraryBooks = config.maxLibraryBooks || 0;
+    const libraryFull = maxLibraryBooks > 0 && librarySize >= maxLibraryBooks;
     const maxBacklog = config.maxPendingBooksBacklog || 5;
     const backlog = await getTranslationBacklog(storage);
-    const maxNewBooks = Math.min(config.maxNewBooksPerRun || 2, Math.max(0, maxBacklog - backlog.pendingBooksCount));
+    const maxNewBooks = libraryFull
+      ? 0
+      : Math.min(config.maxNewBooksPerRun || 2, Math.max(0, maxBacklog - backlog.pendingBooksCount));
 
-    if (backlog.pendingBooksCount >= maxBacklog) {
+    if (libraryFull) {
+      const fullMsg = `Thư viện đã đạt ${librarySize}/${maxLibraryBooks} bộ (trần maxLibraryBooks). Ngừng cào truyện mới, chỉ tiếp tục cập nhật truyện đang theo dõi.`;
+      console.log(`[CRAWLER LIBRARY FULL] ${fullMsg}`);
+      status.message = fullMsg;
+      await updateStatus(status);
+    } else if (backlog.pendingBooksCount >= maxBacklog) {
       const backpressureMsg = `Hàng đợi dịch đang có ${backlog.pendingBooksCount} bộ truyện (${backlog.totalPendingChapters} chương) chờ dịch. Tạm dừng cào thêm truyện mới để ưu tiên dịch hoàn tất (ngưỡng tối đa: ${maxBacklog} bộ).`;
       console.log(`[CRAWLER BACKPRESSURE] ${backpressureMsg}`);
       status.message = backpressureMsg;

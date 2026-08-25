@@ -26,3 +26,7 @@ public/vendor/
 
 # Supabase CLI link/cache metadata
 supabase/.temp/
+
+# convert dictionary build temp
+.tmp-*/
+.tmp-*

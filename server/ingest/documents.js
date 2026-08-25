@@ -7,21 +7,29 @@ const { LAYOUT } = require("../storage/keys");
 
 const SCHEMA_VERSION = 1;
 
+// translationStatus values, weakest to strongest content:
+//   pending   — not yet processed; reader sees the raw source text.
+//   convert   — offline Hán-Việt convert; readable Vietnamese, exact terminology,
+//               produced instantly at ingest so no chapter is ever unreadable.
+//   completed — LLM translation; the fluent tier that upgrades convert on demand.
+// `convert` and `completed` both supply a `translation`; `pending` does not.
 function buildChapterDocument({ bookId, revision, chapter, translation, translationStatus }) {
   if (!bookId) throw new Error("Chapter document cần bookId.");
   const status = translationStatus || (translation ? "completed" : "pending");
+  const hasRendered = translation && (status === "completed" || status === "convert");
+  const content = hasRendered ? translation : chapter.content;
   return {
     schema: SCHEMA_VERSION,
     bookId,
     revision,
     chapterNumber: chapter.chapterNumber,
     title: chapter.title,
-    // `content` is always what the reader should display. When a chapter has not
-    // been translated yet the reader still gets the source text plus a status, so
-    // the page is never empty and never has to call an API to find out why.
-    content: status === "completed" && translation ? translation : chapter.content,
+    // `content` is always what the reader should display. A not-yet-translated
+    // chapter still gets readable text (source or convert) plus a status, so the
+    // page is never empty and never has to call an API to find out why.
+    content,
     translationStatus: status,
-    characters: (status === "completed" && translation ? translation : chapter.content).length,
+    characters: content.length,
     updatedAt: new Date().toISOString()
   };
 }

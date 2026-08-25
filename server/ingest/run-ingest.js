@@ -5,6 +5,7 @@ const { createMetadataStore } = require("../supabase");
 const { ingestBook } = require("./ingest-book");
 const { publishCatalogSnapshot } = require("./catalog-snapshot");
 const { translateText } = require("../gemini");
+const { getConvertFunction } = require("../convert");
 
 // The one entry point both the admin upload and the crawler call. It assembles
 // storage, the metadata store and the translator from the environment so neither
@@ -43,12 +44,21 @@ async function runIngest({
     log({ event: "ingest.translate_skipped", reason: "GEMINI_API_KEY chưa được cấu hình" });
   }
 
+  // Offline convert tier: makes every chapter readable the instant it is ingested,
+  // so the crawler no longer outruns translation into a backlog of unreadable
+  // Chinese. Disabled with CONVERT_ENABLED=false or when no dictionary is present.
+  const convert = getConvertFunction();
+  if (!convert) {
+    log({ event: "ingest.convert_skipped", reason: "Không có từ điển convert hoặc CONVERT_ENABLED=false" });
+  }
+
   const result = await ingestBook({
     storage,
     epubBuffer,
     book,
     revision,
     translate,
+    convert,
     metadataStore,
     archiveStorage,
     requestBudget,
@@ -86,6 +96,7 @@ function describeIngestTargets(env = process.env) {
     storage: hasR2Credentials(env) ? `r2:${env.R2_BUCKET}` : `local:${env.LOCAL_STORAGE_DIR || ".storage"}`,
     metadata: env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY ? "supabase" : "none",
     translate: env.INGEST_TRANSLATE === "false" ? "disabled" : env.GEMINI_API_KEY ? "gemini" : "no key",
+    convert: env.CONVERT_ENABLED === "false" ? "disabled" : getConvertFunction(env) ? "on" : "no dict",
     publicBase: env.R2_PUBLIC_BASE_URL || "(chưa cấu hình)"
   };
 }

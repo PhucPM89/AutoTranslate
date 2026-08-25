@@ -132,11 +132,14 @@ async function main() {
 
   const envKeys = [
     process.env.CLOUDFLARE_AI_TOKEN,
+    process.env.CLOUDFLARE_AI_KEYS,
     process.env.CLOUDFLARE_API_TOKEN,
     process.env.GEMINI_API_KEYS,
     process.env.GEMINI_API_KEY,
     process.env.GROQ_API_KEYS,
-    process.env.GROQ_API_KEY
+    process.env.GROQ_API_KEY,
+    process.env.OPENROUTER_API_KEYS,
+    process.env.OPENROUTER_API_KEY
   ].filter(Boolean).flatMap(k => parseApiKeys(k));
 
   const allowCloudflare = process.env.TRANSLATE_ALLOW_CLOUDFLARE === "true";

@@ -9,6 +9,8 @@
     "setup:admin": "node scripts/setup-admin-env.js",
     "dev": "wrangler pages dev public --compatibility-flags nodejs_compat",
     "configure:cf": "node scripts/configure-cloudflare.js",
+    "convert": "node scripts/convert-chapter.js",
+    "build:convert": "node scripts/build-convert-dicts.js",
     "deploy": "node scripts/deploy-pages.js",
     "test": "node --test \"server/**/*.test.js\" \"client/**/*.test.js\""
   },

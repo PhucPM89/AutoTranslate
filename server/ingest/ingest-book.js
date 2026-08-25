@@ -28,6 +28,11 @@ async function ingestBook({
   book,
   revision,
   translate = null,
+  // Optional offline convert function (zh string -> Hán-Việt convert string).
+  // When supplied, chapters are published as readable convert instead of raw
+  // source while they wait for the LLM tier. Off by default: convert quality
+  // depends on dictionaries the operator must supply, so a caller opts in.
+  convert = null,
   metadataStore = null,
   archiveStorage = null,
   requestBudget = Infinity,
@@ -113,6 +118,16 @@ async function ingestBook({
       if (await storage.head(key)) return;
       const source = await readJson(storage, originalKey(book.id, rev, entry.chapterNumber));
       if (!source) return;
+      // Convert makes the chapter readable immediately; without it the chapter
+      // is published as raw source (pending) exactly as before.
+      let converted = null;
+      if (convert) {
+        try {
+          converted = await convert(source.content);
+        } catch {
+          converted = null; // a convert failure must never block publishing
+        }
+      }
       await storage.put(
         key,
         JSON.stringify(
@@ -120,8 +135,8 @@ async function ingestBook({
             bookId: book.id,
             revision: rev,
             chapter: source,
-            translation: null,
-            translationStatus: "pending"
+            translation: converted,
+            translationStatus: converted ? "convert" : "pending"
           })
         )
       );

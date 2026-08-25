@@ -32,6 +32,8 @@ function describe(config) {
   console.log(`  wordCountBucket    : ${config.wordCountBucket}`);
   console.log(`  creationStatus     : ${config.creationStatus}`);
   console.log(`  maxNewBooksPerRun  : ${config.maxNewBooksPerRun}`);
+  console.log(`  maxPendingBooksBacklog: ${config.maxPendingBooksBacklog}`);
+  console.log(`  maxLibraryBooks    : ${config.maxLibraryBooks || "(không giới hạn)"}`);
   console.log(`  updateExisting     : ${config.updateExisting}`);
   console.log(`  excludedSourceIds  : ${(config.excludedSourceIds || []).length} id`);
 }

@@ -116,6 +116,13 @@ test("a chapter document carries the source text until a translation exists", ()
   const done = buildChapterDocument({ bookId: "b", revision: 1, chapter, translation: "dich", translationStatus: "completed" });
   assert.equal(done.content, "dich");
   assert.equal(done.characters, 4);
+
+  // A convert chapter shows the convert text (not the raw source) and reports
+  // the convert status so the reader can label it and the LLM tier can upgrade it.
+  const convert = buildChapterDocument({ bookId: "b", revision: 1, chapter, translation: "chuyen ngu", translationStatus: "convert" });
+  assert.equal(convert.translationStatus, "convert");
+  assert.equal(convert.content, "chuyen ngu");
+  assert.equal(convert.characters, "chuyen ngu".length);
 });
 
 test("the index ships a url template instead of one url per chapter", () => {
