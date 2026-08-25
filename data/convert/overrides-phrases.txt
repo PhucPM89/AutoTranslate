@@ -124,3 +124,5 @@
 之意=ý
 杀意=sát ý
 敬意=kính ý
+# Genuinely wrong common readings.
+温度=nhiệt độ

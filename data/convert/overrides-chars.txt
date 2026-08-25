@@ -129,3 +129,40 @@
 偷=trộm
 输=thua
 赢=thắng
+# Everyday sensory/state adjectives whose bare Hán-Việt is archaic (快 "khoái",
+# 饿 "ngạ", 疼 "đông"). Standalone only. Polysemous ones (干 khô/làm, 松 lỏng/tùng,
+# 晚 muộn/tối) and convert-standard ones (高 cao, 深 thâm, 老 lão) are left alone.
+快=nhanh
+慢=chậm
+早=sớm
+累=mệt
+饿=đói
+渴=khát
+冷=lạnh
+热=nóng
+疼=đau
+痛=đau
+困=buồn ngủ
+忙=bận
+胖=mập
+瘦=gầy
+矮=thấp
+硬=cứng
+软=mềm
+咸=mặn
+甜=ngọt
+辣=cay
+酸=chua
+湿=ướt
+亮=sáng
+暗=tối
+吵=ồn ào
+紧=chặt
+浅=nông
+宽=rộng
+窄=hẹp
+尖=nhọn
+钝=cùn
+臭=thối
+脏=bẩn
+净=sạch
