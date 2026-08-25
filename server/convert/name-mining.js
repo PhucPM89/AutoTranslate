@@ -95,29 +95,32 @@ function mineNames(texts, {
     for (let i = 0; i < chars.length; i++) {
       if (!HAN.test(chars[i])) continue;
 
-      // High-confidence: whatever the matcher recognises here, subject to the
-      // same person test so a word it would read as a name is not mined.
-      const m = matcher && matcher.match(chars, i);
-      if (m && m.kind === "name") {
-        const span = chars.slice(i, i + m.length).join("");
-        if (personSplit(span)) bump(span, chars[i + m.length]);
-        continue; // don't also count a shorter surname-scan of the same span
-      }
-
-      // Surname scan: take the LONGEST valid name at this position, never its
-      // prefix, or a 3-char name (张灵峰) leaks its 2-char head (张灵) into a
-      // separate, truncated entry.
+      // Surname scan FIRST, taking the LONGEST valid name. This runs before the
+      // matcher on purpose: the matcher truncates a name when a junk bigram
+      // shadows it (郑海冰 -> 郑海, because 郑海 is a dictionary phrase), which is
+      // exactly the case mining exists to recover. Never emits a prefix, or a
+      // 3-char name leaks its 2-char head (张灵峰 -> 张灵) as a separate entry.
+      let scanned = false;
       for (const slen of surnameLens) {
         const surname = chars.slice(i, i + slen).join("");
         if (surname.length !== slen || !surnames[surname]) continue;
-        if (slen === 1 && AMBIGUOUS_SURNAMES.has(surname)) break;
+        if (slen === 1 && AMBIGUOUS_SURNAMES.has(surname)) { scanned = true; break; }
         let best = null;
         for (const glen of [2, 1]) {
           const seq = chars.slice(i, i + slen + glen).join("");
           if (Array.from(seq).length === slen + glen && personSplit(seq)) { best = { seq, end: i + slen + glen }; break; }
         }
-        if (best) bump(best.seq, chars[best.end]);
+        if (best) { bump(best.seq, chars[best.end]); scanned = true; }
         break; // one surname length per position
+      }
+      if (scanned) continue;
+
+      // Otherwise fall back to the matcher for names the scan can't form (e.g.
+      // place names), subject to the same person test.
+      const m = matcher && matcher.match(chars, i);
+      if (m && m.kind === "name") {
+        const span = chars.slice(i, i + m.length).join("");
+        if (personSplit(span)) bump(span, chars[i + m.length]);
       }
     }
   }

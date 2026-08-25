@@ -12,8 +12,8 @@ const { mineNames } = require("./name-mining");
 // chapters should be re-rendered. The backfill re-converts any "convert" chapter
 // stamped with an older version, so a full re-pass resumes across runs instead of
 // restarting from the top. 1 = pre-grammar; 2 = normalization + grammar layers;
-// 3 = name mining; 4 = name-locked segmentation; 5 = natural verb readings + reduplicated/complement constructions.
-const CONVERT_VERSION = 5;
+// 3 = name mining; 4 = name-locked segmentation; 5 = natural verbs + constructions; 6 = surname-scan-first mining (recovers shadowed names).
+const CONVERT_VERSION = 6;
 
 const DEFAULT_HANVIET = path.join("data", "convert", "hanviet-chars.txt");
 const DEFAULT_PHRASE_DIR = path.join("data", "convert", "phrases");
