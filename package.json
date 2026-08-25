@@ -12,7 +12,8 @@
     "convert": "node scripts/convert-chapter.js",
     "build:convert": "node scripts/build-convert-dicts.js",
     "deploy": "node scripts/deploy-pages.js",
-    "test": "node --test \"server/**/*.test.js\" \"client/**/*.test.js\""
+    "test": "node --test \"server/**/*.test.js\" \"client/**/*.test.js\"",
+    "convert:backfill": "node scripts/convert-backfill.js"
   },
   "dependencies": {
     "jszip": "^3.10.1",
