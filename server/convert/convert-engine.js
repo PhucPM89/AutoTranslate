@@ -84,6 +84,15 @@ const DEGREE = new Set([
   "非常", "十分", "格外", "异常", "无比", "相当", "尤其", "分外", "越发"
 ]);
 
+// Degree adverbs that essentially never begin a common noun, so a word starting
+// with one is an adjective even when its tail is not in the adjective list
+// (很难闻 -> adj, so 很难闻的味道 postposes instead of leaking "của"). The risky
+// ones are left out on purpose: 太 opens 太阳/太子, 巨 opens 巨人, 超 opens 超市 —
+// there the prefix is part of a noun, not a degree adverb.
+const SAFE_DEGREE = new Set([
+  "很", "非常", "十分", "格外", "异常", "无比", "相当", "尤其", "分外", "越发", "挺"
+]);
+
 // A numeral or a quantity expression: 三十, 三十年, 三年前. Used by the 的 rule,
 // where a quantity modifier postposes without "của" ("khổ tu ba mươi năm").
 const NUMERIC = /^[0-9０-９一二三四五六七八九十百千万亿零两半几数多]+$/;
@@ -258,9 +267,15 @@ function createConvertEngine({
   // 弟子 has to read "đệ tử nội môn trẻ tuổi nhất", which needs 最年轻 to reach
   // the postposing rule rather than the possessive one.
   function isGradedAdjective(zh) {
-    for (const n of [1, 2]) {
-      if (zh.length <= n) break;
-      if (DEGREE.has(zh.slice(0, n)) && adjectives.has(zh.slice(n))) return true;
+    // Two-character degree prefixes (非常, 十分) before one-character (很, 太) so
+    // the longer, unambiguous adverb wins.
+    for (const n of [2, 1]) {
+      if (zh.length <= n) continue;
+      const prefix = zh.slice(0, n);
+      // A safe adverb forces the reading; otherwise the tail must be a known
+      // adjective, which is what keeps 太阳/巨人 out.
+      if (SAFE_DEGREE.has(prefix)) return true;
+      if (DEGREE.has(prefix) && adjectives.has(zh.slice(n))) return true;
     }
     return false;
   }

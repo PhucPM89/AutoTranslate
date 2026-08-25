@@ -119,3 +119,10 @@
 我要变强，强到没有人可以伤害我在乎的人。
 事情已经到了不可挽回的地步。
 他这才明白师父的用意。
+
+# Graded adjective before 的 postposes even when the adjective is not listed
+很难闻的味道飘了过来。
+一个很漂亮的女孩站在那里。
+# ...but a noun that merely starts with a degree character stays possessive
+太阳的光芒照亮了大地。
+太子的剑断成了两截。
