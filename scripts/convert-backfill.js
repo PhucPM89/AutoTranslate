@@ -37,7 +37,11 @@ loadEnvFile(path.join(__dirname, "..", ".env.local"));
 const { createStorage } = require("../server/storage");
 const { buildChapterDocument, chapterKey, originalKey } = require("../server/ingest/documents");
 const { jobStateKey } = require("../server/ingest/translation-queue");
-const { getConvertFunction, CONVERT_VERSION } = require("../server/convert");
+const { buildConvertEngineFromDisk, mineBookNames, CONVERT_VERSION } = require("../server/convert");
+
+// How many of a book's chapters to read for name mining. The cast shows up early
+// and often, so a sample is enough and keeps the extra R2 reads bounded.
+const NAME_SAMPLE = Number(process.env.CONVERT_NAME_SAMPLE || 40);
 
 function flag(name) {
   return process.argv.includes(name);
@@ -78,7 +82,7 @@ async function listBookIds(storage, only) {
     .map((o) => o.key.slice("jobs/".length, -"/translation.json".length));
 }
 
-async function backfillBook(storage, convert, bookId, { commit, force }) {
+async function backfillBook(storage, bookId, { commit, force }) {
   const state = await readJson(storage, jobStateKey(bookId));
   if (!state || !Array.isArray(state.chapters)) {
     return { bookId, skipped: "no job state", converted: 0, pending: 0 };
@@ -92,6 +96,18 @@ async function backfillBook(storage, convert, bookId, { commit, force }) {
   if (!commit) {
     return { bookId, revision, converted: 0, candidates: candidates.length, missing: 0, preview: true };
   }
+
+  // Mine this book's character names from a sample, then convert every chapter
+  // with them merged in, so a character reads identically across the whole book
+  // (Consistency Engine). Falls back to the plain engine if mining finds nothing.
+  const sample = [];
+  for (const entry of candidates.slice(0, NAME_SAMPLE)) {
+    const src = await readJson(storage, originalKey(bookId, revision, entry.n));
+    if (src && src.content) sample.push(src.content);
+  }
+  const nameGlossary = sample.length ? mineBookNames(sample) : {};
+  const engine = buildConvertEngineFromDisk(process.env, { nameGlossary });
+  const nameCount = Object.keys(nameGlossary).length;
 
   let converted = 0;
   let missing = 0;
@@ -114,7 +130,7 @@ async function backfillBook(storage, convert, bookId, { commit, force }) {
     }
     let text;
     try {
-      text = convert(source.content);
+      text = engine.convert(source.content);
     } catch {
       return;
     }
@@ -137,7 +153,7 @@ async function backfillBook(storage, convert, bookId, { commit, force }) {
     converted += 1;
   });
 
-  return { bookId, revision, converted, missing, candidates: candidates.length };
+  return { bookId, revision, converted, missing, candidates: candidates.length, nameCount };
 }
 
 async function main() {
@@ -150,7 +166,7 @@ async function main() {
     process.exit(1);
   }
 
-  const convert = getConvertFunction();
+  const convert = buildConvertEngineFromDisk();
   if (!convert) {
     console.error("Không có từ điển convert (data/convert). Không thể backfill.");
     process.exit(1);
@@ -162,7 +178,7 @@ async function main() {
 
   let totalConverted = 0;
   for (const bookId of bookIds) {
-    const r = await backfillBook(storage, convert, bookId, { commit, force });
+    const r = await backfillBook(storage, bookId, { commit, force });
     totalConverted += r.converted || 0;
     if (r.skipped) {
       console.log(`  ${bookId}: bỏ qua (${r.skipped})`);
@@ -170,7 +186,7 @@ async function main() {
       totalConverted += r.candidates;
       console.log(`  ${bookId}: ${r.candidates} chương chưa dịch sẽ được convert`);
     } else {
-      console.log(`  ${bookId}: ${r.converted} chương convert / ${r.candidates} chưa dịch${r.missing ? ` (${r.missing} thiếu bản gốc)` : ""}`);
+      console.log(`  ${bookId}: ${r.converted} chương convert / ${r.candidates} chưa dịch · ${r.nameCount||0} tên nhân vật${r.missing ? ` (${r.missing} thiếu gốc)` : ""}`);
     }
   }
   console.log(`\nTổng: ${totalConverted} chương ${commit ? "đã convert" : "sẽ convert"}.`);

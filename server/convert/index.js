@@ -2,26 +2,29 @@
 
 const fs = require("fs");
 const path = require("path");
-const { createConvertEngine } = require("./convert-engine");
+const { createConvertEngine, buildTrie, matchPhrase, isHan } = require("./convert-engine");
+const { createProperNounMatcher } = require("./proper-nouns");
 const { loadPhraseDict, loadHanvietChars } = require("./load-dictionaries");
-const { loadLexicon, readSet } = require("./lexicon");
+const { loadLexicon, readSet, titleCase } = require("./lexicon");
+const { mineNames } = require("./name-mining");
 
 // Bump when the convert engine or its data changes enough that already-converted
 // chapters should be re-rendered. The backfill re-converts any "convert" chapter
 // stamped with an older version, so a full re-pass resumes across runs instead of
-// restarting from the top. 1 = pre-grammar; 2 = normalization + grammar layers.
-const CONVERT_VERSION = 2;
+// restarting from the top. 1 = pre-grammar; 2 = normalization + grammar layers;
+// 3 = "$" terminal fix, surname table, degree adjectives, per-book name mining.
+const CONVERT_VERSION = 3;
 
 const DEFAULT_HANVIET = path.join("data", "convert", "hanviet-chars.txt");
 const DEFAULT_PHRASE_DIR = path.join("data", "convert", "phrases");
-// Normalization overrides load LAST so they win over the base dictionaries:
-// pronouns/particles that otherwise leak as dead phonetics, and connectors
-// VietPhrase renders awkwardly. See data/convert/overrides-*.txt.
+// Normalization overrides load LAST so they win over the base dictionaries.
 const OVERRIDE_CHARS = path.join("data", "convert", "overrides-chars.txt");
 const OVERRIDE_PHRASES = path.join("data", "convert", "overrides-phrases.txt");
-// Entries removed from the phrase dict entirely — fragments that swallow a clause
-// boundary and cannot be fixed by overriding their value.
 const PHRASE_BLOCKLIST = path.join("data", "convert", "phrase-blocklist.txt");
+
+// Pronouns never sit inside a mined given name (顺他), so they seed the reject set
+// together with the function-word and verb tables.
+const PRONOUNS = ["他", "她", "它", "我", "你", "您", "咱", "俺", "们", "谁", "这", "那"];
 
 function splitList(value) {
   return String(value || "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -34,35 +37,60 @@ function defaultPhraseFiles() {
     .map((f) => path.join(DEFAULT_PHRASE_DIR, f));
 }
 
-// Build a convert engine from the on-disk dictionaries, honouring env overrides:
-//   CONVERT_HANVIET   comma-separated single-char phonetic files
-//   CONVERT_PHRASES   comma-separated phrase files (else everything in phrases/)
-// Returns null when no single-char table is available, so callers can cleanly
-// fall back to publishing raw source instead of empty convert.
-function buildConvertEngineFromDisk(env = process.env) {
-  // Base tables first, normalization overrides last (later files win).
+// Load the base tables once. Reused by every engine build and by name mining, so
+// the 667k-entry phrase dictionary is parsed a single time per process.
+let base;
+function loadBase(env = process.env) {
+  if (base) return base;
   const hanvietFiles = [...splitList(env.CONVERT_HANVIET || DEFAULT_HANVIET), OVERRIDE_CHARS];
   const hanvietChars = loadHanvietChars(hanvietFiles);
-  if (!Object.keys(hanvietChars).length) return null;
+  if (!Object.keys(hanvietChars).length) return (base = null);
   const phraseFiles = env.CONVERT_PHRASES ? splitList(env.CONVERT_PHRASES) : defaultPhraseFiles();
   const phraseDict = loadPhraseDict([...phraseFiles, OVERRIDE_PHRASES]);
   for (const zh of readSet(PHRASE_BLOCKLIST)) delete phraseDict[zh];
-  // Word-class tables for the grammar and proper-noun layers. Absent tables mean
-  // the rules that need them go quiet — no proper nouns, no postposed adjectives
-  // or demonstratives — leaving the 的 rewrite, which needs no word list.
   const lexicon = loadLexicon();
-  return createConvertEngine({ phraseDict, hanvietChars, lexicon });
+  base = { hanvietChars, phraseDict, lexicon };
+  return base;
+}
+
+// Build a convert engine. `nameGlossary` (from mineBookNames) is merged in front
+// of the phrase dictionary so a book's characters read identically everywhere,
+// overriding the junk bigrams that shadow them (郑海 vs 郑海冰). Returns null when
+// no single-char table is available, so callers can fall back to raw source.
+function buildConvertEngineFromDisk(env = process.env, { nameGlossary = null } = {}) {
+  const b = loadBase(env);
+  if (!b) return null;
+  const phraseDict = nameGlossary ? { ...b.phraseDict, ...nameGlossary } : b.phraseDict;
+  return createConvertEngine({ phraseDict, hanvietChars: b.hanvietChars, lexicon: b.lexicon });
+}
+
+// Mine a per-book name glossary { zh -> "Tên Hán Việt" } from a sample of the
+// book's chapter texts. Statistical, model-free: a character recurs in varied
+// contexts, a chance collocation does not. See name-mining.js.
+function mineBookNames(texts, env = process.env, { minCount = 6 } = {}) {
+  const b = loadBase(env);
+  if (!b) return {};
+  const trie = buildTrie(b.phraseDict);
+  const { surnames, placeSuffixes, classifiers, functionWords, verbs, adjectives } = b.lexicon;
+  const matcher = createProperNounMatcher({
+    surnames, placeSuffixes, classifiers, functionWords, verbs, adjectives,
+    hanvietChars: b.hanvietChars, phraseDict: b.phraseDict, dropTokens: new Set(),
+    longestPhraseAt: (chars, at) => matchPhrase(trie, chars, at), isHan
+  });
+  const rejectGiven = new Set([...PRONOUNS, ...functionWords, ...verbs]);
+  return mineNames(texts, {
+    matcher, surnames, hanviet: b.hanvietChars, isName: matcher.isNameChar,
+    titleCase, minCount, phraseDict: b.phraseDict, rejectGiven
+  });
 }
 
 // A memoised convert(text) -> string, or null when convert is unavailable or
-// disabled (CONVERT_ENABLED=false). Building the trie is done once per process.
+// disabled. This is the plain, name-agnostic path (ingest of a single new
+// chapter); the backfill builds its own per-book engine via mineBookNames.
 let cached;
 function getConvertFunction(env = process.env) {
   if (cached !== undefined) return cached;
-  if (env.CONVERT_ENABLED === "false") {
-    cached = null;
-    return cached;
-  }
+  if (env.CONVERT_ENABLED === "false") return (cached = null);
   try {
     const engine = buildConvertEngineFromDisk(env);
     cached = engine ? (text) => engine.convert(text) : null;
@@ -72,4 +100,7 @@ function getConvertFunction(env = process.env) {
   return cached;
 }
 
-module.exports = { buildConvertEngineFromDisk, getConvertFunction, defaultPhraseFiles, CONVERT_VERSION };
+module.exports = {
+  buildConvertEngineFromDisk, getConvertFunction, mineBookNames,
+  defaultPhraseFiles, CONVERT_VERSION
+};
