@@ -55,3 +55,24 @@
 听=nghe
 问=hỏi
 道=nói
+
+# Single characters whose phonetic reading reads as jargon where the plain
+# Vietnamese word is what a reader expects. 人 is the clearest case: "mười mấy
+# vạn nhân" is a Hán-Việt count, "mười mấy vạn người" is Vietnamese.
+人=người
+红=đỏ
+火=lửa
+像=như
+会=sẽ
+连=ngay cả
+做=làm
+将=đem
+年=năm
+
+# Interjections. These only surface when the particle opens an utterance — mid
+# sentence they are dropped as the meaningless glue they are.
+嗯=ừ
+哦=ồ
+唉=haizz
+呀=a
+哈=ha

@@ -1,0 +1,50 @@
+# Place / organisation suffixes, `zh=vi`.
+#
+# 2 name characters + one of these reads as a proper noun: 青云城 is "Thanh Vân
+# thành", not "mây xanh thành"; 天玄宗 is "Thiên Huyền tông", not "Thiên huyền
+# tông". The two name characters go phonetic in Title Case, the suffix stays a
+# lowercase common noun — the convention Vietnamese web-novel readers expect.
+宗=tông
+门=môn
+派=phái
+盟=liên minh
+族=tộc
+家=gia
+殿=điện
+阁=các
+楼=lâu
+院=viện
+府=phủ
+宫=cung
+寺=tự
+庙=miếu
+塔=tháp
+城=thành
+镇=trấn
+村=thôn
+庄=trang
+国=quốc
+域=vực
+界=giới
+洲=châu
+山=sơn
+峰=phong
+岭=lĩnh
+峡=hiệp
+谷=cốc
+崖=nhai
+洞=động
+窟=quật
+渊=vực sâu
+海=hải
+江=giang
+河=hà
+湖=hồ
+潭=đàm
+泉=tuyền
+溪=khê
+岛=đảo
+漠=mạc
+营=doanh
+堡=bảo
+寨=trại

@@ -71,3 +71,17 @@
 事情=chuyện
 问题=vấn đề
 地方=nơi
+
+# Corrections to VietPhrase first-options that read as nonsense in context.
+从来没有=chưa từng
+从来没=chưa từng
+从来不=chưa từng
+违背=trái ngược
+洁白=trắng tinh
+刚才说话=vừa mới nói
+不堪设想=không dám tưởng tượng
+撒野=làm bừa
+心动=động lòng
+缓缓=chậm rãi
+凶兽=hung thú
+喘着粗气=thở hổn hển

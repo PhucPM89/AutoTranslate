@@ -111,3 +111,116 @@ test("single-char loader tags source and later files override", () => {
   assert.strictEqual(chars["们"].source, "curated");
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+// --- Integration: dictionary, proper nouns and grammar together ---------------
+//
+// These use a small hand-built lexicon rather than the shipped tables, so a
+// failure points at the engine rather than at a data edit. `full()` wires up the
+// same four layers production does.
+
+const { loadLexicon } = require("./lexicon");
+
+const FULL_HV = {
+  ...HV,
+  天: { hv: "thiên" }, 玄: { hv: "huyền" }, 宗: { hv: "tông" },
+  弟: { hv: "đệ" }, 们: { hv: "môn" }, 的: { hv: "của" },
+  白: { hv: "bạch" }, 衣: { hv: "y" }, 胜: { hv: "thắng" }, 雪: { hv: "tuyết" },
+  苏: { hv: "tô" }, 落: { hv: "lạc" }, 内: { hv: "nội" }, 紫: { hv: "tử" },
+  云: { hv: "vân" }, 殿: { hv: "điện" }, 古: { hv: "cổ" }, 老: { hv: "lão" },
+  书: { hv: "thư" }, 籍: { hv: "tịch" }, 那: { hv: "kia" }, 枚: { hv: "mai" },
+  玉: { hv: "ngọc" }, 佩: { hv: "bội" }, 时: { hv: "thời" }, 候: { hv: "hậu" },
+  看: { hv: "nhìn" }, 眼: { hv: "nhãn" }, 前: { hv: "tiền" }, 少: { hv: "thiếu" },
+  女: { hv: "nữ" }
+};
+
+function full(extra = {}) {
+  return createConvertEngine({
+    hanvietChars: FULL_HV,
+    lexicon: {
+      adjectives: new Set(["古老"]),
+      verbs: new Set(["看"]),
+      functionWords: new Set(["是"]),
+      classifiers: { 枚: "cái" },
+      surnames: { 叶: "Diệp", 苏: "Tô", 白: "Bạch" },
+      placeSuffixes: { 宗: "tông", 殿: "điện" }
+    },
+    ...extra
+  });
+}
+
+test("a name reads phonetically in Title Case, not by meaning", () => {
+  const e = full({ phraseDict: { 落雪: "tuyết rơi" } });
+  assert.strictEqual(e.convert("苏落雪"), "Tô Lạc Tuyết");
+});
+
+test("the dictionary keeps every tie against a name", () => {
+  // 白衣 is a real word, so 白衣胜雪 must not read as a person.
+  const e = full({ phraseDict: { 白衣: "áo trắng", 胜雪: "trắng như tuyết" } });
+  assert.strictEqual(e.convert("白衣胜雪"), "Áo trắng trắng như tuyết");
+});
+
+test("a place name beats a shorter meaning phrase", () => {
+  const e = full({ phraseDict: { 天玄: "trời huyền" } });
+  assert.strictEqual(e.convert("天玄宗"), "Thiên Huyền tông");
+});
+
+test("的 is rewritten to của and the phrase order is reversed", () => {
+  const e = full({ phraseDict: { 弟子们: "các đệ tử" } });
+  assert.strictEqual(e.convert("天玄宗的弟子们"), "Các đệ tử của Thiên Huyền tông");
+});
+
+test("an adjective before 的 postposes instead of leaking của", () => {
+  const e = full({ phraseDict: { 古老: "cổ xưa", 书籍: "sách vở" } });
+  assert.strictEqual(e.convert("古老的书籍"), "Sách vở cổ xưa");
+});
+
+test("a dictionary entry may not swallow 的", () => {
+  // 古老的书 would otherwise win on length and tear 书籍 in half.
+  const e = full({ phraseDict: { 古老的书: "sách cổ", 古老: "cổ xưa", 书籍: "sách vở" } });
+  assert.strictEqual(e.convert("古老的书籍"), "Sách vở cổ xưa");
+});
+
+test("a demonstrative and its classifier postpose around the noun", () => {
+  const e = full({ phraseDict: { 玉佩: "ngọc bội" } });
+  assert.strictEqual(e.convert("那枚玉佩"), "Cái ngọc bội kia");
+});
+
+test("a locative after a place name becomes a leading preposition", () => {
+  const e = full({ phraseDict: {} });
+  assert.strictEqual(e.convert("紫云殿内"), "Trong Tử Vân điện");
+});
+
+test("an aspect marker is dropped and marks the word before it as a verb", () => {
+  // 看着眼前的少女: 着 must not let the dictionary match straight through it.
+  const e = full({ phraseDict: { 眼前: "trước mắt", 少女: "thiếu nữ", 着眼前: "lên trước mắt" } });
+  assert.strictEqual(e.convert("看着眼前"), "Nhìn trước mắt");
+});
+
+test("dialogue after a colon or an opening quote starts a sentence", () => {
+  const e = full({ phraseDict: { 时候: "lúc" } });
+  assert.strictEqual(e.convert("叶辰：「时候」"), "Diệp Thần: “Lúc”");
+});
+
+test("grammar rules can be switched off for raw dictionary order", () => {
+  const e = full({ phraseDict: { 弟子们: "các đệ tử" }, applyGrammarRules: false });
+  assert.strictEqual(e.convert("天玄宗的弟子们"), "Thiên Huyền tông của các đệ tử");
+});
+
+test("the 的 rule needs no tables, but the table-driven rules go quiet", () => {
+  // No lexicon: no proper nouns, no postposing, no classifiers — but 的 is still
+  // rewritten, because recognising it takes no word list. This is the floor a
+  // partial checkout degrades to.
+  const e = createConvertEngine({ hanvietChars: FULL_HV, phraseDict: { 弟子们: "các đệ tử" } });
+  assert.strictEqual(e.convert("天玄宗的弟子们"), "Thiên huyền các đệ tử của tông");
+  assert.strictEqual(e.convert("苏落雪"), "Tô lạc tuyết"); // phonetic, but not a name
+});
+
+test("the shipped lexicon tables all load with entries", () => {
+  const lexicon = loadLexicon();
+  assert.ok(lexicon.adjectives.size > 100, "adjectives");
+  assert.ok(lexicon.verbs.size > 100, "verbs");
+  assert.ok(lexicon.functionWords.size > 50, "function words");
+  assert.ok(Object.keys(lexicon.classifiers).length > 20, "classifiers");
+  assert.ok(Object.keys(lexicon.surnames).length > 100, "surnames");
+  assert.ok(Object.keys(lexicon.placeSuffixes).length > 20, "place suffixes");
+});

@@ -1,0 +1,20 @@
+# VietPhrase entries to drop after loading — one Chinese key per line.
+#
+# The dictionary is community data and a few entries are not words at all but
+# fragments that swallowed a clause boundary. Longest-match then eats the
+# boundary the grammar layer needs to see:
+#
+#   人是   "người là"   swallows 是, so 刚才说话的人是谁 has no noun after 的
+#   到没   "cũng không" splices two clauses together
+#
+# Blocking one costs nothing: its characters fall back to shorter matches, which
+# is what they should have matched in the first place. Keep this list short and
+# specific — it is for entries that are wrong, not entries you dislike.
+人是
+到没
+父亲是
+着眼前
+人已经
+人不
+人都
+人已

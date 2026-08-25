@@ -12,3 +12,12 @@ functions/**/*.js       text eol=lf
 # merge conflicts. To change them, regenerate rather than hand-merge.
 data/convert/hanviet-chars.txt          text eol=lf linguist-generated
 data/convert/phrases/vietphrase.txt.gz  binary linguist-generated
+
+# The curated convert tables are hand-maintained, unlike the generated
+# dictionaries above: pin LF so a Windows checkout does not rewrite them, but
+# leave them diffable — a wrong reading is meant to be reviewed line by line.
+data/convert/pos/*.txt          text eol=lf
+data/convert/names/*.txt        text eol=lf
+data/convert/overrides-*.txt    text eol=lf
+data/convert/phrase-blocklist.txt text eol=lf
+data/convert/samples/*.txt      text eol=lf

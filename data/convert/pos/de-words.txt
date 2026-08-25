@@ -1,0 +1,22 @@
+# Words that genuinely contain 的 — one per line.
+#
+# The engine otherwise refuses every phrase match containing 的, so the grammar
+# layer always gets to see the particle (see particleBoundary in
+# convert-engine.js). These are the exceptions: 的 is part of the word, not a
+# structural particle, and splitting them produces nonsense —
+# 真的 would become "thật" + a stray possessive, 目的 would become "mục" + it.
+的话
+真的
+假的
+是的
+好的
+有的
+有的是
+别的
+一样的
+似的
+目的
+的确
+似的
+挺好的
+不错的

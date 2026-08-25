@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { createConvertEngine } = require("./convert-engine");
 const { loadPhraseDict, loadHanvietChars } = require("./load-dictionaries");
+const { loadLexicon, readSet } = require("./lexicon");
 
 const DEFAULT_HANVIET = path.join("data", "convert", "hanviet-chars.txt");
 const DEFAULT_PHRASE_DIR = path.join("data", "convert", "phrases");
@@ -12,6 +13,9 @@ const DEFAULT_PHRASE_DIR = path.join("data", "convert", "phrases");
 // VietPhrase renders awkwardly. See data/convert/overrides-*.txt.
 const OVERRIDE_CHARS = path.join("data", "convert", "overrides-chars.txt");
 const OVERRIDE_PHRASES = path.join("data", "convert", "overrides-phrases.txt");
+// Entries removed from the phrase dict entirely — fragments that swallow a clause
+// boundary and cannot be fixed by overriding their value.
+const PHRASE_BLOCKLIST = path.join("data", "convert", "phrase-blocklist.txt");
 
 function splitList(value) {
   return String(value || "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -36,7 +40,12 @@ function buildConvertEngineFromDisk(env = process.env) {
   if (!Object.keys(hanvietChars).length) return null;
   const phraseFiles = env.CONVERT_PHRASES ? splitList(env.CONVERT_PHRASES) : defaultPhraseFiles();
   const phraseDict = loadPhraseDict([...phraseFiles, OVERRIDE_PHRASES]);
-  return createConvertEngine({ phraseDict, hanvietChars });
+  for (const zh of readSet(PHRASE_BLOCKLIST)) delete phraseDict[zh];
+  // Word-class tables for the grammar and proper-noun layers. Absent tables mean
+  // the rules that need them go quiet — no proper nouns, no postposed adjectives
+  // or demonstratives — leaving the 的 rewrite, which needs no word list.
+  const lexicon = loadLexicon();
+  return createConvertEngine({ phraseDict, hanvietChars, lexicon });
 }
 
 // A memoised convert(text) -> string, or null when convert is unavailable or

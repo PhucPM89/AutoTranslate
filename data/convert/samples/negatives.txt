@@ -1,0 +1,74 @@
+# Negative corpus — ordinary prose that the proper-noun layer must NOT touch, and
+# constructions the grammar rules must leave alone.
+#
+# Every line contains a surname character, a place suffix, a classifier or a 的
+# in a position where firing a rule would damage the sentence. Run:
+#   node scripts/convert-eval.js --in data/convert/samples/negatives.txt
+# and read the output: a Title-Cased word here is a false positive.
+
+## surname characters doing ordinary work
+他从昏迷中苏醒过来。
+林中传来一阵鸟鸣。
+白天和黑夜交替着。
+金色的阳光洒满大地。
+石头从山坡上滚了下来。
+花开了又谢，谢了又开。
+凤凰是传说中的神鸟。
+龙是四灵之首。
+叶子落满了整个院子。
+江水滔滔向东流去。
+高手之间的对决往往在一瞬间。
+冷风吹过，他打了个寒颤。
+马车缓缓驶出了城门。
+田里的稻子熟了。
+朱红色的大门紧紧关闭着。
+安静下来，别再说话了。
+常年在外奔波，他早已疲惫。
+文字记载了这一切。
+段落之间要空一行。
+
+## place suffixes in common nouns
+这个世界上没有神。
+他们一家人都在家里。
+大家族的规矩总是很多。
+庭院里种着一棵老树。
+学院的大门口挤满了学生。
+门派之间的争斗从未停止。
+海水又咸又苦。
+山谷里回荡着他的喊声。
+河水结冰了。
+湖面上飘着几片落叶。
+洞口很窄，只能一个人通过。
+国家的兴衰在此一举。
+边界线上驻扎着重兵。
+一片乌云遮住了太阳。
+三大门派联手围剿魔教。
+敲门声又响了起来。
+世家子弟大多养尊处优。
+
+## 的 that must not be reordered
+他手里拿着的是一封信。
+我说的都是真话。
+这是我第一次来这里。
+他做的事情没人知道。
+从远处传来的声音很模糊。
+被他打伤的人已经送去医治了。
+在山上修行的道士下山了。
+用剑的人最忌心浮气躁。
+
+## particles that must keep their own meaning
+他了解这件事的全部内情。
+整个过程只用了三分钟。
+地面上到处都是碎石。
+地方官员前来迎接。
+他得到了一件宝物。
+这块地很肥沃。
+他抬起头看了看天。
+一头白发垂到腰间。
+
+## adverbs the adjective rule must not postpose
+他快速移动到了对手身后。
+她轻轻推开了门。
+他深深吸了一口气。
+时间慢慢过去了。
+他突然停下了脚步。
