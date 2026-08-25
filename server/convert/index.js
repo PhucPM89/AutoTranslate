@@ -7,6 +7,11 @@ const { loadPhraseDict, loadHanvietChars } = require("./load-dictionaries");
 
 const DEFAULT_HANVIET = path.join("data", "convert", "hanviet-chars.txt");
 const DEFAULT_PHRASE_DIR = path.join("data", "convert", "phrases");
+// Normalization overrides load LAST so they win over the base dictionaries:
+// pronouns/particles that otherwise leak as dead phonetics, and connectors
+// VietPhrase renders awkwardly. See data/convert/overrides-*.txt.
+const OVERRIDE_CHARS = path.join("data", "convert", "overrides-chars.txt");
+const OVERRIDE_PHRASES = path.join("data", "convert", "overrides-phrases.txt");
 
 function splitList(value) {
   return String(value || "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -25,11 +30,12 @@ function defaultPhraseFiles() {
 // Returns null when no single-char table is available, so callers can cleanly
 // fall back to publishing raw source instead of empty convert.
 function buildConvertEngineFromDisk(env = process.env) {
-  const hanvietFiles = splitList(env.CONVERT_HANVIET || DEFAULT_HANVIET);
-  const phraseFiles = splitList(env.CONVERT_PHRASES);
+  // Base tables first, normalization overrides last (later files win).
+  const hanvietFiles = [...splitList(env.CONVERT_HANVIET || DEFAULT_HANVIET), OVERRIDE_CHARS];
   const hanvietChars = loadHanvietChars(hanvietFiles);
   if (!Object.keys(hanvietChars).length) return null;
-  const phraseDict = loadPhraseDict(phraseFiles.length ? phraseFiles : defaultPhraseFiles());
+  const phraseFiles = env.CONVERT_PHRASES ? splitList(env.CONVERT_PHRASES) : defaultPhraseFiles();
+  const phraseDict = loadPhraseDict([...phraseFiles, OVERRIDE_PHRASES]);
   return createConvertEngine({ phraseDict, hanvietChars });
 }
 

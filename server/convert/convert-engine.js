@@ -29,6 +29,15 @@ function isHan(ch) {
   return HAN.test(ch);
 }
 
+// Aspect/mood particles that carry no lexical meaning. Convert renders them as
+// dead phonetic syllables ("了"→"liễu", "着"→"trước") that break the reading;
+// dropping a standalone one is safe because any real phrase containing it is
+// matched by the trie first and wins before we reach this fallback.
+const DROP_TOKENS = new Set([
+  "了", "着", "呢", "吗", "吧", "啊", "呀", "嘛", "哦", "嗯",
+  "唉", "呗", "咯", "喽", "啦", "哟", "喔", "唔", "呐", "哈"
+]);
+
 // Full-width Chinese punctuation -> { text, side }. `side` drives spacing:
 //   "close" hugs the word on its left and takes a space after  (， 。 ！ ？)
 //   "open"  takes a space before and hugs the word on its right (opening quote/bracket)
@@ -133,7 +142,13 @@ function createConvertEngine({
         continue;
       }
 
-      // 2. Single Han character -> phonetic fallback (unknown Han passes through).
+      // 2. Grammatical particle with no lexical meaning -> drop it entirely.
+      if (DROP_TOKENS.has(ch)) {
+        i += 1;
+        continue;
+      }
+
+      // 3. Single Han character -> phonetic fallback (unknown Han passes through).
       if (isHan(ch)) {
         const entry = hanvietChars[ch];
         tokens.push({ t: "w", s: entry ? entry.hv : ch });

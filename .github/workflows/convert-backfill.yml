@@ -13,6 +13,10 @@ on:
       book:
         description: "Chỉ backfill một bookId (để trống = toàn bộ thư viện)"
         required: false
+      force:
+        description: "Convert lại cả chương đã convert (áp bản chuẩn hóa mới). Không đụng chương đã dịch LLM."
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -49,3 +53,4 @@ jobs:
           node scripts/convert-backfill.js
           --all --commit
           ${{ github.event.inputs.book && format('--book {0}', github.event.inputs.book) || '' }}
+          ${{ github.event.inputs.force == 'true' && '--force' || '' }}

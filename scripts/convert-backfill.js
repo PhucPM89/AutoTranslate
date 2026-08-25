@@ -78,7 +78,7 @@ async function listBookIds(storage, only) {
     .map((o) => o.key.slice("jobs/".length, -"/translation.json".length));
 }
 
-async function backfillBook(storage, convert, bookId, { commit }) {
+async function backfillBook(storage, convert, bookId, { commit, force }) {
   const state = await readJson(storage, jobStateKey(bookId));
   if (!state || !Array.isArray(state.chapters)) {
     return { bookId, skipped: "no job state", converted: 0, pending: 0 };
@@ -98,9 +98,12 @@ async function backfillBook(storage, convert, bookId, { commit }) {
   await pool(candidates, async (entry) => {
     const n = entry.n;
     const published = await readJson(storage, chapterKey(bookId, revision, n));
-    // Already convert or completed on storage — nothing to do.
-    if (published && (published.translationStatus === "convert" || published.translationStatus === "completed")) {
-      return;
+    // Completed LLM chapters are never touched. A chapter already in "convert"
+    // is re-converted only with --force (e.g. after the normalization rules
+    // improve), so an ordinary run stays cheap and idempotent.
+    if (published) {
+      if (published.translationStatus === "completed") return;
+      if (published.translationStatus === "convert" && !force) return;
     }
     const source = await readJson(storage, originalKey(bookId, revision, n));
     if (!source || !source.content) {
@@ -138,6 +141,7 @@ async function main() {
   const only = flagValue("--book");
   const all = flag("--all");
   const commit = flag("--commit");
+  const force = flag("--force");
   if (!only && !all) {
     console.error("Dùng: --all  hoặc  --book <id>   (thêm --commit để ghi thật; mặc định chỉ xem trước)");
     process.exit(1);
@@ -155,7 +159,7 @@ async function main() {
 
   let totalConverted = 0;
   for (const bookId of bookIds) {
-    const r = await backfillBook(storage, convert, bookId, { commit });
+    const r = await backfillBook(storage, convert, bookId, { commit, force });
     totalConverted += r.converted || 0;
     if (r.skipped) {
       console.log(`  ${bookId}: bỏ qua (${r.skipped})`);

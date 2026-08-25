@@ -1,0 +1,57 @@
+# Single-char normalization overrides — loaded AFTER hanviet-chars.txt so these
+# win. Pronouns, demonstratives and the possessive particle leak as meaningless
+# phonetics (他→"tha", 那→"Na", 的→"đích") when no phrase covers them; these are
+# the biggest readability killers, and they are context-free enough to override.
+他=hắn
+她=nàng
+它=nó
+我=ta
+你=ngươi
+您=ngài
+咱=ta
+俺=ta
+谁=ai
+这=này
+那=kia
+的=của
+是=là
+不=không
+也=cũng
+都=đều
+很=rất
+就=liền
+还=còn
+又=lại
+和=và
+与=và
+但=nhưng
+而=mà
+把=đem
+被=bị
+让=khiến
+在=ở
+到=đến
+从=từ
+向=hướng
+往=về phía
+给=cho
+对=với
+跟=cùng
+为=vì
+因=vì
+所=nên
+如=như
+若=nếu
+才=mới
+再=lại
+更=càng
+最=nhất
+太=quá
+去=đi
+来=tới
+说=nói
+想=nghĩ
+看=nhìn
+听=nghe
+问=hỏi
+道=nói
