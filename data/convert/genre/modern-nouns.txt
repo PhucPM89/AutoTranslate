@@ -1,0 +1,46 @@
+# Modern-setting noun readings. Applied ONLY to modern genres (Đô thị, Linh dị,
+# Kinh dị, Trinh thám, Mạt thế, Khoa huyễn, Võng du) — NOT to cultivation
+# (Tiên hiệp, Huyền huyễn), where 门 is "môn phái" and 刀 is the weapon "đao".
+# Single-char everyday objects the base table renders as archaic Hán-Việt.
+门=cửa
+窗=cửa sổ
+床=giường
+桌=bàn
+椅=ghế
+碗=bát
+筷=đũa
+杯=cốc
+锅=nồi
+盆=chậu
+瓶=chai
+刀=dao
+叉=nĩa
+勺=thìa
+伞=ô
+鞋=giày
+帽=mũ
+裤=quần
+袜=tất
+裙=váy
+灯=đèn
+镜=gương
+梳=lược
+钥=chìa khóa
+锁=khóa
+饭=cơm
+菜=món ăn
+肉=thịt
+蛋=trứng
+盐=muối
+糖=đường
+车=xe
+房=nhà
+楼=tòa nhà
+店=cửa hàng
+桥=cầu
+墙=tường
+狗=chó
+猫=mèo
+猪=heo
+鸡=gà
+鸭=vịt

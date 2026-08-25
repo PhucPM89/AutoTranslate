@@ -37,7 +37,7 @@ loadEnvFile(path.join(__dirname, "..", ".env.local"));
 const { createStorage } = require("../server/storage");
 const { buildChapterDocument, chapterKey, originalKey } = require("../server/ingest/documents");
 const { jobStateKey } = require("../server/ingest/translation-queue");
-const { buildConvertEngineFromDisk, mineBookNames, CONVERT_VERSION } = require("../server/convert");
+const { buildConvertEngineFromDisk, mineBookNames, isCultivationGenre, CONVERT_VERSION } = require("../server/convert");
 
 // How many of a book's chapters to read for name mining. The cast shows up early
 // and often, so a sample is enough and keeps the extra R2 reads bounded.
@@ -110,7 +110,11 @@ async function backfillBook(storage, bookId, { commit, force }) {
     if (src && src.content) sample.push(src.content);
   }
   const nameGlossary = sample.length ? mineBookNames(sample) : {};
-  const engine = buildConvertEngineFromDisk(process.env, { nameGlossary });
+  // Genre decides everyday-noun realization: a modern book reads 门 as "cửa", a
+  // cultivation one keeps "môn". The genre lives on the published book index.
+  const index = await readJson(storage, `books/${bookId}/index.json`);
+  const modern = !isCultivationGenre(index && index.genre);
+  const engine = buildConvertEngineFromDisk(process.env, { nameGlossary, modern });
   const nameCount = Object.keys(nameGlossary).length;
 
   let converted = 0;

@@ -12,8 +12,8 @@ const { mineNames } = require("./name-mining");
 // chapters should be re-rendered. The backfill re-converts any "convert" chapter
 // stamped with an older version, so a full re-pass resumes across runs instead of
 // restarting from the top. 1 = pre-grammar; 2 = normalization + grammar layers;
-// 3 = name mining; 4 = name-locked segmentation; 5 = natural verbs + constructions; 6 = surname-scan-first mining; 7 = everyday adjective readings.
-const CONVERT_VERSION = 7;
+// 3 = name mining; 4 = name-locked segmentation; 5 = natural verbs + constructions; 6 = surname-scan-first mining; 7 = adjectives; 8 = genre-aware modern nouns.
+const CONVERT_VERSION = 8;
 
 const DEFAULT_HANVIET = path.join("data", "convert", "hanviet-chars.txt");
 const DEFAULT_PHRASE_DIR = path.join("data", "convert", "phrases");
@@ -21,6 +21,17 @@ const DEFAULT_PHRASE_DIR = path.join("data", "convert", "phrases");
 const OVERRIDE_CHARS = path.join("data", "convert", "overrides-chars.txt");
 const OVERRIDE_PHRASES = path.join("data", "convert", "overrides-phrases.txt");
 const PHRASE_BLOCKLIST = path.join("data", "convert", "phrase-blocklist.txt");
+const MODERN_NOUNS = path.join("data", "convert", "genre", "modern-nouns.txt");
+
+// Genres set in a cultivation/classical world, where everyday characters keep
+// their Hán-Việt reading (门 = "môn phái", 刀 = the weapon "đao"). Everything else
+// (Đô thị, Linh dị, Trinh thám, Mạt thế, Khoa huyễn, Võng du…) is modern enough
+// that those nouns read more naturally by meaning.
+const CULTIVATION_GENRES = ["tiên hiệp", "huyền huyễn", "kiếm hiệp", "tu tiên", "tiên hiệp huyền huyễn"];
+function isCultivationGenre(genre) {
+  const g = String(genre || "").toLowerCase();
+  return CULTIVATION_GENRES.some((c) => g.includes(c));
+}
 
 // Pronouns never sit inside a mined given name (顺他), so they seed the reject set
 // together with the function-word and verb tables.
@@ -49,7 +60,9 @@ function loadBase(env = process.env) {
   const phraseDict = loadPhraseDict([...phraseFiles, OVERRIDE_PHRASES]);
   for (const zh of readSet(PHRASE_BLOCKLIST)) delete phraseDict[zh];
   const lexicon = loadLexicon();
-  base = { hanvietChars, phraseDict, lexicon };
+  // Modern-genre single-char overrides, loaded once and applied per book.
+  const modernNouns = loadHanvietChars([MODERN_NOUNS]);
+  base = { hanvietChars, phraseDict, lexicon, modernNouns };
   return base;
 }
 
@@ -57,13 +70,16 @@ function loadBase(env = process.env) {
 // of the phrase dictionary so a book's characters read identically everywhere,
 // overriding the junk bigrams that shadow them (郑海 vs 郑海冰). Returns null when
 // no single-char table is available, so callers can fall back to raw source.
-function buildConvertEngineFromDisk(env = process.env, { nameGlossary = null } = {}) {
+function buildConvertEngineFromDisk(env = process.env, { nameGlossary = null, modern = false } = {}) {
   const b = loadBase(env);
   if (!b) return null;
+  // A modern-genre book reads everyday nouns by meaning (门 "cửa"); a cultivation
+  // book keeps the Hán-Việt table untouched.
+  const hanvietChars = modern ? { ...b.hanvietChars, ...b.modernNouns } : b.hanvietChars;
   // The engine merges the glossary into its phrase dictionary AND locks
   // segmentation around the names, so pass it through rather than pre-merging.
   return createConvertEngine({
-    phraseDict: b.phraseDict, hanvietChars: b.hanvietChars, lexicon: b.lexicon, nameGlossary
+    phraseDict: b.phraseDict, hanvietChars, lexicon: b.lexicon, nameGlossary
   });
 }
 
@@ -104,6 +120,6 @@ function getConvertFunction(env = process.env) {
 }
 
 module.exports = {
-  buildConvertEngineFromDisk, getConvertFunction, mineBookNames,
+  buildConvertEngineFromDisk, getConvertFunction, mineBookNames, isCultivationGenre,
   defaultPhraseFiles, CONVERT_VERSION
 };
