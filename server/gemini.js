@@ -711,9 +711,13 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
   const earliestCooldown = readyKeysRemaining > 0
     ? Date.now() + 2000
     : futureCooldowns.length ? Math.min(...futureCooldowns) : Date.now() + 30000;
-  const err = lastError || new Error("Tất cả các API key đều đang trong thời gian chờ hoặc hết hạn mức.");
+  // Build a FRESH error rather than mutating lastError: a native fetch/undici
+  // error can have a read-only `code` getter, and assigning to it threw
+  // "Cannot set property code", masking the real cause and killing the run.
+  const err = new Error(lastError ? String(lastError.message || lastError) : "Tất cả các API key đều đang trong thời gian chờ hoặc hết hạn mức.");
   err.earliestCooldown = earliestCooldown;
-  err.code = err.code || "key_pool_slice_exhausted";
+  err.code = (lastError && lastError.code) || "key_pool_slice_exhausted";
+  if (lastError && lastError.status) err.status = lastError.status;
   throw err;
 }
 
@@ -949,6 +953,13 @@ async function translateWithGemini(apiKey, model, prompt, generationConfig = {})
           generationConfig: {
             temperature: generationConfig.temperature ?? 0.2,
             maxOutputTokens: generationConfig.maxTokens || 8192,
+            // Gemini 2.5/3.x "flash" models think by default, and the reasoning
+            // is billed against maxOutputTokens — it ate the whole budget and the
+            // translation came back truncated (finishReason MAX_TOKENS), which
+            // the worker then retried forever. gemini-3.6-flash rejects a budget
+            // of 0 (400 invalid argument), so cap thinking at a small value: just
+            // enough to stay valid, leaving the budget for the translation text.
+            thinkingConfig: { thinkingBudget: 128 },
             ...(generationConfig.responseFormat === "json" ? { responseMimeType: "application/json" } : {})
           }
         })
