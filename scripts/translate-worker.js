@@ -131,21 +131,16 @@ async function main() {
   } catch {}
 
   const envKeys = [
-    process.env.CLOUDFLARE_AI_TOKEN,
-    process.env.CLOUDFLARE_AI_KEYS,
-    process.env.CLOUDFLARE_API_TOKEN,
     process.env.GEMINI_API_KEYS,
     process.env.GEMINI_API_KEY,
     process.env.GROQ_API_KEYS,
     process.env.GROQ_API_KEY,
   ].filter(Boolean).flatMap(k => parseApiKeys(k));
 
-  const allowCloudflare = process.env.TRANSLATE_ALLOW_CLOUDFLARE === "true";
   const allUniqueKeys = Array.from(new Set([...keyList, ...envKeys]))
     .filter(Boolean)
-    .filter((key) => allowCloudflare || !isCloudflareTranslationKey(key))
     .sort((a, b) => translationKeyPriority(a) - translationKeyPriority(b));
-  if (!allUniqueKeys.length) throw new Error("Thiếu API Keys (Cloudflare AI / Gemini / Groq).");
+  if (!allUniqueKeys.length) throw new Error("Thiếu API Keys (Gemini / Groq).");
   importKeyPoolState(await readJson(storage, TRANSLATE_KEY_HEALTH_KEY), allUniqueKeys);
   const persistKeyHealth = () => storage.put(
     TRANSLATE_KEY_HEALTH_KEY,
@@ -571,18 +566,12 @@ async function main() {
   console.log(`\nXong: dịch ${translatedTotal} chương, dùng ${spentTotal} lượt gọi.${reason}`);
 }
 
-function isCloudflareTranslationKey(key) {
-  const value = String(key || "");
-  return value.startsWith("cf_") || value.startsWith("cfut_") || value.includes(":") || value.includes("@");
-}
-
 function translationKeyPriority(key) {
   const value = String(key || "");
   // Gemini first: it produces the fluent sample translations and its free tier
   // is far less rate-limited per request than Groq, whose aggressive free limits
   // on a full-chapter chunk tripped the quota circuit and stalled every run.
-  // Groq (gsk_) is the fallback; Cloudflare last.
-  if (isCloudflareTranslationKey(value)) return 3;
+  // Groq (gsk_) is the fallback.
   if (value.startsWith("gsk_")) return 2;
   return 0; // Gemini (AIza / AQ.)
 }

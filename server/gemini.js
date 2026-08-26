@@ -34,18 +34,6 @@ function sanitizeGroqModel(model) {
   return model;
 }
 
-function isCloudflareKey(apiKey) {
-  if (typeof apiKey !== "string") return false;
-  return (
-    apiKey.includes(":") ||
-    apiKey.includes("@") ||
-    apiKey.startsWith("cfut_") ||
-    apiKey.startsWith("cf_") ||
-    apiKey.includes("cfut_") ||
-    apiKey.includes("cf_")
-  );
-}
-
 function getModelsForApiKey(apiKey) {
   if (typeof apiKey !== "string") return [GROQ_MODEL, ...GROQ_FALLBACK_MODELS];
   if (apiKey.startsWith("gsk_")) {
@@ -53,14 +41,6 @@ function getModelsForApiKey(apiKey) {
     const primary = sanitizeGroqModel(rawPrimary);
     const fallbacks = parseCsv(process.env.GROQ_FALLBACK_MODELS || "openai/gpt-oss-120b")
       .filter((m) => m && !DEPRECATED_GROQ_MODELS.has(m));
-    return [primary, ...fallbacks].filter((m, i, l) => m && l.indexOf(m) === i);
-  }
-  if (isCloudflareKey(apiKey)) {
-    const primary = process.env.CLOUDFLARE_AI_MODEL || "@cf/meta/llama-3.1-8b-instruct";
-    const fallbacks = parseCsv(
-      process.env.CLOUDFLARE_AI_FALLBACK_MODELS ||
-        "@cf/meta/llama-3.1-70b-instruct,@cf/deepseek-ai/deepseek-r1-distill-qwen-32b"
-    );
     return [primary, ...fallbacks].filter((m, i, l) => m && l.indexOf(m) === i);
   }
   const primary = process.env.GEMINI_MODEL || "gemini-2.5-flash";
@@ -398,13 +378,6 @@ function getKeyHealth(key) {
 
 function parseGroqRetryDurationMs(errorMsg) {
   if (!errorMsg || typeof errorMsg !== "string") return 60000;
-  if (
-    errorMsg.includes("daily free allocation") ||
-    errorMsg.includes("10,000 neurons") ||
-    errorMsg.includes("neurons")
-  ) {
-    return 12 * 3600 * 1000; // 12 hours for Cloudflare daily neurons quota
-  }
   // Match "Please retry in 58.09s" (Gemini) or "Please try again in 3m50.688s" (Groq)
   const match = errorMsg.match(/(?:try again in|retry in)\s+(?:(\d+)h)?(?:(\d+)m)?(\d+(?:\.\d+)?)s/i);
   if (match) {
@@ -478,7 +451,7 @@ function computeQuotaRecovery(error, apiKey, now = Date.now()) {
   const message = String(error?.message || error || "");
   const quotaClass = classifyQuotaError(message);
   const providerWait = Math.max(0, Number(error?.retryAfterMs || 0), parseGroqRetryDurationMs(message));
-  const isGemini = !String(apiKey || "").startsWith("gsk_") && !isCloudflareKey(apiKey);
+  const isGemini = !String(apiKey || "").startsWith("gsk_");
 
   if (quotaClass === "daily") {
     const fullResetWait = isGemini
@@ -765,81 +738,11 @@ function reserveKeyOrder(keyList) {
 
 async function translateChunkWithModel(apiKey, model, prompt, generationConfig = {}) {
   const isGroq = apiKey.startsWith("gsk_");
-  const isCloudflare = isCloudflareKey(apiKey);
 
   if (isGroq) {
     return translateWithGroq(apiKey, model, prompt, generationConfig);
-  } else if (isCloudflare) {
-    return translateWithCloudflareWorkersAi(apiKey, model, prompt, generationConfig);
   } else {
     return translateWithGemini(apiKey, model, prompt, generationConfig);
-  }
-}
-
-async function translateWithCloudflareWorkersAi(apiKey, model, prompt, generationConfig = {}) {
-  let token = apiKey;
-  let accountId = process.env.CLOUDFLARE_ACCOUNT_ID || process.env.R2_ACCOUNT_ID || "aa644d98f2377007f0fa98abcafe3d21";
-
-  if (typeof apiKey === "string") {
-    if (apiKey.includes(":")) {
-      const parts = apiKey.split(":");
-      if (parts[0].startsWith("cfut_") || parts[0].startsWith("cf_")) {
-        token = parts[0];
-        accountId = parts[1];
-      } else {
-        accountId = parts[0];
-        token = parts[1];
-      }
-    } else if (apiKey.includes("@")) {
-      const parts = apiKey.split("@");
-      token = parts[0];
-      accountId = parts[1];
-    }
-  }
-
-  const cfModel = model && model.startsWith("@cf/") ? model : "@cf/meta/llama-3.1-8b-instruct";
-  const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/run/${cfModel}`;
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token.trim()}`,
-        "Content-Type": "application/json"
-      },
-      signal: controller.signal,
-      body: JSON.stringify({
-        messages: [
-          {
-            role: "system",
-            content:
-              "Bạn là dịch giả văn học mạng Trung - Việt xuất sắc nhất. Dịch nguyên văn 1:1, đầy đủ 100% từng câu từng chữ, tuyệt đối KHÔNG tóm tắt, KHÔNG lược bỏ bất kỳ câu thoại hay tình tiết nào. Giữ nguyên cấu trúc các đoạn văn."
-          },
-          { role: "user", content: prompt }
-        ],
-        max_tokens: generationConfig.maxTokens || 4096
-      })
-    });
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      const errMsg = Array.isArray(data?.errors) ? data.errors.map((e) => e.message).join(", ") : "Cloudflare AI lỗi.";
-      const message = `${errMsg} [Key: ${token.slice(0, 10)}...] (Status: ${response.status})`;
-      const error = new Error(message);
-      error.status = response.status;
-      error.model = cfModel;
-      throw error;
-    }
-
-    let text = data?.result?.response || "";
-    text = stripThinkTags(text);
-    text = stripMarkdown(text);
-    return { text: text.trim(), model: cfModel, usage: null };
-  } finally {
-    clearTimeout(timeout);
   }
 }
 
