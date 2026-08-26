@@ -67,6 +67,10 @@ const LITERARY_REPLACEMENTS = [
   { pattern: /\btrong nháy mắt đó\b/gi, replacement: "ngay trong khoảnh khắc đó" }
 ];
 
+const { polishActionProse } = require("./action-stylist");
+const { restructureSyntax } = require("./syntactic-restructurer");
+const { enhanceSensoryImagery } = require("./sensory-enhancer");
+
 /**
  * Polish and naturalize text.
  * @param {string} text
@@ -76,6 +80,15 @@ function polishLiteraryProse(text) {
   if (!text || typeof text !== "string") return "";
 
   let result = text;
+
+  // Apply syntactic restructurer (reorder inverted clauses)
+  result = restructureSyntax(result);
+
+  // Apply martial action stylist
+  result = polishActionProse(result);
+
+  // Apply sensory & atmospheric imagery enhancer
+  result = enhanceSensoryImagery(result);
 
   // Apply literary prose patterns
   for (const { pattern, replacement } of LITERARY_REPLACEMENTS) {

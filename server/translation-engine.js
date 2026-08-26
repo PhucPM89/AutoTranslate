@@ -12,6 +12,7 @@ const { polishLiteraryProse } = require("./convert/literary-stylist");
 const { mineNovelGlossary } = require("./glossary-miner");
 const { classifyScene, getScenePronounInstruction } = require("./convert/relationship-matrix");
 const { findMatchedIdioms } = require("./convert/idiom-adapter");
+const { detectPersonas, formatPersonaPrompt } = require("./convert/persona-modulator");
 const { reflectAndPolish } = require("./reflection-engine");
 
 const GLOSSARY_PREFIX = "glossary";
@@ -153,6 +154,9 @@ function createTranslationEngine({ storage = null } = {}) {
     const scene = classifyScene(text);
     const sceneInstruction = getScenePronounInstruction(scene);
 
+    const personas = detectPersonas(text);
+    const personaInstruction = formatPersonaPrompt(personas);
+
     const chunkNote =
       total > 1
         ? `Đây là phần ${index + 1}/${total} của cùng một chương. Hãy chỉ dịch phần này, không thêm tiêu đề phần.`
@@ -173,6 +177,7 @@ function createTranslationEngine({ storage = null } = {}) {
       bookTitle ? `Tác phẩm: ${sanitizeContentSafety(bookTitle)}` : "",
       "",
       sceneInstruction ? sceneInstruction + "\n" : "",
+      personaInstruction ? personaInstruction + "\n" : "",
       "QUY TẮC BẮT BUỘC ĐỂ ĐẢM BẢO CHẤT LƯỢNG:",
       "1. NGUYÊN VĂN 1:1 - TUYỆT ĐỐI KHÔNG TÓM TẮT:",
       "   - Dịch đầy đủ 100% từng câu, từng chữ, từng lời thoại và từng đoạn miêu tả.",
