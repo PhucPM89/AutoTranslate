@@ -428,17 +428,21 @@ function parseGroqRetryDurationMs(errorMsg) {
 
 function classifyQuotaError(errorMsg) {
   const message = String(errorMsg || "").toLowerCase();
-  // Transient server-side hiccups (503/500) are NOT quota exhaustion — the model
-  // is momentarily busy and recovers in seconds. Treating them as a daily quota
-  // hit cooled every key for 24 hours and stalled the whole worker.
-  if (/high demand|overloaded|unavailable|try again|temporarily|internal error|\b50[03]\b|resource has been exhausted.*(?:try|retry)/.test(message)) {
-    return "transient";
-  }
+  // Day/minute limits are matched first, by their explicit dimension words, so a
+  // "TPD ... try again" message reads as daily rather than being mistaken for a
+  // transient hiccup below.
   if (/\b(tpd|rpd)\b|tokens? per day|requests? per day|per-day|daily (?:free )?(?:allocation|quota|limit)|neurons/.test(message)) {
     return "daily";
   }
   if (/\b(tpm|rpm|itpm|otpm)\b|tokens? per minute|requests? per minute|per-minute/.test(message)) {
     return "minute";
+  }
+  // Transient server-side hiccups (503/500, "high demand", overloaded) are NOT
+  // quota exhaustion — the model is momentarily busy and recovers in seconds.
+  // Treating them as a daily quota hit cooled every key for 24 hours and stalled
+  // the whole worker. Kept specific so it never swallows a real quota message.
+  if (/high demand|overloaded|temporarily unavailable|service unavailable|internal error|\b50[03]\b/.test(message)) {
+    return "transient";
   }
   return "quota";
 }
