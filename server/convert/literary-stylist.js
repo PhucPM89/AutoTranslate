@@ -78,6 +78,10 @@ const { naturalizeChronology } = require("./chronology-adapter");
 const { normalizeTitleHierarchy } = require("./title-hierarchy");
 const { escalateDramaticProse } = require("./dramatic-escalator");
 const { adaptUrbanSlang } = require("./urban-slang-adapter");
+const { polishAlchemyProse } = require("./alchemy-stylist");
+const { polishDaoistArrayProse } = require("./daoist-array-stylist");
+const { polishBestiaryProse } = require("./bestiary-stylist");
+const { polishBeautyProse } = require("./courtly-beauty-stylist");
 
 /**
  * Polish and naturalize text.
@@ -100,6 +104,18 @@ function polishLiteraryProse(text) {
 
   // Apply martial action stylist
   result = polishActionProse(result);
+
+  // Apply alchemy & artifact crafting stylist
+  result = polishAlchemyProse(result);
+
+  // Apply daoist array & talismanic stylist
+  result = polishDaoistArrayProse(result);
+
+  // Apply mythical bestiary & demonic stylist
+  result = polishBestiaryProse(result);
+
+  // Apply aesthetic beauty & courtly grace stylist
+  result = polishBeautyProse(result);
 
   // Apply dramatic climax & pathos escalator
   result = escalateDramaticProse(result);
