@@ -155,6 +155,16 @@ function summarizeKeyPool(keyList) {
   return summarizeKeyStats(getKeyPoolStats(keyList));
 }
 
+function sanitizeStatusError(value) {
+  return String(value || "")
+    .replace(/organization\s+`[^`]+`/gi, "organization")
+    .replace(/\b(?:org|user|project)_[A-Za-z0-9_-]+\b/g, "[redacted]")
+    .replace(/https?:\/\/\S+/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 300);
+}
+
 async function main() {
   const storage = createStorage();
 
@@ -406,7 +416,7 @@ async function main() {
               lastSuccessAt = new Date().toISOString();
               lastSuccessfulChapter = chapter;
             }
-            if (lastError) lastRunError = String(lastError).slice(0, 300);
+            if (lastError) lastRunError = sanitizeStatusError(lastError);
             const activityState = readyKeyCount === 0 && status !== "completed"
               ? "waiting_quota"
               : status === "translating"
@@ -448,7 +458,7 @@ async function main() {
               lastAttemptAt: new Date().toISOString(),
               lastSuccessAt,
               lastSuccessfulChapter,
-              lastError: String(lastError || "").slice(0, 300),
+              lastError: sanitizeStatusError(lastError),
               recentActivity,
               message: `${activityMessage} Tiến độ thật ${completed}/${total}; phiên này +${currentTotalSession} chương.`,
               queue: queue.map((j) => {
@@ -760,7 +770,14 @@ async function readJson(storage, key) {
   }
 }
 
-module.exports = { listJobs, refreshBookOutputs, ensureBookRow, bookOutputsNeedRefresh, summarizeKeyStats };
+module.exports = {
+  listJobs,
+  refreshBookOutputs,
+  ensureBookRow,
+  bookOutputsNeedRefresh,
+  summarizeKeyStats,
+  sanitizeStatusError
+};
 
 if (require.main === module) {
   main().catch((error) => {

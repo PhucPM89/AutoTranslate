@@ -539,6 +539,16 @@ test("translation key health summary separates dead, daily and temporary cooldow
   assert.equal(Object.hasOwn(summary, "keyStates"), false, "public status must not expose key fingerprints");
 });
 
+test("translation status errors keep the diagnosis but remove provider identifiers and links", () => {
+  const { sanitizeStatusError } = require("../scripts/translate-worker");
+  const clean = sanitizeStatusError(
+    "Rate limit for organization `org_01secret` on tokens per day. Upgrade at https://console.example.com/settings"
+  );
+
+  assert.match(clean, /Rate limit.*tokens per day/);
+  assert.doesNotMatch(clean, /org_01secret|https?:\/\//);
+});
+
 test("translation progress reports real batch activity, attempts and errors", async () => {
   const state = createJobState({
     bookId: "progress-details",
