@@ -428,6 +428,12 @@ function parseGroqRetryDurationMs(errorMsg) {
 
 function classifyQuotaError(errorMsg) {
   const message = String(errorMsg || "").toLowerCase();
+  // Transient server-side hiccups (503/500) are NOT quota exhaustion — the model
+  // is momentarily busy and recovers in seconds. Treating them as a daily quota
+  // hit cooled every key for 24 hours and stalled the whole worker.
+  if (/high demand|overloaded|unavailable|try again|temporarily|internal error|\b50[03]\b|resource has been exhausted.*(?:try|retry)/.test(message)) {
+    return "transient";
+  }
   if (/\b(tpd|rpd)\b|tokens? per day|requests? per day|per-day|daily (?:free )?(?:allocation|quota|limit)|neurons/.test(message)) {
     return "daily";
   }
@@ -478,6 +484,11 @@ function computeQuotaRecovery(error, apiKey, now = Date.now()) {
   }
   if (quotaClass === "minute") {
     return { quotaClass, durationMs: Math.max(providerWait, MINUTE_QUOTA_RECOVERY_MS) + 30_000, policy: "wait_full_minute_window" };
+  }
+  if (quotaClass === "transient") {
+    // A busy model, not an exhausted key: back off briefly and try again, so one
+    // 503 does not sideline the key for a day.
+    return { quotaClass, durationMs: Math.max(providerWait, 45_000), policy: "retry_after_transient" };
   }
 
   // If the provider omits the exhausted dimension, guessing a short window can
