@@ -578,9 +578,13 @@ function isCloudflareTranslationKey(key) {
 
 function translationKeyPriority(key) {
   const value = String(key || "");
-  if (value.startsWith("gsk_")) return 0;
+  // Gemini first: it produces the fluent sample translations and its free tier
+  // is far less rate-limited per request than Groq, whose aggressive free limits
+  // on a full-chapter chunk tripped the quota circuit and stalled every run.
+  // Groq (gsk_) is the fallback; Cloudflare last.
   if (isCloudflareTranslationKey(value)) return 3;
-  return 2;
+  if (value.startsWith("gsk_")) return 2;
+  return 0; // Gemini (AIza / AQ.)
 }
 
 async function listJobs(storage, onlyBook) {
