@@ -70,6 +70,10 @@ const LITERARY_REPLACEMENTS = [
 const { polishActionProse } = require("./action-stylist");
 const { restructureSyntax } = require("./syntactic-restructurer");
 const { enhanceSensoryImagery } = require("./sensory-enhancer");
+const { versifyClassicalChants } = require("./chant-versifier");
+const { refineInnerMonologue } = require("./monologue-refiner");
+const { naturalizeSoundscapes } = require("./soundscape-adapter");
+const { adaptSatiricalBanter } = require("./banter-adapter");
 
 /**
  * Polish and naturalize text.
@@ -89,6 +93,18 @@ function polishLiteraryProse(text) {
 
   // Apply sensory & atmospheric imagery enhancer
   result = enhanceSensoryImagery(result);
+
+  // Apply soundscape & onomatopoeia naturalizer
+  result = naturalizeSoundscapes(result);
+
+  // Apply inner monologue refiner
+  result = refineInnerMonologue(result);
+
+  // Apply satirical banter adapter
+  result = adaptSatiricalBanter(result);
+
+  // Apply poetry & chant versifier
+  result = versifyClassicalChants(result);
 
   // Apply literary prose patterns
   for (const { pattern, replacement } of LITERARY_REPLACEMENTS) {
