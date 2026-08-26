@@ -98,6 +98,10 @@ const { polishMadnessProse } = require("./madness-stylist");
 const { polishSwordProse } = require("./sword-spirit-stylist");
 const { polishKarmaProse } = require("./karma-stylist");
 const { polishMantraProse } = require("./mantra-stylist");
+const { polishMusicalProse } = require("./musical-dao-stylist");
+const { polishChessProse } = require("./cosmic-chess-stylist");
+const { polishZenProse } = require("./zen-tea-stylist");
+const { polishSoulTokenProse } = require("./soul-token-stylist");
 
 /**
  * Polish and naturalize text.
@@ -120,6 +124,18 @@ function polishLiteraryProse(text) {
 
   // Apply time skips & transcendence stylist
   result = polishTranscendenceProse(result);
+
+  // Apply soul token & life-lamp stylist
+  result = polishSoulTokenProse(result);
+
+  // Apply zen tea & enlightenment stylist
+  result = polishZenProse(result);
+
+  // Apply cosmic chess & fate board stylist
+  result = polishChessProse(result);
+
+  // Apply musical dao & zither stylist
+  result = polishMusicalProse(result);
 
   // Apply karma & destiny stylist
   result = polishKarmaProse(result);
