@@ -12,6 +12,7 @@ const { polishLiteraryProse } = require("./convert/literary-stylist");
 const { mineNovelGlossary } = require("./glossary-miner");
 const { classifyScene, getScenePronounInstruction } = require("./convert/relationship-matrix");
 const { findMatchedIdioms } = require("./convert/idiom-adapter");
+const { reflectAndPolish } = require("./reflection-engine");
 
 const GLOSSARY_PREFIX = "glossary";
 const TM_GLOBAL_KEY = "tm/global.json";
@@ -231,7 +232,8 @@ function createTranslationEngine({ storage = null } = {}) {
       }
     }
 
-    return polishLiteraryProse(clean);
+    const { text: polished } = reflectAndPolish(clean, { glossary });
+    return polished;
   }
 
   return {
