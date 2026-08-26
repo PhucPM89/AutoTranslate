@@ -82,6 +82,10 @@ const { polishAlchemyProse } = require("./alchemy-stylist");
 const { polishDaoistArrayProse } = require("./daoist-array-stylist");
 const { polishBestiaryProse } = require("./bestiary-stylist");
 const { polishBeautyProse } = require("./courtly-beauty-stylist");
+const { polishTribulationProse } = require("./tribulation-stylist");
+const { polishTopographyProse } = require("./topography-stylist");
+const { polishDivineSenseProse } = require("./divine-sense-stylist");
+const { polishInscriptProse } = require("./inscript-stylist");
 
 /**
  * Polish and naturalize text.
@@ -101,6 +105,18 @@ function polishLiteraryProse(text) {
 
   // Apply title & peerage hierarchy modulator
   result = normalizeTitleHierarchy(result);
+
+  // Apply topography & sacred grounds stylist
+  result = polishTopographyProse(result);
+
+  // Apply divine sense & soul force stylist
+  result = polishDivineSenseProse(result);
+
+  // Apply ancient inscriptions & jade slip stylist
+  result = polishInscriptProse(result);
+
+  // Apply tribulation & breakthrough stylist
+  result = polishTribulationProse(result);
 
   // Apply martial action stylist
   result = polishActionProse(result);
