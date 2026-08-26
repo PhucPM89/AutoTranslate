@@ -703,6 +703,18 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
     }
   }
 
+  // The key slice is exhausted. If the only thing wrong was a few residual Han
+  // characters in an otherwise complete translation (repair could not clear a
+  // rare glyph), publish that near-complete candidate rather than failing the
+  // chunk — which made the chapter retry the whole pool over and over (13+
+  // attempts, burning quota, never publishing).
+  if (residualHanCandidate) {
+    const stats = getScriptStats(residualHanCandidate);
+    if (stats.han > 0 && stats.han <= 8) {
+      return { text: residualHanCandidate, model: "residual-han-accepted", usage: {} };
+    }
+  }
+
   // If initial pass failed, check if any key is nearing cooldown reset
   const futureCooldowns = keyList
     .map((key) => getKeyHealth(key).cooldownUntil)
@@ -1022,7 +1034,10 @@ function assessTranslation(source, translation) {
   const sourceIsChinese = sourceStats.han >= 20 && sourceStats.hanRatio >= 0.3;
   if (!sourceIsChinese) return { acceptable: true };
 
-  // 1. Kiểm tra sót chữ Hán (Nghiêm ngặt: không được sót chữ Hán trong bản dịch)
+  // 1. Kiểm tra sót chữ Hán (Nghiêm ngặt: không được sót chữ Hán trong bản dịch).
+  //    Strict on purpose so a residual triggers the focused repair pass; the
+  //    retry loop below accepts a near-complete candidate rather than looping
+  //    forever when repair cannot clear the last stray glyphs.
   if (outputStats.han > 0) {
     return { acceptable: false, reason: "vẫn còn sót chữ Hán chưa được chuyển ngữ" };
   }
