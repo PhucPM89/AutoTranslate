@@ -968,10 +968,11 @@ async function translateWithGemini(apiKey, model, prompt, generationConfig = {})
             // Gemini 2.5/3.x "flash" models think by default, and the reasoning
             // is billed against maxOutputTokens — it ate the whole budget and the
             // translation came back truncated (finishReason MAX_TOKENS), which
-            // the worker then retried forever. gemini-3.6-flash rejects a budget
+            // the worker then retried forever. gemini-3.6-flash rejects a budget of 0; a moderate budget avoids both
+            // MAX_TOKENS truncation and the degenerate repetition a tiny budget caused. Old note: it rejects a budget
             // of 0 (400 invalid argument), so cap thinking at a small value: just
             // enough to stay valid, leaving the budget for the translation text.
-            thinkingConfig: { thinkingBudget: 128 },
+            thinkingConfig: { thinkingBudget: 512 },
             ...(generationConfig.responseFormat === "json" ? { responseMimeType: "application/json" } : {})
           }
         })
