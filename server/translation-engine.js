@@ -10,6 +10,8 @@
 
 const { polishLiteraryProse } = require("./convert/literary-stylist");
 const { mineNovelGlossary } = require("./glossary-miner");
+const { classifyScene, getScenePronounInstruction } = require("./convert/relationship-matrix");
+const { findMatchedIdioms } = require("./convert/idiom-adapter");
 
 const GLOSSARY_PREFIX = "glossary";
 const TM_GLOBAL_KEY = "tm/global.json";
@@ -139,16 +141,27 @@ function createTranslationEngine({ storage = null } = {}) {
     isRetry = false
   }) {
     const matchedTerms = findMatchedGlossaryTerms(text, glossary);
+    const matchedIdioms = findMatchedIdioms(text);
+    const allTerms = [...matchedTerms];
+    for (const idiom of matchedIdioms) {
+      if (!allTerms.some((t) => t.zh === idiom.zh)) {
+        allTerms.push(idiom);
+      }
+    }
+
+    const scene = classifyScene(text);
+    const sceneInstruction = getScenePronounInstruction(scene);
+
     const chunkNote =
       total > 1
         ? `Đây là phần ${index + 1}/${total} của cùng một chương. Hãy chỉ dịch phần này, không thêm tiêu đề phần.`
         : "";
 
     let glossarySection = "";
-    if (matchedTerms.length > 0) {
+    if (allTerms.length > 0) {
       glossarySection = [
-        "BẢNG TỪ ĐIỂN THUẬT NGỮ & TÊN RIÊNG BẮT BUỘC DÙNG (Không được dịch khác):",
-        ...matchedTerms.map((t) => `  - "${t.zh}" ➔ "${t.vi}"`),
+        "BẢNG TỪ ĐIỂN THUẬT NGỮ, TÊN RIÊNG & THÀNH NGỮ BẮT BUỘC DÙNG (Không được dịch khác):",
+        ...allTerms.map((t) => `  - "${t.zh}" ➔ "${t.vi}"`),
         ""
       ].join("\n");
     }
@@ -158,6 +171,7 @@ function createTranslationEngine({ storage = null } = {}) {
       "Hãy dịch toàn bộ văn bản tiếng Trung sau sang tiếng Việt tự nhiên, văn phong mượt mà, thuần chất tiểu thuyết mạng.",
       bookTitle ? `Tác phẩm: ${sanitizeContentSafety(bookTitle)}` : "",
       "",
+      sceneInstruction ? sceneInstruction + "\n" : "",
       "QUY TẮC BẮT BUỘC ĐỂ ĐẢM BẢO CHẤT LƯỢNG:",
       "1. NGUYÊN VĂN 1:1 - TUYỆT ĐỐI KHÔNG TÓM TẮT:",
       "   - Dịch đầy đủ 100% từng câu, từng chữ, từng lời thoại và từng đoạn miêu tả.",

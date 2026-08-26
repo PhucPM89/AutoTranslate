@@ -39,7 +39,7 @@ test("translation-engine: buildContextualPrompt injects glossary section", () =>
     glossary
   });
 
-  assert.ok(prompt.includes('BẢNG TỪ ĐIỂN THUẬT NGỮ & TÊN RIÊNG BẮT BUỘC DÙNG'));
+  assert.ok(prompt.includes("BẢNG TỪ ĐIỂN THUẬT NGỮ"));
   assert.ok(prompt.includes('"林枫" ➔ "Lâm Phong"'));
   assert.ok(prompt.includes('"大板" ➔ "Osaka"'));
   assert.ok(prompt.includes("Nội dung tiếng Trung cần dịch:"));

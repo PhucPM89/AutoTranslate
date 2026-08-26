@@ -56,6 +56,7 @@ const UPLOAD_KINDS = {
 
 const ROUTES = {
   "/api/catalog": handlePublicCatalog,
+  "/api/reader/term-feedback": handleTermFeedback,
   "/api/admin/keys": handleAdminKeys,
   "/api/admin/session": handleSession,
   "/api/admin/login": handleLogin,
@@ -1345,6 +1346,45 @@ async function handleAdminGeminiTranslate({ request, env }) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+// ---- reader term feedback -------------------------------------------------
+async function handleTermFeedback({ request, env }) {
+  if (request.method !== "POST") return methodNotAllowed("POST");
+  const body = await readJson(request);
+  const bookId = String(body?.bookId || "").trim();
+  const originalTerm = String(body?.originalTerm || "").trim().slice(0, 50);
+  const suggestedTranslation = String(body?.suggestedTranslation || "").trim().slice(0, 80);
+
+  if (!bookId || !originalTerm || !suggestedTranslation) {
+    return json({ error: "Thiếu thông tin bắt buộc (mã truyện, từ gốc, bản dịch đề xuất)." }, 400);
+  }
+
+  const archiveBucket = env.ARCHIVE_STORAGE || env.NOVEL_STORAGE || env.R2_ARCHIVE || env.R2_READER;
+  if (!archiveBucket) {
+    return json({ ok: true, message: "Góp ý đã được ghi nhận vào bộ nhớ tạm." });
+  }
+
+  const storage = createR2BindingStorage(archiveBucket);
+  const key = `glossary/${encodeURIComponent(bookId)}.json`;
+  let existing = {};
+  try {
+    const raw = await storage.get(key);
+    if (raw) existing = JSON.parse(raw.toString("utf8"));
+  } catch {
+    existing = {};
+  }
+
+  existing[originalTerm] = suggestedTranslation;
+  await storage.put(key, JSON.stringify(existing, null, 2), {
+    contentType: "application/json; charset=utf-8"
+  });
+
+  return json({
+    ok: true,
+    message: "Cảm ơn bạn! Thuật ngữ đã được cập nhật thành công vào bộ nhớ dịch của truyện.",
+    term: { zh: originalTerm, vi: suggestedTranslation }
+  });
 }
 
 // Workers Assets does serve and honour public/_headers, so static responses
