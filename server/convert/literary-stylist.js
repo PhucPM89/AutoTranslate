@@ -86,6 +86,10 @@ const { polishTribulationProse } = require("./tribulation-stylist");
 const { polishTopographyProse } = require("./topography-stylist");
 const { polishDivineSenseProse } = require("./divine-sense-stylist");
 const { polishInscriptProse } = require("./inscript-stylist");
+const { polishAuctionProse } = require("./auction-stylist");
+const { polishWarfareProse } = require("./warfare-stylist");
+const { polishHealingProse } = require("./meridian-healing-stylist");
+const { polishTranscendenceProse } = require("./transcendence-stylist");
 
 /**
  * Polish and naturalize text.
@@ -106,6 +110,9 @@ function polishLiteraryProse(text) {
   // Apply title & peerage hierarchy modulator
   result = normalizeTitleHierarchy(result);
 
+  // Apply time skips & transcendence stylist
+  result = polishTranscendenceProse(result);
+
   // Apply topography & sacred grounds stylist
   result = polishTopographyProse(result);
 
@@ -114,6 +121,15 @@ function polishLiteraryProse(text) {
 
   // Apply ancient inscriptions & jade slip stylist
   result = polishInscriptProse(result);
+
+  // Apply auction house & bidding war stylist
+  result = polishAuctionProse(result);
+
+  // Apply military strategy & siege warfare stylist
+  result = polishWarfareProse(result);
+
+  // Apply medical diagnostics & acupuncture stylist
+  result = polishHealingProse(result);
 
   // Apply tribulation & breakthrough stylist
   result = polishTribulationProse(result);
