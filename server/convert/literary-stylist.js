@@ -90,6 +90,10 @@ const { polishAuctionProse } = require("./auction-stylist");
 const { polishWarfareProse } = require("./warfare-stylist");
 const { polishHealingProse } = require("./meridian-healing-stylist");
 const { polishTranscendenceProse } = require("./transcendence-stylist");
+const { polishCulinaryProse } = require("./culinary-stylist");
+const { polishConspiracyProse } = require("./conspiracy-stylist");
+const { polishSpatialProse } = require("./spatial-stylist");
+const { polishElegyProse } = require("./elegy-stylist");
 
 /**
  * Polish and naturalize text.
@@ -112,6 +116,18 @@ function polishLiteraryProse(text) {
 
   // Apply time skips & transcendence stylist
   result = polishTranscendenceProse(result);
+
+  // Apply memorial elegy & epitaph stylist
+  result = polishElegyProse(result);
+
+  // Apply court politics & conspiracy stylist
+  result = polishConspiracyProse(result);
+
+  // Apply culinary & immortal banquet stylist
+  result = polishCulinaryProse(result);
+
+  // Apply spatiotemporal & void stylist
+  result = polishSpatialProse(result);
 
   // Apply topography & sacred grounds stylist
   result = polishTopographyProse(result);
