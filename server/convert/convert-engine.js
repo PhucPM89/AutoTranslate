@@ -27,6 +27,7 @@
 
 const { applyGrammar } = require("./grammar");
 const { createProperNounMatcher } = require("./proper-nouns");
+const { polishLiteraryProse } = require("./literary-stylist");
 
 const HAN = /\p{Script=Han}/u;
 
@@ -482,13 +483,14 @@ function createConvertEngine({
   // match the source so the reader and the LLM tier stay aligned.
   function convert(text) {
     if (typeof text !== "string" || !text) return "";
-    return text
+    const converted = text
       .replace(/\r\n/g, "\n")
       .split(/\n/)
       .map((line) => (line.trim() ? convertLine(line) : ""))
       .join("\n")
       .replace(/\n{3,}/g, "\n\n")
       .trim();
+    return polishLiteraryProse(converted);
   }
 
   return { convert, convertLine, tokenize };

@@ -49,7 +49,7 @@
 再=lại
 更=càng
 最=nhất
-太=quá
+太=thái
 去=đi
 来=tới
 说=nói

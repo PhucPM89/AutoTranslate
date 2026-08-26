@@ -8,6 +8,9 @@
 // 4. Prompt Builder with creative fiction framing.
 // 5. Post-Processor: punctuation normalization, Markdown cleanup, and quality assessment.
 
+const { polishLiteraryProse } = require("./convert/literary-stylist");
+const { mineNovelGlossary } = require("./glossary-miner");
+
 const GLOSSARY_PREFIX = "glossary";
 const TM_GLOBAL_KEY = "tm/global.json";
 
@@ -85,6 +88,15 @@ function createTranslationEngine({ storage = null } = {}) {
         cacheControl: "no-cache"
       });
     }
+  }
+
+  async function mineAndMergeGlossary(bookId, chapterTexts) {
+    if (!bookId) return {};
+    const existing = await loadGlossary(bookId);
+    const mined = mineNovelGlossary(chapterTexts);
+    const merged = { ...mined, ...existing };
+    await saveGlossary(bookId, merged);
+    return merged;
   }
 
   async function loadTranslationMemory(bookId = null) {
@@ -205,12 +217,13 @@ function createTranslationEngine({ storage = null } = {}) {
       }
     }
 
-    return clean;
+    return polishLiteraryProse(clean);
   }
 
   return {
     loadGlossary,
     saveGlossary,
+    mineAndMergeGlossary,
     loadTranslationMemory,
     findMatchedGlossaryTerms,
     sanitizeContentSafety,

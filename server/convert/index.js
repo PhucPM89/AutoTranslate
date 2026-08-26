@@ -176,5 +176,5 @@ function getConvertFunction(env = process.env) {
 
 module.exports = {
   buildConvertEngineFromDisk, getConvertFunction, mineBookNames, isCultivationGenre,
-  defaultPhraseFiles, CONVERT_VERSION
+  defaultPhraseFiles, CONVERT_VERSION, loadBase
 };

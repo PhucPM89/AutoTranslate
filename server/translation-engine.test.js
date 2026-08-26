@@ -103,3 +103,25 @@ test("translation-engine: loadTranslationMemory returns default patterns", async
   assert.ok(tm.length >= DEFAULT_TM_PATTERNS.length);
   assert.ok(tm.some((p) => p.zh === "倒吸一口凉气" && p.vi === "hít sâu một hơi khí lạnh"));
 });
+
+test("translation-engine: mineAndMergeGlossary extracts and saves book entities", async () => {
+  const mockStorage = {
+    store: new Map(),
+    async get(key) {
+      if (!this.store.has(key)) return null;
+      return Buffer.from(this.store.get(key));
+    },
+    async put(key, body) {
+      this.store.set(key, body);
+    }
+  };
+
+  const engine = createTranslationEngine({ storage: mockStorage });
+  const bookId = "test-book-mine";
+  const texts = ["李子夜手持诛仙剑，踏入青云门，运转太玄剑诀。"];
+
+  const merged = await engine.mineAndMergeGlossary(bookId, texts);
+  assert.ok(merged["青云门"]);
+  assert.ok(merged["诛仙剑"]);
+  assert.ok(mockStorage.store.has(glossaryKey(bookId)));
+});
