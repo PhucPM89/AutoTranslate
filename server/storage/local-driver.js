@@ -10,7 +10,13 @@ function createLocalStorage(env = process.env) {
   const root = path.resolve(env.LOCAL_STORAGE_DIR || ".storage");
   const publicBase = (env.LOCAL_PUBLIC_BASE_URL || "/local-cdn").replace(/\/$/, "");
 
-  const full = (key) => path.join(root, key);
+  const full = (key) => {
+    const resolved = path.resolve(root, key);
+    if (!resolved.startsWith(root + path.sep) && resolved !== root) {
+      throw new Error(`Path traversal detected: ${key}`);
+    }
+    return resolved;
+  };
   const metaPath = (key) => `${full(key)}.meta.json`;
 
   return {

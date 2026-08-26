@@ -30,11 +30,25 @@ function writeLocalBookmarks(storage, data) {
   }
 }
 
+function cleanId(id) {
+  return String(id || "").replace(/^(cdn|library):/, "").split(":")[0];
+}
+
 function mergeBookmarks(local = {}, remote = []) {
-  const merged = { ...local };
-  for (const item of remote) {
+  const merged = {};
+  for (const [key, item] of Object.entries(local || {})) {
+    if (!item) continue;
+    const cid = cleanId(item.bookId || key);
+    if (!cid) continue;
+    merged[cid] = {
+      ...item,
+      bookId: cid
+    };
+  }
+  for (const item of remote || []) {
     if (!item || !item.book_id) continue;
-    const bookId = item.book_id;
+    const bookId = cleanId(item.book_id);
+    if (!bookId) continue;
     const existing = merged[bookId];
     const remoteTime = new Date(item.updated_at || 0).getTime();
     const localTime = existing ? new Date(existing.updatedAt || 0).getTime() : 0;
@@ -52,9 +66,9 @@ function mergeBookmarks(local = {}, remote = []) {
   return merged;
 }
 
-function createUserSync({ url, anonKey, authClient, storage, fetchImpl = fetch }) {
+function createUserSync({ url, anonKey, authClient, storage, fetchImpl = fetch, syncDebounceMs = SYNC_DEBOUNCE_MS }) {
   const base = String(url || "").replace(/\/$/, "");
-  let bookmarks = readLocalBookmarks(storage);
+  let bookmarks = mergeBookmarks(readLocalBookmarks(storage), []);
   const listeners = new Set();
   const pendingSync = new Map();
   let syncTimer = null;
@@ -97,10 +111,6 @@ function createUserSync({ url, anonKey, authClient, storage, fetchImpl = fetch }
     } catch {
       return [];
     }
-  }
-
-  function cleanId(id) {
-    return String(id || "").replace(/^(cdn|library):/, "").split(":")[0];
   }
 
   async function sendRemoteUpsert(items) {
@@ -152,7 +162,7 @@ function createUserSync({ url, anonKey, authClient, storage, fetchImpl = fetch }
     const token = getSessionToken();
     if (!token || !base || !anonKey) return false;
     try {
-      const res = await fetchImpl(`${base}/rest/v1/user_bookmarks?book_id=eq.${encodeURIComponent(bookId)}`, {
+      const res = await fetchImpl(`${base}/rest/v1/user_bookmarks?book_id=eq.${encodeURIComponent(cleanId(bookId))}`, {
         method: "DELETE",
         headers: {
           apikey: anonKey,
@@ -165,17 +175,26 @@ function createUserSync({ url, anonKey, authClient, storage, fetchImpl = fetch }
     }
   }
 
-  function flushPending() {
+  async function flushPending() {
+    syncTimer = null;
     if (!pendingSync.size) return;
     const toSend = Array.from(pendingSync.values());
     pendingSync.clear();
-    sendRemoteUpsert(toSend).catch(() => {});
+    const sent = await sendRemoteUpsert(toSend);
+    if (!sent) {
+      // Preserve unsent progress. A later save/sync will retry it; silently
+      // dropping the batch made cross-device state stale after one network flap.
+      for (const item of toSend) {
+        const key = cleanId(item.bookId);
+        if (key && !pendingSync.has(key)) pendingSync.set(key, item);
+      }
+    }
   }
 
   function scheduleSync(bookmark) {
-    pendingSync.set(bookmark.bookId, bookmark);
+    pendingSync.set(cleanId(bookmark.bookId), bookmark);
     if (syncTimer) clearTimeout(syncTimer);
-    syncTimer = setTimeout(flushPending, SYNC_DEBOUNCE_MS);
+    syncTimer = setTimeout(() => flushPending().catch(() => {}), syncDebounceMs);
   }
 
   async function syncAll() {
@@ -188,7 +207,7 @@ function createUserSync({ url, anonKey, authClient, storage, fetchImpl = fetch }
 
     // If local had items not yet in remote, push them up.
     const localOnly = Object.values(bookmarks).filter(
-      (local) => !remote.some((r) => r.book_id === local.bookId)
+      (local) => local && cleanId(local.bookId) && !remote.some((r) => cleanId(r.book_id) === cleanId(local.bookId))
     );
     if (localOnly.length) {
       await sendRemoteUpsert(localOnly);
@@ -207,27 +226,41 @@ function createUserSync({ url, anonKey, authClient, storage, fetchImpl = fetch }
 
   return {
     getBookmarks: () => bookmarks,
-    isBookmarked: (bookId) => Boolean(bookmarks[bookId]),
-    getBookmark: (bookId) => bookmarks[bookId] || null,
+    isBookmarked: (bookId) => {
+      const cid = cleanId(bookId);
+      return Boolean(cid && (bookmarks[cid] || bookmarks[bookId]));
+    },
+    getBookmark: (bookId) => {
+      const cid = cleanId(bookId);
+      return (cid && bookmarks[cid]) || bookmarks[bookId] || null;
+    },
 
     toggleBookmark(bookId, info = {}) {
-      if (!bookId) return false;
-      const exists = Boolean(bookmarks[bookId]);
+      const cid = cleanId(bookId);
+      if (!cid) return false;
+      const exists = Boolean(bookmarks[cid] || bookmarks[bookId]);
       if (exists) {
-        delete bookmarks[bookId];
+        delete bookmarks[cid];
+        if (bookId !== cid) delete bookmarks[bookId];
+        pendingSync.delete(cid);
+        if (!pendingSync.size && syncTimer) {
+          clearTimeout(syncTimer);
+          syncTimer = null;
+        }
         writeLocalBookmarks(storage, bookmarks);
         emit();
-        sendRemoteDelete(bookId).catch(() => {});
+        sendRemoteDelete(cid).catch(() => {});
         return false;
       } else {
         const item = {
-          bookId,
+          bookId: cid,
           chapterIndex: info.chapterIndex || 0,
           chapterTitle: info.chapterTitle || "",
           progressPct: info.progressPct || 0,
           updatedAt: new Date().toISOString()
         };
-        bookmarks[bookId] = item;
+        bookmarks[cid] = item;
+        if (bookId !== cid) delete bookmarks[bookId];
         writeLocalBookmarks(storage, bookmarks);
         emit();
         scheduleSync(item);
@@ -236,16 +269,19 @@ function createUserSync({ url, anonKey, authClient, storage, fetchImpl = fetch }
     },
 
     saveProgress(bookId, { chapterIndex = 0, chapterTitle = "", progressPct = 0 } = {}) {
-      if (!bookId) return;
-      const current = bookmarks[bookId] || { bookId };
+      const cid = cleanId(bookId);
+      if (!cid) return;
+      const current = bookmarks[cid] || bookmarks[bookId] || { bookId: cid };
       const item = {
         ...current,
+        bookId: cid,
         chapterIndex: Number(chapterIndex) || 0,
         chapterTitle: String(chapterTitle || ""),
         progressPct: Math.round(Number(progressPct) || 0),
         updatedAt: new Date().toISOString()
       };
-      bookmarks[bookId] = item;
+      bookmarks[cid] = item;
+      if (bookId !== cid) delete bookmarks[bookId];
       writeLocalBookmarks(storage, bookmarks);
       emit();
       scheduleSync(item);
@@ -264,6 +300,7 @@ module.exports = {
   LOCAL_KEY,
   readLocalBookmarks,
   writeLocalBookmarks,
+  cleanId,
   mergeBookmarks,
   createUserSync
 };

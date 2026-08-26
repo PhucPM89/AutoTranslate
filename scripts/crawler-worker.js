@@ -72,7 +72,7 @@ async function main() {
   }
 
   const storage = createStorage();
-  const maxBacklog = Number(config.maxBacklog || 5);
+  const maxBacklog = Number(config.maxPendingBooksBacklog || config.maxBacklog || 15);
   const pendingCount = await countUntranslatedBooks(storage);
   if (pendingCount >= maxBacklog) {
     const msg = `Hàng đợi dịch đang có ${pendingCount} bộ chưa dịch xong (vượt mức tối đa ${maxBacklog} bộ). Tạm dừng cào sách mới để tập trung dịch dứt điểm các bộ hiện có.`;
@@ -832,8 +832,8 @@ async function downloadAndPublish(candidate, status, wordCountBucket = -1) {
 async function translateBookMetadata(source) {
   let apiKey = "";
   try {
-    const storage = createStorage();
-    const rawKeys = await storage.get("config/api-keys.json");
+    const privateStorage = createArchiveStorage();
+    const rawKeys = privateStorage && await privateStorage.get("config/api-keys.json");
     if (rawKeys) {
       const parsed = JSON.parse(rawKeys.toString("utf8"));
       if (Array.isArray(parsed) && parsed.length > 0) {

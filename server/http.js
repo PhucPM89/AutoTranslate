@@ -3,10 +3,13 @@
 function readJsonBody(req, limit = 64 * 1024) {
   if (req.body && typeof req.body === "object") return Promise.resolve(req.body);
   return new Promise((resolve, reject) => {
-    let raw = "";
+    const chunks = [];
+    let byteLength = 0;
     req.on("data", (chunk) => {
-      raw += chunk;
-      if (Buffer.byteLength(raw) > limit) {
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      chunks.push(buf);
+      byteLength += buf.length;
+      if (byteLength > limit) {
         const error = new Error("Request body is too large.");
         error.status = 413;
         reject(error);
@@ -15,6 +18,7 @@ function readJsonBody(req, limit = 64 * 1024) {
     });
     req.on("end", () => {
       try {
+        const raw = Buffer.concat(chunks, byteLength).toString("utf8").trim();
         resolve(raw ? JSON.parse(raw) : {});
       } catch {
         const error = new Error("JSON không hợp lệ.");

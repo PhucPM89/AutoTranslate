@@ -64,6 +64,8 @@ jobs:
       GEMINI_TRANSLATE_CONCURRENCY: "1"
       TRANSLATE_MAX_KEYS_PER_CHUNK: "3"
       TRANSLATE_SPACING_MS: ${{ vars.TRANSLATE_SPACING_MS || '500' }}
+      TRANSLATE_BOOK_INPUT: ${{ inputs.book || '' }}
+      TRANSLATE_BUDGET_INPUT: ${{ inputs.budget || '5000' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -78,9 +80,11 @@ jobs:
         run: node scripts/check-env.js translate
 
       - name: Translate Focused Book 100%
-        run: >
-          node scripts/translate-worker.js
-          --minutes 14
-          --budget ${{ github.event.inputs.budget || '5000' }}
-          --batch-size 1
-          ${{ github.event.inputs.book && format('--book {0}', github.event.inputs.book) || '' }}
+        # workflow_dispatch values are untrusted strings. Passing them through
+        # quoted environment variables keeps shell metacharacters as data.
+        run: |
+          node scripts/translate-worker.js \
+            --minutes 14 \
+            --budget "$TRANSLATE_BUDGET_INPUT" \
+            --batch-size 1 \
+            --book "$TRANSLATE_BOOK_INPUT"

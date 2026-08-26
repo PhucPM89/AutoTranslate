@@ -123,18 +123,23 @@ function createSupabase(env = process.env, { role = "service" } = {}) {
 
     // ---- catalogue reads ----------------------------------------------
     async listBooks({ limit = 24, offset = 0, genre = "", search = "", order = "updated_at.desc" } = {}) {
+      const categorySelect = genre
+        ? "book_categories!inner(categories!inner(slug,name))"
+        : "book_categories(categories(slug,name))";
       const params = new URLSearchParams({
         // book_categories is embedded rather than joined by hand: the books table
         // has no genre column, so this is where a book's category comes from, and
         // without it the reader's category filter had nothing to populate.
         select:
-          "id,title,author,description,cover_url,status,total_chapters,translated_chapters,revision,featured,updated_at,book_categories(categories(slug,name))",
+          `id,title,author,description,cover_url,status,total_chapters,translated_chapters,revision,featured,updated_at,${categorySelect}`,
         published: "eq.true",
         order,
         limit: String(limit),
         offset: String(offset)
       });
-      if (genre) params.set("status", `eq.${genre}`);
+      if (genre) {
+        params.set("book_categories.categories.slug", `eq.${genre}`);
+      }
       if (search) {
         // Trigram index on (title || ' ' || author) backs this.
         params.set("or", `(title.ilike.*${search}*,author.ilike.*${search}*)`);
@@ -263,15 +268,15 @@ function toBookRow(book) {
     description: book.description || "",
     cover_url: book.cover || book.cover_url || "",
     status: book.status || "Đang cập nhật",
-    total_chapters: book.totalChapters || 0,
-    translated_chapters: book.translatedChapters || 0,
-    revision: book.revision || 1,
+    total_chapters: book.totalChapters ?? book.total_chapters ?? 0,
+    translated_chapters: book.translatedChapters ?? book.translated_chapters ?? 0,
+    revision: book.revision ?? 1,
     source: book.source || "admin",
-    source_id: book.sourceId || null,
-    source_url: book.sourceUrl || null,
+    source_id: book.sourceId ?? book.source_id ?? null,
+    source_url: book.sourceUrl ?? book.source_url ?? null,
     featured: Boolean(book.featured),
     published: book.published !== false,
-    last_crawled_at: book.lastCrawledAt || null
+    last_crawled_at: book.lastCrawledAt ?? book.last_crawled_at ?? null
   };
 }
 

@@ -31,3 +31,13 @@ test("ingest workflow leaves translation to the dedicated worker", () => {
   const yaml = fs.readFileSync(path.join(__dirname, "..", ".github", "workflows", "ingest-book.yml"), "utf8");
   assert.doesNotMatch(yaml, /node scripts\/translate-worker\.js/);
 });
+
+test("workflow-dispatch strings never interpolate directly into shell scripts", () => {
+  for (const name of ["translate-worker.yml", "convert-backfill.yml"]) {
+    const yaml = fs.readFileSync(path.join(WORKFLOWS, name), "utf8");
+    const runBlocks = [...yaml.matchAll(/run:\s*\|([\s\S]*?)(?=\n\s{6}(?:-|[A-Za-z_]))/g)].map((match) => match[1]);
+    for (const block of runBlocks) {
+      assert.doesNotMatch(block, /\$\{\{[^\n]*(?:inputs\.|github\.event\.inputs)/, name);
+    }
+  }
+});

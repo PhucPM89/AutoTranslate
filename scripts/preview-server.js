@@ -36,8 +36,12 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  const filePath = path.join(PUBLIC_DIR, reqPath);
-  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+  let safeReqPath = "/index.html";
+  try {
+    safeReqPath = decodeURIComponent(reqPath);
+  } catch {}
+  const filePath = path.resolve(PUBLIC_DIR, "." + path.normalize("/" + safeReqPath));
+  if (filePath.startsWith(PUBLIC_DIR) && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
     const ext = path.extname(filePath).toLowerCase();
     res.writeHead(200, { "Content-Type": MIME_TYPES[ext] || "application/octet-stream" });
     fs.createReadStream(filePath).pipe(res);

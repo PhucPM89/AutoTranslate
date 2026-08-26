@@ -99,60 +99,60 @@
 :root {
   color-scheme: dark;
 
-  /* Ground and surfaces — Mực Mun & Sơn Mài Hoàng Gia */
-  --bg: #0c0a10;
+  /* Ground and surfaces — Mực Mun & Sơn Mài Hoàng Gia (Deep Obsidian Slate) */
+  --bg: #14161a;
   --app-bg: var(--bg);
-  --bg-sunken: #070509;
-  --topbar: rgba(16, 13, 22, 0.82);
-  --sidebar: #120e18;
-  --surface: #171320;
-  --surface-raised: #211c2e;
-  --surface-hover: #2e2640;
+  --bg-sunken: #0d0f12;
+  --topbar: rgba(20, 22, 26, 0.88);
+  --sidebar: #171a1f;
+  --surface: #1d2026;
+  --surface-raised: #252a33;
+  --surface-hover: #2e3440;
 
   /* Reading sheet */
-  --paper: #130f1c;
-  --paper-text: #fbf8f2;
+  --paper: #14161a;
+  --paper-text: #d6dae1;
 
   /* Ink & Typography */
-  --text: #fbf8f2;
-  --text-soft: #ddd3c3;
-  --muted: #a89c8a;
-  --faint: #786e5e;
+  --text: #d6dae1;
+  --text-soft: #a8b2c2;
+  --muted: #7b8494;
+  --faint: #555d6b;
 
   /* Lines — Khung viền thếp vàng cổ điển */
-  --border: rgba(229, 169, 60, 0.18);
-  --border-soft: rgba(229, 169, 60, 0.09);
-  --border-strong: rgba(229, 169, 60, 0.4);
+  --border: rgba(217, 155, 80, 0.18);
+  --border-soft: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(217, 155, 80, 0.42);
 
-  /* Accents — Hoàng Kim & Hổ Phách & Chu Sa & Lam Ngọc */
-  --accent: #e5a93c;
-  --accent-strong: #f6c05d;
+  /* Accents — Hoàng Kim & Hổ Phách & Chu Sa */
+  --accent: #d99b50;
+  --accent-strong: #ebb06a;
   --accent-2: #38bdf8;
   --accent-hot: #f43f5e;
-  --accent-ink: #140d04;
-  --accent-wash: rgba(229, 169, 60, 0.15);
-  --vermilion: #ef4444;
-  --warm: #f59e0b;
-  --gold: #e5a93c;
+  --accent-ink: #140e04;
+  --accent-wash: rgba(217, 155, 80, 0.14);
+  --vermilion: #e04434;
+  --warm: #d99b50;
+  --gold: #d99b50;
   --danger: #f43f5e;
 
   /* The one royal gold gradient the whole interface borrows from */
-  --gradient: linear-gradient(135deg, #d97706 0%, #f59e0b 50%, #fbbf24 100%);
-  --gradient-soft: linear-gradient(135deg, rgba(229, 169, 60, 0.22), rgba(245, 158, 11, 0.12));
-  --gradient-text: linear-gradient(120deg, #fffbeb 0%, #fde68a 35%, #f59e0b 80%, #d97706 100%);
+  --gradient: linear-gradient(135deg, #c27d38 0%, #d99b50 50%, #ebb06a 100%);
+  --gradient-soft: linear-gradient(135deg, rgba(217, 155, 80, 0.2), rgba(194, 125, 56, 0.1));
+  --gradient-text: linear-gradient(120deg, #fffcf5 0%, #f7dfb5 40%, #d99b50 85%, #b5722e 100%);
 
   /* Elevation: Royal gold edge glow and deep shadow */
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.6);
-  --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.65);
-  --shadow-lg: 0 30px 80px rgba(0, 0, 0, 0.85);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 28px 72px rgba(0, 0, 0, 0.8);
   --shadow: var(--shadow-lg);
-  --glow: 0 0 0 1px rgba(229, 169, 60, 0.35), 0 14px 44px rgba(217, 119, 6, 0.28);
-  --glow-strong: 0 0 0 1px rgba(246, 192, 93, 0.6), 0 20px 64px rgba(245, 158, 11, 0.42);
+  --glow: 0 0 0 1px rgba(217, 155, 80, 0.3), 0 12px 36px rgba(194, 125, 56, 0.22);
+  --glow-strong: 0 0 0 1px rgba(235, 176, 106, 0.55), 0 18px 52px rgba(217, 155, 80, 0.35);
 
   /* Type */
-  --font-sans: "Be Vietnam Pro", Inter, "Segoe UI", Arial, "Noto Sans", "Microsoft YaHei", sans-serif;
-  --font-display: var(--font-sans);
-  --font-read: var(--font-sans);
+  --font-sans: "Be Vietnam Pro", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Literata", "Merriweather", "Playfair Display", Georgia, serif;
+  --font-read: "Literata", "Lora", "Merriweather", serif;
   --text-2xs: 0.68rem;
   --text-xs: 0.75rem;
   --text-sm: 0.83rem;
@@ -185,8 +185,10 @@
   --fast: 140ms;
   --slow: 300ms;
 
-  --document-width: 820px;
+  --document-width: 740px;
   --content-font-size: 20px;
+  --reader-line-height: 1.84;
+  --reader-par-spacing: 1.4em;
   /* The reader topbar is sticky, so the bar under it and the layout height both
      need the same number; keeping it here stops them drifting apart. */
   --topbar-h: 72px;
@@ -195,73 +197,72 @@
 body:not(.dark) {
   color-scheme: light;
 
-  --bg: #f7f6fb;
+  --bg: #f9f9f8;
   --app-bg: var(--bg);
-  --bg-sunken: #ecebf5;
-  --topbar: rgba(255, 255, 255, 0.78);
-  --sidebar: #f2f1f9;
+  --bg-sunken: #f0f0ee;
+  --topbar: rgba(249, 249, 248, 0.92);
+  --sidebar: #f3f3f1;
   --surface: #ffffff;
-  --surface-raised: #f4f2fc;
-  --surface-hover: #eae7f8;
+  --surface-raised: #f0f0ee;
+  --surface-hover: #e5e5e2;
 
   --paper: #ffffff;
-  --paper-text: #1b1630;
+  --paper-text: #191918;
 
-  --text: #14102a;
-  --text-soft: #3b3363;
-  --muted: #655d8a;
-  --faint: #918ab0;
+  --text: #191918;
+  --text-soft: #444440;
+  --muted: #6b6b66;
+  --faint: #969690;
 
-  --border: rgba(109, 76, 200, 0.18);
-  --border-soft: rgba(109, 76, 200, 0.1);
-  --border-strong: rgba(109, 76, 200, 0.34);
+  --border: rgba(0, 0, 0, 0.1);
+  --border-soft: rgba(0, 0, 0, 0.05);
+  --border-strong: rgba(0, 0, 0, 0.22);
 
-  /* Darker than the dark theme's accent so it still passes contrast on white. */
-  --accent: #7c3aed;
-  --accent-strong: #6d28d9;
+  --accent: #9e472a;
+  --accent-strong: #ba5736;
   --accent-2: #0891b2;
   --accent-hot: #db2777;
   --accent-ink: #ffffff;
-  --accent-wash: rgba(124, 58, 237, 0.1);
+  --accent-wash: rgba(158, 71, 42, 0.1);
   --vermilion: #e11d48;
   --warm: #b45309;
-  --gold: #a16207;
+  --gold: #9e472a;
   --danger: #be123c;
 
-  --gradient: linear-gradient(135deg, #7c3aed 0%, #c026d3 48%, #0891b2 100%);
-  --gradient-soft: linear-gradient(135deg, rgba(124, 58, 237, 0.12), rgba(8, 145, 178, 0.08));
-  --gradient-text: linear-gradient(120deg, #6d28d9 0%, #a21caf 45%, #0e7490 100%);
+  --gradient: linear-gradient(135deg, #9e472a 0%, #c46343 50%, #d97d5f 100%);
+  --gradient-soft: linear-gradient(135deg, rgba(158, 71, 42, 0.14), rgba(8, 145, 178, 0.06));
+  --gradient-text: linear-gradient(120deg, #191918 0%, #444440 55%, #9e472a 100%);
 
-  --shadow-sm: 0 1px 2px rgba(30, 20, 60, 0.07);
-  --shadow-md: 0 10px 26px rgba(30, 20, 60, 0.1);
-  --shadow-lg: 0 26px 64px rgba(30, 20, 60, 0.14);
+  --shadow-sm: 0 1px 2px rgba(25, 25, 24, 0.06);
+  --shadow-md: 0 8px 24px rgba(25, 25, 24, 0.08);
+  --shadow-lg: 0 20px 54px rgba(25, 25, 24, 0.12);
   --shadow: var(--shadow-lg);
-  --glow: 0 0 0 1px rgba(124, 58, 237, 0.18), 0 14px 40px rgba(124, 58, 237, 0.14);
-  --glow-strong: 0 0 0 1px rgba(124, 58, 237, 0.32), 0 20px 56px rgba(124, 58, 237, 0.22);
+  --glow: 0 0 0 1px rgba(158, 71, 42, 0.16), 0 10px 30px rgba(158, 71, 42, 0.12);
+  --glow-strong: 0 0 0 1px rgba(158, 71, 42, 0.3), 0 16px 44px rgba(158, 71, 42, 0.18);
 }
 
 /* Theme Sepia — Giấy ngà cổ điển êm dịu */
 body.theme-sepia {
   color-scheme: light;
-  --bg: #f5eedb;
+  --bg: #f4eedd;
   --app-bg: var(--bg);
-  --bg-sunken: #ede3cb;
-  --topbar: rgba(245, 238, 219, 0.92);
-  --sidebar: #eee5cf;
-  --surface: #faf5e8;
-  --surface-raised: #f3ebda;
-  --surface-hover: #e9e0cd;
-  --paper: #faf5e8;
-  --paper-text: #2d261e;
-  --text: #2d261e;
+  --bg-sunken: #eae2cd;
+  --topbar: rgba(244, 238, 221, 0.94);
+  --sidebar: #eae2cd;
+  --surface: #faf6eb;
+  --surface-raised: #ded4bc;
+  --surface-hover: #d3c8ae;
+  --paper: #faf6eb;
+  --paper-text: #2c251e;
+  --text: #2c251e;
   --text-soft: #4a3f33;
-  --muted: #786b5c;
-  --faint: #9c8e7e;
-  --border: rgba(120, 107, 92, 0.2);
-  --border-soft: rgba(120, 107, 92, 0.12);
-  --border-strong: rgba(120, 107, 92, 0.35);
-  --accent: #8b5cf6;
-  --accent-strong: #7c3aed;
+  --muted: #6e6456;
+  --faint: #918474;
+  --border: rgba(140, 83, 43, 0.18);
+  --border-soft: rgba(140, 83, 43, 0.09);
+  --border-strong: rgba(140, 83, 43, 0.38);
+  --accent: #8c532b;
+  --accent-strong: #aa6738;
   --shadow-sm: 0 1px 2px rgba(60, 45, 25, 0.08);
   --shadow-md: 0 8px 24px rgba(60, 45, 25, 0.12);
 }
@@ -272,20 +273,22 @@ body.theme-oled {
   --bg: #000000;
   --app-bg: #000000;
   --bg-sunken: #000000;
-  --topbar: rgba(0, 0, 0, 0.92);
-  --sidebar: #050505;
-  --surface: #0a0a0a;
-  --surface-raised: #121212;
-  --surface-hover: #1c1c1c;
+  --topbar: rgba(0, 0, 0, 0.94);
+  --sidebar: #060606;
+  --surface: #0c0c0c;
+  --surface-raised: #141414;
+  --surface-hover: #1e1e1e;
   --paper: #000000;
-  --paper-text: #e2e8f0;
-  --text: #f8fafc;
-  --text-soft: #cbd5e1;
-  --muted: #8892b0;
-  --faint: #64748b;
+  --paper-text: #d0d0d0;
+  --text: #d8d8d8;
+  --text-soft: #a8a8a8;
+  --muted: #6b6b6b;
+  --faint: #444444;
   --border: rgba(255, 255, 255, 0.12);
   --border-soft: rgba(255, 255, 255, 0.06);
-  --border-strong: rgba(255, 255, 255, 0.22);
+  --border-strong: rgba(255, 255, 255, 0.25);
+  --accent: #cfa15d;
+  --accent-strong: #e0b674;
 }
 
 /* Theme Forest — Xanh Rừng dịu mắt chống nhức mỏi */
@@ -315,25 +318,25 @@ body.theme-forest {
 /* Theme Light — Nền giấy sáng tự nhiên */
 body.theme-light {
   color-scheme: light;
-  --bg: #faf9f6;
-  --app-bg: #faf9f6;
-  --bg-sunken: #f0eee8;
-  --topbar: rgba(250, 249, 246, 0.94);
-  --sidebar: #f3f1ec;
+  --bg: #f9f9f8;
+  --app-bg: #f9f9f8;
+  --bg-sunken: #f0f0ee;
+  --topbar: rgba(249, 249, 248, 0.94);
+  --sidebar: #f3f3f1;
   --surface: #ffffff;
-  --surface-raised: #f5f4ef;
-  --surface-hover: #ebe9e2;
+  --surface-raised: #f0f0ee;
+  --surface-hover: #e5e5e2;
   --paper: #ffffff;
-  --paper-text: #1a1a1c;
-  --text: #1a1a1c;
-  --text-soft: #4a4a52;
-  --muted: #71717a;
-  --faint: #a1a1aa;
-  --border: rgba(0, 0, 0, 0.12);
-  --border-soft: rgba(0, 0, 0, 0.06);
+  --paper-text: #191918;
+  --text: #191918;
+  --text-soft: #444440;
+  --muted: #6b6b66;
+  --faint: #969690;
+  --border: rgba(0, 0, 0, 0.1);
+  --border-soft: rgba(0, 0, 0, 0.05);
   --border-strong: rgba(0, 0, 0, 0.22);
-  --accent: #7c3aed;
-  --accent-strong: #6d28d9;
+  --accent: #9e472a;
+  --accent-strong: #ba5736;
 }
 
 /* Font styles — Typography chuyên nghiệp cho đọc tiểu thuyết */
@@ -373,30 +376,25 @@ body.font-sans #paperTitle {
 }
 
 /* =========================================================================
-   Ambient light
-   A flat fill is what makes a dark page feel like a document. Three large soft
-   lights sit behind everything and drift slowly, so the background has depth and
-   the accent gradient reads as coming from somewhere. Fixed, pointer-events off,
-   and animated on transform only - nothing here causes layout or repaint work.
-   The reduced-motion block below stops the drift.
+   Ambient literary aura
+   A quiet, refined background atmosphere that respects reader comfort.
    ========================================================================= */
 body::before {
   position: fixed;
   z-index: 0;
   inset: -25vmax;
   background:
-    radial-gradient(38vmax 38vmax at 18% 12%, rgba(124, 58, 237, 0.5), transparent 62%),
-    radial-gradient(32vmax 32vmax at 82% 8%, rgba(6, 182, 212, 0.32), transparent 60%),
-    radial-gradient(34vmax 34vmax at 62% 88%, rgba(192, 38, 211, 0.3), transparent 62%);
+    radial-gradient(40vmax 40vmax at 18% 12%, rgba(217, 155, 80, 0.1), transparent 62%),
+    radial-gradient(35vmax 35vmax at 82% 8%, rgba(140, 83, 43, 0.08), transparent 60%),
+    radial-gradient(38vmax 38vmax at 62% 88%, rgba(20, 26, 36, 0.75), transparent 62%);
   content: "";
-  filter: blur(38px) saturate(1.2);
-  opacity: 0.9;
+  filter: blur(48px);
+  opacity: 0.85;
   pointer-events: none;
-  animation: aurora-drift 34s ease-in-out infinite alternate;
+  animation: aurora-drift 45s ease-in-out infinite alternate;
 }
 
-/* A little grain over the top. Large flat gradients band on cheap panels; noise
-   hides the steps and keeps the surface from looking like plastic. */
+/* Subtle organic paper texture */
 body::after {
   position: fixed;
   z-index: 1;
@@ -404,12 +402,12 @@ body::after {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
   content: "";
   mix-blend-mode: overlay;
-  opacity: 0.05;
+  opacity: 0.04;
   pointer-events: none;
 }
 
 body:not(.dark)::before {
-  opacity: 0.4;
+  opacity: 0.35;
 }
 
 /* Everything real sits above the two decorative layers. */
@@ -420,10 +418,10 @@ body > * {
 
 @keyframes aurora-drift {
   from {
-    transform: translate3d(-3%, -2%, 0) scale(1);
+    transform: translate3d(-2%, -1%, 0) scale(1);
   }
   to {
-    transform: translate3d(3%, 4%, 0) scale(1.12);
+    transform: translate3d(2%, 3%, 0) scale(1.08);
   }
 }
 
@@ -3463,16 +3461,16 @@ body.theme-light .document-text p:hover {
 /* TTS Speaking paragraph active highlight */
 .document-text p.tts-speaking,
 .document-text .tts-paragraph-highlight.tts-speaking {
-  background-color: rgba(168, 85, 247, 0.16) !important;
-  box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.35);
-  color: #ffffff;
+  background-color: color-mix(in srgb, var(--accent) 18%, transparent) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--text);
 }
 
 body.theme-sepia .document-text p.tts-speaking,
 body.theme-sepia .document-text .tts-paragraph-highlight.tts-speaking {
-  background-color: rgba(139, 92, 246, 0.14) !important;
-  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.3);
-  color: #1a1005;
+  background-color: rgba(140, 83, 43, 0.14) !important;
+  box-shadow: 0 0 0 2px rgba(140, 83, 43, 0.35);
+  color: var(--text);
 }
 
 body.theme-forest .document-text p.tts-speaking,

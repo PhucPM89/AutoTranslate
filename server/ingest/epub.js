@@ -206,7 +206,7 @@ function safeCodePoint(code) {
 
 function normalizePath(path) {
   const parts = [];
-  for (const part of String(path).split("/")) {
+  for (const part of String(path || "").replace(/\\/g, "/").split("/")) {
     if (!part || part === ".") continue;
     if (part === "..") parts.pop();
     else parts.push(safeDecode(part));

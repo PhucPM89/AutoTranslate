@@ -47,3 +47,15 @@ test("TTSEngine: sleep timer countdown and chapter end mode", () => {
   assert.equal(tts.timerRemainingSeconds, 0);
   assert.equal(timerLabel, "");
 });
+
+test("TTSEngine: stop() cleans up active utterances", () => {
+  const tts = new TTSEngine();
+  tts._utterances.add({ mock: true });
+  assert.equal(tts._utterances.size, 1);
+
+  tts.stop();
+  assert.equal(tts.isPlaying, false);
+  assert.equal(tts.isPaused, false);
+  assert.equal(tts._utterances.size, 0);
+});
+

@@ -382,6 +382,8 @@ async function getTranslationBacklog(storage) {
         state = JSON.parse(raw.toString("utf8"));
       } catch {}
       if (!state || !Array.isArray(state.chapters)) continue;
+      const index = await storage.get(`books/${state.bookId}/index.json`).catch(() => null);
+      if (!index) continue;
       const counts = summarize(state);
       const pendingChapters = counts.total - counts.completed;
       if (pendingChapters > 0) {

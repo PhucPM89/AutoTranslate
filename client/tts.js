@@ -233,6 +233,10 @@ class TTSEngine {
       this.synth.cancel();
     }
     this.currentUtterance = null;
+    this._utterances.clear();
+    if (typeof window !== "undefined") {
+      window._safariActiveUtterance = null;
+    }
     this.notifyState();
     if (this.onParagraphChange) this.onParagraphChange(-1);
   }

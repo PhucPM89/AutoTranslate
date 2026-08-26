@@ -317,3 +317,39 @@ test("Gemini daily quota resumes only after the next Pacific midnight", () => {
   assert.ok(recovery.durationMs >= reset - now);
   assert.ok(recovery.durationMs <= 25 * 60 * 60_000);
 });
+
+test("importKeyPoolState with missing or invalid cursor does not corrupt globalKeyIndex with NaN", () => {
+  const keys = ["key-alpha", "key-beta"];
+  importKeyPoolState({ keys: [] }, keys); // no cursor property
+  const order1 = reserveKeyOrder(keys);
+  assert.equal(order1.length, 2);
+  assert.equal(order1[0].key, "key-alpha");
+  assert.ok(Number.isFinite(order1[0].index));
+
+  importKeyPoolState({ keys: [], cursor: "invalid-nan" }, keys);
+  const order2 = reserveKeyOrder(keys);
+  assert.equal(order2.length, 2);
+  assert.equal(order2[0].key, "key-alpha");
+  assert.ok(Number.isFinite(order2[0].index));
+});
+
+test("cleanTranslatedTitle does not erase titles matching clean patterns completely", () => {
+  const { cleanTranslatedTitle } = require("./gemini");
+  if (typeof cleanTranslatedTitle === "function") {
+    assert.equal(cleanTranslatedTitle("Bản Hoàn Chỉnh"), "Bản Hoàn Chỉnh");
+    assert.equal(cleanTranslatedTitle("Tiểu Thuyết"), "Tiểu Thuyết");
+    assert.equal(cleanTranslatedTitle("Võng Du Chi Tuyệt Đỉnh - Bản Hoàn Chỉnh"), "Võng Du Chi Tuyệt Đỉnh");
+  }
+});
+
+test("keyPoolState produces non-colliding fingerprints for keys with identical prefix and suffix", () => {
+  const keys = [
+    "AIzaSyD-shared-prefix-123456789-suffix",
+    "AIzaSyD-shared-prefix-987654321-suffix"
+  ];
+  const state = exportKeyPoolState(keys);
+  assert.equal(state.keys.length, 2);
+  assert.notEqual(state.keys[0].id, state.keys[1].id, "fingerprints must be unique even with common prefix/suffix");
+  assert.match(state.keys[0].id, /^k_[a-f0-9]{16}$/);
+});
+

@@ -1617,7 +1617,7 @@ async function openFromUrl() {
   const urlParams = new URLSearchParams(window.location.search);
   const paramBook = urlParams.get("book");
   if (paramBook) {
-    const chNum = Number(urlParams.get("ch")) || 1;
+    const chNum = Number(urlParams.get("chapter") || urlParams.get("ch")) || 1;
     const catalogBook = findBookById(paramBook);
     if (catalogBook) {
       if (!requireLogin("Vui lòng đăng nhập tài khoản Google để đọc truyện.")) {

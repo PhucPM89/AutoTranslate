@@ -435,6 +435,56 @@ test("saving translation focus dispatches an immediate replacement run", async (
   }
 });
 
+test("translation dispatch rejects shell-shaped inputs before calling GitHub", async () => {
+  const environment = env({ GITHUB_DISPATCH_TOKEN: "github-test-token" });
+  const originalFetch = global.fetch;
+  let calls = 0;
+  global.fetch = async () => {
+    calls += 1;
+    return new Response(null, { status: 204 });
+  };
+  try {
+    for (const body of [
+      { book: "safe-book; env", budget: "5000" },
+      { book: "safe-book", budget: "1; env" },
+      { book: "safe-book", budget: "10001" }
+    ]) {
+      const response = await call("/api/admin/translate", { method: "POST", cookie: cookie(), body }, environment);
+      assert.equal(response.status, 400);
+    }
+    assert.equal(calls, 0);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("malformed translation JSON is rejected instead of dispatching defaults", async () => {
+  const environment = env({ GITHUB_DISPATCH_TOKEN: "github-test-token" });
+  const request = new Request("https://tram-chu.online/api/admin/translate", {
+    method: "POST",
+    headers: { cookie: cookie(), origin: "https://tram-chu.online", "content-type": "application/json" },
+    body: "{broken"
+  });
+  const response = await loadWorker().fetch(request, environment);
+  assert.equal(response.status, 400);
+});
+
+test("dynamic API keys are persisted only in the private archive bucket", async () => {
+  const environment = env();
+  const response = await call(
+    "/api/admin/keys",
+    {
+      method: "POST",
+      cookie: cookie(),
+      body: { action: "add", key: `gsk_${"a".repeat(40)}` }
+    },
+    environment
+  );
+  assert.equal(response.status, 200);
+  assert.ok(environment.NOVEL_ARCHIVE.objects.has("config/api-keys.json"));
+  assert.ok(!environment.NOVEL_STORAGE.objects.has("config/api-keys.json"));
+});
+
 test("translation status hides deleted books left in an old worker snapshot", async () => {
   const environment = env();
   environment.NOVEL_STORAGE.objects.set(

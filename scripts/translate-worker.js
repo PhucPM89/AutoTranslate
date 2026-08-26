@@ -25,7 +25,7 @@ function loadEnvFile(file) {
 loadEnvFile(path.join(__dirname, "..", ".env"));
 loadEnvFile(path.join(__dirname, "..", ".env.local"));
 
-const { createStorage } = require("../server/storage");
+const { createStorage, createArchiveStorage } = require("../server/storage");
 const { createSupabase } = require("../server/supabase");
 const { chapterKey, originalKey, buildChapterDocument } = require("../server/ingest/documents");
 const { publishIndex } = require("../server/ingest/ingest-book");
@@ -167,11 +167,14 @@ function sanitizeStatusError(value) {
 
 async function main() {
   const storage = createStorage();
+  // Credentials and provider-health diagnostics are operational secrets, so
+  // they live only in the private archive bucket, never the CDN reader bucket.
+  const privateStorage = createArchiveStorage();
 
   // Load dynamically configured keys from R2 Storage if present
   let keyList = [];
   try {
-    const rawKeys = await storage.get("config/api-keys.json");
+    const rawKeys = privateStorage && await privateStorage.get("config/api-keys.json");
     if (rawKeys) {
       const parsed = JSON.parse(rawKeys.toString("utf8"));
       if (Array.isArray(parsed) && parsed.length > 0) {
@@ -191,11 +194,14 @@ async function main() {
     .filter(Boolean)
     .sort((a, b) => translationKeyPriority(a) - translationKeyPriority(b));
   if (!allUniqueKeys.length) throw new Error("Thiếu API Keys (Gemini / Groq).");
-  importKeyPoolState(await readJson(storage, TRANSLATE_KEY_HEALTH_KEY), allUniqueKeys);
-  const persistKeyHealth = () => storage.put(
-    TRANSLATE_KEY_HEALTH_KEY,
-    JSON.stringify(exportKeyPoolState(allUniqueKeys))
-  ).catch((error) => console.warn(`Không lưu được cooldown API key: ${error.message}`));
+  importKeyPoolState(privateStorage ? await readJson(privateStorage, TRANSLATE_KEY_HEALTH_KEY) : null, allUniqueKeys);
+  const persistKeyHealth = () => privateStorage
+    ? privateStorage.put(
+        TRANSLATE_KEY_HEALTH_KEY,
+        JSON.stringify(exportKeyPoolState(allUniqueKeys)),
+        { cacheControl: "private, no-store" }
+      ).catch((error) => console.warn(`Không lưu được cooldown API key: ${error.message}`))
+    : Promise.resolve();
   const apiKey = allUniqueKeys.join(",");
   const db = createSupabase();
   const engine = createTranslationEngine({ storage });

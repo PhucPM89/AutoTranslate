@@ -129,3 +129,56 @@ test("a failed request reports the status without echoing the key", () =>
       );
     }
   ));
+
+test("upsertBook preserves snake_case properties from existing database rows", () =>
+  withFakeFetch(
+    () => new Response(null, { status: 204 }),
+    async (calls) => {
+      const db = createSupabase(ENV);
+      const existingRow = {
+        id: "fanqie-12345",
+        title: "Tu Chân Giới",
+        author: "Tác Giả",
+        description: "Mô tả",
+        cover_url: "/covers/fanqie-12345.jpg",
+        status: "Đang cập nhật",
+        total_chapters: 1500,
+        translated_chapters: 1200,
+        revision: 2,
+        source: "fanqie",
+        source_id: "12345",
+        source_url: "https://fanqie.com/12345",
+        last_crawled_at: "2026-08-20T10:00:00Z"
+      };
+      await db.upsertBook(existingRow);
+
+      assert.equal(calls.length, 1);
+      const body = JSON.parse(calls[0].options.body);
+      assert.equal(body[0].total_chapters, 1500);
+      assert.equal(body[0].translated_chapters, 1200);
+      assert.equal(body[0].source_id, "12345");
+      assert.equal(body[0].source_url, "https://fanqie.com/12345");
+      assert.equal(body[0].last_crawled_at, "2026-08-20T10:00:00Z");
+    }
+  ));
+
+test("listBooks filters on book_categories.categories.slug with !inner join when genre is given", () =>
+  withFakeFetch(
+    () => new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } }),
+    async (calls) => {
+      const db = createSupabase(ENV);
+      await db.listBooks({ genre: "tien-hiep" });
+      assert.equal(calls.length, 1);
+      const url = new URL(calls[0].url);
+      assert.equal(url.searchParams.get("book_categories.categories.slug"), "eq.tien-hiep");
+      assert.match(url.searchParams.get("select"), /book_categories!inner\(categories!inner\(slug,name\)\)/);
+      assert.equal(url.searchParams.get("status"), null);
+
+      calls.length = 0;
+      await db.listBooks({ genre: "" });
+      assert.equal(calls.length, 1);
+      const urlNoGenre = new URL(calls[0].url);
+      assert.doesNotMatch(urlNoGenre.searchParams.get("select"), /!inner/);
+    }
+  ));
+

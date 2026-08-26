@@ -421,7 +421,7 @@ async function handleTranslateStatus({ request, env }) {
 
   if (request.method === "POST") {
     requireSameOrigin(request);
-    const body = await readJson(request).catch(() => ({}));
+    const body = await readJson(request);
     if (body?.action === "focus") {
       if (!env.NOVEL_STORAGE) throw fail(503, "Chưa cấu hình NOVEL_STORAGE để lưu bộ truyện ưu tiên.");
       const storage = createR2BindingStorage(env.NOVEL_STORAGE);
@@ -464,8 +464,7 @@ async function handleTranslateStatus({ request, env }) {
     if (!env.GITHUB_DISPATCH_TOKEN || !env.GITHUB_REPOSITORY) {
       throw fail(503, "Chưa cấu hình GITHUB_DISPATCH_TOKEN / GITHUB_REPOSITORY.");
     }
-    const book = String(body?.book || "").trim();
-    const budget = String(body?.budget || "5000").trim();
+    const { book, budget } = normalizeTranslationDispatch(body);
 
     await dispatchTranslationWorkflow(env, { book, budget });
 
@@ -573,8 +572,10 @@ async function dispatchTranslationWorkflow(env, { book = "", budget = "5000", re
     );
 
     if (!response.ok) {
-      const errText = await response.text().catch(() => "");
-      console.error("Workflow dispatch translate-worker failed:", response.status, errText);
+      // GitHub's diagnostic can echo workflow inputs. Status is sufficient here,
+      // and keeping the body out of logs prevents attacker-controlled data from
+      // becoming an operational log-injection surface.
+      console.error("Workflow dispatch translate-worker failed:", response.status);
       throw fail(502, `Không gọi được GitHub Actions translate worker (HTTP ${response.status}).`);
     }
 }
@@ -872,7 +873,9 @@ function sessionCookie(value, maxAge) {
 const KEYS_STORAGE_KEY = "config/api-keys.json";
 
 function storageForKeys(env) {
-  if (env.NOVEL_STORAGE) return createR2BindingStorage(env.NOVEL_STORAGE);
+  // Credentials are operational secrets. NOVEL_STORAGE is the reader bucket and
+  // is served wholesale by the public CDN, so falling back to it publishes every
+  // key to the internet. Fail closed when the private binding is absent.
   if (env.NOVEL_ARCHIVE) return createR2BindingStorage(env.NOVEL_ARCHIVE);
   return null;
 }
@@ -922,8 +925,8 @@ async function handleAdminKeys({ request, env }) {
 
     if (action === "add") {
       const newKey = String(body?.key || "").trim();
-      if (!newKey || (!newKey.startsWith("gsk_") && !newKey.startsWith("sk-or-v1-"))) {
-        throw fail(400, "API Key không hợp lệ. Key phải bắt đầu bằng 'gsk_' (Groq) hoặc 'sk-or-v1-' (OpenRouter).");
+      if (!/^(?:gsk_|sk-or-v1-|AIza|AQ\.)[A-Za-z0-9_.-]{14,280}$/.test(newKey)) {
+        throw fail(400, "API Key không hợp lệ. Key phải bắt đầu bằng 'AIza'/'AQ.' (Gemini), 'gsk_' (Groq) hoặc 'sk-or-v1-' (OpenRouter).");
       }
       if (keyList.includes(newKey)) {
         throw fail(400, "API Key này đã tồn tại trong danh sách.");
@@ -1002,7 +1005,8 @@ async function handleAdminKeys({ request, env }) {
               model: env.GROQ_MODEL || "qwen/qwen3.6-27b",
               messages: [{ role: "user", content: "hi" }],
               max_tokens: 1
-            })
+            }),
+            signal: AbortSignal.timeout(15000)
           });
           const data = await resp.json().catch(() => null);
           const ok = resp.ok;
@@ -1036,7 +1040,8 @@ async function handleAdminKeys({ request, env }) {
           });
         } else if (isOpenRouter) {
           const resp = await fetch("https://openrouter.ai/api/v1/auth/key", {
-            headers: { Authorization: `Bearer ${key}` }
+            headers: { Authorization: `Bearer ${key}` },
+            signal: AbortSignal.timeout(15000)
           });
           const data = await resp.json().catch(() => null);
           const ok = resp.ok;
@@ -1064,6 +1069,25 @@ async function handleAdminKeys({ request, env }) {
             remainingTokens: 50000,
             resetTokens: "0s"
           });
+        } else if (key.startsWith("AIza") || key.startsWith("AQ.")) {
+          const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`, {
+            signal: AbortSignal.timeout(15000)
+          });
+          const ok = resp.ok;
+          const status = ok ? "ready" : (resp.status === 429 ? "cooldown" : "error");
+          const statusMessage = ok
+            ? "Sẵn sàng (Google Gemini API)"
+            : (resp.status === 429 ? "Tạm hết RPM/RPD Quota" : `Lỗi HTTP ${resp.status}`);
+          results.push({
+            id: i + 1,
+            masked,
+            provider: "Google Gemini",
+            status,
+            statusMessage,
+            latencyMs: Date.now() - startTime,
+            ok,
+            error: ok ? null : `Lỗi HTTP ${resp.status}`
+          });
         } else {
           results.push({
             id: i + 1,
@@ -1079,7 +1103,7 @@ async function handleAdminKeys({ request, env }) {
         results.push({
           id: i + 1,
           masked,
-          provider: isGroq ? "Groq LPU" : isOpenRouter ? "OpenRouter" : "Khác",
+          provider: isGroq ? "Groq LPU" : isOpenRouter ? "OpenRouter" : key.startsWith("AIza") || key.startsWith("AQ.") ? "Google Gemini" : "Khác",
           status: "error",
           statusMessage: err.message,
           error: err.message,
@@ -1106,7 +1130,7 @@ async function handleAdminKeys({ request, env }) {
   const summary = keyList.map((key, i) => ({
     id: i + 1,
     masked: key.slice(0, 8) + "..." + key.slice(-6),
-    provider: key.startsWith("gsk_") ? "Groq LPU" : "Google Gemini",
+    provider: key.startsWith("gsk_") ? "Groq LPU" : key.startsWith("sk-or-v1-") ? "OpenRouter" : "Google Gemini",
     status: "ready"
   }));
 
@@ -1145,6 +1169,21 @@ async function readJson(request, limit = 64 * 1024) {
     if (error?.status) throw error;
     throw fail(400, "Body không đúng định dạng JSON.");
   }
+}
+
+function normalizeTranslationDispatch(body) {
+  const book = String(body?.book || "").trim();
+  if (book && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(book)) {
+    throw fail(400, "ID truyện không hợp lệ.");
+  }
+
+  const rawBudget = String(body?.budget ?? "5000").trim();
+  if (!/^\d{1,5}$/.test(rawBudget)) throw fail(400, "Budget dịch không hợp lệ.");
+  const parsedBudget = Number(rawBudget);
+  if (!Number.isSafeInteger(parsedBudget) || parsedBudget < 1 || parsedBudget > 10000) {
+    throw fail(400, "Budget dịch phải từ 1 đến 10.000 lượt gọi.");
+  }
+  return { book, budget: String(parsedBudget) };
 }
 
 function extensionOf(filename, allowed) {

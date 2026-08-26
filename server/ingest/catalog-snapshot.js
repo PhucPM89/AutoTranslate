@@ -27,10 +27,10 @@ function resolveCoverUrl(bookId, coverUrl, env = process.env) {
   return bookId ? `/covers/${bookId}.jpg` : "";
 }
 
-async function buildSnapshotFromSupabase(env = process.env, storage = null) {
-  const db = createSupabase(env);
-  if (!db) return null;
-  const rows = await db.listBooks({ limit: 1000, order: "updated_at.desc" });
+async function buildSnapshotFromSupabase(env = process.env, storage = null, db = null) {
+  const database = db || createSupabase(env);
+  if (!database) return null;
+  const rows = await database.listBooks({ limit: 1000, order: "updated_at.desc" });
   if (!Array.isArray(rows)) return null;
   const filtered = rows.filter((row) => row && row.id && row.title && !hasHan(row.title) && !hasHan(row.author));
   
@@ -104,11 +104,11 @@ async function buildSnapshotFromStorage(storage) {
   return books.sort((a, b) => String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")));
 }
 
-async function publishCatalogSnapshot({ storage, site = {}, env = process.env, log = () => {} }) {
+async function publishCatalogSnapshot({ storage, db = null, site = {}, env = process.env, log = () => {} }) {
   let books = null;
   let source = "supabase";
   try {
-    books = await buildSnapshotFromSupabase(env, storage);
+    books = await buildSnapshotFromSupabase(env, storage, db);
   } catch (error) {
     log({ event: "catalog.supabase_failed", message: error.message });
   }

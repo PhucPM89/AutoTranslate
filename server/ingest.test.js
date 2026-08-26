@@ -24,6 +24,7 @@ const {
   summarize
 } = require("./ingest/translation-queue");
 const { ingestBook } = require("./ingest/ingest-book");
+const { publishCatalogSnapshot } = require("./ingest/catalog-snapshot");
 
 function tempStorage() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ingest-test-"));
@@ -699,4 +700,74 @@ test("nextBatchChapters groups consecutive pending chapters and runTranslationJo
   assert.equal(batch3[0].n, 1);
   assert.equal(batch3[1].n, 2);
   assert.equal(batch3[2].n, 3);
+});
+
+test("publishCatalogSnapshot uses passed db instance directly", async () => {
+  const { storage } = tempStorage();
+  let listBooksCalled = false;
+  const mockDb = {
+    listBooks: async () => {
+      listBooksCalled = true;
+      return [
+        {
+          id: "book-test-db",
+          title: "Sách Thử Nghiệm",
+          author: "Tác Giả",
+          description: "Mô tả",
+          cover_url: "/covers/book-test-db.jpg",
+          status: "Đang cập nhật",
+          total_chapters: 10,
+          translated_chapters: 5,
+          revision: 1
+        }
+      ];
+    }
+  };
+
+  const snapshot = await publishCatalogSnapshot({ storage, db: mockDb });
+  assert.equal(listBooksCalled, true);
+  assert.equal(snapshot.source, "supabase");
+  assert.equal(snapshot.books.length, 1);
+  assert.equal(snapshot.books[0].id, "book-test-db");
+});
+
+test("getTranslationBacklog ignores orphan translation queues from deleted books", async () => {
+  const { storage } = tempStorage();
+  const { jobStateKey, getTranslationBacklog } = require("./ingest/translation-queue");
+  
+  // Book 1: active book with published index.json
+  const activeState = createJobState({ bookId: "active-book", revision: 1, chapters: [{ chapterNumber: 1 }, { chapterNumber: 2 }] });
+  await storage.put(jobStateKey("active-book"), JSON.stringify(activeState));
+  await storage.put("books/active-book/index.json", JSON.stringify({ bookId: "active-book" }));
+
+  // Book 2: deleted book (orphan queue, index.json missing)
+  const orphanState = createJobState({ bookId: "deleted-book", revision: 1, chapters: [{ chapterNumber: 1 }] });
+  await storage.put(jobStateKey("deleted-book"), JSON.stringify(orphanState));
+
+  const backlog = await getTranslationBacklog(storage);
+  assert.equal(backlog.pendingBooksCount, 1);
+  assert.equal(backlog.totalPendingChapters, 2);
+  assert.deepEqual(backlog.pendingBooks.map((b) => b.bookId), ["active-book"]);
+});
+
+test("createLocalStorage driver rejects path traversal attempts", async () => {
+  const { createLocalStorage } = require("./storage/local-driver");
+  const path = require("path");
+  const fs = require("fs");
+  const os = require("os");
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "storage-test-"));
+  
+  try {
+    const storage = createLocalStorage({ LOCAL_STORAGE_DIR: tempDir });
+    await assert.rejects(
+      () => storage.get("../../etc/passwd"),
+      /Path traversal detected/
+    );
+    await assert.rejects(
+      () => storage.put("../escape.txt", "data"),
+      /Path traversal detected/
+    );
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
 });

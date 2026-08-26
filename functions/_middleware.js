@@ -40,7 +40,7 @@ export async function onRequest(context) {
   const userAgent = (request.headers.get("user-agent") || "").toLowerCase();
   const isCrawler = BOT_USER_AGENTS.some((bot) => userAgent.includes(bot));
   const bookId = url.searchParams.get("book");
-  const chapterParam = url.searchParams.get("chapter");
+  const chapterParam = url.searchParams.get("chapter") || url.searchParams.get("ch");
 
   // If not a crawler or no book specified, pass through to normal static handling
   if (!isCrawler || !bookId) {

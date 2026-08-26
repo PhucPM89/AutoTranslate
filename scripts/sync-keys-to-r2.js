@@ -1,6 +1,6 @@
 "use strict";
 
-const { createStorage } = require("../server/storage");
+const { createArchiveStorage } = require("../server/storage");
 const { parseApiKeys } = require("../server/gemini");
 const path = require("path");
 const fs = require("fs");
@@ -19,19 +19,22 @@ if (fs.existsSync(envPath)) {
   }
 }
 
-const keyList = parseApiKeys(process.env.GROQ_API_KEYS || process.env.GROQ_API_KEY || "");
-console.log(`Tìm thấy ${keyList.length} Groq API Keys từ .env.`);
+const keyList = Array.from(new Set([
+  ...parseApiKeys(process.env.GROQ_API_KEYS || process.env.GROQ_API_KEY || ""),
+  ...parseApiKeys(process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || "")
+])).filter(Boolean);
+console.log(`Tìm thấy ${keyList.length} API Keys (Gemini / Groq) từ .env.`);
 
 async function main() {
-  const storage = createStorage(process.env);
+  const storage = createArchiveStorage(process.env);
   if (!storage) {
-    throw new Error("Không thể kết nối R2 Storage từ env.");
+    throw new Error("Thiếu R2_ARCHIVE_BUCKET; từ chối ghi API key vào reader bucket công khai.");
   }
 
   const key = "config/api-keys.json";
   await storage.put(key, JSON.stringify(keyList, null, 2), {
     contentType: "application/json",
-    cacheControl: "no-cache"
+    cacheControl: "private, no-store"
   });
 
   console.log(`✅ Đã lưu thành công ${keyList.length} API Keys lên R2: ${key}`);

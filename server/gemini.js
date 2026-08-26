@@ -5,6 +5,7 @@ if (typeof dns.setDefaultResultOrder === "function") {
   dns.setDefaultResultOrder("ipv4first");
 }
 
+const crypto = require("crypto");
 const { createTranslationEngine } = require("./translation-engine");
 
 const GROQ_MODEL = process.env.GROQ_MODEL || "qwen/qwen3.6-27b";
@@ -106,6 +107,8 @@ function getActiveKeys(apiKeys) {
   if (parsed.length) return parsed;
 
   const fromEnv = [
+    process.env.GEMINI_API_KEYS,
+    process.env.GEMINI_API_KEY,
     process.env.GROQ_API_KEYS,
     process.env.GROQ_API_KEY
   ].filter(Boolean).join(",");
@@ -227,7 +230,8 @@ async function translateBatchChapters(chapters, apiKeys, options = {}) {
 }
 
 function cleanTranslatedTitle(title) {
-  return String(title || "")
+  const original = String(title || "").trim();
+  const cleaned = original
     .replace(/[\-_|·].*(bản hoàn chỉnh|đọc miễn phí|trực tuyến|tiểu thuyết|toàn bộ|toàn văn).*$/i, "")
     .replace(/\s*(toàn bộ|toàn văn|hoàn chỉnh|bản toàn thể)?\s*trực tuyến miễn phí đọc\s*$/i, "")
     .replace(/\s*toàn văn đọc miễn phí\s*$/i, "")
@@ -235,6 +239,7 @@ function cleanTranslatedTitle(title) {
     .replace(/\s*bản toàn thể\s*$/i, "")
     .replace(/\s*tiểu thuyết\s*$/i, "")
     .trim();
+  return cleaned || original;
 }
 
 async function translateMetadata(metadata, apiKey) {
@@ -513,7 +518,8 @@ function getKeyPoolStats(keyList = []) {
 
 function keyFingerprint(key) {
   const value = String(key || "");
-  return `${value.slice(0, 8)}...${value.slice(-6)}`;
+  const hash = crypto.createHash("sha256").update(value).digest("hex").slice(0, 16);
+  return `k_${hash}`;
 }
 
 function exportKeyPoolState(keyList = []) {
@@ -540,9 +546,10 @@ function exportKeyPoolState(keyList = []) {
 function importKeyPoolState(snapshot, keyList = []) {
   if (!snapshot || !Array.isArray(snapshot.keys)) return;
   const byId = new Map(snapshot.keys.map((entry) => [entry.id, entry]));
-  globalKeyIndex = Math.max(0, Number(snapshot.cursor || 0));
+  const cursor = Number(snapshot?.cursor);
+  globalKeyIndex = Number.isFinite(cursor) && cursor >= 0 ? cursor : 0;
   for (const key of keyList) {
-    const saved = byId.get(keyFingerprint(key));
+    const saved = byId.get(keyFingerprint(key)) || byId.get(`${key.slice(0, 8)}...${key.slice(-6)}`);
     if (!saved) continue;
     const health = getKeyHealth(key);
     health.cooldownUntil = Math.max(0, Number(saved.cooldownUntil || 0));
@@ -825,7 +832,7 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
           continue;
         }
 
-        const message = `${data?.error?.message || "Groq API trả về lỗi."} [Key: ${apiKey.slice(0, 10)}...] (Status: ${response.status})`;
+        const message = `${data?.error?.message || "Groq API trả về lỗi."} (Status: ${response.status})`;
         const error = new Error(message);
         error.status = response.status;
         error.model = model;
@@ -862,7 +869,7 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
 async function translateWithGemini(apiKey, model, prompt, generationConfig = {}) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     model
-  )}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  )}:generateContent`;
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const controller = new AbortController();
@@ -873,6 +880,7 @@ async function translateWithGemini(apiKey, model, prompt, generationConfig = {})
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
           "x-goog-api-client": "gl-node/gemini-translator"
         },
         signal: controller.signal,
@@ -908,7 +916,7 @@ async function translateWithGemini(apiKey, model, prompt, generationConfig = {})
           continue;
         }
 
-        const message = `${data?.error?.message || "Gemini API trả về lỗi."} [Key: ${apiKey.slice(0, 10)}...] (Status: ${response.status})`;
+        const message = `${data?.error?.message || "Gemini API trả về lỗi."} (Status: ${response.status})`;
         const error = new Error(message);
         error.status = response.status;
         error.model = model;
@@ -1178,5 +1186,6 @@ module.exports = {
   buildResidualHanRepairPrompt,
   exportKeyPoolState,
   importKeyPoolState,
-  keyFingerprint
+  keyFingerprint,
+  cleanTranslatedTitle
 };
