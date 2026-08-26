@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "include": [
+    "/api/*",
+    "/covers/*",
+    "/"
+  ],
+  "exclude": [
+    "/admin-upload.js",
+    "/app.js",
+    "/style.css",
+    "/sw.js",
+    "/favicon.svg",
+    "/manifest.webmanifest",
+    "/robots.txt",
+    "/sitemap.xml",
+    "/library.json",
+    "/assets/*",
+    "/fonts/*",
+    "/vendor/*",
+    "/library/*"
+  ]
+}

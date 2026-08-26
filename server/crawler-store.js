@@ -81,7 +81,7 @@ function sanitizeCrawlerConfig(value) {
     enabled: Boolean(value?.enabled),
     categories: categories.length ? categories : [...DEFAULT_CONFIG.categories],
     maxNewBooksPerRun: clampInteger(value?.maxNewBooksPerRun, 1, 3, DEFAULT_CONFIG.maxNewBooksPerRun),
-    maxPendingBooksBacklog: clampInteger(value?.maxPendingBooksBacklog, 1, 200, DEFAULT_CONFIG.maxPendingBooksBacklog),
+    maxPendingBooksBacklog: clampInteger(value?.maxPendingBooksBacklog, 0, 200, DEFAULT_CONFIG.maxPendingBooksBacklog),
     maxLibraryBooks: clampInteger(value?.maxLibraryBooks, 0, 100000, DEFAULT_CONFIG.maxLibraryBooks),
     // The word-count bucket is the single length control; Fanqie applies it
     // server-side, so a separate chapter minimum is redundant.

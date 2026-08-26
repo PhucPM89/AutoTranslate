@@ -34,7 +34,8 @@ const {
   jobStateKey,
   runTranslationJobs,
   summarize,
-  isDone
+  isDone,
+  isSettled
 } = require("../server/ingest/translation-queue");
 const {
   translateText,
@@ -264,8 +265,8 @@ async function main() {
     const bIsActive = activeBookIds.has(b.bookId);
     if (aIsActive !== bIsActive) return bIsActive ? 1 : -1;
 
-    const aDone = (a.total || 0) - (a.pending || 0);
-    const bDone = (b.total || 0) - (b.pending || 0);
+    const aDone = (a.total || 0) - (a.pending || 0) - (a.failed || 0);
+    const bDone = (b.total || 0) - (b.pending || 0) - (b.failed || 0);
     if (aDone > 0 || bDone > 0) {
       // Prioritize novel with highest completion count to finish 100% fastest
       const aPct = (a.total || 0) ? (aDone / a.total) : 0;
@@ -289,7 +290,7 @@ async function main() {
   console.log(`Có ${activeQueue.length} book trong hàng đợi worker (Batch size: ${BATCH_SIZE}, ${activeBookIds.size} book VIP toàn hệ thống):`);
   for (const job of activeQueue.slice(0, 10)) {
     const vipTag = activeBookIds.has(job.bookId) ? " [VIP ĐỘC GIẢ]" : "";
-    const done = (job.total || 0) - (job.pending || 0);
+    const done = (job.total || 0) - (job.pending || 0) - (job.failed || 0);
     const pct = job.total ? Math.round((done / job.total) * 100) : 0;
     console.log(`  ${job.bookId} r${job.revision}: Đã dịch ${done}/${job.total} (${pct}%)${vipTag} — Còn ${job.pending} chương`);
   }
@@ -343,7 +344,7 @@ async function main() {
         stop = true;
         break;
       }
-      if (isDone(job.state)) continue;
+      if (isSettled(job.state)) continue;
 
       if (!rowChecked.has(job.bookId)) {
         await ensureBookRow({ storage, db, job });
@@ -364,7 +365,7 @@ async function main() {
       console.log(`>>> [KHÓA CHẶT DỊCH 100%] Bộ truyện: "${bTitle}" (${job.bookId})`);
       console.log(`===============================================================`);
 
-      while (!isDone(job.state) && spentTotal < REQUEST_BUDGET && Date.now() < deadlineAt) {
+      while (!isSettled(job.state) && spentTotal < REQUEST_BUDGET && Date.now() < deadlineAt) {
         const remainingBudget = REQUEST_BUDGET === Infinity ? Infinity : REQUEST_BUDGET - spentTotal;
         const result = await runTranslationJobs({
           state: job.state,
@@ -469,8 +470,9 @@ async function main() {
               message: `${activityMessage} Tiến độ thật ${completed}/${total}; phiên này +${currentTotalSession} chương.`,
               queue: queue.map((j) => {
                 const isCurrent = j.bookId === job.bookId;
-                const doneCh = isCurrent ? completed : (j.total || 0) - (j.pending || 0);
-                const pendCh = isCurrent ? Math.max(0, total - completed) : j.pending;
+                const failedCh = isCurrent ? summarize(job.state).failed : Number(j.failed || 0);
+                const doneCh = isCurrent ? completed : (j.total || 0) - (j.pending || 0) - failedCh;
+                const pendCh = isCurrent ? Math.max(0, total - completed - failedCh) : j.pending;
                 return {
                   bookId: j.bookId,
                   revision: j.revision,
@@ -522,10 +524,23 @@ async function main() {
           }
         }
 
+        if (result.failed && isSettled(job.state) && !isDone(job.state)) {
+          touched.set(job.bookId, job);
+          sincePublish.set(job.bookId, 0);
+          await publishBook(job);
+          const counts = summarize(job.state);
+          if (!ONLY_BOOK && translationConfig.focusBookId === job.bookId) {
+            translationConfig = await writeTranslationConfig(storage, { focusBookId: "" });
+            console.log(`  Bộ ưu tiên không còn chương dịch được; trả dashboard về chế độ tự động.`);
+          }
+          console.warn(`  [${job.bookId}] Queue đã hết chương dịch được: ${counts.completed}/${counts.total} completed, ${counts.failed} failed. Đã publish trạng thái để worker không kẹt.`);
+          break;
+        }
+
         rotation.lastBookId = job.bookId;
         await storage.put(ROTATION_KEY, JSON.stringify(rotation)).catch(() => {});
 
-        if (isDone(job.state)) {
+        if (isSettled(job.state)) {
           break;
         }
 
@@ -603,10 +618,11 @@ async function main() {
       return {
         bookId: j.bookId,
         revision: j.revision,
-        pending: Math.max(0, counts.total - counts.completed),
+        pending: Math.max(0, counts.total - counts.completed - counts.failed),
         highPriority: j.highPriority,
         total: counts.total,
-        translated: counts.completed
+        translated: counts.completed,
+        failed: counts.failed
       };
     })
   });
@@ -645,13 +661,14 @@ async function listJobs(storage, onlyBook) {
     const state = await readJson(storage, jobStateKey(onlyBook));
     if (!state || !Array.isArray(state.chapters)) return [];
     const counts = summarize(state);
-    if (counts.completed === counts.total) return [];
+    if (isSettled(state)) return [];
     return [{
       bookId: state.bookId,
       revision: state.revision,
       state,
       total: counts.total,
-      pending: counts.total - counts.completed,
+      pending: counts.total - counts.completed - counts.failed,
+      failed: counts.failed,
       highPriority: counts.highPriority || 0
     }];
   }
@@ -666,13 +683,14 @@ async function listJobs(storage, onlyBook) {
     if (!index) continue;
 
     const counts = summarize(state);
-    if (counts.completed === counts.total) continue;
+    if (isSettled(state)) continue;
     jobs.push({
       bookId: state.bookId,
       revision: state.revision,
       state,
       total: counts.total,
-      pending: counts.total - counts.completed,
+      pending: counts.total - counts.completed - counts.failed,
+      failed: counts.failed,
       highPriority: counts.highPriority || 0
     });
   }

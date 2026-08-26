@@ -57,31 +57,47 @@ async function main() {
 
   const storage = createStorage();
   const jobs = (await storage.list("jobs/")).filter((o) => o.key.endsWith("/translation.json"));
+  console.log(`Đang đọc ${jobs.length} jobs dịch...`);
+
+  const jobStates = [];
+  await pool(jobs, async (o) => {
+    const st = await readJson(storage, o.key);
+    if (st && Array.isArray(st.chapters)) jobStates.push(st);
+  }, 30);
+
+  const allChapterTasks = [];
+  for (const st of jobStates) {
+    const done = st.chapters.filter((c) => c.status === "completed").slice(0, perBook);
+    const bookId = st.bookId;
+    const rev = st.revision || 1;
+    for (const c of done) {
+      allChapterTasks.push({ bookId, rev, n: c.n });
+    }
+  }
+
+  console.log(`Tìm thấy ${allChapterTasks.length} chương completed. Đang tải song song...`);
   const chapters = [];
   let chapCount = 0;
 
-  for (const o of jobs) {
-    const st = await readJson(storage, o.key);
-    if (!st || !Array.isArray(st.chapters)) continue;
-    const done = st.chapters.filter((c) => c.status === "completed").slice(0, perBook);
-    if (!done.length) continue;
-    const bookId = st.bookId;
-    const rev = st.revision || 1;
-    await pool(done, async (c) => {
-      const zh = await readJson(storage, originalKey(bookId, rev, c.n));
-      const vi = await readJson(storage, chapterKey(bookId, rev, c.n));
-      if (!zh || !vi || vi.translationStatus !== "completed") return;
-      const zp = String(zh.content || "").split(/\n/).filter((x) => x.trim());
-      const vp = String(vi.content || "").split(/\n/).filter((x) => x.trim());
-      const paras = [];
-      const n = Math.min(zp.length, vp.length);
-      for (let i = 0; i < n; i++) paras.push([zp[i], vp[i]]);
-      chapters.push({ book: bookId, paras });
-      chapCount++;
-    });
-    if (chapCount && chapCount % 500 === 0) console.log(`  ...đọc ${chapCount} chương`);
-  }
+  await pool(allChapterTasks, async ({ bookId, rev, n }) => {
+    const [zh, vi] = await Promise.all([
+      readJson(storage, originalKey(bookId, rev, n)),
+      readJson(storage, chapterKey(bookId, rev, n))
+    ]);
+    if (!zh || !vi || vi.translationStatus !== "completed") return;
+    const zp = String(zh.content || "").split(/\n/).filter((x) => x.trim());
+    const vp = String(vi.content || "").split(/\n/).filter((x) => x.trim());
+    const paras = [];
+    const minLen = Math.min(zp.length, vp.length);
+    for (let i = 0; i < minLen; i++) paras.push([zp[i], vp[i]]);
+    chapters.push({ book: bookId, paras });
+    chapCount++;
+    if (chapCount % 500 === 0 || chapCount === allChapterTasks.length) {
+      console.log(`  ...đã tải ${chapCount}/${allChapterTasks.length} chương`);
+    }
+  }, 40);
 
+  console.log("Đang phân tích và xây dựng Translation Memory...");
   const tm = buildTM(chapters, { minCount, minBooks });
   const lines = Object.entries(tm).map(([zh, vi]) => `${zh}=${vi}`);
   fs.mkdirSync(path.dirname(out), { recursive: true });

@@ -406,19 +406,15 @@ function parseGroqRetryDurationMs(errorMsg) {
 
 function classifyQuotaError(errorMsg) {
   const message = String(errorMsg || "").toLowerCase();
-  // Day/minute limits are matched first, by their explicit dimension words, so a
-  // "TPD ... try again" message reads as daily rather than being mistaken for a
-  // transient hiccup below.
-  if (/\b(tpd|rpd)\b|tokens? per day|requests? per day|per-day|daily (?:free )?(?:allocation|quota|limit)|neurons/.test(message)) {
+  // Day/minute limits are matched first, by their explicit dimension words
+  if (/\b(tpd|rpd|qpd)\b|tokens? per day|requests? per day|queries per day|per-day|daily (?:free )?(?:allocation|quota|limit)|neurons/.test(message)) {
     return "daily";
   }
-  if (/\b(tpm|rpm|itpm|otpm)\b|tokens? per minute|requests? per minute|per-minute/.test(message)) {
+  if (/\b(tpm|rpm|itpm|otpm|qpm)\b|queries per minute|tokens? per minute|requests? per minute|per-minute|limit.*minute/i.test(message)) {
     return "minute";
   }
   // Transient server-side hiccups (503/500, "high demand", overloaded) are NOT
   // quota exhaustion — the model is momentarily busy and recovers in seconds.
-  // Treating them as a daily quota hit cooled every key for 24 hours and stalled
-  // the whole worker. Kept specific so it never swallows a real quota message.
   if (/high demand|overloaded|temporarily unavailable|service unavailable|internal error|\b50[03]\b/.test(message)) {
     return "transient";
   }
@@ -973,8 +969,8 @@ function assessTranslation(source, translation) {
     return { acceptable: false, reason: "vẫn còn sót chữ Hán chưa được chuyển ngữ" };
   }
 
-  // 2. Kiểm tra tỷ lệ độ dài nghiêm ngặt (chống tóm tắt / lược bớt / đứt đoạn)
-  // Bản dịch tiếng Việt chuẩn luôn dài ít nhất 85% - 160% so với bản gốc chữ Hán.
+  // 2. Đảm bảo độ đầy đủ 100% nội dung (Tuyệt đối không tóm tắt, cắt xén, đứt đoạn)
+  // Bản dịch tiếng Việt chuẩn của tiểu thuyết luôn dài từ 85% đến 220% so với bản gốc chữ Hán.
   if (source.length >= 200) {
     const ratio = output.length / Math.max(1, source.length);
     if (ratio < 0.85) {
@@ -985,8 +981,7 @@ function assessTranslation(source, translation) {
     }
   }
 
-  // 3. Preserve paragraph structure. A translation that collapses most source
-  // paragraphs usually omitted or summarized content even when total length is plausible.
+  // 3. Đảm bảo cấu trúc số đoạn văn tương ứng (chống gộp/bỏ sót đoạn)
   const sourceParagraphs = paragraphCount(source);
   const outputParagraphs = paragraphCount(output);
   if (sourceParagraphs >= 4 && outputParagraphs < Math.ceil(sourceParagraphs * 0.5)) {
@@ -996,8 +991,7 @@ function assessTranslation(source, translation) {
     };
   }
 
-  // Exact long-paragraph duplication is a common model failure and can still
-  // pass the broad length-ratio check above.
+  // Chống lặp nguyên đoạn văn dài (model failure)
   const normalizedParagraphs = output
     .split(/\n{2,}/)
     .map(normalizeForComparison)
@@ -1006,16 +1000,39 @@ function assessTranslation(source, translation) {
     return { acceptable: false, reason: "bản dịch lặp nguyên đoạn dài" };
   }
 
-  // Arabic numbers carry quantities, dates and ranks. They should survive a
-  // faithful translation even when surrounding units are localized.
+  // 4. Kiểm tra bảo toàn số lượng và dữ liệu định lượng
   const outputNumbers = new Set(extractNumbers(output));
-  const missingNumber = extractNumbers(source)
-    .find((number) => number && !outputNumbers.has(number));
+  const outputLower = output.toLowerCase();
+  const NUMBER_WORDS = {
+    "0": ["không"],
+    "1": ["một", "nhất", "đầu"],
+    "2": ["hai", "nhị", "đôi"],
+    "3": ["ba", "tam"],
+    "4": ["bốn", "tư", "tứ"],
+    "5": ["năm", "ngũ"],
+    "6": ["sáu", "lục"],
+    "7": ["bảy", "thất"],
+    "8": ["tám", "bát"],
+    "9": ["chín", "cửu"],
+    "10": ["mười", "thập"],
+    "20": ["hai mươi", "hai chục"],
+    "30": ["ba mươi", "ba chục"],
+    "50": ["năm mươi"],
+    "100": ["trăm", "bách", "một trăm"],
+    "1000": ["nghìn", "ngàn", "thiên", "một nghìn", "một ngàn"],
+    "10000": ["vạn", "mười nghìn", "mười ngàn"]
+  };
+  const missingNumber = extractNumbers(source).find((number) => {
+    if (!number || outputNumbers.has(number)) return false;
+    const words = NUMBER_WORDS[number];
+    if (words && words.some((w) => outputLower.includes(w))) return false;
+    return true;
+  });
   if (missingNumber) {
     return { acceptable: false, reason: `bản dịch làm mất số ${missingNumber}` };
   }
 
-  // 4. Kiểm tra câu cụt / đứt gãy ở cuối đoạn
+  // 5. Kiểm tra câu cụt / đứt gãy ở cuối đoạn
   const lastLine = output.split("\n").filter(Boolean).pop() || "";
   const endsWithIncompleteQuote = /["'“‘][^"'“”’]*$/.test(lastLine) && !/[.!?…~]["'”’]?$/.test(lastLine);
   if (source.length > 500 && endsWithIncompleteQuote && !/[.!?…~]$/.test(output)) {

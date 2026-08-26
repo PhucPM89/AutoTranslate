@@ -30,3 +30,7 @@ supabase/.temp/
 # convert dictionary build temp
 .tmp-*/
 .tmp-*
+
+# Neural model weights
+models/*.onnx
+models/*.bin

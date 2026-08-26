@@ -74,7 +74,7 @@ function summarize(state) {
   let high = 0;
   for (const entry of state.chapters) {
     counts[entry.status] = (counts[entry.status] || 0) + 1;
-    if (entry.priority === "high" && entry.status !== "completed") high += 1;
+    if (entry.priority === "high" && entry.status !== "completed" && entry.status !== "failed") high += 1;
   }
   return { total: state.chapters.length, ...counts, highPriority: high };
 }
@@ -83,13 +83,17 @@ function isDone(state) {
   return state.chapters.every((entry) => entry.status === "completed");
 }
 
+function isSettled(state) {
+  return state.chapters.every((entry) => entry.status === "completed" || entry.status === "failed");
+}
+
 // Newly crawled chapters lead so an ongoing book stays current. Every fairness
 // interval gives the oldest normal-priority backlog a turn, so a long book still
 // progresses toward 100% instead of being starved by updates.
 function nextChapter(state, { now = Date.now(), maxAttempts = DEFAULT_MAX_ATTEMPTS, picked = 0, fairnessEvery = 4, strictSequential = false } = {}) {
   if (strictSequential) {
     const firstUnfinished = state.chapters
-      .filter((entry) => entry.status !== "completed")
+      .filter((entry) => entry.status !== "completed" && entry.status !== "failed")
       .sort((a, b) => a.n - b.n)[0];
     return isEntryReady(firstUnfinished, { now, maxAttempts }) ? firstUnfinished : null;
   }
@@ -123,7 +127,7 @@ function nextBatchChapters(state, { now = Date.now(), maxAttempts = DEFAULT_MAX_
 }
 
 function isEntryReady(entry, { now, maxAttempts }) {
-  if (!entry || entry.status === "completed") return false;
+  if (!entry || entry.status === "completed" || entry.status === "failed") return false;
   if (Number(entry.attempts || 0) >= maxAttempts) return false;
   return Number(entry.nextAttemptAt || 0) <= now;
 }
@@ -385,7 +389,7 @@ async function getTranslationBacklog(storage) {
       const index = await storage.get(`books/${state.bookId}/index.json`).catch(() => null);
       if (!index) continue;
       const counts = summarize(state);
-      const pendingChapters = counts.total - counts.completed;
+      const pendingChapters = counts.total - counts.completed - counts.failed;
       if (pendingChapters > 0) {
         pendingBooks.push({
           bookId: state.bookId,
@@ -415,6 +419,7 @@ module.exports = {
   mergeJobState,
   summarize,
   isDone,
+  isSettled,
   nextChapter,
   nextBatchChapters,
   backoffFor,

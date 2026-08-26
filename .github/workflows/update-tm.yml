@@ -1,0 +1,73 @@
+name: Auto-update Translation Memory
+
+# Continuous Self-Learning Loop for the Super Convert Engine.
+# Scans all completed chapters translated by Gemini on Cloudflare R2,
+# extracts high-confidence formulaic clauses and idioms into Translation Memory (tm.txt.gz),
+# and automatically commits the new memory back to the repository.
+
+on:
+  schedule:
+    # Runs weekly on Sunday at 02:00 UTC
+    - cron: "0 2 * * 0"
+  workflow_dispatch:
+    inputs:
+      min_books:
+        description: "Số lượng truyện tối thiểu xuất hiện mẫu câu"
+        required: false
+        default: "2"
+      min_count:
+        description: "Số lần xuất hiện tối thiểu của mẫu câu"
+        required: false
+        default: "3"
+
+permissions:
+  contents: write
+
+jobs:
+  update-tm:
+    name: Auto-Mine Translation Memory from R2
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_ARCHIVE_BUCKET: ${{ secrets.R2_ARCHIVE_BUCKET }}
+      R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
+      MIN_BOOKS_INPUT: ${{ inputs.min_books || '2' }}
+      MIN_COUNT_INPUT: ${{ inputs.min_count || '3' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Mine Translation Memory from R2 Completed Chapters
+        run: |
+          node scripts/build-tm.js \
+            --min-books "$MIN_BOOKS_INPUT" \
+            --min-count "$MIN_COUNT_INPUT"
+
+      - name: Bundle Webnovel Phrase Pack with fresh TM
+        run: node scripts/extract-novel-phrases.js
+
+      - name: Commit and push updated Translation Memory
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [[ -n $(git status --porcelain data/convert) ]]; then
+            git add data/convert/tm.txt.gz data/convert/phrases/webnovel-phrases.txt.gz
+            git commit -m "chore(convert): auto-update translation memory from R2 parallel corpus [skip ci]"
+            git push
+            echo "✓ Đã tự động cập nhật Translation Memory thành công!"
+          else
+            echo "Không có mẫu câu mới nào cần cập nhật."
+          fi

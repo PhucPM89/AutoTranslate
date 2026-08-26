@@ -126,3 +126,19 @@
 # ...but a noun that merely starts with a degree character stays possessive
 太阳的光芒照亮了大地。
 太子的剑断成了两截。
+
+## paired conjunctions & complex grammar
+他不仅天赋极高，而且修炼极其刻苦。
+哪怕是死，我也绝不退缩一步。
+与其坐以待毙，不如放手一搏。
+既然如此，那就休怪我手下无情了。
+宁可站着死，也绝不跪着生。
+
+## disposal 把 and directional complements
+他把手中的长剑拔了出来。
+萧炎把那枚丹药直接吞了下去。
+他一跃而起，整个人倒飞而出。
+周围的众人全都倒吸了一口凉气。
+听到这个消息，他顿时目瞪口呆。
+面对强敌，他怒不可遏，一拳轰出。
+他痛得几乎说不出话来。

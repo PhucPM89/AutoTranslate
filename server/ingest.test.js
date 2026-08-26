@@ -21,6 +21,7 @@ const {
   isQuotaError,
   isQualityRejection,
   QUALITY_MAX_ATTEMPTS,
+  isSettled,
   summarize
 } = require("./ingest/translation-queue");
 const { ingestBook } = require("./ingest/ingest-book");
@@ -210,6 +211,23 @@ test("strict sequential mode waits for the earliest gap instead of skipping ahea
   assert.equal(nextChapter(state, { now: 10_000, strictSequential: true }).n, 1);
 });
 
+test("strict sequential mode skips terminal failed chapters", () => {
+  const state = createJobState({
+    bookId: "strict-failed",
+    revision: 1,
+    chapters: [{ chapterNumber: 1 }, { chapterNumber: 2 }, { chapterNumber: 3 }]
+  });
+  state.chapters[0].status = "failed";
+  state.chapters[0].attempts = 15;
+  state.chapters[1].status = "completed";
+
+  assert.equal(nextChapter(state, { strictSequential: true }).n, 3);
+  state.chapters[2].status = "failed";
+  assert.equal(nextChapter(state, { strictSequential: true }), null);
+  assert.equal(isSettled(state), true);
+  assert.equal(summarize(state).highPriority, 0);
+});
+
 test("a chapter is never completed when the upload fails", async () => {
   const state = createJobState({ bookId: "b", revision: 1, chapters: [{ chapterNumber: 1 }] });
   const result = await runTranslationJobs({
@@ -343,6 +361,27 @@ test("ingest is idempotent: running twice does not duplicate or re-translate", a
     "pending",
     "untranslated chapters are still published so the reader never 404s"
   );
+});
+
+test("ingest publishes convert chapters and reflects convert status in the index", async () => {
+  const { storage } = tempStorage();
+  const book = { id: "book-convert", title: "Sach convert", author: "Tac gia" };
+
+  await ingestBook({
+    storage,
+    epubBuffer: await buildEpub({ chapters: 2 }),
+    book,
+    revision: 1,
+    convert: async (source) => `convert:${source.slice(0, 8)}`
+  });
+
+  const chapter = JSON.parse((await storage.get("books/book-convert/r1/ch/1.json")).toString("utf8"));
+  const index = JSON.parse((await storage.get("books/book-convert/index.json")).toString("utf8"));
+
+  assert.equal(chapter.translationStatus, "convert");
+  assert.match(chapter.content, /^convert:/);
+  assert.equal(index.chapters[0].status, "convert");
+  assert.equal(index.translatedChapters, 0, "convert is readable but still waits for LLM completion");
 });
 
 test("ingest writes the archive, the cover and a resumable job state", async () => {
@@ -508,14 +547,24 @@ test("listJobs skips fully translated books and reports the high-priority count"
   await storage.put(jobStateKey("b-done"), JSON.stringify(done));
   await storage.put("books/b-done/index.json", JSON.stringify({ bookId: "b-done" }));
 
+  const settled = createJobState({ bookId: "b-settled", revision: 1, chapters: [{ chapterNumber: 1 }, { chapterNumber: 2 }] });
+  settled.chapters[0].status = "completed";
+  settled.chapters[1].status = "failed";
+  settled.chapters[1].attempts = 15;
+  await storage.put(jobStateKey("b-settled"), JSON.stringify(settled));
+  await storage.put("books/b-settled/index.json", JSON.stringify({ bookId: "b-settled" }));
+
   const busy = createJobState({ bookId: "b-busy", revision: 1, chapters: [{ chapterNumber: 1 }, { chapterNumber: 2 }] });
   busy.chapters[1].priority = "high";
+  busy.chapters[0].status = "failed";
+  busy.chapters[0].attempts = 15;
   await storage.put(jobStateKey("b-busy"), JSON.stringify(busy));
   await storage.put("books/b-busy/index.json", JSON.stringify({ bookId: "b-busy" }));
 
   const jobs = await listJobs(storage, "");
   assert.deepEqual(jobs.map((job) => job.bookId), ["b-busy"]);
-  assert.equal(jobs[0].pending, 2);
+  assert.equal(jobs[0].pending, 1);
+  assert.equal(jobs[0].failed, 1);
   assert.equal(jobs[0].highPriority, 1);
 });
 
@@ -737,6 +786,8 @@ test("getTranslationBacklog ignores orphan translation queues from deleted books
   
   // Book 1: active book with published index.json
   const activeState = createJobState({ bookId: "active-book", revision: 1, chapters: [{ chapterNumber: 1 }, { chapterNumber: 2 }] });
+  activeState.chapters[1].status = "failed";
+  activeState.chapters[1].attempts = 15;
   await storage.put(jobStateKey("active-book"), JSON.stringify(activeState));
   await storage.put("books/active-book/index.json", JSON.stringify({ bookId: "active-book" }));
 
@@ -746,7 +797,8 @@ test("getTranslationBacklog ignores orphan translation queues from deleted books
 
   const backlog = await getTranslationBacklog(storage);
   assert.equal(backlog.pendingBooksCount, 1);
-  assert.equal(backlog.totalPendingChapters, 2);
+  assert.equal(backlog.totalPendingChapters, 1);
+  assert.equal(backlog.pendingBooks[0].pending, 1);
   assert.deepEqual(backlog.pendingBooks.map((b) => b.bookId), ["active-book"]);
 });
 

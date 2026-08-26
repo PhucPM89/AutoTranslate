@@ -712,7 +712,10 @@ function appendText(parent, tagName, className, value) {
 function startTranslatePolling() {
   stopTranslatePolling();
   loadTranslateStatus();
-  translateTimer = setInterval(loadTranslateStatus, 2500);
+  translateTimer = setInterval(() => {
+    if (activeAdminTab !== "translate" || document.hidden) return;
+    loadTranslateStatus();
+  }, 10000);
 }
 
 function stopTranslatePolling() {

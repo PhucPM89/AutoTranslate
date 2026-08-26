@@ -1,72 +1,111 @@
 "use strict";
 
-// Example-Based MT: learn fluent clause translations from the parallel corpus we
-// already have — the chapters the LLM tier finished, each holding the Chinese
-// source and its Gemini translation, paragraph-aligned. Web-novel prose is
-// heavily formulaic ("他冷哼一声", "心中暗道", "不知过了多久" recur across every
-// book), so a clause that appears often, translated the same way most of the
-// time, is a safe, fluent phrase to reuse. Convert fills the rest.
+// Example-Based MT: learn fluent sentence and clause translations from the
+// parallel corpus on R2 (chapters the LLM tier finished, source + Gemini translation).
 //
-// The alignment is done at the CLAUSE level (split on punctuation), which is
-// robust without word alignment: when a paragraph's Chinese and Vietnamese split
-// into the same number of clauses, they pair up in order. Paragraphs where the
-// counts disagree (the LLM merged or reordered) are skipped, not guessed.
+// Extracts formulaic sentences and clauses that recur across novels and translates
+// them identically to Gemini.
 
 const HAN = /\p{Script=Han}/u;
-// Arabic and Chinese numerals. A clause with a count (三十年后, 第一次) varies too
-// much to be a stable, reusable formula, so it is left to convert.
-const DIGIT = /[0-9０-９一二三四五六七八九十百千万亿零两]/;
-// Sentence/clause punctuation on each side. The Vietnamese has been through the
-// LLM, so it uses Western marks; the Chinese source is full-width.
-const ZH_SPLIT = /[，。！？；：、]/;
-const VI_SPLIT = /[,.!?;:]/;
 
-// Quote and bracket marks that cling to a clause edge but are not part of it.
+// Arabic numbers.
+const ARABIC_DIGITS = /[0-9０-９]/;
+
+// Sentence-level and clause-level splitters.
+const ZH_SENTENCE_SPLIT = /[。！？\n]+/;
+const VI_SENTENCE_SPLIT = /[.!?\n]+/;
+
+const ZH_CLAUSE_SPLIT = /[，。！？；：、]/;
+const VI_CLAUSE_SPLIT = /[,.!?;:]/;
+
+// Quote and bracket marks that cling to a clause edge.
 const EDGE = /^[\s"'“”‘’「」『』（）()《》\-—…·]+|[\s"'“”‘’「」『』（）()《》\-—…·]+$/g;
+
+function clean(text) {
+  return String(text || "").replace(EDGE, "").trim();
+}
 
 function clauses(text, splitter) {
   return String(text || "")
     .split(splitter)
-    .map((c) => c.replace(EDGE, "").trim())
+    .map(clean)
     .filter(Boolean);
 }
 
-// Clause pairs from one paragraph, or [] when the split counts disagree.
+// Pair paragraphs flexibly at both sentence level and clause level.
 function pairParagraph(zhPara, viPara) {
-  const zc = clauses(zhPara, ZH_SPLIT);
-  const vc = clauses(viPara, VI_SPLIT);
-  if (zc.length === 0 || zc.length !== vc.length) return [];
-  return zc.map((zh, i) => [zh, vc[i]]);
+  const pairs = [];
+  
+  // 1. Direct clause pairing if clause counts match
+  const zc = clauses(zhPara, ZH_CLAUSE_SPLIT);
+  const vc = clauses(viPara, VI_CLAUSE_SPLIT);
+  if (zc.length > 0 && zc.length === vc.length) {
+    for (let i = 0; i < zc.length; i++) {
+      pairs.push([zc[i], vc[i]]);
+    }
+    return pairs;
+  }
+
+  // 2. Sentence-level pairing: for each matching sentence, check if sub-clauses match
+  const zs = clauses(zhPara, ZH_SENTENCE_SPLIT);
+  const vs = clauses(viPara, VI_SENTENCE_SPLIT);
+  if (zs.length > 0 && zs.length === vs.length) {
+    for (let i = 0; i < zs.length; i++) {
+      const zSubC = clauses(zs[i], ZH_CLAUSE_SPLIT);
+      const vSubC = clauses(vs[i], VI_CLAUSE_SPLIT);
+      if (zSubC.length > 0 && zSubC.length === vSubC.length) {
+        for (let j = 0; j < zSubC.length; j++) {
+          pairs.push([zSubC[j], vSubC[j]]);
+        }
+      } else if (zSubC.length <= 1 && vSubC.length <= 1) {
+        pairs.push([zs[i], vs[i]]);
+      }
+    }
+    return pairs;
+  }
+
+  return [];
 }
 
-// Is this Chinese clause generic enough to reuse across books? Formulaic prose
-// only: no digits (dates, counts, cultivation levels differ), no Latin, and a
-// sane length — long clauses are plot-specific and short ones are noise.
+// 4-character numeric idioms that are safe to learn
+const NUMERIC_IDIOMS = new Set([
+  "一言不发", "一动不动", "一跃而起", "一击必杀", "一剑封喉", "一败涂地", "一步登天",
+  "一落千丈", "一意孤行", "一触即发", "一表人才", "一箭双雕", "一臂之力", "一丝不苟",
+  "一日千里", "一清二楚", "一往无前", "万无一失", "万籁俱寂", "万死不辞", "万念俱灰",
+  "万众瞩目", "三番五次", "三足鼎立", "三思而行", "千钧一发", "千变万化", "千真万确",
+  "千方百计", "千言万语", "千军万马", "千载难逢", "千篇一律", "九死一生", "百发百中",
+  "百炼成钢", "百思不解", "百战百胜", "十全十美", "十拿九稳", "四分五裂", "五湖四海",
+  "七上八下", "七零八落", "八方支援", "九牛一毛"
+]);
+
+// Is this Chinese clause generic enough to reuse across books?
 function isGenericClause(zh) {
   const len = Array.from(zh).length;
-  if (len < 3 || len > 22) return false;
-  if (DIGIT.test(zh)) return false;
+  if (len < 3 || len > 28) return false;
+  if (ARABIC_DIGITS.test(zh)) return false;
   if (/[A-Za-z]/.test(zh)) return false;
-  // Mostly Han — a clause that is half punctuation/symbols is not prose.
+
+  // If it contains Chinese numeral, only allow verified 4-character idioms
+  if (/[0-9０-９一二三四五六七八九十百千万亿零两]/.test(zh)) {
+    if (len !== 4 || !NUMERIC_IDIOMS.has(zh)) return false;
+  }
+
+  // Mostly Han
   const han = Array.from(zh).filter((c) => HAN.test(c)).length;
   return han >= Math.max(3, len - 1);
 }
 
 // Accumulate clause pairs across chapters, then keep the ones frequent, agreed
-// and — crucially — seen in MORE THAN ONE BOOK. Cross-book recurrence is what
-// separates a formulaic clause (时间一分一秒的过去, everywhere) from a
-// book-specific one that merely repeats inside its own novel (秦禹皱了皱眉头 —
-// a character's name, useless and unsafe elsewhere). Returns { zh -> vi }.
-//
-//   chapters: [{ book, paras: [[zhParagraph, viParagraph], ...] }, ...]
-function buildTM(chapters, { minCount = 3, minAgreement = 0.6, minBooks = 2 } = {}) {
+// and seen in MORE THAN ONE BOOK.
+function buildTM(chapters, { minCount = 3, minAgreement = 0.55, minBooks = 2 } = {}) {
   const votes = new Map(); // zh -> Map(vi -> count)
   const books = new Map(); // zh -> Set(bookId)
+
   for (const { book, paras } of chapters) {
     for (const [zhPara, viPara] of paras) {
       for (const [zh, vi] of pairParagraph(zhPara, viPara)) {
         if (!isGenericClause(zh)) continue;
-        if (!vi || Array.from(vi).length > Array.from(zh).length * 4 + 10) continue;
+        if (!vi || Array.from(vi).length > Array.from(zh).length * 4 + 15) continue;
         let m = votes.get(zh);
         if (!m) votes.set(zh, (m = new Map()));
         m.set(vi, (m.get(vi) || 0) + 1);
@@ -85,11 +124,9 @@ function buildTM(chapters, { minCount = 3, minAgreement = 0.6, minBooks = 2 } = 
       total += n;
       if (n > bestN) { bestN = n; best = vi; }
     }
-    // Lower-case the first letter: Gemini capitalised these because they were
-    // usually sentence-initial, but a clause lands mid-sentence too. The convert
-    // engine re-capitalises real sentence starts, so a caseless value is correct
-    // in both places (and keeps the proper-noun invariant honest).
-    if (total >= minCount && bestN / total >= minAgreement) tm[zh] = lowerFirst(best);
+    if (total >= minCount && bestN / total >= minAgreement) {
+      tm[zh] = lowerFirst(best);
+    }
   }
   return tm;
 }
@@ -98,7 +135,13 @@ function lowerFirst(text) {
   const m = /\p{L}/u.exec(text);
   if (!m) return text;
   const i = m.index;
-  return text.slice(0, i) + text[i].toLocaleLowerCase("vi") + text.slice(i + 1);
+  return text.slice(0, i) + text.charAt(i).toLowerCase() + text.slice(i + 1);
 }
 
-module.exports = { pairParagraph, isGenericClause, buildTM, clauses };
+module.exports = {
+  pairParagraph,
+  isGenericClause,
+  buildTM,
+  lowerFirst,
+  clauses
+};

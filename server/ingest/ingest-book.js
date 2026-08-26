@@ -107,16 +107,20 @@ async function ingestBook({
   // chapters from the reader.
   syncChapterStatuses(chapterList, state);
 
-  // 5. Publish the index now. The book is browsable and every chapter is already
-  //    readable in its source language while translation catches up.
   const bookRecord = { ...book, cover: coverUrl };
-  await publishIndex({ storage, book: bookRecord, revision: rev, chapters: chapterList, state });
 
-  // 6. Untranslated chapters are published as-is so no reader ever hits a 404.
+  // 5. Publish every chapter object before the index that points readers at
+  //    those immutable URLs. Convert status is also reflected back into the
+  //    chapter list so the reader can label the offline tier correctly.
   await runPool(
     chapterList.map((entry) => async () => {
       const key = chapterKey(book.id, rev, entry.chapterNumber);
-      if (await storage.head(key)) return;
+      if (await storage.head(key)) {
+        const published = await readJson(storage, key);
+        if (published?.translationStatus) entry.translationStatus = published.translationStatus;
+        if (published?.translationStatus === "convert") entry.convertVersion = published.convertVersion;
+        return;
+      }
       const source = await readJson(storage, originalKey(book.id, rev, entry.chapterNumber));
       if (!source) return;
       // Convert makes the chapter readable immediately; without it the chapter
@@ -142,9 +146,16 @@ async function ingestBook({
           })
         )
       );
+      if (converted) {
+        entry.translationStatus = "convert";
+        entry.convertVersion = CONVERT_VERSION;
+      }
     }),
     uploadConcurrency
   );
+
+  // 6. Publish the index only after all reader-facing chapter objects exist.
+  await publishIndex({ storage, book: bookRecord, revision: rev, chapters: chapterList, state });
 
   // 7. Translate, if a translator was supplied and there is budget for it.
   let translationResult = { translated: 0, failed: 0, quotaExhausted: false, spent: 0, summary: summarize(state), done: isDone(state) };
@@ -215,7 +226,9 @@ function syncChapterStatuses(chapterList, state) {
   const byNumber = new Map(state.chapters.map((entry) => [entry.n, entry.status]));
   for (const entry of chapterList) {
     const status = byNumber.get(entry.chapterNumber);
-    if (status) entry.translationStatus = status;
+    if (status && !(status === "pending" && entry.translationStatus === "convert")) {
+      entry.translationStatus = status;
+    }
   }
   return chapterList;
 }
@@ -223,7 +236,12 @@ function syncChapterStatuses(chapterList, state) {
 async function publishIndex({ storage, book, revision, chapters, state }) {
   const withStatus = chapters.map((chapter) => {
     const jobEntry = state.chapters.find((entry) => entry.n === chapter.chapterNumber);
-    return { ...chapter, translationStatus: jobEntry ? jobEntry.status : chapter.translationStatus };
+    const queueStatus = jobEntry ? jobEntry.status : "";
+    const translationStatus =
+      queueStatus === "completed" || queueStatus === "failed"
+        ? queueStatus
+        : chapter.translationStatus || queueStatus || "pending";
+    return { ...chapter, translationStatus };
   });
   // When no public hostname is configured yet the index still gets written, with a
   // relative template that the reader resolves against its configured CDN base.

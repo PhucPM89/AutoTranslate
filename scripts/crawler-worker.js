@@ -37,27 +37,6 @@ const AVERAGE_CHARS_PER_CHAPTER = 2200;
 // Probing /page/ is only a fallback now, so it gets a tight budget.
 const MAX_DETAIL_PROBES = 12;
 
-async function countUntranslatedBooks(storage) {
-  try {
-    const rawCatalog = await storage.get("catalog/latest.json");
-    if (!rawCatalog) return 0;
-    const catalog = JSON.parse(rawCatalog.toString("utf8"));
-    const books = Array.isArray(catalog.books) ? catalog.books : [];
-    let pendingCount = 0;
-    for (const b of books) {
-      const total = Number(b.chapterCount || b.totalChapters || 0);
-      const done = Number(b.translatedChapters || 0);
-      if (total > 0 && done < total) {
-        pendingCount++;
-      }
-    }
-    return pendingCount;
-  } catch (err) {
-    console.warn("countUntranslatedBooks error:", err.message);
-    return 0;
-  }
-}
-
 async function main() {
   requireEnvironment();
   // Config, status and the crawled-book list come straight from R2 and Supabase.
@@ -72,18 +51,6 @@ async function main() {
   }
 
   const storage = createStorage();
-  const maxBacklog = Number(config.maxPendingBooksBacklog || config.maxBacklog || 15);
-  const pendingCount = await countUntranslatedBooks(storage);
-  if (pendingCount >= maxBacklog) {
-    const msg = `Hàng đợi dịch đang có ${pendingCount} bộ chưa dịch xong (vượt mức tối đa ${maxBacklog} bộ). Tạm dừng cào sách mới để tập trung dịch dứt điểm các bộ hiện có.`;
-    await updateStatus({
-      state: "idle",
-      message: msg,
-      finishedAt: new Date().toISOString()
-    });
-    console.log(`[CRAWLER] ${msg}`);
-    return;
-  }
 
   // Pre-flight check: If translation worker is paused due to quota, halt crawler immediately!
   try {
@@ -238,28 +205,30 @@ async function main() {
     //      that convert makes every crawled book readable). Existing novels keep
     //      updating above it; only new-book acquisition stops.
     //   2. maxPendingBooksBacklog — a soft cap on the LLM-polish queue.
-    const storage = createStorage();
     const librarySize = existingBooks.length;
     const maxLibraryBooks = config.maxLibraryBooks || 0;
     const libraryFull = maxLibraryBooks > 0 && librarySize >= maxLibraryBooks;
-    const maxBacklog = config.maxPendingBooksBacklog || 5;
+    const maxBacklog = Number(config.maxPendingBooksBacklog ?? config.maxBacklog ?? 5);
     const backlog = await getTranslationBacklog(storage);
     const maxNewBooks = libraryFull
       ? 0
-      : Math.min(config.maxNewBooksPerRun || 2, Math.max(0, maxBacklog - backlog.pendingBooksCount));
+      : maxBacklog > 0
+        ? Math.min(config.maxNewBooksPerRun || 2, Math.max(0, maxBacklog - backlog.pendingBooksCount))
+        : (config.maxNewBooksPerRun || 2);
 
     if (libraryFull) {
       const fullMsg = `Thư viện đã đạt ${librarySize}/${maxLibraryBooks} bộ (trần maxLibraryBooks). Ngừng cào truyện mới, chỉ tiếp tục cập nhật truyện đang theo dõi.`;
       console.log(`[CRAWLER LIBRARY FULL] ${fullMsg}`);
       status.message = fullMsg;
       await updateStatus(status);
-    } else if (backlog.pendingBooksCount >= maxBacklog) {
+    } else if (maxBacklog > 0 && backlog.pendingBooksCount >= maxBacklog) {
       const backpressureMsg = `Hàng đợi dịch đang có ${backlog.pendingBooksCount} bộ truyện (${backlog.totalPendingChapters} chương) chờ dịch. Tạm dừng cào thêm truyện mới để ưu tiên dịch hoàn tất (ngưỡng tối đa: ${maxBacklog} bộ).`;
       console.log(`[CRAWLER BACKPRESSURE] ${backpressureMsg}`);
       status.message = backpressureMsg;
       await updateStatus(status);
     } else {
-      console.log(`[CRAWLER CAPACITY] Hàng đợi dịch hiện có ${backlog.pendingBooksCount}/${maxBacklog} bộ truyện chờ dịch. Cho phép cào tối đa ${maxNewBooks} bộ mới trong lượt này.`);
+      const capLabel = maxBacklog > 0 ? `${backlog.pendingBooksCount}/${maxBacklog}` : `${backlog.pendingBooksCount}/không giới hạn`;
+      console.log(`[CRAWLER CAPACITY] Hàng đợi dịch hiện có ${capLabel} bộ truyện chờ dịch. Cho phép cào tối đa ${maxNewBooks} bộ mới trong lượt này.`);
       let booksAddedThisRun = 0;
 
       while (remainingBudgetMs() >= MIN_BUDGET_FOR_NEW_JOB_MS && booksAddedThisRun < maxNewBooks) {

@@ -120,7 +120,15 @@ const ANCHORS = [
   // dialogue opens a sentence
   ["她小声说：「我怕。」", "“Ta sợ.”"],
   // adverbial 地 is glue, not "đất"
-  ["她轻轻地叹了一口气，转身走出了房间。", "nhẹ nhàng thở dài"]
+  ["她轻轻地叹了一口气，转身走出了房间。", "nhẹ nhàng thở dài"],
+  // verb + aspect + noun + de + noun must not falsely invert
+  ["林动看着眼前的少女。", "Lâm Động nhìn thiếu nữ trước mắt"],
+  // comparison 比 and multipliers
+  ["他修炼的速度比别人快十倍。", "so với người khác nhanh mười lần"],
+  // measurements and idioms
+  ["他一剑刺出，剑气纵横三万里。", "ba vạn dặm"],
+  ["无论如何，我都不会放弃。", "từ bỏ"],
+  ["为什么会变成这样？", "Tại sao lại"]
 ];
 
 // An anchor that lands at the start of the sentence gets its first letter

@@ -92,8 +92,9 @@ test("maxLibraryBooks and the widened backlog are clamped, 0 disables the cap", 
   assert.equal(big.maxLibraryBooks, 5000, "trần thư viện lớn được giữ");
   assert.equal(big.maxPendingBooksBacklog, 120, "backlog nới rộng được giữ");
 
-  const off = sanitizeCrawlerConfig({ maxLibraryBooks: 0 });
+  const off = sanitizeCrawlerConfig({ maxLibraryBooks: 0, maxPendingBooksBacklog: 0 });
   assert.equal(off.maxLibraryBooks, 0, "0 = không giới hạn");
+  assert.equal(off.maxPendingBooksBacklog, 0, "0 = không giới hạn backlog dịch");
 
   const capped = sanitizeCrawlerConfig({ maxLibraryBooks: 10 ** 9, maxPendingBooksBacklog: 9999 });
   assert.equal(capped.maxLibraryBooks, 100000, "trần trên bị kẹp");

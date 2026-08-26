@@ -37,6 +37,32 @@ function isCultivationGenre(genre) {
   return CULTIVATION_GENRES.some((c) => g.includes(c));
 }
 
+const GENRE_DIR = path.join("data", "convert", "genres");
+
+const GENRE_KEYWORDS = {
+  xianxia: ["tiên hiệp", "huyền huyễn", "kiếm hiệp", "tu tiên", "cổ đại", "võ hiệp", "xianxia", "wuxia", "fantasy"],
+  modern: ["đô thị", "hiện đại", "tổng tài", "trọng sinh", "thương trường", "hào môn", "y thuật", "bác sĩ", "urban", "modern"],
+  romance: ["ngôn tình", "cung đấu", "trạch đấu", "nữ cường", "điền văn", "sủng", "ngược", "hầu phủ", "romance", "palace"],
+  system: ["võng du", "hệ thống", "vô hạn lưu", "xuyên nhanh", "game", "system", "rpg"],
+  scifi: ["khoa huyễn", "cơ giáp", "mạt thế", "tinh tế", "cyberpunk", "scifi", "mecha"],
+  horror: ["kinh dị", "huyền nghi", "trinh thám", "linh dị", "quỷ dị", "pháp y", "horror", "mystery", "thriller"]
+};
+
+function resolveGenreKeys(genreInput) {
+  if (!genreInput) return [];
+  const list = Array.isArray(genreInput) ? genreInput : [genreInput];
+  const keys = new Set();
+  for (const raw of list) {
+    const s = String(raw || "").toLowerCase();
+    for (const [key, patterns] of Object.entries(GENRE_KEYWORDS)) {
+      if (patterns.some((p) => s.includes(p))) {
+        keys.add(key);
+      }
+    }
+  }
+  return Array.from(keys);
+}
+
 // Pronouns never sit inside a mined given name (顺他), so they seed the reject set
 // together with the function-word and verb tables.
 const PRONOUNS = ["他", "她", "它", "我", "你", "您", "咱", "俺", "们", "谁", "这", "那"];
@@ -50,6 +76,16 @@ function defaultPhraseFiles() {
   return fs.readdirSync(DEFAULT_PHRASE_DIR)
     .filter((f) => f.endsWith(".txt") || f.endsWith(".txt.gz") || f.endsWith(".json"))
     .map((f) => path.join(DEFAULT_PHRASE_DIR, f));
+}
+
+// Cached genre packs
+const genrePacksCache = new Map();
+function loadGenrePack(genreKey) {
+  if (genrePacksCache.has(genreKey)) return genrePacksCache.get(genreKey);
+  const p = path.join(GENRE_DIR, `genre-${genreKey}.txt.gz`);
+  const dict = fs.existsSync(p) ? loadPhraseDict([p]) : {};
+  genrePacksCache.set(genreKey, dict);
+  return dict;
 }
 
 // Load the base tables once. Reused by every engine build and by name mining, so
@@ -71,20 +107,34 @@ function loadBase(env = process.env) {
   return base;
 }
 
-// Build a convert engine. `nameGlossary` (from mineBookNames) is merged in front
-// of the phrase dictionary so a book's characters read identically everywhere,
-// overriding the junk bigrams that shadow them (郑海 vs 郑海冰). Returns null when
-// no single-char table is available, so callers can fall back to raw source.
-function buildConvertEngineFromDisk(env = process.env, { nameGlossary = null, modern = false } = {}) {
+// Build a convert engine with Genre-Adaptive Profiles.
+// `genre` or `genres` dynamically mounts specialized vocabulary packs (xianxia,
+// modern, romance, system, scifi, horror) with highest precedence.
+function buildConvertEngineFromDisk(env = process.env, { nameGlossary = null, genre = null, genres = null, modern = false } = {}) {
   const b = loadBase(env);
   if (!b) return null;
+
+  const resolvedGenres = resolveGenreKeys(genres || genre);
+  const isModernGenre = modern || resolvedGenres.some((g) => g === "modern" || g === "scifi" || g === "horror" || g === "system");
+
   // A modern-genre book reads everyday nouns by meaning (门 "cửa"); a cultivation
   // book keeps the Hán-Việt table untouched.
-  const hanvietChars = modern ? { ...b.hanvietChars, ...b.modernNouns } : b.hanvietChars;
+  const hanvietChars = isModernGenre ? { ...b.hanvietChars, ...b.modernNouns } : b.hanvietChars;
+
+  // Mount genre packs if matched
+  let phraseDict = b.phraseDict;
+  if (resolvedGenres.length > 0) {
+    phraseDict = { ...phraseDict };
+    for (const g of resolvedGenres) {
+      const pack = loadGenrePack(g);
+      Object.assign(phraseDict, pack);
+    }
+  }
+
   // The engine merges the glossary into its phrase dictionary AND locks
   // segmentation around the names, so pass it through rather than pre-merging.
   return createConvertEngine({
-    phraseDict: b.phraseDict, hanvietChars, lexicon: b.lexicon, nameGlossary
+    phraseDict, hanvietChars, lexicon: b.lexicon, nameGlossary
   });
 }
 

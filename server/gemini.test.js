@@ -65,6 +65,13 @@ test("rejects a translation that drops Arabic quantities", () => {
   assert.match(result.reason, /làm mất số 1200/);
 });
 
+test("accepts a translation that expresses numbers in natural Vietnamese words", () => {
+  const source = `${"这是中文内容。".repeat(40)}他等了10天，遇到了2个人。`;
+  const output = "Đây là bản dịch tiếng Việt đầy đủ. Hắn đã chờ mười ngày và gặp được hai người. ".repeat(6);
+  const result = assessTranslation(source, output);
+  assert.equal(result.acceptable, true);
+});
+
 test("accepts a substantial Vietnamese translation", () => {
   const vietnamese = "Đây là một đoạn văn đã được dịch đầy đủ sang tiếng Việt, giữ nguyên nội dung và cấu trúc. ".repeat(12);
   const result = assessTranslation(chineseSource, vietnamese);

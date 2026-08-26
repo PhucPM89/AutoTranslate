@@ -283,6 +283,29 @@ async function writeSitemapAndRobots() {
   const robotsTxt = `User-agent: *\nAllow: /\n\nSitemap: ${siteUrl}/sitemap.xml\n`;
   fs.writeFileSync(path.join(PUBLIC_DIR, "robots.txt"), robotsTxt);
   console.log(`/robots.txt ${formatKb(Buffer.byteLength(robotsTxt))}`);
+
+  // Generate _routes.json for Cloudflare Pages to bypass static assets (0 Worker requests)
+  const routesJson = {
+    version: 1,
+    include: ["/api/*", "/covers/*", "/"],
+    exclude: [
+      "/admin-upload.js",
+      "/app.js",
+      "/style.css",
+      "/sw.js",
+      "/favicon.svg",
+      "/manifest.webmanifest",
+      "/robots.txt",
+      "/sitemap.xml",
+      "/library.json",
+      "/assets/*",
+      "/fonts/*",
+      "/vendor/*",
+      "/library/*"
+    ]
+  };
+  fs.writeFileSync(path.join(PUBLIC_DIR, "_routes.json"), JSON.stringify(routesJson, null, 2));
+  console.log(`/_routes.json ${formatKb(Buffer.byteLength(JSON.stringify(routesJson)))} (Cloudflare static routing)`);
 }
 
 function formatKb(bytes) {

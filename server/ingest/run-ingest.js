@@ -31,6 +31,10 @@ async function runIngest({
   const metadataStore = createMetadataStore();
   const apiKey = process.env.GEMINI_API_KEY || "";
 
+  if (hasR2Credentials(process.env) && !archiveStorage) {
+    throw new Error("Thiếu R2_ARCHIVE_BUCKET: không được lưu EPUB nguồn vào bucket public.");
+  }
+
   const translate =
     translateEnabled && apiKey
       ? async (chapter) => {

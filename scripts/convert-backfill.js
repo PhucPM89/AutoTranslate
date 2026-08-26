@@ -36,12 +36,14 @@ loadEnvFile(path.join(__dirname, "..", ".env.local"));
 
 const { createStorage } = require("../server/storage");
 const { buildChapterDocument, chapterKey, originalKey } = require("../server/ingest/documents");
+const { publishIndex } = require("../server/ingest/ingest-book");
 const { jobStateKey } = require("../server/ingest/translation-queue");
 const { buildConvertEngineFromDisk, mineBookNames, isCultivationGenre, CONVERT_VERSION } = require("../server/convert");
 
 // How many of a book's chapters to read for name mining. The cast shows up early
 // and often, so a sample is enough and keeps the extra R2 reads bounded.
 const NAME_SAMPLE = Number(process.env.CONVERT_NAME_SAMPLE || 40);
+const FAST_INDEX_SAMPLE = Number(process.env.CONVERT_FAST_INDEX_SAMPLE || 12);
 
 function flag(name) {
   return process.argv.includes(name);
@@ -97,6 +99,21 @@ async function backfillBook(storage, bookId, { commit, force }) {
     return { bookId, revision, converted: 0, candidates: candidates.length, missing: 0, preview: true };
   }
 
+  const index = await readJson(storage, `books/${bookId}/index.json`);
+  if (index && !force && candidates.length) {
+    const sampleEntries = evenSample(candidates, FAST_INDEX_SAMPLE);
+    const sampleStatuses = await Promise.all(
+      sampleEntries.map(async (entry) => {
+        const published = await readJson(storage, chapterKey(bookId, revision, entry.n));
+        return published?.translationStatus || "";
+      })
+    );
+    if (sampleStatuses.length && sampleStatuses.every((status) => status === "convert")) {
+      await publishConvertIndex({ storage, bookId, revision, index, state });
+      return { bookId, revision, converted: 0, missing: 0, candidates: candidates.length, nameCount: 0, indexSynced: true };
+    }
+  }
+
   // Mine this book's character names from a sample, then convert every chapter
   // with them merged in, so a character reads identically across the whole book
   // (Consistency Engine). The sample is spread EVENLY across the novel, not taken
@@ -112,13 +129,18 @@ async function backfillBook(storage, bookId, { commit, force }) {
   const nameGlossary = sample.length ? mineBookNames(sample) : {};
   // Genre decides everyday-noun realization: a modern book reads 门 as "cửa", a
   // cultivation one keeps "môn". The genre lives on the published book index.
-  const index = await readJson(storage, `books/${bookId}/index.json`);
   const modern = !isCultivationGenre(index && index.genre);
   const engine = buildConvertEngineFromDisk(process.env, { nameGlossary, modern });
   const nameCount = Object.keys(nameGlossary).length;
+  const indexStatusByNumber = new Map();
+  for (const chapter of index?.chapters || []) {
+    const n = Number(chapter.n || chapter.chapterNumber || 0);
+    if (n) indexStatusByNumber.set(n, chapter.status || chapter.translationStatus || "pending");
+  }
 
   let converted = 0;
   let missing = 0;
+  let indexNeedsPublish = false;
   await pool(candidates, async (entry) => {
     const n = entry.n;
     const published = await readJson(storage, chapterKey(bookId, revision, n));
@@ -129,6 +151,10 @@ async function backfillBook(storage, bookId, { commit, force }) {
     // re-renders every convert chapter regardless of version.
     if (published) {
       if (published.translationStatus === "completed") return;
+      if (published.translationStatus === "convert" || published.translationStatus === "failed") {
+        indexStatusByNumber.set(n, published.translationStatus);
+        indexNeedsPublish = true;
+      }
       if (published.translationStatus === "convert" && !force && (published.convertVersion || 0) >= CONVERT_VERSION) return;
     }
     const source = await readJson(storage, originalKey(bookId, revision, n));
@@ -159,9 +185,62 @@ async function backfillBook(storage, bookId, { commit, force }) {
       );
     }
     converted += 1;
+    indexStatusByNumber.set(n, "convert");
+    indexNeedsPublish = true;
   });
 
+  if (commit && index && indexNeedsPublish) {
+    await publishConvertIndex({ storage, bookId, revision, index, state, statusByNumber: indexStatusByNumber });
+  }
+
   return { bookId, revision, converted, missing, candidates: candidates.length, nameCount };
+}
+
+function evenSample(items, limit) {
+  const count = Math.max(1, Math.min(Number(limit) || 1, items.length));
+  if (items.length <= count) return items;
+  const sample = [];
+  for (let i = 0; i < count; i += 1) {
+    sample.push(items[Math.floor((i * (items.length - 1)) / (count - 1))]);
+  }
+  return sample;
+}
+
+async function publishConvertIndex({ storage, bookId, revision, index, state, statusByNumber = null }) {
+  const chapters = [];
+  const stateByNumber = new Map((state.chapters || []).map((entry) => [entry.n, entry.status]));
+  for (const chapter of index.chapters || []) {
+    const n = Number(chapter.n || chapter.chapterNumber || 0);
+    if (!n) continue;
+    const queueStatus = stateByNumber.get(n);
+    const status =
+      queueStatus === "completed" || queueStatus === "failed"
+        ? queueStatus
+        : statusByNumber?.get(n) || "convert";
+    chapters.push({
+      chapterNumber: n,
+      title: chapter.title || `Chương ${n}`,
+      translationStatus: status
+    });
+  }
+  await publishIndex({
+    storage,
+    book: {
+      id: bookId,
+      title: index.title,
+      author: index.author,
+      genre: index.genre,
+      status: index.status,
+      description: index.description,
+      cover: index.cover,
+      source: index.source,
+      sourceId: index.sourceId,
+      sourceUrl: index.sourceUrl
+    },
+    revision,
+    chapters,
+    state
+  });
 }
 
 async function main() {
@@ -194,7 +273,8 @@ async function main() {
       totalConverted += r.candidates;
       console.log(`  ${bookId}: ${r.candidates} chương chưa dịch sẽ được convert`);
     } else {
-      console.log(`  ${bookId}: ${r.converted} chương convert / ${r.candidates} chưa dịch · ${r.nameCount||0} tên nhân vật${r.missing ? ` (${r.missing} thiếu gốc)` : ""}`);
+      const syncNote = r.indexSynced ? " · đã đồng bộ index nhanh" : "";
+      console.log(`  ${bookId}: ${r.converted} chương convert / ${r.candidates} chưa dịch · ${r.nameCount||0} tên nhân vật${syncNote}${r.missing ? ` (${r.missing} thiếu gốc)` : ""}`);
     }
   }
   console.log(`\nTổng: ${totalConverted} chương ${commit ? "đã convert" : "sẽ convert"}.`);

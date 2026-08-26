@@ -152,3 +152,52 @@ test("two 的 in one sentence are rewritten independently", () => {
   ]);
   assert.strictEqual(text(out), "phụ thân của Lâm Động là thành chủ của Thanh Vân thành");
 });
+
+test("pairedConjunctions normalizes correlative conjunctions", () => {
+  const { pairedConjunctions } = require("./grammar");
+  const out = pairedConjunctions([
+    w("bất cận", "不仅", "fn"), w("như thử", "如此"), w("nhi thả", "而且", "fn")
+  ]);
+  assert.strictEqual(text(out), "không những như thử mà còn");
+});
+
+test("comparison reorders A 比 B + Adj", () => {
+  const { comparison } = require("./grammar");
+  const out = comparison([
+    w("hắn", "他"), w("so với", "比", "fn"), w("ngươi", "你"), w("nhanh", "快", "adj")
+  ]);
+  assert.strictEqual(text(out), "hắn nhanh hơn ngươi");
+});
+
+test("disposalBa reorders 把 + Noun + Verb to Verb + Noun", () => {
+  const { disposalBa } = require("./grammar");
+  const out = disposalBa([
+    w("hắn", "他"), w("đem", "把", "fn"), w("kiếm", "剑"), w("rút ra", "拔出", "verb")
+  ]);
+  assert.strictEqual(text(out), "hắn rút ra kiếm");
+});
+
+test("directionalComplements normalizes complement directions", () => {
+  const { directionalComplements } = require("./grammar");
+  const out = directionalComplements([
+    w("đứng", "站", "verb"), w("khởi lai", "起来")
+  ]);
+  assert.strictEqual(text(out), "đứng lên");
+});
+
+test("potentialComplements translates V+得/不+C", () => {
+  const { potentialComplements } = require("./grammar");
+  const out = potentialComplements([
+    w("đánh", "打", "verb"), w("bất", "不"), w("qua", "过", "verb")
+  ]);
+  assert.strictEqual(text(out), "đánh không qua");
+});
+
+test("modalAdverbs normalizes emphatic adverbs", () => {
+  const { modalAdverbs } = require("./grammar");
+  const out = modalAdverbs([
+    w("thiên thiên", "偏偏"), w("cứu cánh", "究竟")
+  ]);
+  assert.strictEqual(text(out), "lại cứ rốt cuộc");
+});
+

@@ -37,9 +37,12 @@
 给=cho
 对=với
 跟=cùng
+比=so với
 为=vì
 因=vì
 所=nên
+倍=lần
+弃=bỏ
 如=như
 若=nếu
 才=mới
@@ -129,6 +132,8 @@
 偷=trộm
 输=thua
 赢=thắng
+死=chết
+生=sống
 # Everyday sensory/state adjectives whose bare Hán-Việt is archaic (快 "khoái",
 # 饿 "ngạ", 疼 "đông"). Standalone only. Polysemous ones (干 khô/làm, 松 lỏng/tùng,
 # 晚 muộn/tối) and convert-standard ones (高 cao, 深 thâm, 老 lão) are left alone.
