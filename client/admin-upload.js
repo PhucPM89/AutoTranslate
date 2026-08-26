@@ -864,9 +864,17 @@ function renderTranslateStatus(status = {}) {
     }
   }
   if (els.translateStateMessage) {
-    els.translateStateMessage.textContent = isRunning && bookTitle
+    let stateMsg = isRunning && bookTitle
       ? (status.activityMessage || `Worker đang xử lý bộ [${bookTitle}], nhưng chưa nhận được chi tiết lượt dịch.`)
       : (status.message || "Chưa có tác vụ dịch đang chạy.");
+    // When nothing is advancing, show the real reason (last provider/quality
+    // error) instead of leaving the admin guessing why it looks frozen.
+    const lastErr = String(status.lastError || "").trim();
+    const stalled = activityState === "waiting_quota" || activityState === "retrying" || isQuotaPaused;
+    if (lastErr && stalled) {
+      stateMsg += ` · Lỗi gần nhất: ${lastErr}`;
+    }
+    els.translateStateMessage.textContent = stateMsg;
   }
   if (els.transLiveState) {
     const label = heartbeatStale && isRunning
@@ -973,9 +981,23 @@ function renderTranslateStatus(status = {}) {
   if (els.transStatKeysActive) {
     const keys = Number(status.activeKeyCount || 0);
     const ready = Number(status.readyKeyCount);
-    els.transStatKeysActive.textContent = keys
-      ? (Number.isFinite(ready) ? `${ready}/${keys} Keys sẵn sàng` : `${keys} Keys đủ điều kiện`)
-      : "Đang kiểm tra Keys";
+    const dead = Number(status.deadKeyCount || 0);
+    const daily = Number(status.dailyExhaustedKeyCount || 0);
+    const cooldown = Number(status.cooldownKeyCount || 0);
+    if (!keys) {
+      els.transStatKeysActive.textContent = "Đang kiểm tra Keys";
+    } else if (Number.isFinite(ready)) {
+      // Break the pool down so it is obvious whether a key is DEAD (needs
+      // replacing) or just resting on quota. Silence on a stalled run used to
+      // look identical to a healthy one.
+      const parts = [`${ready}/${keys} key sẵn sàng`];
+      if (daily) parts.push(`${daily} hết quota ngày`);
+      if (cooldown) parts.push(`${cooldown} đang nghỉ`);
+      if (dead) parts.push(`⚠️ ${dead} key lỗi/khoá — cần thay`);
+      els.transStatKeysActive.textContent = parts.join(" · ");
+    } else {
+      els.transStatKeysActive.textContent = `${keys} Keys đủ điều kiện`;
+    }
   }
 
   // 3. Next In Line Teaser

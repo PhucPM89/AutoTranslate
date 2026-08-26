@@ -115,6 +115,46 @@ async function writeTranslateStatus(storage, status) {
   }
 }
 
+// Buckets every key into a single clear state so the dashboard can answer
+// "is a key dead, or just resting?" at a glance:
+//   ready    - usable right now
+//   dead     - invalid/revoked (auth failure); needs a human to replace it
+//   daily    - hit its daily quota; frees up at the next reset
+//   cooldown - short rate-limit / transient backoff; frees up in minutes
+// The status object stores aggregates only. The backing R2 object can be read
+// directly from the public bucket, so even masked key fingerprints do not
+// belong in it.
+function summarizeKeyStats(stats = []) {
+  let ready = 0;
+  let dead = 0;
+  let daily = 0;
+  let cooldown = 0;
+  for (const stat of stats) {
+    // Auth failures remain actionable even after their timed cooldown expires:
+    // the credential still needs replacing until it proves successful again.
+    if (stat.quotaClass === "auth" || stat.recoveryPolicy === "disable_invalid_key") {
+      dead += 1;
+    } else if (stat.ready) {
+      ready += 1;
+    } else if (stat.quotaClass === "daily") {
+      daily += 1;
+    } else {
+      cooldown += 1;
+    }
+  }
+  return {
+    activeKeyCount: stats.length,
+    readyKeyCount: ready,
+    deadKeyCount: dead,
+    dailyExhaustedKeyCount: daily,
+    cooldownKeyCount: cooldown
+  };
+}
+
+function summarizeKeyPool(keyList) {
+  return summarizeKeyStats(getKeyPoolStats(keyList));
+}
+
 async function main() {
   const storage = createStorage();
 
@@ -166,7 +206,7 @@ async function main() {
       state: "idle",
       focusBookId: translationConfig.focusBookId,
       selectionMode: translationConfig.focusBookId ? "focused" : "automatic",
-      activeKeyCount: allUniqueKeys.length,
+      ...summarizeKeyPool(allUniqueKeys),
       spacingMs: computeAdaptiveSpacing(allUniqueKeys),
       finishedAt: new Date().toISOString(),
       message: "Tất cả các bộ truyện đã được dịch đầy đủ. Không có job chờ."
@@ -262,6 +302,7 @@ async function main() {
   let cycle = 0;
   let lastSuccessAt = "";
   let lastSuccessfulChapter = 0;
+  let lastRunError = "";
 
   // Publishing is throttled per book: every 5 chapters published immediately
   const PUBLISH_EVERY_CHAPTERS = 5;
@@ -358,13 +399,14 @@ async function main() {
             const elapsedMin = Math.max(0.05, (Date.now() - new Date(startedAt).getTime()) / 60000);
             const currentSpeed = Math.round((currentTotalSession / elapsedMin) * 10) / 10;
             const currentSpacing = computeAdaptiveSpacing(allUniqueKeys);
-            const keyStats = getKeyPoolStats(allUniqueKeys);
-            const readyKeyCount = keyStats.filter((entry) => entry.ready).length;
+            const keyPool = summarizeKeyPool(allUniqueKeys);
+            const readyKeyCount = keyPool.readyKeyCount;
             if (completed > lastKnownCompleted) {
               lastKnownCompleted = completed;
               lastSuccessAt = new Date().toISOString();
               lastSuccessfulChapter = chapter;
             }
+            if (lastError) lastRunError = String(lastError).slice(0, 300);
             const activityState = readyKeyCount === 0 && status !== "completed"
               ? "waiting_quota"
               : status === "translating"
@@ -388,9 +430,7 @@ async function main() {
               state: "running",
               focusBookId: configuredFocus,
               selectionMode,
-              activeKeyCount: allUniqueKeys.length,
-              readyKeyCount,
-              cooldownKeyCount: allUniqueKeys.length - readyKeyCount,
+              ...keyPool,
               spacingMs: currentSpacing,
               startedAt,
               speed: currentSpeed,
@@ -518,17 +558,14 @@ async function main() {
     await publishBook(job);
   }
 
-  const finalKeyStats = getKeyPoolStats(allUniqueKeys);
-  const finalReadyKeyCount = finalKeyStats.filter((entry) => entry.ready).length;
   await persistKeyHealth();
   await writeTranslateStatus(storage, {
     state: stoppedForQuota ? "paused_quota" : "idle",
     focusBookId: translationConfig.focusBookId,
     selectionMode: translationConfig.focusBookId ? "focused" : "automatic",
-    activeKeyCount: allUniqueKeys.length,
-    readyKeyCount: finalReadyKeyCount,
-    cooldownKeyCount: allUniqueKeys.length - finalReadyKeyCount,
+    ...summarizeKeyPool(allUniqueKeys),
     spacingMs: computeAdaptiveSpacing(allUniqueKeys),
+    startedAt,
     finishedAt: new Date().toISOString(),
     currentBookId: stoppedForQuota ? quotaBookId : "",
     currentBookTitle: stoppedForQuota ? quotaBookTitle : "",
@@ -539,17 +576,23 @@ async function main() {
     resumesAt: stoppedForQuota && quotaResumeAt ? new Date(quotaResumeAt).toISOString() : null,
     translatedThisRun: translatedTotal,
     spentRequests: spentTotal,
+    lastSuccessAt,
+    lastSuccessfulChapter,
+    lastError: lastRunError,
     message: stoppedForQuota
       ? `Tạm dừng an toàn: quota chưa hồi đầy, không gửi thêm request. Tự tiếp tục sau ${new Date(quotaResumeAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}. Phiên này đã dịch ${translatedTotal} chương.`
       : `Phiên dịch hoàn tất: Đã dịch ${translatedTotal} chương mới trên ${touched.size} bộ truyện.`,
-    queue: queue.map((j) => ({
-      bookId: j.bookId,
-      revision: j.revision,
-      pending: j.pending,
-      highPriority: j.highPriority,
-      total: j.total,
-      translated: (j.total || 0) - (j.pending || 0)
-    }))
+    queue: queue.map((j) => {
+      const counts = summarize(j.state);
+      return {
+        bookId: j.bookId,
+        revision: j.revision,
+        pending: Math.max(0, counts.total - counts.completed),
+        highPriority: j.highPriority,
+        total: counts.total,
+        translated: counts.completed
+      };
+    })
   });
 
   console.log(`\nĐã chạy ${cycle} vòng, ${touched.size} truyện có bản dịch mới.`);
@@ -717,7 +760,7 @@ async function readJson(storage, key) {
   }
 }
 
-module.exports = { listJobs, refreshBookOutputs, ensureBookRow, bookOutputsNeedRefresh };
+module.exports = { listJobs, refreshBookOutputs, ensureBookRow, bookOutputsNeedRefresh, summarizeKeyStats };
 
 if (require.main === module) {
   main().catch((error) => {

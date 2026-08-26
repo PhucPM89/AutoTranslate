@@ -518,6 +518,27 @@ test("listJobs skips fully translated books and reports the high-priority count"
   assert.equal(jobs[0].highPriority, 1);
 });
 
+test("translation key health summary separates dead, daily and temporary cooldowns", () => {
+  const { summarizeKeyStats } = require("../scripts/translate-worker");
+  const summary = summarizeKeyStats([
+    { ready: true, quotaClass: "", recoveryPolicy: "" },
+    { ready: false, quotaClass: "daily", recoveryPolicy: "wait_full_daily_reset" },
+    { ready: false, quotaClass: "minute", recoveryPolicy: "wait_full_minute_window" },
+    // An invalid credential stays actionable even after its timed cooldown has
+    // elapsed and getKeyPoolStats starts reporting it as ready again.
+    { ready: true, quotaClass: "auth", recoveryPolicy: "disable_invalid_key" }
+  ]);
+
+  assert.deepEqual(summary, {
+    activeKeyCount: 4,
+    readyKeyCount: 1,
+    deadKeyCount: 1,
+    dailyExhaustedKeyCount: 1,
+    cooldownKeyCount: 1
+  });
+  assert.equal(Object.hasOwn(summary, "keyStates"), false, "public status must not expose key fingerprints");
+});
+
 test("translation progress reports real batch activity, attempts and errors", async () => {
   const state = createJobState({
     bookId: "progress-details",
