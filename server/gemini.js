@@ -701,7 +701,26 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
   // "Cannot set property code", masking the real cause and killing the run.
   const err = new Error(lastError ? String(lastError.message || lastError) : "Tất cả các API key đều đang trong thời gian chờ hoặc hết hạn mức.");
   err.earliestCooldown = earliestCooldown;
-  err.code = (lastError && lastError.code) || "key_pool_slice_exhausted";
+  // Distinguish WHY the slice was exhausted. A 502 lastError with keys still
+  // ready means every key produced an UNACCEPTABLE translation (residual Han,
+  // repetition, truncation) — the keys are fine, the chapter is hard. That must
+  // NOT be treated as a quota/rate problem: doing so made the queue decrement
+  // attempts and retry the same poison chapter forever, freezing all progress.
+  // Only a genuine cooldown/rate exhaustion (no ready keys, or a 429/503
+  // lastError) keeps the quota code so the queue defers instead of failing.
+  const qualityRejection =
+    readyKeysRemaining > 0 &&
+    lastError &&
+    lastError.status === 502 &&
+    lastError.status !== 429 &&
+    lastError.status !== 503;
+  if (qualityRejection) {
+    err.code = "translation_rejected";
+    err.qualityRejected = true;
+    err.qualityReason = String(lastError.message || "").slice(0, 200);
+  } else {
+    err.code = (lastError && lastError.code) || "key_pool_slice_exhausted";
+  }
   if (lastError && lastError.status) err.status = lastError.status;
   throw err;
 }

@@ -13,6 +13,17 @@
 const STATES = ["pending", "processing", "completed", "failed", "retrying"];
 const DEFAULT_MAX_ATTEMPTS = 15;
 const DEFAULT_BACKOFF_MS = 2000;
+// A chapter the models keep translating UNACCEPTABLY (residual Han, repetition,
+// truncation) rarely improves on retry — the keys are healthy, the chapter is
+// hard. Cap those attempts low so one poison chapter is skipped in seconds
+// instead of freezing the whole queue while it burns the key pool forever. The
+// offline convert tier still gives readers a Vietnamese version of a skipped
+// chapter, so failing it here is safe.
+const QUALITY_MAX_ATTEMPTS = 4;
+
+function isQualityRejection(error) {
+  return Boolean(error && (error.qualityRejected === true || error.code === "translation_rejected"));
+}
 
 function jobStateKey(bookId) {
   return `jobs/${bookId}/translation.json`;
@@ -224,7 +235,16 @@ async function runTranslationJobs({
               spent += 1;
               const errMsg = String(err && err.message ? err.message : err).slice(0, 300);
               entry.lastError = errMsg;
-              if (isQuotaError(err)) {
+              if (isQualityRejection(err)) {
+                if (entry.attempts >= QUALITY_MAX_ATTEMPTS) {
+                  entry.attempts = maxAttempts;
+                  entry.status = "failed";
+                  failed += 1;
+                } else {
+                  entry.status = "retrying";
+                  entry.nextAttemptAt = now() + backoffFor(entry.attempts, backoffBaseMs);
+                }
+              } else if (isQuotaError(err)) {
                 quotaExhausted = true;
                 if (err && err.earliestCooldown) {
                   earliestCooldown = earliestCooldown
@@ -273,7 +293,21 @@ async function runTranslationJobs({
         if (entry.status === "completed") continue;
         entry.lastError = errMsg;
 
-        if (isQuotaError(error)) {
+        if (isQualityRejection(error)) {
+          // Keys are healthy; the translation itself was rejected (residual Han,
+          // repetition, truncation) and retrying the same models rarely helps.
+          // After a few tries, force attempts to the give-up threshold so the
+          // existing isEntryReady gate skips it permanently and the queue moves
+          // on instead of looping here forever.
+          if (entry.attempts >= QUALITY_MAX_ATTEMPTS) {
+            entry.attempts = maxAttempts;
+            entry.status = "failed";
+            failed += 1;
+          } else {
+            entry.status = "retrying";
+            entry.nextAttemptAt = now() + backoffFor(entry.attempts, backoffBaseMs);
+          }
+        } else if (isQuotaError(error)) {
           entry.attempts = Math.max(0, entry.attempts - 1);
           entry.status = "pending";
           entry.nextAttemptAt = now() + backoffFor(1, backoffBaseMs);
@@ -384,5 +418,7 @@ module.exports = {
   backoffFor,
   runTranslationJobs,
   isQuotaError,
+  isQualityRejection,
+  QUALITY_MAX_ATTEMPTS,
   getTranslationBacklog
 };

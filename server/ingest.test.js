@@ -19,6 +19,8 @@ const {
   backoffFor,
   runTranslationJobs,
   isQuotaError,
+  isQualityRejection,
+  QUALITY_MAX_ATTEMPTS,
   summarize
 } = require("./ingest/translation-queue");
 const { ingestBook } = require("./ingest/ingest-book");
@@ -244,6 +246,39 @@ test("quota exhaustion pauses the run without burning an attempt", async () => {
   assert.ok(isQuotaError({ status: 429 }));
   assert.ok(!isQuotaError(new Error("mạng lỗi")));
   assert.ok(isQuotaError({ code: "key_pool_slice_exhausted" }));
+});
+
+test("a poison chapter (quality-rejected) is skipped so the queue keeps moving", async () => {
+  // ch1 always fails the quality gate while keys stay healthy; ch2 is fine.
+  // The old bug misread the pool-exhausted error as quota, refunded the attempt
+  // and retried ch1 forever, freezing all progress. Now ch1 must be failed after
+  // QUALITY_MAX_ATTEMPTS and ch2 must get translated in the same run.
+  const state = createJobState({ bookId: "b", revision: 1, chapters: [{ chapterNumber: 1 }, { chapterNumber: 2 }] });
+  const reject = Object.assign(new Error("Bản dịch chưa đạt yêu cầu (vẫn còn sót chữ Hán)."), {
+    code: "translation_rejected",
+    qualityRejected: true,
+    status: 502
+  });
+  const published = [];
+  let ch1Calls = 0;
+  const result = await runTranslationJobs({
+    state,
+    loadChapter: async (n) => ({ chapterNumber: n, title: "t", content: "c" }),
+    translateChapter: async (chapter) => {
+      if (chapter.chapterNumber === 1) { ch1Calls += 1; throw reject; }
+      return "bản dịch ổn";
+    },
+    publishChapter: async (chapter) => { published.push(chapter.chapterNumber); },
+    saveState: async () => {},
+    backoffBaseMs: 0
+  });
+  assert.equal(result.quotaExhausted, false, "a quality reject is NOT a quota wait");
+  assert.equal(state.chapters[0].status, "failed", "poison chapter is skipped, not looped");
+  assert.equal(ch1Calls, QUALITY_MAX_ATTEMPTS, "the poison chapter burns only the quality cap, not 15 attempts");
+  assert.equal(state.chapters[1].status, "completed", "the next chapter still gets translated");
+  assert.deepEqual(published, [2], "only the good chapter was published");
+  assert.ok(isQualityRejection(reject));
+  assert.ok(!isQualityRejection({ code: "key_pool_slice_exhausted" }), "genuine pool exhaustion stays a quota wait");
 });
 
 test("a request budget stops the run early and leaves the rest resumable", async () => {
