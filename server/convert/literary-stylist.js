@@ -74,6 +74,10 @@ const { versifyClassicalChants } = require("./chant-versifier");
 const { refineInnerMonologue } = require("./monologue-refiner");
 const { naturalizeSoundscapes } = require("./soundscape-adapter");
 const { adaptSatiricalBanter } = require("./banter-adapter");
+const { naturalizeChronology } = require("./chronology-adapter");
+const { normalizeTitleHierarchy } = require("./title-hierarchy");
+const { escalateDramaticProse } = require("./dramatic-escalator");
+const { adaptUrbanSlang } = require("./urban-slang-adapter");
 
 /**
  * Polish and naturalize text.
@@ -88,8 +92,17 @@ function polishLiteraryProse(text) {
   // Apply syntactic restructurer (reorder inverted clauses)
   result = restructureSyntax(result);
 
+  // Apply ancient chronology & measure naturalizer
+  result = naturalizeChronology(result);
+
+  // Apply title & peerage hierarchy modulator
+  result = normalizeTitleHierarchy(result);
+
   // Apply martial action stylist
   result = polishActionProse(result);
+
+  // Apply dramatic climax & pathos escalator
+  result = escalateDramaticProse(result);
 
   // Apply sensory & atmospheric imagery enhancer
   result = enhanceSensoryImagery(result);
@@ -102,6 +115,9 @@ function polishLiteraryProse(text) {
 
   // Apply satirical banter adapter
   result = adaptSatiricalBanter(result);
+
+  // Apply urban & internet slang adapter
+  result = adaptUrbanSlang(result);
 
   // Apply poetry & chant versifier
   result = versifyClassicalChants(result);

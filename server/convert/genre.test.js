@@ -39,7 +39,7 @@ test("genre: romance mounts imperial palace and ancient family hierarchy", () =>
 
   const out2 = engine.convert("臣妾参见皇上，太后哀家凤体安康。");
   assert.ok(out2.includes("Thần thiếp"), `expected Thần thiếp, got: ${out2}`);
-  assert.ok(out2.includes("ai gia"), `expected ai gia, got: ${out2}`);
+  assert.match(out2, /ai gia/i, `expected Ai gia, got: ${out2}`);
 });
 
 test("genre: system mounts game and status mechanics", () => {
