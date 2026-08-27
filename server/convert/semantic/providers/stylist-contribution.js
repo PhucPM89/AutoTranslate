@@ -84,13 +84,18 @@ const STYLE_SLOTS = Object.freeze({
 });
 
 const {
+  SEMANTIC_ROLES,
   SEMANTIC_TYPES,
+  REALIZATION_DIMENSIONS,
   CONFLICT_POLICIES,
   STYLE_SLOT_DEFINITIONS,
+  PROVIDER_SLOT_COMPATIBILITY_MAP,
   defineStyleSlot,
   getSlotDefinition,
   isSlotMergeable,
-  getSlotMaxMultiplicity
+  getSlotMaxMultiplicity,
+  getAllSlotDefinitions,
+  validateProviderSlotCompatibility
 } = require("./style-slot-definitions");
 
 /**
@@ -149,12 +154,17 @@ function createStylistContribution({
 
 module.exports = {
   STYLE_SLOTS,
+  SEMANTIC_ROLES,
   SEMANTIC_TYPES,
+  REALIZATION_DIMENSIONS,
   CONFLICT_POLICIES,
   STYLE_SLOT_DEFINITIONS,
+  PROVIDER_SLOT_COMPATIBILITY_MAP,
   defineStyleSlot,
   getSlotDefinition,
   isSlotMergeable,
   getSlotMaxMultiplicity,
+  getAllSlotDefinitions,
+  validateProviderSlotCompatibility,
   createStylistContribution
 };
