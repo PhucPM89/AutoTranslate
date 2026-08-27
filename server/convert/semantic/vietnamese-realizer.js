@@ -49,15 +49,14 @@ function checkNegationSafety(renderedText, sourceZh) {
   const zh = String(sourceZh || "");
   const vi = String(renderedText || "").toLowerCase();
 
-  const isNegatedZh = /(?:没有|不|未|从未|并非|无论|休想|绝非|不可|无)\b/u.test(zh) ||
-                      /(?:没有|不是|并未|从未|不可|无|休想)/.test(zh);
+  const isNegatedZh = /(?:没有|不|未|从未|并非|无论|休想|绝非|不可|无)/.test(zh);
 
   if (!isNegatedZh) {
     return { passed: true };
   }
 
   // Target Vietnamese MUST contain at least one valid negative marker
-  const hasNegationVi = /(?:\bkhông\b|\bchưa\b|\bchẳng\b|\bchưa từng\b|\bkhông hề\b|\bđừng\b|\bkhông có\b|\bchớ\b|\bvô\b|\bchẳng hề\b)/i.test(vi);
+  const hasNegationVi = /(?:(?<!\p{L})(?:không|chưa|chẳng|chưa từng|không hề|đừng|không có|chớ|vô|chẳng hề)(?!\p{L}))/iu.test(vi);
 
   if (!hasNegationVi) {
     return {
@@ -78,14 +77,14 @@ function checkTemporalSafety(renderedText, sourceZh, temporalAspect) {
   const vi = String(renderedText || "").toLowerCase();
 
   if (temporalAspect === "PERFECTIVE_ALREADY" || /(?:已经|已然|早已)/.test(zh)) {
-    const hasAlreadyVi = /(?:\bđã\b|\bsớm đã\b|\bđã sớm\b|\bxong\b|\brồi\b)/i.test(vi);
+    const hasAlreadyVi = /(?:(?<!\p{L})(?:đã|sớm đã|đã sớm|xong|rồi)(?!\p{L}))/iu.test(vi);
     if (!hasAlreadyVi) {
       return { passed: false, reason: "PERFECTIVE_ASPECT_LOST" };
     }
   }
 
   if (temporalAspect === "SEQUENTIAL_THEN" || /(?:随后|旋即|紧接着)/.test(zh)) {
-    const hasSequentialVi = /(?:\bsau đó\b|\btiếp theo\b|\bngay sau đó\b|\bliền\b|\brồi\b)/i.test(vi);
+    const hasSequentialVi = /(?:(?<!\p{L})(?:sau đó|tiếp theo|ngay sau đó|liền|rồi)(?!\p{L}))/iu.test(vi);
     if (!hasSequentialVi) {
       return { passed: false, reason: "SEQUENTIAL_TEMPORAL_LOST" };
     }
@@ -103,7 +102,7 @@ function checkDiscourseSafety(renderedText, sourceZh, causalRelation) {
   const vi = String(renderedText || "").toLowerCase();
 
   if (causalRelation === "ADVERSATIVE_BUT" || /(?:却|但是|然而|不过)/.test(zh)) {
-    const hasButVi = /(?:\bnhưng\b|\btuy nhiên\b|\blại\b|\bsong\b|\bngặt nỗi\b)/i.test(vi);
+    const hasButVi = /(?:(?<!\p{L})(?:nhưng|tuy nhiên|lại|song|ngặt nỗi)(?!\p{L}))/iu.test(vi);
     if (!hasButVi) {
       return { passed: false, reason: "ADVERSATIVE_CONNECTOR_LOST" };
     }
