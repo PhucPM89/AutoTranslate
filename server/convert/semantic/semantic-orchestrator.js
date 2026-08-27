@@ -75,18 +75,34 @@ function createSemanticOrchestrator({
     const baselineOutput = baseConvertFunction ? baseConvertFunction(text) : "";
     const analyzed = analyzer.analyzeChapter(text);
     const traces = [];
+    const allStylistContributions = [];
+    const allConflictResolutions = [];
+    const expressionPlanPreviews = [];
 
     for (const para of analyzed.paragraphs) {
+      const contextSnap = para.contextSnapshot;
       for (const cl of para.clauses) {
         if (cl.lexicalResolution) {
           traces.push(...(cl.lexicalResolution.resolutionRecords || []));
         }
+
+        // Run Router and Planner in Shadow Mode for stylist audit
+        const routingDecision = router.route(cl, contextSnap);
+        allStylistContributions.push(...(routingDecision.selectedContributions || []));
+        allConflictResolutions.push(...(routingDecision.slotResolutions || []));
+
+        const plan = planner.planClause(cl, contextSnap);
+        expressionPlanPreviews.push(plan);
       }
     }
 
     return Object.freeze({
       baselineOutput,
-      lexicalResolutionAnalysis: analyzed,
+      semanticAnalysis: analyzed,
+      lexicalResolutionAnalysis: analyzed, // Backward compatibility
+      stylistContributions: Object.freeze(allStylistContributions),
+      conflictResolution: Object.freeze(allConflictResolutions),
+      expressionPlanPreview: Object.freeze(expressionPlanPreviews),
       traces: Object.freeze(traces)
     });
   }

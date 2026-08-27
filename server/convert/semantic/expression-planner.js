@@ -30,25 +30,30 @@ function createExpressionPlanner({
     const slotReplacements = [];
     const rejectedByBudget = [];
 
-    for (const suggestion of routingDecision.acceptedSuggestions) {
+    const winningContributions = routingDecision.selectedContributions || routingDecision.acceptedSuggestions || [];
+
+    for (const contrib of winningContributions) {
+      const slotId = contrib.sourceSpanZh || contrib.targetSlot || contrib.slotId || "";
+      const candidateVi = contrib.candidateVi || "";
+
       // Evaluate against Expansion Budget
       const budgetCheck = evaluateExpansionBudget(clauseIR, {
-        targetVi: suggestion.candidateVi,
-        introducedMetaphors: 0,
-        adjectiveCount: suggestion.candidateVi.split(/\s+/).length > 4 ? 2 : 1
+        targetVi: candidateVi,
+        introducedMetaphors: contrib.introducedMetaphor ? 1 : 0,
+        adjectiveCount: (contrib.introducedInformation || []).length
       });
 
       if (budgetCheck.allowed) {
         slotReplacements.push({
-          slotId: suggestion.slotId,
-          replacementVi: suggestion.candidateVi,
-          providerId: suggestion.providerId,
-          priority: suggestion.priority
+          slotId,
+          replacementVi: candidateVi,
+          providerId: contrib.providerId,
+          priority: contrib.lexicalPriority || contrib.priority || 0.8
         });
       } else {
         rejectedByBudget.push({
-          slotId: suggestion.slotId,
-          candidateVi: suggestion.candidateVi,
+          slotId,
+          candidateVi,
           reason: budgetCheck.reason
         });
       }
