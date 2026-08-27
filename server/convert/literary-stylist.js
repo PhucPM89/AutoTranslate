@@ -106,6 +106,10 @@ const { polishNecropolisProse } = require("./necropolis-stylist");
 const { polishImperialProse } = require("./imperial-edict-stylist");
 const { polishCyberProse } = require("./cyber-scifi-stylist");
 const { polishBeastContractProse } = require("./beast-contract-stylist");
+const { polishEldritchProse } = require("./eldritch-stylist");
+const { polishGrimoireProse } = require("./grimoire-magic-stylist");
+const { polishApocalypseProse } = require("./apocalypse-stylist");
+const { polishForensicProse } = require("./forensic-deduction-stylist");
 
 /**
  * Polish and naturalize text.
@@ -129,8 +133,20 @@ function polishLiteraryProse(text) {
   // Apply imperial decrees & royal proclamations stylist
   result = polishImperialProse(result);
 
+  // Apply forensic & deduction mystery stylist
+  result = polishForensicProse(result);
+
   // Apply time skips & transcendence stylist
   result = polishTranscendenceProse(result);
+
+  // Apply apocalypse & genetic mutant stylist
+  result = polishApocalypseProse(result);
+
+  // Apply grimoire & western magic stylist
+  result = polishGrimoireProse(result);
+
+  // Apply eldritch & cthulhu horror stylist
+  result = polishEldritchProse(result);
 
   // Apply beast taming & familiar contracts stylist
   result = polishBeastContractProse(result);
