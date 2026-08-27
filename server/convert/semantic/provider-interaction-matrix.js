@@ -44,7 +44,15 @@ const DOMAIN_PAIR_RELATIONS = [
   { domainA: "TRIBULATION_BREAKTHROUGH", domainB: "TOPOGRAPHY_LANDSCAPE", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Celestial lightning over immortal peaks" },
   { domainA: "TRANSCENDENCE_TIME", domainB: "ELEGY_LAMENT", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Passing of millennia and mourning fallen heroes" },
   { domainA: "TRANSCENDENCE_TIME", domainB: "WARFARE_SIEGE", relation: INTERACTION_RELATIONS.ORTHOGONAL, note: "Millennium contemplation over ancient battlefields" },
-  { domainA: "APOCALYPSE_SURVIVAL", domainB: "CYBER_SCIFI", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Wasteland survival and futuristic mechas" }
+  { domainA: "APOCALYPSE_SURVIVAL", domainB: "CYBER_SCIFI", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Wasteland survival and futuristic mechas" },
+
+  // Wave C1 Normalization Interactions
+  { domainA: "COMBAT", domainB: "SOUNDSCAPE", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Impact acoustic effects and martial combat harmonize" },
+  { domainA: "MUSICAL_DAO", domainB: "SOUNDSCAPE", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Acoustic zither chords and environmental soundscapes harmonize" },
+  { domainA: "WARFARE_SIEGE", domainB: "SOUNDSCAPE", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "War drums, explosions, and battlefield charges harmonize" },
+  { domainA: "SUPERNATURAL_HORROR", domainB: "SENSORY_ATMOSPHERE", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Ghostly specters and eerie cold mist harmonize" },
+  { domainA: "ZEN_TEA", domainB: "SENSORY_ATMOSPHERE", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Tea discourse and serene fragrances harmonize" },
+  { domainA: "TRANSCENDENCE_TIME", domainB: "CHRONOLOGY", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Temporal measures and retrospective time skips harmonize" }
 ];
 
 /**

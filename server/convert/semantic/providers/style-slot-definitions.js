@@ -972,6 +972,49 @@ const STYLE_SLOT_DEFINITIONS = Object.freeze({
     conflictPolicy: CONFLICT_POLICIES.WIN_OR_ABSTAIN,
     description: "Chân tướng đại bạch",
     sourceSemantics: "Source describes complete revelation of hidden truth behind a mystery"
+  }),
+
+  // =========================================================================
+  // 9. WAVE C1 NORMALIZATION SLOTS (3 Canonical Slots)
+  // =========================================================================
+  TEMPORAL_MEASURE: defineStyleSlot({
+    id: "TEMPORAL_MEASURE",
+    semanticRole: SEMANTIC_ROLES.STATE,
+    realizationDimensions: [REALIZATION_DIMENSIONS.LEXICAL, REALIZATION_DIMENSIONS.REGISTER],
+    canMerge: false,
+    canCompete: true,
+    maxMultiplicity: 1,
+    allowedTextRoles: ["ACTION", "DESCRIPTION", "DIALOGUE", "EXPOSITION"],
+    requiredEvidence: ["TEMPORAL_MEASURE_EXPRESSION"],
+    conflictPolicy: CONFLICT_POLICIES.COMPOSITE_SCORE,
+    description: "Ước lượng thời lượng cổ trang (nén nhang, tuần trà, nhịp thở, canh giờ)",
+    sourceSemantics: "Source denotes ancient temporal duration measurement"
+  }),
+  SOUNDSCAPE_EFFECT: defineStyleSlot({
+    id: "SOUNDSCAPE_EFFECT",
+    semanticRole: SEMANTIC_ROLES.EVENT,
+    realizationDimensions: [REALIZATION_DIMENSIONS.LEXICAL, REALIZATION_DIMENSIONS.RHYTHMIC],
+    canMerge: false,
+    canCompete: true,
+    maxMultiplicity: 1,
+    allowedTextRoles: ["ACTION", "DESCRIPTION", "DIALOGUE"],
+    requiredEvidence: ["SOUNDSCAPE_ONOMATOPOEIA"],
+    conflictPolicy: CONFLICT_POLICIES.COMPOSITE_SCORE,
+    description: "Từ tượng thanh, âm thanh va chạm, nổ vang, rắc, phụt, keng, gió rít",
+    sourceSemantics: "Source denotes concrete acoustic onomatopoeia or impact soundscape"
+  }),
+  ATMOSPHERIC_DETAIL: defineStyleSlot({
+    id: "ATMOSPHERIC_DETAIL",
+    semanticRole: SEMANTIC_ROLES.ATMOSPHERE,
+    realizationDimensions: [REALIZATION_DIMENSIONS.LEXICAL, REALIZATION_DIMENSIONS.ATMOSPHERIC],
+    canMerge: true,
+    canCompete: false,
+    maxMultiplicity: 2,
+    allowedTextRoles: ["DESCRIPTION", "INNER_THOUGHT"],
+    requiredEvidence: ["SENSORY_IMAGERY_KEYWORD"],
+    conflictPolicy: CONFLICT_POLICIES.ORTHOGONAL_MERGE,
+    description: "Chi tiết cảm giác, ánh trăng, hương thơm, sương mù linh khí, hàn ý",
+    sourceSemantics: "Source denotes atmospheric sensory imagery (visual, olfactory, thermal, mist)"
   })
 });
 
@@ -983,6 +1026,7 @@ const PROVIDER_SLOT_COMPATIBILITY_MAP = Object.freeze({
   "auction-provider": ["AUCTION_EVENT"],
   "beast-contract-provider": ["BEAST_CONTRACT", "BEAST_EVOLUTION"],
   "bestiary-provider": ["BEAST_ROAR", "BEAST_EVOLUTION"],
+  "chronology-provider": ["TEMPORAL_MEASURE", "TRANSCENDENCE_TIME"],
   "cosmic-chess-provider": ["COSMIC_CHESS_BOARD", "CHESS_STRATEGY_MOVE"],
   "culinary-provider": ["CULINARY_DELICACY", "CULINARY_SENSATION"],
   "cyber-scifi-provider": ["CYBER_INTERFACE", "CYBER_MECHA"],
@@ -999,7 +1043,9 @@ const PROVIDER_SLOT_COMPATIBILITY_MAP = Object.freeze({
   "meridian-healing-provider": ["MERIDIAN_ACUPOINT", "HEALING_PURGE"],
   "musical-dao-provider": ["MUSICAL_PERFORMANCE", "MUSICAL_ATTACK"],
   "necropolis-provider": ["NECROPOLIS_ATMOSPHERE"],
+  "sensory-provider": ["ATMOSPHERIC_DETAIL", "TOPOGRAPHY_LANDSCAPE"],
   "soul-token-provider": ["SOUL_TOKEN_STATE"],
+  "soundscape-provider": ["SOUNDSCAPE_EFFECT"],
   "spatial-provider": ["SPATIAL_VOID"],
   "supernatural-provider": ["SUPERNATURAL_SPECTER", "TAOIST_EXORCISM", "NETHERWORLD_PARADE"],
   "sword-provider": ["WEAPON_DRAW", "WEAPON_STRIKE", "WEAPON_INTENT"],

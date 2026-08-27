@@ -42,6 +42,11 @@ const { createTranscendenceProvider } = require("./transcendence-provider");
 const { createTribulationProvider } = require("./tribulation-provider");
 const { createWarfareProvider } = require("./warfare-provider");
 
+// Wave C1 Providers (Structural & Sensory Normalization)
+const { createChronologyProvider } = require("./chronology-provider");
+const { createSoundscapeProvider } = require("./soundscape-provider");
+const { createSensoryProvider } = require("./sensory-provider");
+
 function createDefaultProviderRegistry() {
   const providers = [
     // Phase 2A Pilot
@@ -64,7 +69,7 @@ function createDefaultProviderRegistry() {
     createSpatialProvider(),
     createAuctionProvider(),
 
-    // Phase 2B Wave B (15 New Providers)
+    // Phase 2B Wave B (15 Providers)
     createApocalypseProvider(),
     createCosmicChessProvider(),
     createDivineSenseProvider(),
@@ -79,7 +84,12 @@ function createDefaultProviderRegistry() {
     createTopographyProvider(),
     createTranscendenceProvider(),
     createTribulationProvider(),
-    createWarfareProvider()
+    createWarfareProvider(),
+
+    // Phase 2B Wave C1 (3 Providers)
+    createChronologyProvider(),
+    createSoundscapeProvider(),
+    createSensoryProvider()
   ];
 
   return Object.freeze({

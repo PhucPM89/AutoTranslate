@@ -133,7 +133,9 @@ function createStylistRouter({
         ? provider.getSuggestions(clauseIR, context)
         : (typeof provider.proposeContributions === "function"
             ? { contributions: provider.proposeContributions(clauseIR, context) }
-            : { contributions: [] });
+            : (typeof provider.contribute === "function"
+                ? { contributions: provider.contribute(clauseIR, context) }
+                : { contributions: [] }));
 
       if (result.forbiddenPatterns) {
         for (const fp of result.forbiddenPatterns) forbiddenPatterns.add(fp);
