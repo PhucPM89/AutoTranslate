@@ -134,7 +134,12 @@ function buildConvertEngineFromDisk(env = process.env, { nameGlossary = null, ge
   // The engine merges the glossary into its phrase dictionary AND locks
   // segmentation around the names, so pass it through rather than pre-merging.
   return createConvertEngine({
-    phraseDict, hanvietChars, lexicon: b.lexicon, nameGlossary
+    phraseDict,
+    hanvietChars,
+    lexicon: b.lexicon,
+    nameGlossary,
+    translationEngineMode: env.TRANSLATION_ENGINE_MODE,
+    canaryPercentage: env.CANARY_PERCENTAGE
   });
 }
 
@@ -167,7 +172,11 @@ function getConvertFunction(env = process.env) {
   if (env.CONVERT_ENABLED === "false") return (cached = null);
   try {
     const engine = buildConvertEngineFromDisk(env);
-    cached = engine ? (text) => engine.convert(text) : null;
+    cached = engine
+      ? (text) => (env.TRANSLATION_ENGINE_MODE && env.TRANSLATION_ENGINE_MODE !== "LEGACY"
+          ? engine.convertWithCanary(text).text
+          : engine.convert(text))
+      : null;
   } catch {
     cached = null;
   }

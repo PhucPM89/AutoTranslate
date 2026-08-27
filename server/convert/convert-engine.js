@@ -29,6 +29,7 @@ const { applyGrammar } = require("./grammar");
 const { createProperNounMatcher } = require("./proper-nouns");
 const { polishLiteraryProse } = require("./literary-stylist");
 const { createSemanticOrchestrator } = require("./semantic/semantic-orchestrator");
+const { createCanaryController } = require("./canary-controller");
 
 const HAN = /\p{Script=Han}/u;
 
@@ -223,7 +224,9 @@ function createConvertEngine({
   nameGlossary = null,
   normalizePunctuation = true,
   capitalizeSentences = true,
-  applyGrammarRules = true
+  applyGrammarRules = true,
+  translationEngineMode = null,
+  canaryPercentage = undefined
 } = {}) {
   // A per-book name glossary reads inside the phrase dictionary (so the name
   // renders), and also seeds a separate trie used to lock segmentation: a
@@ -497,6 +500,14 @@ function createConvertEngine({
     baseConvertFunction: (raw) => (raw.trim() ? convertLine(raw) : "")
   });
 
+  // Production Canary Controller (Phase R4)
+  const canaryController = createCanaryController({
+    fallbackFunction: convert,
+    semanticOrchestrator,
+    mode: translationEngineMode || process.env.TRANSLATION_ENGINE_MODE || "LEGACY",
+    canaryPercentage: canaryPercentage !== undefined ? canaryPercentage : (process.env.CANARY_PERCENTAGE || 0)
+  });
+
   function convertSemantic(text) {
     if (typeof text !== "string" || !text) return "";
     return semanticOrchestrator.translateChapter(text).text;
@@ -507,12 +518,26 @@ function createConvertEngine({
     return semanticOrchestrator.translateShadow(text);
   }
 
-  return { convert, convertSemantic, convertSemanticShadow, convertLine, tokenize, semanticOrchestrator };
+  function convertWithCanary(text, opts = {}) {
+    return canaryController.translate(text, opts);
+  }
+
+  return {
+    convert,
+    convertSemantic,
+    convertSemanticShadow,
+    convertWithCanary,
+    canaryController,
+    convertLine,
+    tokenize,
+    semanticOrchestrator
+  };
 }
 
 module.exports = {
   createConvertEngine,
   createSemanticOrchestrator,
+  createCanaryController,
   isHan,
   buildTrie,
   matchPhrase,
