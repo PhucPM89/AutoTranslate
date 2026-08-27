@@ -102,6 +102,10 @@ const { polishMusicalProse } = require("./musical-dao-stylist");
 const { polishChessProse } = require("./cosmic-chess-stylist");
 const { polishZenProse } = require("./zen-tea-stylist");
 const { polishSoulTokenProse } = require("./soul-token-stylist");
+const { polishNecropolisProse } = require("./necropolis-stylist");
+const { polishImperialProse } = require("./imperial-edict-stylist");
+const { polishCyberProse } = require("./cyber-scifi-stylist");
+const { polishBeastContractProse } = require("./beast-contract-stylist");
 
 /**
  * Polish and naturalize text.
@@ -122,8 +126,20 @@ function polishLiteraryProse(text) {
   // Apply title & peerage hierarchy modulator
   result = normalizeTitleHierarchy(result);
 
+  // Apply imperial decrees & royal proclamations stylist
+  result = polishImperialProse(result);
+
   // Apply time skips & transcendence stylist
   result = polishTranscendenceProse(result);
+
+  // Apply beast taming & familiar contracts stylist
+  result = polishBeastContractProse(result);
+
+  // Apply cyberpunk, VR & mecha stylist
+  result = polishCyberProse(result);
+
+  // Apply necropolis & ancient tombs stylist
+  result = polishNecropolisProse(result);
 
   // Apply soul token & life-lamp stylist
   result = polishSoulTokenProse(result);
