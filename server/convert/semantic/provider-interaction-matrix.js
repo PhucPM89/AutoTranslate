@@ -69,7 +69,13 @@ const DOMAIN_PAIR_RELATIONS = [
   // Wave C2B-2 Urban Slang Relations
   { domainA: "URBAN_SLANG", domainB: "BANTER", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Modern slang expressions may appear within banter dialogue" },
   { domainA: "URBAN_SLANG", domainB: "COMBAT", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Face-slap metaphors coexist with combat narrative" },
-  { domainA: "URBAN_SLANG", domainB: "MONOLOGUE_PSYCHOLOGY", relation: INTERACTION_RELATIONS.ORTHOGONAL, note: "Register localization and inner monologue operate on separate dimensions" }
+  { domainA: "URBAN_SLANG", domainB: "MONOLOGUE_PSYCHOLOGY", relation: INTERACTION_RELATIONS.ORTHOGONAL, note: "Register localization and inner monologue operate on separate dimensions" },
+
+  // Wave C3-A1 Courtly Beauty Relations
+  { domainA: "COURTLY_BEAUTY", domainB: "SUPERNATURAL_HORROR", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Spectral / eerie beauty coexists with supernatural horror atmosphere" },
+  { domainA: "COURTLY_BEAUTY", domainB: "COMBAT", relation: INTERACTION_RELATIONS.ORTHOGONAL, note: "Visual maiden aesthetics does not alter physical martial combat semantics" },
+  { domainA: "COURTLY_BEAUTY", domainB: "TITLE_HIERARCHY", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Noble / sect lady titles and aesthetic elegance realize on distinct slots" },
+  { domainA: "COURTLY_BEAUTY", domainB: "BANTER", relation: INTERACTION_RELATIONS.ORTHOGONAL, note: "Physical elegance descriptions and spoken retort dialogue operate on separate text roles" }
 ];
 
 /**

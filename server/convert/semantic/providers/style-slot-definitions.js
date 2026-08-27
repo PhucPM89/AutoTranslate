@@ -1093,6 +1093,23 @@ const STYLE_SLOT_DEFINITIONS = Object.freeze({
     conflictPolicy: CONFLICT_POLICIES.COMPOSITE_SCORE,
     description: "Localise thuật ngữ internet, urban slang, gaming và meme hiện đại theo narrative register phù hợp",
     sourceSemantics: "Source contains contemporary Chinese internet slang, gaming jargon, or modern social meme expressions requiring register-aware narrative/lexical adaptation"
+  }),
+
+  // =========================================================================
+  // 13. WAVE C3-A1 COURTLY BEAUTY & AESTHETIC ELEGANCE (1 Canonical Slot)
+  // =========================================================================
+  AESTHETIC_ELEGANCE: defineStyleSlot({
+    id: "AESTHETIC_ELEGANCE",
+    semanticRole: SEMANTIC_ROLES.ATMOSPHERE,
+    realizationDimensions: [REALIZATION_DIMENSIONS.LEXICAL, REALIZATION_DIMENSIONS.ATMOSPHERIC, REALIZATION_DIMENSIONS.REGISTER],
+    canMerge: false,
+    canCompete: true,
+    maxMultiplicity: 1,
+    allowedTextRoles: ["DESCRIPTION", "ACTION", "DIALOGUE", "EXPOSITION"],
+    requiredEvidence: ["AESTHETIC_MAIDEN_EVIDENCE"],
+    conflictPolicy: CONFLICT_POLICIES.COMPOSITE_SCORE,
+    description: "Hiện thực hóa nét thanh tao, dung mạo, xiêm y và thần thái cổ phong của mỹ nhân dựa trên bằng chứng ngữ nghĩa có sẵn",
+    sourceSemantics: "Source denotes explicit classical maiden visual aesthetics, attire, ethereal grace, or poetic beauty metaphors without invented physical or erotic attributes"
   })
 });
 
@@ -1106,6 +1123,7 @@ const PROVIDER_SLOT_COMPATIBILITY_MAP = Object.freeze({
   "bestiary-provider": ["BEAST_ROAR", "BEAST_EVOLUTION"],
   "chronology-provider": ["TEMPORAL_MEASURE", "TRANSCENDENCE_TIME"],
   "cosmic-chess-provider": ["COSMIC_CHESS_BOARD", "CHESS_STRATEGY_MOVE"],
+  "courtly-beauty-provider": ["AESTHETIC_ELEGANCE"],
   "culinary-provider": ["CULINARY_DELICACY", "CULINARY_SENSATION"],
   "cyber-scifi-provider": ["CYBER_INTERFACE", "CYBER_MECHA"],
   "daoist-array-provider": ["ARRAY_NODE", "TALISMAN_ACTIVATION"],
