@@ -25,6 +25,23 @@ const { createSoulTokenProvider } = require("./soul-token-provider");
 const { createSpatialProvider } = require("./spatial-provider");
 const { createAuctionProvider } = require("./auction-provider");
 
+// Wave B Providers (Semantic State & Environment)
+const { createApocalypseProvider } = require("./apocalypse-provider");
+const { createCosmicChessProvider } = require("./cosmic-chess-provider");
+const { createDivineSenseProvider } = require("./divine-sense-provider");
+const { createEldritchProvider } = require("./eldritch-provider");
+const { createElegyProvider } = require("./elegy-provider");
+const { createForensicDeductionProvider } = require("./forensic-deduction-provider");
+const { createGrimoireMagicProvider } = require("./grimoire-magic-provider");
+const { createImperialEdictProvider } = require("./imperial-edict-provider");
+const { createKarmaProvider } = require("./karma-provider");
+const { createMantraProvider } = require("./mantra-provider");
+const { createMusicalDaoProvider } = require("./musical-dao-provider");
+const { createTopographyProvider } = require("./topography-provider");
+const { createTranscendenceProvider } = require("./transcendence-provider");
+const { createTribulationProvider } = require("./tribulation-provider");
+const { createWarfareProvider } = require("./warfare-provider");
+
 function createDefaultProviderRegistry() {
   const providers = [
     // Phase 2A Pilot
@@ -45,7 +62,24 @@ function createDefaultProviderRegistry() {
     createNecropolisProvider(),
     createSoulTokenProvider(),
     createSpatialProvider(),
-    createAuctionProvider()
+    createAuctionProvider(),
+
+    // Phase 2B Wave B (15 New Providers)
+    createApocalypseProvider(),
+    createCosmicChessProvider(),
+    createDivineSenseProvider(),
+    createEldritchProvider(),
+    createElegyProvider(),
+    createForensicDeductionProvider(),
+    createGrimoireMagicProvider(),
+    createImperialEdictProvider(),
+    createKarmaProvider(),
+    createMantraProvider(),
+    createMusicalDaoProvider(),
+    createTopographyProvider(),
+    createTranscendenceProvider(),
+    createTribulationProvider(),
+    createWarfareProvider()
   ];
 
   return Object.freeze({

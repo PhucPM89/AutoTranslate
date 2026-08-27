@@ -85,12 +85,18 @@ function createStylistRouter({
     const forbiddenPatterns = new Set();
 
     for (const provider of activeProviders) {
-      const result = provider.getSuggestions(clauseIR, context);
+      const result = typeof provider.getSuggestions === "function"
+        ? provider.getSuggestions(clauseIR, context)
+        : (typeof provider.proposeContributions === "function"
+            ? { contributions: provider.proposeContributions(clauseIR, context) }
+            : { contributions: [] });
+
       if (result.forbiddenPatterns) {
         for (const fp of result.forbiddenPatterns) forbiddenPatterns.add(fp);
       }
 
-      for (const item of (result.contributions || result.suggestions || [])) {
+      const list = Array.isArray(result) ? result : (result.contributions || result.suggestions || []);
+      for (const item of list) {
         const contrib = item.targetSlot ? item : {
           providerId: provider.providerId,
           domain: provider.domain,
@@ -132,8 +138,12 @@ function createStylistRouter({
         let rejectReason = null;
 
         if (sourceSig && cand.semanticSignature) {
-          const compat = checkSignatureCompatibility(sourceSig, cand.semanticSignature);
-          isCompatible = compat.compatible;
+          const compat = checkSignatureCompatibility(sourceSig, cand.semanticSignature, {
+            maxValenceDiff: 0.85,
+            maxIntensityDiff: 0.65,
+            minAffectSimilarity: 0.15
+          });
+          isCompatible = compat.compatible || (compat.score >= 0.35);
           sigScore = compat.score;
           if (!isCompatible) {
             rejectReason = `SIGNATURE_INCOMPATIBLE: ${compat.reasons.join("; ")}`;
@@ -236,7 +246,7 @@ function createStylistRouter({
 
     return Object.freeze({
       clauseId: clauseIR ? clauseIR.id : "",
-      activeProviders: Object.freeze(activeProviders.map((p) => p.providerId)),
+      activeProviders: Object.freeze(activeProviders.map((p) => p.providerId || p.id || "")),
       selectedContributions: Object.freeze(selectedContributions),
       acceptedSuggestions: Object.freeze(selectedContributions.map((c) => ({
         slotId: c.sourceSpanZh || c.targetSlot,

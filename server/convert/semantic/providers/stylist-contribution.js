@@ -40,7 +40,47 @@ const STYLE_SLOTS = Object.freeze({
   NECROPOLIS_ATMOSPHERE: "NECROPOLIS_ATMOSPHERE", // Cổ mộ, quan quách ngàn năm, thi khí, cạm bẫy
   SOUL_TOKEN_STATE: "SOUL_TOKEN_STATE",       // Mệnh bài nứt vỡ, hồn đăng phụt tắt, tổ miếu chấn động
   SPATIAL_VOID: "SPATIAL_VOID",               // Khe nứt không gian, hư không sụp đổ, bí cảnh khai mở
-  AUCTION_EVENT: "AUCTION_EVENT"              // Toàn trường tĩnh lặng, tiếng búa chốt giá, giá trên trời
+  AUCTION_EVENT: "AUCTION_EVENT",             // Toàn trường tĩnh lặng, tiếng búa chốt giá, giá trên trời
+
+  // Wave B Style Slots (Semantic State & Environment)
+  APOCALYPSE_HORDE: "APOCALYPSE_HORDE",       // Tang thi cuồng triều, mạt thế phế thổ
+  GENETIC_LIMIT: "GENETIC_LIMIT",             // Phá vỡ khóa gen, tinh hạch dị thú
+  ELEMENTAL_AWAKENING: "ELEMENTAL_AWAKENING", // Dị năng thức tỉnh, bùng nổ sức mạnh
+  COSMIC_CHESS_BOARD: "COSMIC_CHESS_BOARD",   // Thiên địa vi bàn, chúng sinh vi tử
+  CHESS_STRATEGY_MOVE: "CHESS_STRATEGY_MOVE", // Hạ cờ không hối, thắng bại đã phân, bỏ xe giữ tướng
+  DIVINE_SENSE_SCAN: "DIVINE_SENSE_SCAN",     // Thần thức quét qua, thần niệm như triều
+  SOUL_PRESSURE: "SOUL_PRESSURE",             // Uy áp giáng lâm, thức hải chấn động, linh hồn đau đớn
+  DOMAIN_EXPANSION: "DOMAIN_EXPANSION",       // Lĩnh vực tuyệt đối mở rộng
+  ELDRITCH_HORROR: "ELDRITCH_HORROR",         // Bất khả danh trạng, lời thì thầm điên loạn
+  FORBIDDEN_GAZE: "FORBIDDEN_GAZE",           // Nhìn thẳng thần minh, chứng kiến cấm kỵ
+  SANITY_COLLAPSE: "SANITY_COLLAPSE",         // Lý trí sụp đổ, ô nhiễm biến dị
+  ELEGY_SOUL_CALL: "ELEGY_SOUL_CALL",         // Hồn quy lai hề, ngậm cười chín suối, âm dương cách biệt
+  ELEGY_HEROIC_SPIRIT: "ELEGY_HEROIC_SPIRIT", // Anh hồn bất diệt, âm dung uyển tại
+  FORENSIC_MYSTERY: "FORENSIC_MYSTERY",       // Án mạng mật thất, bằng chứng ngoại phạm, dấu vết tơ nhện
+  FORENSIC_TRUTH: "FORENSIC_TRUTH",           // Chân tướng đại bạch
+  GRIMOIRE_CURSE: "GRIMOIRE_CURSE",           // Ma pháp cấm chú, ma lực cuộn trào
+  MAGIC_INCANTATION: "MAGIC_INCANTATION",     // Ngâm xướng chú ngữ, ma pháp trận, ma đạo thư
+  IMPERIAL_PROCLAMATION: "IMPERIAL_PROCLAMATION", // Phụng thiên thừa vận, khâm thử
+  IMPERIAL_SALUTATION: "IMPERIAL_SALUTATION", // Lãnh chỉ tạ ân, vạn tuế, đệ trình quốc thư
+  KARMA_SAMSARA: "KARMA_SAMSARA",             // Tơ nhân quả, chém đứt nghiệp duyên, chín kiếp luân hồi
+  DESTINED_DUEL: "DESTINED_DUEL",             // Túc huệ thức tỉnh, trận đấu định mệnh
+  MANTRA_SEAL: "MANTRA_SEAL",                 // Bấm quyết niệm chú, miệng tụng chân ngôn, kết thủ ấn
+  WORD_AS_LAW: "WORD_AS_LAW",                 // Ngôn xuất pháp tùy
+  MUSICAL_PERFORMANCE: "MUSICAL_PERFORMANCE", // Tiếng đàn du dương, gảy dây đàn, Cao Sơn Lưu Thủy, khúc chung nhân tán
+  MUSICAL_ATTACK: "MUSICAL_ATTACK",           // Âm ba giết địch, sóng âm hóa kiếm
+  SUPERNATURAL_SPECTER: "SUPERNATURAL_SPECTER", // Lệ quỷ áo đỏ, mắt âm dương, minh hôn
+  TAOIST_EXORCISM: "TAOIST_EXORCISM",         // Kiếm gỗ đào, máu chó mực, phù chú trừ tà
+  NETHERWORLD_PARADE: "NETHERWORLD_PARADE",   // Âm binh mượn đường, thi biến cương thi
+  TOPOGRAPHY_LANDSCAPE: "TOPOGRAPHY_LANDSCAPE", // Linh khí hóa vụ, mây mù đỉnh núi, động thiên phúc địa, vách đá
+  SEVERED_VITALITY: "SEVERED_VITALITY",       // Sinh cơ đoạn tuyệt, tử khí ngập trời
+  TRANSCENDENCE_TIME: "TRANSCENDENCE_TIME",   // Búng tay ngàn năm, cảnh còn người mất, nhìn hết phồn hoa
+  SOLITARY_DAO: "SOLITARY_DAO",               // Đại đạo độc hành
+  TRIBULATION_LIGHTNING: "TRIBULATION_LIGHTNING", // Mây kiếp cuồn cuộn, Tử Tiêu Thần Lôi, thiên kiếp giáng lâm
+  CELESTIAL_PHENOMENON: "CELESTIAL_PHENOMENON", // Thiên địa dị tượng, vạn đạo ráng mây, đạo âm ngân vang
+  REALM_BREAKTHROUGH: "REALM_BREAKTHROUGH",   // Phá vỡ bình cảnh, tâm ma xâm thực
+  WAR_DRUMS: "WAR_DRUMS",                     // Trống trận dồn dập, chiêng thu quân
+  WARFARE_CHARGE: "WARFARE_CHARGE",           // Thiên quân vạn mã xung phong, khói lửa ngập trời
+  BLOODY_BATTLEFIELD: "BLOODY_BATTLEFIELD"    // Quyết tử huyết chiến sa trường
 });
 
 /**
@@ -67,6 +107,8 @@ function createStylistContribution({
   introducedInformation = [],
   introducedMetaphor = false,
   introducedEmotion = null,
+  surfaceRealization = true,
+  semanticAssertions = [],
   provenance = ""
 } = {}) {
   return Object.freeze({
@@ -87,6 +129,8 @@ function createStylistContribution({
     introducedInformation: Object.freeze([...introducedInformation]),
     introducedMetaphor: Boolean(introducedMetaphor),
     introducedEmotion: introducedEmotion ? String(introducedEmotion) : null,
+    surfaceRealization: Boolean(surfaceRealization),
+    semanticAssertions: Object.freeze([...semanticAssertions]),
     provenance: String(provenance || "")
   });
 }
