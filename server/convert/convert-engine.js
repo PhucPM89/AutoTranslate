@@ -502,7 +502,12 @@ function createConvertEngine({
     return semanticOrchestrator.translateChapter(text).text;
   }
 
-  return { convert, convertSemantic, convertLine, tokenize, semanticOrchestrator };
+  function convertSemanticShadow(text) {
+    if (typeof text !== "string" || !text) return { baselineOutput: "", lexicalResolutionAnalysis: null, traces: [] };
+    return semanticOrchestrator.translateShadow(text);
+  }
+
+  return { convert, convertSemantic, convertSemanticShadow, convertLine, tokenize, semanticOrchestrator };
 }
 
 module.exports = {

@@ -61,11 +61,36 @@ function createSemanticOrchestrator({
   }
 
   /**
-   * Translates a single line/sentence.
+   * Shadow Mode: Computes baseline translation along with deep lexical resolution analysis.
+   * Does NOT alter baseline production output.
    * 
-   * @param {string} line
-   * @returns {string}
+   * @param {string} text
+   * @returns {{ baselineOutput: string, lexicalResolutionAnalysis: Object, traces: Array<Object> }}
    */
+  function translateShadow(text) {
+    if (!text || typeof text !== "string") {
+      return { baselineOutput: "", lexicalResolutionAnalysis: null, traces: [] };
+    }
+
+    const baselineOutput = baseConvertFunction ? baseConvertFunction(text) : "";
+    const analyzed = analyzer.analyzeChapter(text);
+    const traces = [];
+
+    for (const para of analyzed.paragraphs) {
+      for (const cl of para.clauses) {
+        if (cl.lexicalResolution) {
+          traces.push(...(cl.lexicalResolution.resolutionRecords || []));
+        }
+      }
+    }
+
+    return Object.freeze({
+      baselineOutput,
+      lexicalResolutionAnalysis: analyzed,
+      traces: Object.freeze(traces)
+    });
+  }
+
   function translateLine(line) {
     if (!line || typeof line !== "string") return "";
     const { text } = translateChapter(line);
@@ -75,6 +100,7 @@ function createSemanticOrchestrator({
   return Object.freeze({
     translateChapter,
     translateLine,
+    translateShadow,
     getAnalyzer: () => analyzer,
     getRouter: () => router,
     getPlanner: () => planner,

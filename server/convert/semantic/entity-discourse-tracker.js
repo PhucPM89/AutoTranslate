@@ -270,6 +270,7 @@ function createDiscourseTracker({
     updateSalience,
     resolvePronoun,
     populateClauseDiscourse,
+    getState: () => ({ salienceStack: [...salienceStack], registry: new Map(registry) }),
     getSalienceStack: () => [...salienceStack],
     getRegistry: () => new Map(registry)
   };

@@ -185,6 +185,7 @@ function createClauseIR({
   objectSlot = null,   // { entityId, baseVi, attributes: [] }
   semanticSignature = null,
   contextWeights = {},
+  lexicalResolution = null, // { resolvedSlots, resolutionRecords, method, confidence }
   invariants = {},
   uncertainty = null
 } = {}) {
@@ -198,6 +199,7 @@ function createClauseIR({
     objectSlot: objectSlot ? Object.freeze({ ...objectSlot }) : null,
     semanticSignature: semanticSignature || createSemanticSignature(),
     contextWeights: Object.freeze({ ...contextWeights }),
+    lexicalResolution: lexicalResolution ? Object.freeze({ ...lexicalResolution }) : null,
     invariants: Object.freeze({
       preserveClauseOrder: invariants.preserveClauseOrder !== false,
       maxAdjectives: invariants.maxAdjectives ?? 1,
@@ -372,6 +374,7 @@ function createProvenanceTrace({
   finalVi = "",
   contextSnapshot = {},
   discourseResolution = {},
+  lexicalAudit = [],
   stylistAudit = [],
   budgetAudit = {}
 } = {}) {
@@ -381,6 +384,7 @@ function createProvenanceTrace({
     finalVi: String(finalVi),
     contextSnapshot: Object.freeze({ ...contextSnapshot }),
     discourseResolution: Object.freeze({ ...discourseResolution }),
+    lexicalAudit: Object.freeze(lexicalAudit.map((l) => Object.freeze({ ...l }))),
     stylistAudit: Object.freeze(stylistAudit.map((s) => Object.freeze({ ...s }))),
     budgetAudit: Object.freeze({ ...budgetAudit }),
     timestamp: new Date().toISOString()

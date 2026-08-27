@@ -15,6 +15,7 @@
 const { segmentParagraphToClauseIRs } = require("./clause-segmenter");
 const { createDiscourseTracker } = require("./entity-discourse-tracker");
 const { createContextProfiler } = require("./dynamic-context-profiler");
+const { createLexicalResolver } = require("./lexical-resolver");
 const { createProvenanceTrace } = require("./contracts");
 
 /**
@@ -23,7 +24,8 @@ const { createProvenanceTrace } = require("./contracts");
 function createSemanticAnalyzer({
   initialEntities = [],
   baselineGenre = "XIANXIA",
-  initialDomains = {}
+  initialDomains = {},
+  lexicalResolver = createLexicalResolver()
 } = {}) {
   const discourseTracker = createDiscourseTracker({ initialEntities });
   const contextProfiler = createContextProfiler({ baselineGenre, initialDomains });
@@ -52,13 +54,22 @@ function createSemanticAnalyzer({
         clauseIndex: cIdx
       });
 
-      // 3. Attach current context weights to ClauseIR
+      // 3. Resolve lexical candidates in context
+      const lexicalRes = lexicalResolver.resolveText(
+        rawClause.sourceZh,
+        contextSnap,
+        discourseTracker.getState(),
+        populatedClause
+      );
+
+      // 4. Attach context weights & lexical resolution to ClauseIR
       const fullClauseIR = Object.freeze({
         ...populatedClause,
-        contextWeights: Object.freeze({ ...contextSnap.domainWeights })
+        contextWeights: Object.freeze({ ...contextSnap.domainWeights }),
+        lexicalResolution: Object.freeze(lexicalRes)
       });
 
-      // 4. Create Provenance Trace skeleton
+      // 5. Create Provenance Trace with lexical audit
       const trace = createProvenanceTrace({
         clauseId: fullClauseIR.id,
         sourceZh: fullClauseIR.sourceZh,
@@ -69,6 +80,7 @@ function createSemanticAnalyzer({
           resolvedPronoun: fullClauseIR.subjectSlot ? fullClauseIR.subjectSlot.resolvedPronoun : null,
           flag: fullClauseIR.uncertainty ? fullClauseIR.uncertainty.flag : null
         },
+        lexicalAudit: lexicalRes.resolutionRecords || [],
         stylistAudit: [],
         budgetAudit: {
           preserveClauseOrder: fullClauseIR.invariants.preserveClauseOrder,
