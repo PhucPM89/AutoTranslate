@@ -196,7 +196,7 @@ const KNOWN_POLYSEMOUS_ENTRIES = {
   ],
   "依窗而立": [
     {
-      candidateVi: "tựa bên cửa sổ mà đứng",
+      candidateVi: "tựa bên cửa sổ",
       partOfSpeech: "verb",
       semanticFeatures: ["POSTURE", "CLASSICAL_BEAUTY"],
       semanticSignature: createSemanticSignature({ denotation: "LEANING_BY_WINDOW", valence: 0.20, intensity: 0.50 }),
@@ -212,6 +212,46 @@ const KNOWN_POLYSEMOUS_ENTRIES = {
       semanticSignature: createSemanticSignature({ denotation: "LEANING_BY_WINDOW", valence: 0.20, intensity: 0.50 }),
       confidence: 0.95,
       indicatorContexts: ["而立", "看", "望", "佳人", "独坐", "凭栏"]
+    }
+  ],
+  "负手而立": [
+    {
+      candidateVi: "chắp tay sau lưng",
+      partOfSpeech: "verb",
+      semanticFeatures: ["POSTURE", "MAJESTIC"],
+      semanticSignature: createSemanticSignature({ denotation: "HANDS_BEHIND_BACK_STANCE", valence: 0.20, intensity: 0.60 }),
+      confidence: 0.98,
+      indicatorContexts: ["老者", "掌门", "太上长老", "白衣", "山巅", "负手"]
+    }
+  ],
+  "昂首而立": [
+    {
+      candidateVi: "hiên ngang ngẩng đầu",
+      partOfSpeech: "verb",
+      semanticFeatures: ["POSTURE", "RESOLUTE"],
+      semanticSignature: createSemanticSignature({ denotation: "HEAD_HELD_HIGH_STANCE", valence: 0.40, intensity: 0.70 }),
+      confidence: 0.98,
+      indicatorContexts: ["傲然", "少年", "昂首", "挺立"]
+    }
+  ],
+  "临风而立": [
+    {
+      candidateVi: "đứng đón gió",
+      partOfSpeech: "verb",
+      semanticFeatures: ["POSTURE", "ATMOSPHERIC"],
+      semanticSignature: createSemanticSignature({ denotation: "STANDING_IN_WIND", valence: 0.20, intensity: 0.50 }),
+      confidence: 0.98,
+      indicatorContexts: ["长袍", "衣袂", "清风", "山顶", "崖边"]
+    }
+  ],
+  "凌空而立": [
+    {
+      candidateVi: "lơ lửng giữa không trung",
+      partOfSpeech: "verb",
+      semanticFeatures: ["POSTURE", "XIANXIA_FLIGHT"],
+      semanticSignature: createSemanticSignature({ denotation: "HOVERING_IN_AIR", valence: 0.30, intensity: 0.80 }),
+      confidence: 0.98,
+      indicatorContexts: ["虚空", "天穹", "踏空", "御空", "金丹", "元婴"]
     }
   ],
   "直往": [
@@ -246,22 +286,62 @@ const KNOWN_POLYSEMOUS_ENTRIES = {
   ],
   "戏谑道": [
     {
-      candidateVi: "trêu chọc nói",
+      candidateVi: "trêu chọc",
       partOfSpeech: "verb",
       semanticFeatures: ["DIALOGUE_TAG", "BANTER"],
       semanticSignature: createSemanticSignature({ denotation: "TEASING_SPEECH", valence: 0.30, intensity: 0.60 }),
-      confidence: 0.95,
+      confidence: 0.98,
       indicatorContexts: ["眨眼", "笑道", "嘴角", "师姐", "师妹", "笑眯眯"]
     }
   ],
   "干笑道": [
     {
-      candidateVi: "cười gượng nói",
+      candidateVi: "cười gượng",
       partOfSpeech: "verb",
       semanticFeatures: ["DIALOGUE_TAG", "AWKWARD"],
       semanticSignature: createSemanticSignature({ denotation: "AWKWARD_LAUGH_SPEECH", valence: -0.10, intensity: 0.50 }),
-      confidence: 0.95,
+      confidence: 0.98,
       indicatorContexts: ["冷汗", "擦汗", "干笑", "挠头", "尴尬"]
+    }
+  ],
+  "冷笑道": [
+    {
+      candidateVi: "cười lạnh",
+      partOfSpeech: "verb",
+      semanticFeatures: ["DIALOGUE_TAG", "COLD_SCORN"],
+      semanticSignature: createSemanticSignature({ denotation: "SNEERING_SPEECH", valence: -0.50, intensity: 0.70 }),
+      confidence: 0.98,
+      indicatorContexts: ["嘴角", "杀意", "眼神", "不屑", "冷笑"]
+    }
+  ],
+  "沉声道": [
+    {
+      candidateVi: "trầm giọng",
+      partOfSpeech: "verb",
+      semanticFeatures: ["DIALOGUE_TAG", "GRAVE"],
+      semanticSignature: createSemanticSignature({ denotation: "GRAVE_SPEECH", valence: -0.10, intensity: 0.70 }),
+      confidence: 0.98,
+      indicatorContexts: ["脸色凝重", "长老", "师尊", "严肃", "沉声"]
+    }
+  ],
+  "厉声道": [
+    {
+      candidateVi: "quát lớn",
+      partOfSpeech: "verb",
+      semanticFeatures: ["DIALOGUE_TAG", "STERN"],
+      semanticSignature: createSemanticSignature({ denotation: "HARSH_SPEECH", valence: -0.60, intensity: 0.85 }),
+      confidence: 0.98,
+      indicatorContexts: ["怒喝", "大喝", "斥责", "厉声", "震怒"]
+    }
+  ],
+  "淡淡道": [
+    {
+      candidateVi: "thản nhiên nói",
+      partOfSpeech: "verb",
+      semanticFeatures: ["DIALOGUE_TAG", "INDIFFERENT"],
+      semanticSignature: createSemanticSignature({ denotation: "CALM_SPEECH", valence: 0.0, intensity: 0.50 }),
+      confidence: 0.98,
+      indicatorContexts: ["神色平静", "目光淡然", "淡淡", "随口"]
     }
   ],
   "逼宫": [

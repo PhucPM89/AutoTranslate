@@ -66,16 +66,15 @@ const LITERARY_REPLACEMENTS = [
   { pattern: /\btrong nháy mắt chi gian\b/gi, replacement: "trong chớp mắt" },
   { pattern: /\btrong nháy mắt đó\b/gi, replacement: "ngay trong khoảnh khắc đó" },
 
-  // 9. Khử sượng quán ngữ & đoản ngữ đặc thù (Phase R7-3 Naturalness Hardening)
+  // 9. Khử sượng quán ngữ & đoản ngữ đặc thù (Phase R7-3.1 Native Hardening)
   { pattern: /(?<!\p{L})lăng lệ ác liệt(?!\p{L})/giu, replacement: "sắc bén" },
   { pattern: /(?<!\p{L})một cái\s+(quét ngang|đòn|cú|chém|đấm|đá|tát|đao quang|kiếm quang)(?!\p{L})/giu, replacement: "một cú $1" },
   { pattern: /(?<!\p{L})bức vua thoái vị(?!\p{L})/giu, replacement: "bức cung" },
   { pattern: /(?<!\p{L})dục hỏa trùng sống(?!\p{L})/giu, replacement: "dục hỏa trùng sinh" },
   { pattern: /(?<!\p{L})khước vu(?!\p{L})/giu, replacement: "thế nhưng lại ở trong" },
-  { pattern: /(?<!\p{L})giễu giễu nói(?!\p{L})/giu, replacement: "trêu chọc nói" },
-  { pattern: /(?<!\p{L})hí hước đạo(?!\p{L})/giu, replacement: "trêu chọc nói" },
-  { pattern: /(?<!\p{L})cười khan nói(?!\p{L})/giu, replacement: "cười gượng nói" },
-  { pattern: /(?<!\p{L})can tiếu đạo(?!\p{L})/giu, replacement: "cười gượng nói" },
+  { pattern: /(?<!\p{L})(?:giễu giễu nói|hí hước đạo|trêu chọc nói)(?!\p{L})/giu, replacement: "trêu chọc" },
+  { pattern: /(?<!\p{L})(?:cười khan nói|can tiếu đạo|cười gượng nói)(?!\p{L})/giu, replacement: "cười gượng" },
+  { pattern: /(?<!\p{L})lệ thanh nói(?!\p{L})/giu, replacement: "quát lớn" },
   { pattern: /(?<!\p{L})hách đắc(?!\p{L})/giu, replacement: "sợ đến mức" },
   { pattern: /(?<!\p{L})nhắm\s+([^,.;!?\n]+?)\s+trong ngực toản(?!\p{L})/giu, replacement: "chui thẳng vào lòng $1" },
   { pattern: /(?<!\p{L})quấn ở trên người ta(?!\p{L})/giu, replacement: "cứ để tôi lo" },
@@ -85,7 +84,17 @@ const LITERARY_REPLACEMENTS = [
   { pattern: /(?<!\p{L})chín chữ chân ngôn(?!\p{L})/giu, replacement: "Cửu Tự Chân Ngôn" },
   { pattern: /(?<!\p{L})trong lòng thầm nói(?!\p{L})/giu, replacement: "thầm nghĩ" },
   { pattern: /(?<!\p{L})khí đắc\s+toàn thân\s+(?:phát run|run rẩy)(?!\p{L})/giu, replacement: "tức đến mức toàn thân run rẩy" },
-  { pattern: /(?<!\p{L})cười đến mức không khép miệng lại được(?!\p{L})/giu, replacement: "cười toe toét" }
+  { pattern: /(?<!\p{L})cười đến mức không khép miệng lại được(?!\p{L})/giu, replacement: "cười toe toét" },
+  { pattern: /(?<!\p{L})tựa bên cửa sổ mà đứng(?!\p{L})/giu, replacement: "tựa bên cửa sổ" },
+  { pattern: /(?<!\p{L})chắp tay sau lưng mà đứng(?!\p{L})/giu, replacement: "chắp tay sau lưng" },
+  { pattern: /(?<!\p{L})ngẩng đầu mà đứng(?!\p{L})/giu, replacement: "hiên ngang ngẩng đầu" },
+  { pattern: /(?<!\p{L})đứng đón gió mà đứng(?!\p{L})/giu, replacement: "đứng đón gió" },
+  { pattern: /(?<!\p{L})lơ lửng giữa không trung mà đứng(?!\p{L})/giu, replacement: "lơ lửng giữa không trung" },
+  { pattern: /(?<!\p{L})sách vở\s+(ghi lại|chép lại|thuật lại|chứa đựng)(?!\p{L})/giu, replacement: "cuốn sách $1" },
+  {
+    pattern: /(?<!\p{L})(?:thế nhưng )?(?:lại ở trong|lại trong|ở trong)\s+([a-zà-ỹ\u00C0-\u024F\u1EA0-\u1EF9\s]+?)(?:\s+bên trong)?\s+dục hỏa trùng sinh(?!\p{L})/giu,
+    replacement: (m, g1) => "lại hồi sinh giữa biển lửa " + g1.trim()
+  }
 ];
 
 const { polishActionProse } = require("./action-stylist");

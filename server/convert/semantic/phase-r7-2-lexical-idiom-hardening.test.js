@@ -67,7 +67,7 @@ test("Phase R7-2 - 9. Golden Test: 不可不防 (Necessity Double-Negative)", ()
 
 test("Phase R7-2 - 10. Golden Test: 却于毁灭之中浴火重生 (Adversative Locative)", () => {
   const res = engine.convertSemantic("神魂却于毁灭之中浴火重生！");
-  assert.ok(/thế nhưng lại trong|thế nhưng lại ở trong|lại trong|ở trong/i.test(res), "Must translate adversative-locative naturally");
+  assert.ok(/lại hồi sinh|thế nhưng lại trong|thế nhưng lại ở trong|lại trong|ở trong/i.test(res), "Must translate adversative-locative naturally");
   assert.ok(!/khước vu/i.test(res), "Must NOT output raw 'khước vu'");
 });
 

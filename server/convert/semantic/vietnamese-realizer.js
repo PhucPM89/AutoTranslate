@@ -355,7 +355,7 @@ function createVietnameseRealizer({
       // Dialogue Reporting Verb Punctuation: Join reporting verb with colon before quote
       if (i > 0) {
         const prevText = clauseResults[i - 1];
-        if (/(?:nói|hỏi|quát|than|thầm nghĩ|cười nói|nhủ|hô|cười lạnh|nói nhỏ|thở dài|cười trêu nói|cười gượng nói|trêu chọc nói|nghĩ thầm|tự nhủ|nhủ thầm)(?!\p{L})/iu.test(prevText.trim()) && /^[“"「『]/.test(clauseText.trim())) {
+        if (/(?:nói|hỏi|quát|than|thầm nghĩ|cười nói|nhủ|hô|cười lạnh|nói nhỏ|thở dài|cười trêu|cười gượng|trêu chọc|trầm giọng|quát lớn|nghĩ thầm|tự nhủ|nhủ thầm)(?!\p{L})/iu.test(prevText.trim()) && /^[“"「『]/.test(clauseText.trim())) {
           clauseResults[i - 1] = prevText.trim().replace(/[,，:：]$/, "") + ":";
         }
       }
