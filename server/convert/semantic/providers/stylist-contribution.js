@@ -83,6 +83,16 @@ const STYLE_SLOTS = Object.freeze({
   BLOODY_BATTLEFIELD: "BLOODY_BATTLEFIELD"    // Quyết tử huyết chiến sa trường
 });
 
+const {
+  SEMANTIC_TYPES,
+  CONFLICT_POLICIES,
+  STYLE_SLOT_DEFINITIONS,
+  defineStyleSlot,
+  getSlotDefinition,
+  isSlotMergeable,
+  getSlotMaxMultiplicity
+} = require("./style-slot-definitions");
+
 /**
  * Creates an immutable StylistContribution.
  * 
@@ -93,6 +103,7 @@ function createStylistContribution({
   providerId = "",
   domain = "NEUTRAL",
   targetSlot = STYLE_SLOTS.ACTION_STRIKE,
+  dimension = "LEXICAL", // LEXICAL | AFFECTIVE | RHYTHMIC | ATMOSPHERIC
   sourceSpanZh = "",
   candidateVi = "",
   semanticRequirements = {},
@@ -115,6 +126,7 @@ function createStylistContribution({
     providerId: String(providerId),
     domain: String(domain),
     targetSlot: String(targetSlot),
+    dimension: String(dimension || "LEXICAL"),
     sourceSpanZh: String(sourceSpanZh || ""),
     candidateVi: String(candidateVi || "").trim(),
     semanticRequirements: Object.freeze({ ...semanticRequirements }),
@@ -137,5 +149,12 @@ function createStylistContribution({
 
 module.exports = {
   STYLE_SLOTS,
+  SEMANTIC_TYPES,
+  CONFLICT_POLICIES,
+  STYLE_SLOT_DEFINITIONS,
+  defineStyleSlot,
+  getSlotDefinition,
+  isSlotMergeable,
+  getSlotMaxMultiplicity,
   createStylistContribution
 };

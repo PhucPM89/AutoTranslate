@@ -1,18 +1,27 @@
 "use strict";
 
 /**
- * Stylist Router & Conflict Resolver (Phase 2A)
+ * Stylist Router & Conflict Resolver (Wave B.5 Hardened)
  * 
  * Orchestrates multi-provider contribution bidding, evaluates semantic compatibility,
  * groups contributions by StyleSlot, and deterministically resolves slot conflicts
  * via multi-factor scoring (Domain Weight, Lexical Priority, Affect Alignment, Rhythm, Expansion Cost).
+ * 
+ * Implements:
+ * - Provider order independence & conflict order independence.
+ * - Semantic equivalence deduplication.
+ * - 4 distinct resolution outcomes: WIN, MERGE, REJECT, ABSTAIN.
+ * - Slot metadata-driven multiplicity & merging.
+ * - Combined clause expansion budget & saturation control.
  */
 
 const { checkSignatureCompatibility } = require("./contracts");
 const { createDefaultProviderRegistry } = require("./providers/provider-registry");
 const { STYLE_SLOTS } = require("./providers/stylist-contribution");
+const { getSlotDefinition } = require("./providers/style-slot-definitions");
+const { getDomainInteractionRelation, INTERACTION_RELATIONS } = require("./provider-interaction-matrix");
 
-// Domain Mutual Suppression Matrix
+// Domain Mutual Suppression Matrix (Retained for backwards compatibility)
 const SUPPRESSION_RULES = [
   {
     dominantDomain: "COMBAT",
@@ -34,6 +43,33 @@ const ROUTER_SCORING_WEIGHTS = Object.freeze({
   RHYTHM_MATCH: 0.10
 });
 
+/**
+ * Collapses duplicate or semantically equivalent contributions from multiple providers.
+ */
+function deduplicateContributions(rawContributions) {
+  const map = new Map();
+  const result = [];
+
+  for (const item of rawContributions) {
+    const key = `${item.targetSlot}::${item.sourceSpanZh}::${item.candidateVi.toLowerCase().trim()}`;
+    if (!map.has(key)) {
+      map.set(key, { ...item, mergedProvenances: [item.provenance || item.providerId] });
+      result.push(map.get(key));
+    } else {
+      const existing = map.get(key);
+      existing.lexicalPriority = Math.max(existing.lexicalPriority, item.lexicalPriority || 0.8);
+      existing.confidence = Math.max(existing.confidence, item.confidence || 1.0);
+      existing.semanticExpansionCost = Math.min(existing.semanticExpansionCost, item.semanticExpansionCost || 0.0);
+      if (item.provenance && !existing.mergedProvenances.includes(item.provenance)) {
+        existing.mergedProvenances.push(item.provenance);
+        existing.provenance = existing.mergedProvenances.join("+");
+      }
+    }
+  }
+
+  return result;
+}
+
 function createStylistRouter({
   registry = createDefaultProviderRegistry(),
   minDomainActivationWeight = 0.15,
@@ -53,23 +89,31 @@ function createStylistRouter({
     const sourceSig = (clauseIR && clauseIR.semanticSignature) || null;
     const invariants = (clauseIR && clauseIR.invariants) || {};
 
-    // 1. Identify Suppressed Domains based on Dominant Active Domains
+    // 1. Identify Suppressed Domains based on Suppression Rules
     const suppressedSet = new Set();
     for (const rule of SUPPRESSION_RULES) {
       const weight = domainWeights[rule.dominantDomain] || 0.0;
-      if (weight >= rule.dominantThreshold) {
+      const isDominantPrimary = primaryDomain === rule.dominantDomain;
+      if (weight >= rule.dominantThreshold && isDominantPrimary) {
         for (const sup of rule.suppressedDomains) {
           suppressedSet.add(sup);
         }
       }
     }
 
-    // 2. Select Eligible Providers based on Context & Clause Role
-    const allProviders = Array.isArray(registry)
+    // 2. Select Eligible Providers & Ensure Deterministic Order
+    const rawAll = Array.isArray(registry)
       ? registry
       : (typeof registry.getAllProviders === "function" ? registry.getAllProviders() : []);
-    const activeProviders = [];
+    
+    // Deterministic sort of providers by providerId so execution order never depends on insertion order
+    const allProviders = rawAll.slice().sort((a, b) => {
+      const idA = a.providerId || a.id || "";
+      const idB = b.providerId || b.id || "";
+      return idA.localeCompare(idB);
+    });
 
+    const activeProviders = [];
     for (const provider of allProviders) {
       const weight = domainWeights[provider.domain] || 0.0;
       const isPrimary = provider.domain === primaryDomain;
@@ -98,7 +142,7 @@ function createStylistRouter({
       const list = Array.isArray(result) ? result : (result.contributions || result.suggestions || []);
       for (const item of list) {
         const contrib = item.targetSlot ? item : {
-          providerId: provider.providerId,
+          providerId: provider.providerId || provider.id,
           domain: provider.domain,
           targetSlot: item.slotId || item.targetSlot || "GENERAL_SLOT",
           sourceSpanZh: item.slotId || item.targetZh || item.sourceSpanZh || "",
@@ -107,7 +151,10 @@ function createStylistRouter({
           lexicalPriority: item.priority || item.lexicalPriority || 0.8,
           semanticExpansionCost: item.semanticExpansionCost || 0.0,
           introducedInformation: item.introducedInformation || [],
-          introducedMetaphor: item.introducedMetaphor || false
+          introducedMetaphor: item.introducedMetaphor || false,
+          surfaceRealization: item.surfaceRealization !== undefined ? item.surfaceRealization : true,
+          semanticAssertions: item.semanticAssertions || [],
+          provenance: item.provenance || `${provider.providerId || provider.id}:${item.targetZh || item.slotId}`
         };
         rawContributions.push(contrib);
       }
@@ -128,7 +175,12 @@ function createStylistRouter({
     const rejectedContributions = [];
     const slotResolutions = [];
 
-    for (const [slot, candidates] of slotMap.entries()) {
+    // Sort slot keys deterministically
+    const sortedSlots = Array.from(slotMap.keys()).sort();
+
+    for (const slot of sortedSlots) {
+      const candidates = slotMap.get(slot);
+      const slotDef = getSlotDefinition(slot);
       const scoredCandidates = [];
 
       for (const cand of candidates) {
@@ -202,53 +254,153 @@ function createStylistRouter({
 
       if (scoredCandidates.length === 0) continue;
 
-      // Sort descending by composite score
-      scoredCandidates.sort((a, b) => b.compositeScore - a.compositeScore);
+      // Deterministic sort: Score DESC, Priority DESC, Confidence DESC, candidateVi ASC (order-independent tiebreaker)
+      scoredCandidates.sort((a, b) => {
+        if (Math.abs(b.compositeScore - a.compositeScore) > 1e-6) {
+          return b.compositeScore - a.compositeScore;
+        }
+        if (Math.abs(b.contribution.lexicalPriority - a.contribution.lexicalPriority) > 1e-6) {
+          return b.contribution.lexicalPriority - a.contribution.lexicalPriority;
+        }
+        if (Math.abs(a.contribution.semanticExpansionCost - b.contribution.semanticExpansionCost) > 1e-6) {
+          return a.contribution.semanticExpansionCost - b.contribution.semanticExpansionCost;
+        }
+        const keyA = `${a.contribution.candidateVi}::${a.contribution.providerId}`;
+        const keyB = `${b.contribution.candidateVi}::${b.contribution.providerId}`;
+        return keyA.localeCompare(keyB);
+      });
 
-      const top1 = scoredCandidates[0];
-      const top2 = scoredCandidates.length > 1 ? scoredCandidates[1] : null;
-      const margin = top2 ? Number((top1.compositeScore - top2.compositeScore).toFixed(3)) : 1.0;
+      // E. Resolution Policy (WIN, MERGE, ABSTAIN)
+      if (slotDef.canMerge) {
+        // Multi-contribution merging up to maxMultiplicity
+        const maxMult = slotDef.maxMultiplicity || 2;
+        const validCandidates = scoredCandidates.filter((s) => s.compositeScore >= 0.40);
+        const mergedWinners = validCandidates.slice(0, maxMult);
 
-      let decision = "WIN";
-      if (top1.compositeScore < 0.40) {
-        decision = "ABSTAIN";
-      } else if (top2 && margin < 0.05 && top1.compositeScore < 0.80) {
-        decision = "ABSTAIN";
-      }
+        if (mergedWinners.length > 0) {
+          for (const winner of mergedWinners) {
+            selectedContributions.push(winner.contribution);
+          }
 
-      if (decision === "WIN") {
-        selectedContributions.push(top1.contribution);
-
-        if (top2) {
-          for (let i = 1; i < scoredCandidates.length; i++) {
+          // Excess candidates beyond maxMultiplicity are recorded as SATURATED
+          for (let i = maxMult; i < scoredCandidates.length; i++) {
             rejectedContributions.push({
               contribution: scoredCandidates[i].contribution,
-              reason: `LOWER_BID_SCORE (Score: ${scoredCandidates[i].compositeScore} vs Winner: ${top1.compositeScore})`,
+              reason: `SLOT_SATURATED (Max multiplicity ${maxMult} reached)`,
               score: scoredCandidates[i].compositeScore
             });
           }
+
+          slotResolutions.push(Object.freeze({
+            targetSlot: slot,
+            semanticType: slotDef.semanticType,
+            decision: "MERGE",
+            merged: Object.freeze(mergedWinners.map((w) => w.contribution)),
+            confidence: mergedWinners[0].compositeScore,
+            margin: 1.0,
+            alternatives: Object.freeze(scoredCandidates.slice(maxMult).map((s) => ({
+              candidateVi: s.contribution.candidateVi,
+              providerId: s.contribution.providerId,
+              score: s.compositeScore
+            })))
+          }));
+        } else {
+          slotResolutions.push(Object.freeze({
+            targetSlot: slot,
+            semanticType: slotDef.semanticType,
+            decision: "ABSTAIN",
+            winner: null,
+            merged: [],
+            confidence: 0.0,
+            margin: 0.0,
+            alternatives: []
+          }));
         }
+      } else {
+        // Single winner competitive slot
+        const top1 = scoredCandidates[0];
+        const top2 = scoredCandidates.length > 1 ? scoredCandidates[1] : null;
+        const margin = top2 ? Number((top1.compositeScore - top2.compositeScore).toFixed(3)) : 1.0;
+
+        let decision = "WIN";
+        if (top1.compositeScore < 0.40) {
+          decision = "ABSTAIN";
+        } else if (top2 && margin < 0.05 && top1.compositeScore < 0.80) {
+          decision = "ABSTAIN";
+        }
+
+        if (decision === "WIN") {
+          selectedContributions.push(top1.contribution);
+
+          if (top2) {
+            for (let i = 1; i < scoredCandidates.length; i++) {
+              rejectedContributions.push({
+                contribution: scoredCandidates[i].contribution,
+                reason: `LOWER_BID_SCORE (Score: ${scoredCandidates[i].compositeScore} vs Winner: ${top1.compositeScore})`,
+                score: scoredCandidates[i].compositeScore
+              });
+            }
+          }
+        }
+
+        slotResolutions.push(Object.freeze({
+          targetSlot: slot,
+          semanticType: slotDef.semanticType,
+          decision,
+          winner: decision === "WIN" ? top1.contribution : null,
+          merged: decision === "WIN" ? [top1.contribution] : [],
+          confidence: top1.compositeScore,
+          margin,
+          alternatives: Object.freeze(scoredCandidates.slice(1).map((s) => ({
+            candidateVi: s.contribution.candidateVi,
+            providerId: s.contribution.providerId,
+            score: s.compositeScore
+          })))
+        }));
+      }
+    }
+
+    // 6. Aggregate Clause-Level Saturation & Modifier Deduplication
+    const seenAtoms = new Set();
+    const finalSelectedContributions = [];
+    let totalAdjectives = 0;
+    const maxClauseAdjectives = invariants.maxAdjectives !== undefined ? invariants.maxAdjectives * 2 : 4;
+
+    for (const contrib of selectedContributions) {
+      let isOverBudget = false;
+      const filteredInfo = [];
+
+      for (const info of contrib.introducedInformation || []) {
+        const atomKey = String(info).toLowerCase().trim();
+        if (seenAtoms.has(atomKey)) {
+          // Atom already introduced by another slot; omit duplicate atom
+          continue;
+        }
+        if (totalAdjectives >= maxClauseAdjectives) {
+          isOverBudget = true;
+          break;
+        }
+        seenAtoms.add(atomKey);
+        filteredInfo.push(info);
+        totalAdjectives++;
       }
 
-      slotResolutions.push(Object.freeze({
-        targetSlot: slot,
-        decision,
-        winner: decision === "WIN" ? top1.contribution : null,
-        confidence: top1.compositeScore,
-        margin,
-        alternatives: Object.freeze(scoredCandidates.slice(1).map((s) => ({
-          candidateVi: s.contribution.candidateVi,
-          providerId: s.contribution.providerId,
-          score: s.compositeScore
-        })))
-      }));
+      if (!isOverBudget || contrib.surfaceRealization) {
+        finalSelectedContributions.push(contrib);
+      } else {
+        rejectedContributions.push({
+          contribution: contrib,
+          reason: "CLAUSE_EXPANSION_SATURATION_EXCEEDED",
+          score: contrib.lexicalPriority
+        });
+      }
     }
 
     return Object.freeze({
       clauseId: clauseIR ? clauseIR.id : "",
       activeProviders: Object.freeze(activeProviders.map((p) => p.providerId || p.id || "")),
-      selectedContributions: Object.freeze(selectedContributions),
-      acceptedSuggestions: Object.freeze(selectedContributions.map((c) => ({
+      selectedContributions: Object.freeze(finalSelectedContributions),
+      acceptedSuggestions: Object.freeze(finalSelectedContributions.map((c) => ({
         slotId: c.sourceSpanZh || c.targetSlot,
         candidateVi: c.candidateVi,
         providerId: c.providerId,
@@ -257,7 +409,7 @@ function createStylistRouter({
       slotResolutions: Object.freeze(slotResolutions),
       rejectedContributions: Object.freeze(rejectedContributions),
       forbiddenPatterns: Object.freeze(Array.from(forbiddenPatterns)),
-      provenance: "stylist-router:phase-2a"
+      provenance: "stylist-router:wave-b.5"
     });
   }
 
