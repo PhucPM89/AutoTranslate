@@ -1015,6 +1015,36 @@ const STYLE_SLOT_DEFINITIONS = Object.freeze({
     conflictPolicy: CONFLICT_POLICIES.ORTHOGONAL_MERGE,
     description: "Chi tiết cảm giác, ánh trăng, hương thơm, sương mù linh khí, hàn ý",
     sourceSemantics: "Source denotes atmospheric sensory imagery (visual, olfactory, thermal, mist)"
+  }),
+
+  // =========================================================================
+  // 10. WAVE C2A DISCOURSE & SOCIAL ADDRESS SLOTS (2 Canonical Slots)
+  // =========================================================================
+  SOCIAL_ADDRESS: defineStyleSlot({
+    id: "SOCIAL_ADDRESS",
+    semanticRole: SEMANTIC_ROLES.DIALOGUE_ACT,
+    realizationDimensions: [REALIZATION_DIMENSIONS.LEXICAL, REALIZATION_DIMENSIONS.REGISTER, REALIZATION_DIMENSIONS.DIALOGUE_STYLE],
+    canMerge: false,
+    canCompete: true,
+    maxMultiplicity: 1,
+    allowedTextRoles: ["DIALOGUE", "ACTION"],
+    requiredEvidence: ["HONORIFIC_ADDRESS_EXPRESSION"],
+    conflictPolicy: CONFLICT_POLICIES.COMPOSITE_SCORE,
+    description: "Xưng hô đối thoại tôn ti, sư đồ, quân thần, tiền bối - vãn bối, sư huynh - sư đệ",
+    sourceSemantics: "Source denotes interpersonal direct address based on social hierarchy"
+  }),
+  TITLE_HONORIFIC: defineStyleSlot({
+    id: "TITLE_HONORIFIC",
+    semanticRole: SEMANTIC_ROLES.OBJECT,
+    realizationDimensions: [REALIZATION_DIMENSIONS.LEXICAL, REALIZATION_DIMENSIONS.REGISTER],
+    canMerge: false,
+    canCompete: true,
+    maxMultiplicity: 1,
+    allowedTextRoles: ["ACTION", "DESCRIPTION", "DIALOGUE", "EXPOSITION"],
+    requiredEvidence: ["SECT_PEERAGE_TITLE_EXPRESSION"],
+    conflictPolicy: CONFLICT_POLICIES.COMPOSITE_SCORE,
+    description: "Tôn xưng, chức vị tông môn, quan tước triều đình, danh xưng tự xưng tôn kính",
+    sourceSemantics: "Source denotes institutional or relational honorific title or self-designation"
   })
 });
 
@@ -1049,6 +1079,7 @@ const PROVIDER_SLOT_COMPATIBILITY_MAP = Object.freeze({
   "spatial-provider": ["SPATIAL_VOID"],
   "supernatural-provider": ["SUPERNATURAL_SPECTER", "TAOIST_EXORCISM", "NETHERWORLD_PARADE"],
   "sword-provider": ["WEAPON_DRAW", "WEAPON_STRIKE", "WEAPON_INTENT"],
+  "title-hierarchy-provider": ["SOCIAL_ADDRESS", "TITLE_HONORIFIC", "IMPERIAL_SALUTATION"],
   "topography-provider": ["TOPOGRAPHY_LANDSCAPE", "SEVERED_VITALITY"],
   "transcendence-provider": ["TRANSCENDENCE_TIME", "SOLITARY_DAO"],
   "tribulation-provider": ["TRIBULATION_LIGHTNING", "CELESTIAL_PHENOMENON", "REALM_BREAKTHROUGH"],

@@ -269,6 +269,8 @@ function createDiscourseTracker({
     getEntity,
     updateSalience,
     resolvePronoun,
+    resolveDialoguePronoun,
+    resolveNarrativePronoun,
     populateClauseDiscourse,
     getState: () => ({ salienceStack: [...salienceStack], registry: new Map(registry) }),
     getSalienceStack: () => [...salienceStack],

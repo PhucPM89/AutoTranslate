@@ -47,6 +47,9 @@ const { createChronologyProvider } = require("./chronology-provider");
 const { createSoundscapeProvider } = require("./soundscape-provider");
 const { createSensoryProvider } = require("./sensory-provider");
 
+// Wave C2A Providers (Discourse & Social Address)
+const { createTitleHierarchyProvider } = require("./title-hierarchy-provider");
+
 function createDefaultProviderRegistry() {
   const providers = [
     // Phase 2A Pilot
@@ -89,7 +92,10 @@ function createDefaultProviderRegistry() {
     // Phase 2B Wave C1 (3 Providers)
     createChronologyProvider(),
     createSoundscapeProvider(),
-    createSensoryProvider()
+    createSensoryProvider(),
+
+    // Phase 2B Wave C2A (1 Provider)
+    createTitleHierarchyProvider()
   ];
 
   return Object.freeze({

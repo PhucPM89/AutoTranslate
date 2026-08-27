@@ -83,7 +83,9 @@ const STYLE_SLOTS = Object.freeze({
   BLOODY_BATTLEFIELD: "BLOODY_BATTLEFIELD",   // Quyết tử huyết chiến sa trường
   TEMPORAL_MEASURE: "TEMPORAL_MEASURE",       // Ước lượng thời lượng cổ trang (nén nhang, tuần trà, nhịp thở, canh giờ)
   SOUNDSCAPE_EFFECT: "SOUNDSCAPE_EFFECT",     // Từ tượng thanh, âm thanh va chạm, nổ vang, rắc, phụt, keng, gió rít
-  ATMOSPHERIC_DETAIL: "ATMOSPHERIC_DETAIL"    // Chi tiết cảm giác, ánh trăng, hương thơm, sương mù linh khí, hàn ý
+  ATMOSPHERIC_DETAIL: "ATMOSPHERIC_DETAIL",   // Chi tiết cảm giác, ánh trăng, hương thơm, sương mù linh khí, hàn ý
+  SOCIAL_ADDRESS: "SOCIAL_ADDRESS",           // Xưng hô đối thoại tôn ti, sư đồ, quân thần, tiền bối - vãn bối
+  TITLE_HONORIFIC: "TITLE_HONORIFIC"          // Tôn xưng, chức vị tông môn, quan tước triều đình
 });
 
 const {
