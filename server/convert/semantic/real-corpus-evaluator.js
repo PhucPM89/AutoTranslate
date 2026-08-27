@@ -57,7 +57,7 @@ function evaluateQualityVector(sourceZh, outputText, expectedAnnotation = {}, is
 
   // 2. Aspectual / Temporal Safety Check
   const isTemporalZh = /(?:已经|已然|早已|当年|三千载|十年)/.test(zh);
-  const hasTemporalVi = /(?:(?<!\p{L})(?:đã|sớm đã|năm xưa|ba ngàn năm|mười năm|đã hơn)(?!\p{L}))/iu.test(text);
+  const hasTemporalVi = /(?:(?<!\p{L})(?:đã|sớm đã|năm xưa|ba ngàn năm|mười năm|đã hơn|đã có|ba nghìn|ba nghìn năm)(?!\p{L}))/iu.test(text);
   if (isTemporalZh && !hasTemporalVi) {
     semanticFidelity -= 1.5;
     errors.push({

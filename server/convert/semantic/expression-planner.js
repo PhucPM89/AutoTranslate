@@ -250,6 +250,24 @@ function createExpressionPlanner({
       }
     }
 
+    // 4. Layer B: Merge Disambiguated Lexical Slots
+    if (clauseIR.lexicalResolution && clauseIR.lexicalResolution.resolvedSlots) {
+      for (const slot of clauseIR.lexicalResolution.resolvedSlots) {
+        if (!slotReplacements.some((s) => s.slotId === slot.spanZh)) {
+          slotReplacements.push({
+            slotId: slot.spanZh,
+            targetSlot: "LEXICAL_DISAMBIGUATION",
+            replacementVi: slot.chosenVi,
+            providerId: "lexical-resolver",
+            dimension: "LEXICAL",
+            priority: slot.confidence || 0.90,
+            expansionCost: 0.0,
+            provenance: `lexical-resolver:${slot.method || "DIRECT"}`
+          });
+        }
+      }
+    }
+
     // Determine Fallback Hierarchy Level
     if (rejectedByBudget.length > 0) {
       fallbackLevel = slotReplacements.length > 0

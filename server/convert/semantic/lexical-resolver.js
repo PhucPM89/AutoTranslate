@@ -182,6 +182,42 @@ function createLexicalResolver({
             } else if (/走|行进|行走|潜行|前行/.test(textZh)) {
               contextIndicatorScore = cand.candidateVi === "đi" ? 1.00 : 0.20;
             }
+          } else if (cand.spanZh === "幽幽") {
+            if (/茶香|清香|花香|香气|药香|暗香|茶|花|泉/.test(textZh) || primaryDomain === "ZEN_TEA") {
+              contextIndicatorScore = (cand.candidateVi === "thoang thoảng" || cand.candidateVi === "phảng phất") ? 1.00 : 0.10;
+            } else if (/叹|语|声|古刹|冷风|鬼火|阴森|幽暗/.test(textZh)) {
+              contextIndicatorScore = (cand.candidateVi === "u u" || cand.candidateVi === "khẽ") ? 1.00 : 0.20;
+            }
+          } else if (cand.spanZh === "轰然") {
+            if (/劈下|倒下|破裂|爆发|降临|镇压|炸开|作响|巨响|雷劫|崩塌/.test(textZh) || primaryDomain === "TRIBULATION" || primaryDomain === "COMBAT") {
+              contextIndicatorScore = cand.candidateVi === "ầm ầm" ? 1.00 : 0.30;
+            }
+          } else if (cand.spanZh === "包在我身上") {
+            contextIndicatorScore = 1.00;
+          } else if (cand.spanZh === "舞刀弄枪") {
+            contextIndicatorScore = 1.00;
+          } else if (cand.spanZh === "打入冷宫") {
+            contextIndicatorScore = 1.00;
+          } else if (cand.spanZh === "九字真言") {
+            contextIndicatorScore = 1.00;
+          } else if (cand.spanZh === "依窗" || cand.spanZh === "依窗而立") {
+            contextIndicatorScore = 1.00;
+          } else if (cand.spanZh === "吓得") {
+            contextIndicatorScore = 1.00;
+          } else if (cand.spanZh === "直往我怀里钻") {
+            contextIndicatorScore = 1.00;
+          } else if (cand.spanZh === "直往") {
+            if (/怀里|钻|深处|去|冲|飞|落|洞/.test(textZh)) {
+              contextIndicatorScore = cand.candidateVi === "thẳng vào" ? 1.00 : 0.20;
+            }
+          } else if (cand.spanZh === "不可不") {
+            if (/防|察|戒|留心|慎|虑|备/.test(textZh)) {
+              contextIndicatorScore = cand.candidateVi === "nhất định phải" ? 1.00 : 0.20;
+            }
+          } else if (cand.spanZh === "却于") {
+            contextIndicatorScore = 1.00;
+          } else if (cand.spanZh === "戏谑道" || cand.spanZh === "干笑道") {
+            contextIndicatorScore = 1.00;
           }
         }
 

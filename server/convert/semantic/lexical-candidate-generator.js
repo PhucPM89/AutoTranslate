@@ -97,6 +97,172 @@ const KNOWN_POLYSEMOUS_ENTRIES = {
       confidence: 0.85,
       indicatorContexts: ["方便", "便宜", "随手", "便当", "不便"]
     }
+  ],
+  "九字真言": [
+    {
+      candidateVi: "Cửu Tự Chân Ngôn",
+      partOfSpeech: "noun",
+      semanticFeatures: ["DAOIST_INCANTATION", "LOCKED_TERM"],
+      semanticSignature: createSemanticSignature({ denotation: "DAOIST_HOLY_MANTRA", valence: 0.50, intensity: 0.90 }),
+      confidence: 1.0,
+      indicatorContexts: ["锁链", "道士", "真言", "道法", "符", "金光", "镇压", "阵法", "金刚"]
+    }
+  ],
+  "舞刀弄枪": [
+    {
+      candidateVi: "múa đao múa kiếm",
+      partOfSpeech: "verb",
+      semanticFeatures: ["IDIOM", "MARTIAL_DISPLAY"],
+      semanticSignature: createSemanticSignature({ denotation: "MARTIAL_WEAPON_PLAY", valence: 0.0, intensity: 0.60 }),
+      confidence: 0.95,
+      indicatorContexts: ["何必", "动武", "切磋", "打架", "动手", "各位", "道爷"]
+    }
+  ],
+  "打入冷宫": [
+    {
+      candidateVi: "đày vào lãnh cung",
+      partOfSpeech: "verb",
+      semanticFeatures: ["IMPERIAL_PUNISHMENT", "COURT_CONSTRUCTION"],
+      semanticSignature: createSemanticSignature({ denotation: "BANISH_TO_COLD_PALACE", valence: -0.70, intensity: 0.85 }),
+      confidence: 0.95,
+      indicatorContexts: ["皇帝", "废黜", "冷宫", "贵妃", "惩处", "贬", "娘娘", "太师"]
+    }
+  ],
+  "包在我身上": [
+    {
+      candidateVi: "cứ để tôi lo",
+      partOfSpeech: "phrase",
+      semanticFeatures: ["IDIOMATIC_ASSURANCE", "COLLOQUIAL"],
+      semanticSignature: createSemanticSignature({ denotation: "COLLOQUIAL_ASSURANCE", valence: 0.40, intensity: 0.80 }),
+      confidence: 0.98,
+      indicatorContexts: ["哥们", "这事", "放心", "包在", "保证", "稳妥", "兄弟"]
+    }
+  ],
+  "吓得": [
+    {
+      candidateVi: "sợ đến mức",
+      partOfSpeech: "verb",
+      semanticFeatures: ["DEGREE_COMPLEMENT", "AFFECT_FEAR"],
+      semanticSignature: createSemanticSignature({ denotation: "SCARED_TO_DEGREE", valence: -0.60, intensity: 0.80 }),
+      confidence: 0.95,
+      indicatorContexts: ["直往", "发抖", "浑身", "面无人色", "哭", "逃", "钻"]
+    }
+  ],
+  "直往我怀里钻": [
+    {
+      candidateVi: "chui thẳng vào lòng ta",
+      partOfSpeech: "phrase",
+      semanticFeatures: ["DIRECTIONAL_BURROW", "IDIOM"],
+      semanticSignature: createSemanticSignature({ denotation: "BURROW_INTO_EMBRACE", valence: 0.20, intensity: 0.70 }),
+      confidence: 0.98,
+      indicatorContexts: ["吓得", "不知是谁", "师姐", "怀里", "钻"]
+    }
+  ],
+  "轰然": [
+    {
+      candidateVi: "ầm ầm",
+      partOfSpeech: "adv",
+      semanticFeatures: ["ACOUSTIC_IMPACT", "INTENSITY"],
+      semanticSignature: createSemanticSignature({ denotation: "THUNDEROUS_BOOM", valence: 0.0, intensity: 0.85 }),
+      confidence: 0.95,
+      indicatorContexts: ["劈下", "倒下", "破裂", "爆发", "降临", "镇压", "炸开", "作响", "巨响", "雷劫", "崩塌"]
+    },
+    {
+      candidateVi: "oanh nhiên",
+      partOfSpeech: "adv",
+      semanticFeatures: ["LITERARY_FLOURISH"],
+      semanticSignature: createSemanticSignature({ denotation: "LITERARY_BOOM", valence: 0.0, intensity: 0.50 }),
+      confidence: 0.60,
+      indicatorContexts: []
+    }
+  ],
+  "幽幽": [
+    {
+      candidateVi: "thoang thoảng",
+      partOfSpeech: "adj",
+      semanticFeatures: ["SENSORY_AROMA", "ATMOSPHERE"],
+      semanticSignature: createSemanticSignature({ denotation: "FAINT_DELICATE_SCENT", valence: 0.30, intensity: 0.50 }),
+      confidence: 0.95,
+      indicatorContexts: ["茶香", "清香", "花香", "香气", "药香", "暗香", "飘香", "茶", "泉"]
+    },
+    {
+      candidateVi: "u u",
+      partOfSpeech: "adj",
+      semanticFeatures: ["EERIE_OR_FAINT_SOUND"],
+      semanticSignature: createSemanticSignature({ denotation: "EERIE_ATMOSPHERE", valence: -0.20, intensity: 0.50 }),
+      confidence: 0.80,
+      indicatorContexts: ["叹", "语", "声", "古刹", "冷风", "鬼火", "阴森"]
+    }
+  ],
+  "依窗而立": [
+    {
+      candidateVi: "tựa bên cửa sổ mà đứng",
+      partOfSpeech: "verb",
+      semanticFeatures: ["POSTURE", "CLASSICAL_BEAUTY"],
+      semanticSignature: createSemanticSignature({ denotation: "LEANING_BY_WINDOW", valence: 0.20, intensity: 0.50 }),
+      confidence: 0.98,
+      indicatorContexts: ["佳人", "少女", "云鬓", "罗裳", "望", "独立"]
+    }
+  ],
+  "依窗": [
+    {
+      candidateVi: "tựa bên cửa sổ",
+      partOfSpeech: "verb",
+      semanticFeatures: ["POSTURE", "DESCRIPTION"],
+      semanticSignature: createSemanticSignature({ denotation: "LEANING_BY_WINDOW", valence: 0.20, intensity: 0.50 }),
+      confidence: 0.95,
+      indicatorContexts: ["而立", "看", "望", "佳人", "独坐", "凭栏"]
+    }
+  ],
+  "直往": [
+    {
+      candidateVi: "thẳng vào",
+      partOfSpeech: "adv",
+      semanticFeatures: ["DIRECTIONAL_MOTION"],
+      semanticSignature: createSemanticSignature({ denotation: "STRAIGHT_TOWARDS", valence: 0.0, intensity: 0.70 }),
+      confidence: 0.95,
+      indicatorContexts: ["怀里", "钻", "深处", "去", "冲", "飞", "落", "洞"]
+    }
+  ],
+  "不可不": [
+    {
+      candidateVi: "nhất định phải",
+      partOfSpeech: "adv",
+      semanticFeatures: ["NECESSITY_DOUBLE_NEGATIVE"],
+      semanticSignature: createSemanticSignature({ denotation: "ABSOLUTE_NECESSITY", valence: 0.10, intensity: 0.80 }),
+      confidence: 0.95,
+      indicatorContexts: ["防", "察", "戒", "留心", "慎", "虑", "备"]
+    }
+  ],
+  "却于": [
+    {
+      candidateVi: "thế nhưng lại ở trong",
+      partOfSpeech: "fn",
+      semanticFeatures: ["ADVERSATIVE_LOCATIVE"],
+      semanticSignature: createSemanticSignature({ denotation: "ADVERSATIVE_WITHIN", valence: 0.10, intensity: 0.75 }),
+      confidence: 0.95,
+      indicatorContexts: ["毁灭", "绝境", "危难", "无声处", "暗中", "死地", "浴火重生"]
+    }
+  ],
+  "戏谑道": [
+    {
+      candidateVi: "trêu chọc nói",
+      partOfSpeech: "verb",
+      semanticFeatures: ["DIALOGUE_TAG", "BANTER"],
+      semanticSignature: createSemanticSignature({ denotation: "TEASING_SPEECH", valence: 0.30, intensity: 0.60 }),
+      confidence: 0.95,
+      indicatorContexts: ["眨眼", "笑道", "嘴角", "师姐", "师妹", "笑眯眯"]
+    }
+  ],
+  "干笑道": [
+    {
+      candidateVi: "cười gượng nói",
+      partOfSpeech: "verb",
+      semanticFeatures: ["DIALOGUE_TAG", "AWKWARD"],
+      semanticSignature: createSemanticSignature({ denotation: "AWKWARD_LAUGH_SPEECH", valence: -0.10, intensity: 0.50 }),
+      confidence: 0.95,
+      indicatorContexts: ["冷汗", "擦汗", "干笑", "挠头", "尴尬"]
+    }
   ]
 };
 
@@ -234,11 +400,13 @@ function createLexicalCandidateGenerator({
         if (textZh.startsWith(polyZh, i)) {
           hasAmbiguity = true;
           for (const alt of polyAlts) {
+            const isIdiomOrTerm = polyZh.length >= 3 || (alt.semanticFeatures && (alt.semanticFeatures.includes("IDIOM") || alt.semanticFeatures.includes("LOCKED_TERM") || alt.semanticFeatures.includes("DAOIST_INCANTATION")));
+            const src = isIdiomOrTerm ? "IDIOM_CONSTRUCTION" : "POLYSEMY_ALT";
             positionCandidates.push(createLexicalCandidate({
               spanZh: polyZh,
               candidateVi: alt.candidateVi,
               segmentation: { start: i, end: i + polyZh.length, length: polyZh.length },
-              lexicalSource: "POLYSEMY_ALT",
+              lexicalSource: src,
               partOfSpeech: alt.partOfSpeech,
               semanticFeatures: alt.semanticFeatures,
               semanticSignature: alt.semanticSignature,
@@ -265,21 +433,21 @@ function createLexicalCandidateGenerator({
       // If multiple candidates exist with different segmentations or meanings, flag ambiguity
       if (positionCandidates.length > 1) {
         const uniqueVi = new Set(positionCandidates.map((c) => c.candidateVi));
-        const uniqueLens = new Set(positionCandidates.map((c) => c.segmentation.length));
+        const uniqueLens = new Set(positionCandidates.map((c) => (c.segmentation ? c.segmentation.length : 1)));
         if (uniqueVi.size > 1 || uniqueLens.size > 1) {
           hasAmbiguity = true;
         }
       }
 
-      // Determine step forward
-      const maxLen = positionCandidates.reduce((max, c) => Math.max(max, c.segmentation.length), 1);
+      // Determine step forward: prioritize best matched multi-character candidate
+      const bestLen = positionCandidates.reduce((max, c) => Math.max(max, c.segmentation ? c.segmentation.length : 1), 1);
       nodes.push({
         position: i,
         sourceChar: ch,
         candidates: Object.freeze(positionCandidates)
       });
 
-      i += Math.max(1, phraseMatch ? phraseMatch.length : 1);
+      i += Math.max(1, bestLen);
     }
 
     return Object.freeze({

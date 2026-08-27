@@ -7,15 +7,15 @@ const { createRealCorpusEvaluator, calculateInterRaterAgreement, ERROR_SEVERITY 
 const { REAL_CORPUS_SAMPLES } = require("./real-corpus-data");
 
 // Comprehensive mock baseline converter for real corpus test execution
-function mockBaseConvert(zhText) {
-  return String(zhText)
-    .replace(/青云门屹立于青峰之巅已有三千载/g, "Thanh Vân Môn đứng sừng sững ở đỉnh núi xanh đã hơn ba ngàn năm")
-    .replace(/门下弟子逾万/g, "đệ tử dưới trướng hơn vạn người")
-    .replace(/威震八方/g, "uy chấn tám phương")
+function mockBaseConvert(text) {
+  return String(text || "")
+    .replace(/青云(?:门|\s*môn)\s*屹立于青峰之巅已有三千载/g, "Thanh Vân Môn sừng sững trên đỉnh núi xanh đã hơn ba ngàn năm")
+    .replace(/(?:门|\s*môn)\s*下弟子逾万/g, "đệ tử dưới trướng hơn vạn người")
+    .replace(/威震八方/g, "uy danh vang dội khắp tám phương")
     .replace(/十年征战/g, "mười năm chinh chiến")
-    .replace(/白骨蔽野/g, "xương trắng che đầy đồng hoang")
-    .replace(/昔日繁华帝都如今只剩断壁残垣/g, "Đế Đô phồn hoa ngày xưa nay chỉ còn là bức tường đổ nát")
-    .replace(/令人不胜唏嘘/g, "khiến người ta không khỏi thở dài cảm thán")
+    .replace(/白骨蔽野/g, "xương trắng đầy đồng")
+    .replace(/昔日繁华帝都如今只剩断壁残垣/g, "Đế Đô phồn hoa ngày trước nay chỉ còn lại tường xiêu vách đổ")
+    .replace(/令人不胜唏嘘/g, "khiến người ta không khỏi thổn thức")
     .replace(/师尊/g, "Sư tôn")
     .replace(/弟子自知罪孽深重/g, "đệ tử tự biết tội nghiệt sâu nặng")
     .replace(/但绝无背叛宗门之意/g, "nhưng tuyệt đối không có ý phản bội tông môn")

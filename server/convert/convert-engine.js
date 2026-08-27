@@ -207,6 +207,10 @@ function particleBoundary(chars, i, length, afterModifier, deWords) {
   if (deWords.has(zh)) return false;
   if (zh.length > 1 && zh.includes(DE)) return true;
   if (length > 1 && ADVERBIAL.has(chars[i + length - 1])) return true;
+  if (length === 2 && (chars[i] === "将" || chars[i] === "把")) {
+    const isNominalCompound = /^(?:将军|将领|大将|名将|主将|副将|战将|天将|神将|武将|老将|少将|部将|末将|把柄|把戏|把握|把手|把头|一把)$/.test(zh);
+    if (!isNominalCompound) return true;
+  }
   return afterModifier && ADVERBIAL.has(chars[i]);
 }
 
@@ -433,10 +437,10 @@ function createConvertEngine({
       }
 
       // 9. Numbers and Latin letters read as words so they get normal spacing.
-      if (/[0-9A-Za-zÀ-ɏ]/.test(ch)) {
+      if (/[A-Za-z0-9_À-ỹ\u00C0-\u024F\u1EA0-\u1EF9]/.test(ch)) {
         let j = i;
         let run = "";
-        while (j < chars.length && /[0-9A-Za-zÀ-ɏ.,]/.test(chars[j]) && !PUNCT[chars[j]]) {
+        while (j < chars.length && (/[A-Za-z0-9_À-ỹ\u00C0-\u024F\u1EA0-\u1EF9]/.test(chars[j]) || (/[.,]/.test(chars[j]) && j + 1 < chars.length && /[0-9]/.test(chars[j + 1]))) && !PUNCT[chars[j]]) {
           run += chars[j];
           j++;
         }

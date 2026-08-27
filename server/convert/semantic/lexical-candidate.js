@@ -12,6 +12,7 @@ const { createSemanticSignature } = require("./contracts");
 // Source Priority tiers
 const LEXICAL_SOURCE_TIERS = Object.freeze({
   BOOK_GLOSSARY: { tier: "LOCKED", basePriority: 1.00 },
+  IDIOM_CONSTRUCTION: { tier: "PREFERRED", basePriority: 0.92 },
   TRANSLATION_MEMORY: { tier: "PREFERRED", basePriority: 0.95 },
   GENRE_PACK: { tier: "PREFERRED", basePriority: 0.85 },
   PROPER_NOUN: { tier: "PREFERRED", basePriority: 0.80 },

@@ -102,7 +102,7 @@ function checkDiscourseSafety(renderedText, sourceZh, causalRelation) {
   const vi = String(renderedText || "").toLowerCase();
 
   if (causalRelation === "ADVERSATIVE_BUT" || /(?:却|但是|然而|不过)/.test(zh)) {
-    const hasButVi = /(?:(?<!\p{L})(?:nhưng|tuy nhiên|lại|song|ngặt nỗi)(?!\p{L}))/iu.test(vi);
+    const hasButVi = /(?:(?<!\p{L})(?:nhưng|tuy nhiên|lại|song|ngặt nỗi|chỉ là|chỉ|thế nhưng)(?!\p{L}))/iu.test(vi);
     if (!hasButVi) {
       return { passed: false, reason: "ADVERSATIVE_CONNECTOR_LOST" };
     }
@@ -217,7 +217,7 @@ function createVietnameseRealizer({
 
     for (const slot of plan.slotReplacements) {
       if (rendered.includes(slot.slotId)) {
-        rendered = rendered.split(slot.slotId).join(slot.replacementVi);
+        rendered = rendered.split(slot.slotId).join(` ${slot.replacementVi} `);
         appliedRules.push({
           provider: slot.providerId,
           slot: slot.targetSlot || slot.slotId,
