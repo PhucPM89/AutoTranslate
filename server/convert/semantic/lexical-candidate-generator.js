@@ -165,29 +165,67 @@ function createLexicalCandidateGenerator({
       // 3. Check Trie Longest Match (Phrase Dictionary)
       let phraseMatch = null;
       if (trie) {
-        let node = trie;
-        let j = i;
-        let longest = null;
-        while (j < chars.length) {
-          const next = node.get(chars[j]);
-          if (!next) break;
-          node = next;
-          j++;
-          const val = node.get(""); // terminal
-          if (val !== undefined) {
-            longest = { vi: val, length: j - i };
+        let node = trie.root || (trie instanceof Map ? trie : null);
+        if (node) {
+          let j = i;
+          let longest = null;
+          while (j < chars.length) {
+            const next = node.get(chars[j]);
+            if (!next) break;
+            node = next;
+            j++;
+            // Check terminal value
+            for (const [k, val] of node.entries()) {
+              if ((typeof k === "symbol" || k === "") && typeof val === "string") {
+                longest = { vi: val, length: j - i };
+              }
+            }
+          }
+          if (longest) {
+            phraseMatch = longest;
           }
         }
-        if (longest) {
-          phraseMatch = longest;
-          positionCandidates.push(createLexicalCandidate({
-            spanZh: chars.slice(i, i + longest.length).join(""),
-            candidateVi: longest.vi,
-            segmentation: { start: i, end: i + longest.length, length: longest.length },
-            lexicalSource: "PHRASE_DICT",
-            confidence: 0.85,
-            provenance: "trie-phrase-dict"
-          }));
+      } else if (phraseDict) {
+        for (let len = 6; len >= 2; len--) {
+          const sub = chars.slice(i, i + len).join("");
+          if (phraseDict[sub]) {
+            phraseMatch = { vi: phraseDict[sub], length: len };
+            break;
+          }
+        }
+      }
+
+      if (phraseMatch) {
+        positionCandidates.push(createLexicalCandidate({
+          spanZh: chars.slice(i, i + phraseMatch.length).join(""),
+          candidateVi: phraseMatch.vi,
+          segmentation: { start: i, end: i + phraseMatch.length, length: phraseMatch.length },
+          lexicalSource: "PHRASE_DICT",
+          confidence: 0.85,
+          provenance: "trie-phrase-dict"
+        }));
+
+        // Lookahead for overlapping proper nouns or glossary within phrase span
+        if (phraseMatch.length > 1) {
+          for (let k = 1; k < phraseMatch.length; k++) {
+            if (properNounMatcher) {
+              const subName = properNounMatcher.match(chars, i + k);
+              if (subName && subName.length >= 2) {
+                hasAmbiguity = true;
+                // Provide single char prefix candidate to allow alternative segmentation
+                const singleChar = chars[i];
+                const singleHv = hanvietChars[singleChar] ? hanvietChars[singleChar].hv : singleChar;
+                positionCandidates.push(createLexicalCandidate({
+                  spanZh: singleChar,
+                  candidateVi: singleHv,
+                  segmentation: { start: i, end: i + 1, length: 1 },
+                  lexicalSource: "PHRASE_DICT",
+                  confidence: 0.70,
+                  provenance: "competing-segmentation:prefix"
+                }));
+              }
+            }
+          }
         }
       }
 

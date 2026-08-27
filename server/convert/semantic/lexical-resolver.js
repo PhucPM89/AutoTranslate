@@ -48,12 +48,13 @@ function createLexicalResolver({
       for (const node of graph.nodes) {
         const top = node.candidates[0];
         if (top) {
+          const method = top.isLocked ? "GLOSSARY_LOCK" : "FAST_PATH";
           resolvedSlots.push({
             spanZh: top.spanZh,
             chosenVi: top.candidateVi,
             lexicalSource: top.lexicalSource,
             confidence: 1.0,
-            method: "FAST_PATH"
+            method
           });
           resolutionRecords.push(Object.freeze({
             sourceSpan: top.spanZh,
@@ -61,8 +62,8 @@ function createLexicalResolver({
             status: "RESOLVED",
             confidence: 1.0,
             margin: 1.0,
-            method: "FAST_PATH",
-            evidence: { fastPath: true },
+            method,
+            evidence: { fastPath: true, isLocked: top.isLocked },
             alternatives: Object.freeze([]),
             provenance: top.provenance
           }));
