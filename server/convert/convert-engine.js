@@ -259,17 +259,16 @@ function createConvertEngine({
   // phrase: 留给他 (留给), 刚才说话 (说话). The 的 rule needs this — a verb before
   // 的 marks a relative clause, not a possessive. Only two-character edges are
   // tested; single characters are far too ambiguous (期望 is not 望).
+  const ACTION_VERB_ROOTS = /(?:斩|杀|拔|破|劈|刺|扫|灭|打|推|拉|击|震|飞|走|跑|跳|笑|哭|说|道|问|看|望|听|取|拿|吞|炼|服|坐|立|落|避|窜|遁|逃|追|迎|挡|封|印|祭|化|变)/;
+
   function looksVerbal(zh) {
     if (verbs.has(zh)) return true;
+    if (ACTION_VERB_ROOTS.test(zh.charAt(0)) && !NOUN_SUFFIX.test(zh.slice(-1))) return true;
     // A dictionary entry that swallowed an aspect marker (记载了, 死了) is a verb
     // phrase by construction — only a verb takes one.
     if (zh.length > 1 && ASPECT.has(zh.slice(-1))) return true;
     if (zh.length === 2) {
-      // A verb plus its object or result: 用剑, 打伤. Listing every one of these
-      // is hopeless, but the shape is recognisable — unless the second character
-      // is a noun-forming suffix, where the compound is a noun instead (说法 is
-      // "cách nói", not "nói pháp").
-      return verbs.has(zh.charAt(0)) && !NOUN_SUFFIX.test(zh.charAt(1));
+      return (verbs.has(zh.charAt(0)) || ACTION_VERB_ROOTS.test(zh.charAt(0))) && !NOUN_SUFFIX.test(zh.charAt(1));
     }
     if (zh.length < 3) return false;
     return verbs.has(zh.slice(0, 2)) || verbs.has(zh.slice(-2));
@@ -292,6 +291,8 @@ function createConvertEngine({
     return false;
   }
 
+  const DESCRIPTIVE_ADJ = /(?:凌厉|森然|惨白|阴鸷|清丽|锋利|漆黑|绝美|晶莹|清澈|阴森|沉重|巨大|强横|浩瀚|恐怖|诡异|冰冷|灼热|璀璨|耀眼|刺目|通红|火红|幽暗|苍茫|巍峨|刺骨|枯槁|血红)/;
+
   // Tag a word token so grammar.js can reason about it. Order matters: function
   // words and verbs are checked before the numeral test, so 把 stays "đem".
   function classify(zh) {
@@ -299,7 +300,7 @@ function createConvertEngine({
     if (DEMONSTRATIVES.has(zh)) return "dem";
     if (LOCATIVES[zh]) return "loc";
     if (functionWords.has(zh)) return "fn";
-    if (adjectives.has(zh) || COLOUR_SUFFIX.test(zh) || isGradedAdjective(zh)) return "adj";
+    if (adjectives.has(zh) || COLOUR_SUFFIX.test(zh) || isGradedAdjective(zh) || DESCRIPTIVE_ADJ.test(zh)) return "adj";
     if (looksVerbal(zh)) return "verb";
     if (NUMERIC.test(zh) || QUANTITY.test(zh)) return "num";
     return "noun";

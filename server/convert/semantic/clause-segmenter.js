@@ -282,17 +282,35 @@ function analyzeClauseStructure(clauseText, role) {
     };
   }
 
+  // Detect Entity Class of subject (PERSON, CREATURE, OBJECT, LOCATION, PHENOMENON, EVENT, ABSTRACT)
+  let entityClass = null;
+  if (/(?:药鼎|丹鼎|丹炉|长剑|宝剑|长刀|法宝|灵丹|神兵|玉佩|阵法|锁链|蒲团|经文|卷轴|罗裳|琴音|真言)/.test(clean)) {
+    entityClass = "OBJECT";
+  } else if (/(?:雷劫|天劫|紫气|霞光|鬼火|阴风|狂风|暴雨|血月|异象|剑鸣|茶香)/.test(clean)) {
+    entityClass = "PHENOMENON";
+  } else if (/(?:荒冢|古殿|古刹|大殿|深渊|山峰|宗门|城池|朝堂|古墓|禁地|九霄|泥土)/.test(clean)) {
+    entityClass = "LOCATION";
+  } else if (/(?:大战|拍卖|讲道|浩劫|大劫|逼宫)/.test(clean)) {
+    entityClass = "EVENT";
+  } else if (/(?:巨蟒|凶兽|神兽|灵兽|妖兽|白狐|灵禽)/.test(clean)) {
+    entityClass = "CREATURE";
+  } else if (/(?:少年|少女|老僧|老道|修士|道士|太师|皇帝|长老|掌门|师尊|弟子|女鬼|佳人|将军)/.test(clean)) {
+    entityClass = "PERSON";
+  }
+
   // 4. Pro-Drop Check: Does the clause start with a known subject or is it omitted?
   const opensWithPronounOrNoun =
     PRONOUN_SUBJECTS.has(clean.slice(0, 1)) ||
     PRONOUN_SUBJECTS.has(clean.slice(0, 2)) ||
-    /^[A-Z\u4e00-\u9fa5]{2,4}(?:说|道|看|望|走|笑|拔|出|入)/.test(clean);
+    Boolean(entityClass) ||
+    /^[A-Z\u4e00-\u9fa5]{2,4}(?:说|道|看|望|走|笑|拔|出|入|轰|立|现|响)/.test(clean);
 
   const isImplicitSubject = role === "ACTION" && !opensWithPronounOrNoun;
 
   return {
     tier: "FULL_FRAME",
     isImplicitSubject,
+    entityClass,
     hasSerialVerbs: false,
     isTopicComment: false,
     serialActions: []
@@ -342,6 +360,7 @@ function segmentParagraphToClauseIRs(paraText, {
         tier: structure.tier,
         sourceZh: rawText,
         role,
+        entityClass: structure.entityClass || null,
         cognitiveEvent: Object.freeze({ ...cognitiveEvent, textRole: role }),
         subjectSlot: {
           isImplicit: structure.isImplicitSubject,

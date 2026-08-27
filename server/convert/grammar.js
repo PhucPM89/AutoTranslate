@@ -102,10 +102,15 @@ function clauseStart(tokens, i) {
 }
 
 function headEnd(tokens, i) {
+  if (i >= tokens.length || !isWord(tokens[i])) return -1;
+  // If immediate token is a nominal head or action verb, it is the head
+  if (isNominal(tokens[i]) || tokens[i].k === "verb") {
+    return i;
+  }
   let end = i;
   while (end < tokens.length && end - i < MAX_HEAD - 1 && isWord(tokens[end]) && tokens[end].k === "adj") end++;
-  if (!isNominal(tokens[end])) return -1;
-  return end;
+  if (end < tokens.length && (isNominal(tokens[end]) || tokens[end].k === "verb")) return end;
+  return -1;
 }
 
 function link(text, kind = "fn") {
@@ -148,11 +153,27 @@ function de(tokens) {
       }
     }
 
+    if (end >= 0 && kind === "adj") {
+      let start = i - 1;
+      while (start > 0 && i - start < MAX_MODIFIER && isWord(tokens[start - 1]) && (tokens[start - 1].k === "adj" || tokens[start - 1].k === "adv")) {
+        start--;
+      }
+      const adjTokens = tokens.slice(start, i);
+      const headTokens = tokens.slice(i + 1, end + 1);
+      for (const a of adjTokens) a._postposed = true;
+      for (const h of headTokens) h._postposed = true;
+      // Reorder [Adj, 的, Head] to [Head, Adj] without 'của'
+      tokens.splice(start, end - start + 1, ...headTokens, ...adjTokens);
+      continue;
+    }
+
     if (end >= 0 && kind === "verb") {
       const start = clauseStart(tokens, i);
       if (start < i && !isGoverned(tokens, start, i)) {
-        const glue = i - start > 1 ? [link("mà", "fn")] : [];
-        tokens.splice(start, end - start + 1, ...tokens.slice(i + 1, end + 1), ...glue, ...tokens.slice(start, i));
+        const headTokens = tokens.slice(i + 1, end + 1);
+        const isPurposeHead = headTokens.some(h => /(?:thời cơ|cơ hội|phương pháp|cách)/i.test(h.s || ""));
+        const glue = isPurposeHead ? [link("để", "fn")] : (i - start > 1 ? [link("mà", "fn")] : []);
+        tokens.splice(start, end - start + 1, ...headTokens, ...glue, ...tokens.slice(start, i));
         continue;
       }
     }
@@ -167,9 +188,10 @@ function adjective(tokens) {
   for (let i = 0; i < tokens.length - 1; i++) {
     const adj = tokens[i];
     const head = tokens[i + 1];
-    if (!isWord(adj) || adj.k !== "adj") continue;
+    if (!isWord(adj) || adj.k !== "adj" || adj._postposed) continue;
+    if (!isWord(head) || head._postposed) continue;
     if (QUANTIFIERS.has(adj.zh || "")) continue;
-    if (!isWord(head) || (head.k !== "noun" && head.k !== "name")) continue;
+    if (head.k !== "noun" && head.k !== "name") continue;
     if (PREDICATE.test(head.zh || "")) continue;
     tokens[i] = head;
     tokens[i + 1] = adj;
@@ -257,24 +279,32 @@ function comparison(tokens) {
   return tokens;
 }
 
-// 7. Disposal 把/将 Structure: 把 + [Noun] + [Verb Phrase] -> [Verb Phrase] + [Noun]
+// 7. Disposal 把/将 Structure: 把/将 + [Noun] + [Verb Phrase] -> [Verb Phrase] + [Noun]
 function disposalBa(tokens) {
   for (let i = 0; i < tokens.length - 2; i++) {
     const tok = tokens[i];
     if (!isWord(tok) || (tok.zh !== "把" && tok.zh !== "将")) continue;
-    // Find object noun phrase
-    let objEnd = i + 1;
-    while (objEnd < tokens.length && objEnd - i < MAX_HEAD && isNominal(tokens[objEnd])) {
-      objEnd++;
+
+    // Scan for the main transitive verb following 把/将 within MAX_HEAD tokens
+    let verbIdx = -1;
+    for (let j = i + 1; j < tokens.length && j - i <= MAX_HEAD; j++) {
+      if (!isWord(tokens[j]) || tokens[j].k === "punct") break;
+      if (tokens[j].k === "verb" && j > i + 1) {
+        verbIdx = j;
+        break;
+      }
     }
-    if (objEnd <= i + 1) continue;
-    // Check if followed by a verb phrase
-    const verbIdx = objEnd;
-    if (verbIdx < tokens.length && isWord(tokens[verbIdx]) && tokens[verbIdx].k === "verb") {
+
+    if (verbIdx > i + 1) {
       const verb = tokens[verbIdx];
-      const objTokens = tokens.slice(i + 1, objEnd);
-      // Replace "把 + Obj + Verb" with "Verb + Obj"
-      tokens.splice(i, objEnd - i + 1, verb, ...objTokens);
+      const objTokens = tokens.slice(i + 1, verbIdx);
+      if (tok.zh === "将") {
+        tok.s = "đem";
+        tok.k = "fn";
+      } else {
+        // Replace "把 + Obj + Verb" with "Verb + Obj"
+        tokens.splice(i, verbIdx - i + 1, verb, ...objTokens);
+      }
     }
   }
   return tokens;
@@ -311,15 +341,19 @@ function directionalComplements(tokens) {
   return tokens;
 }
 
-// 10. Potential Complements: V + 得/不 + C
+// 10. Potential & Degree Complements: V + 得/不 + C
 function potentialComplements(tokens) {
   for (let i = 0; i < tokens.length - 2; i++) {
     const v = tokens[i];
     const pt = tokens[i + 1];
     const c = tokens[i + 2];
-    if (!isWord(v) || v.k !== "verb" || !isWord(pt) || !isWord(c)) continue;
-    if (pt.zh === "得" && (c.k === "adj" || c.k === "verb")) {
-      pt.s = "được";
+    if (!isWord(v) || (v.k !== "verb" && v.k !== "adj") || !isWord(pt) || !isWord(c)) continue;
+    if (pt.zh === "得") {
+      if (c.zh === "见" || c.zh === "懂" || c.zh === "到" || c.zh === "下" || c.zh === "清") {
+        pt.s = "được";
+      } else {
+        pt.s = "đến mức";
+      }
     } else if (pt.zh === "不" && (c.k === "adj" || c.k === "verb")) {
       pt.s = "không";
     }

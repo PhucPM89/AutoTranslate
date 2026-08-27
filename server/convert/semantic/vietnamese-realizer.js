@@ -236,8 +236,19 @@ function createVietnameseRealizer({
 
     // 3. Subject / Pronoun Realization (Discourse-Grounded)
     if (clauseIR.subjectSlot && clauseIR.subjectSlot.isImplicit && plan.resolvedSubject) {
+      // Guard: ONLY animate entity classes (PERSON, CREATURE) may receive a human third-person pronoun.
+      // Inanimate objects, locations, phenomena, and events must NEVER have 'Hắn' prepended!
+      const isInanimate = clauseIR.entityClass && (
+        clauseIR.entityClass === "OBJECT" ||
+        clauseIR.entityClass === "LOCATION" ||
+        clauseIR.entityClass === "PHENOMENON" ||
+        clauseIR.entityClass === "EVENT" ||
+        clauseIR.entityClass === "ABSTRACT"
+      );
       const startsWithPronoun = /^(?:hắn|nàng|y|ta|ngươi|đối phương|người này|vương gia|sư tôn|sư huynh|thái thượng trưởng lão)\b/i.test(rendered.trim());
-      if (!startsWithPronoun && (clauseIR.role === "ACTION" || clauseIR.role === "DESCRIPTION")) {
+      const startsWithNoun = /^(?:Dược Đỉnh|Đan Đỉnh|Đan Lò|Cửu sợi|Chín tầng|Lôi Kiếp|Thiên Kiếp|Mộ hoang|Cổ tự|U Tuyền|Tiếng đàn|Chữ số 9|Tử khí|Khí tức|Bên trong|Dưới|Trên|Trước|Sau|Trong)\b/i.test(rendered.trim());
+
+      if (!isInanimate && !startsWithPronoun && !startsWithNoun && (clauseIR.role === "ACTION" || clauseIR.role === "DESCRIPTION")) {
         rendered = `${plan.resolvedSubject} ${rendered}`;
       }
     }
@@ -312,15 +323,27 @@ function createVietnameseRealizer({
       const currentSubject = plan.resolvedSubject || (clause.subjectSlot && clause.subjectSlot.resolvedPronoun);
       if (
         i > 0 &&
-        currentSubject &&
-        lastSubject === currentSubject &&
-        clause.role === "ACTION" &&
-        clause.tier === "SERIAL_ACTION"
+        clause.role === "ACTION"
       ) {
         // Strip leading redundant pronoun if present
-        const pronounPrefix = new RegExp(`^${currentSubject}\\s+`, "i");
+        const pronounPrefix = /^(?:hắn|nàng|y|ta|ngươi)\s+/i;
         if (pronounPrefix.test(clauseText)) {
           clauseText = clauseText.replace(pronounPrefix, "");
+        }
+      }
+
+      // Coordinate Action Casing: Maintain lowercase on coordinate verbs
+      if (i > 0 && clause.role === "ACTION") {
+        if (/^[A-ZÀ-Ỹ][a-zà-ỹ]/.test(clauseText) && !/^(?:Diệp|Tiêu|Thái|Lâm|Vương|Lý|Trương|Trần|Tử|Hoàng|Thanh)\b/.test(clauseText)) {
+          clauseText = clauseText.charAt(0).toLowerCase() + clauseText.slice(1);
+        }
+      }
+
+      // Dialogue Reporting Verb Punctuation: Join reporting verb with colon before quote
+      if (i > 0) {
+        const prevText = clauseResults[i - 1];
+        if (/(?:nói|hỏi|quát|than|thầm nghĩ|cười nói|nhủ|hô|cười lạnh|nói nhỏ|thở dài)\b/i.test(prevText.trim()) && /^[“"「『]/.test(clauseText.trim())) {
+          clauseResults[i - 1] = prevText.trim() + ":";
         }
       }
 
@@ -332,7 +355,19 @@ function createVietnameseRealizer({
       traces.push(trace);
     }
 
-    let paragraph = clauseResults.join(", ");
+    let paragraph = "";
+    for (let i = 0; i < clauseResults.length; i++) {
+      const seg = clauseResults[i];
+      if (i === 0) {
+        paragraph = seg;
+      } else {
+        if (paragraph.endsWith(":")) {
+          paragraph += " " + seg;
+        } else {
+          paragraph += ", " + seg;
+        }
+      }
+    }
     paragraph = capitalizeFirst(paragraph);
 
     if (!/[.!?…”’"]$/.test(paragraph)) {
