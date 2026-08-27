@@ -111,9 +111,12 @@ function checkSignatureCompatibility(sourceSig, candidateSig, {
   }
 
   // Soft Valence Drift Check
+  const isNeutralSource = sourceSig.affectDistribution.NEUTRAL && sourceSig.affectDistribution.NEUTRAL >= 0.80;
+  const effectiveMaxValenceDiff = isNeutralSource ? 0.80 : maxValenceDiff;
+
   const valenceDiff = Math.abs(sourceSig.valence - candidateSig.valence);
-  if (valenceDiff > maxValenceDiff) {
-    reasons.push(`Valence drift: ${valenceDiff.toFixed(2)} > ${maxValenceDiff}`);
+  if (valenceDiff > effectiveMaxValenceDiff) {
+    reasons.push(`Valence drift: ${valenceDiff.toFixed(2)} > ${effectiveMaxValenceDiff}`);
   }
 
   // Soft Intensity Drift Check
@@ -125,23 +128,29 @@ function checkSignatureCompatibility(sourceSig, candidateSig, {
   // Calculate Affect Vector Similarity (Cosine Similarity)
   const srcAff = sourceSig.affectDistribution;
   const candAff = candidateSig.affectDistribution;
-  const allKeys = new Set([...Object.keys(srcAff), ...Object.keys(candAff)]);
 
-  let dotProduct = 0;
-  let srcNormSq = 0;
-  let candNormSq = 0;
+  // If source is neutral/unannotated baseline, it gracefully accepts stylistic tone
+  let affectSimilarity = 0;
+  if (srcAff.NEUTRAL && srcAff.NEUTRAL >= 0.80) {
+    affectSimilarity = 0.80; // High baseline compatibility for neutral text
+  } else {
+    const allKeys = new Set([...Object.keys(srcAff), ...Object.keys(candAff)]);
+    let dotProduct = 0;
+    let srcNormSq = 0;
+    let candNormSq = 0;
 
-  for (const k of allKeys) {
-    const s = srcAff[k] || 0;
-    const c = candAff[k] || 0;
-    dotProduct += s * c;
-    srcNormSq += s * s;
-    candNormSq += c * c;
+    for (const k of allKeys) {
+      const s = srcAff[k] || 0;
+      const c = candAff[k] || 0;
+      dotProduct += s * c;
+      srcNormSq += s * s;
+      candNormSq += c * c;
+    }
+
+    const srcNorm = Math.sqrt(srcNormSq);
+    const candNorm = Math.sqrt(candNormSq);
+    affectSimilarity = (srcNorm > 0 && candNorm > 0) ? (dotProduct / (srcNorm * candNorm)) : 0;
   }
-
-  const srcNorm = Math.sqrt(srcNormSq);
-  const candNorm = Math.sqrt(candNormSq);
-  const affectSimilarity = (srcNorm > 0 && candNorm > 0) ? (dotProduct / (srcNorm * candNorm)) : 0;
 
   if (affectSimilarity < minAffectSimilarity) {
     return {

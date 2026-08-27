@@ -28,6 +28,7 @@
 const { applyGrammar } = require("./grammar");
 const { createProperNounMatcher } = require("./proper-nouns");
 const { polishLiteraryProse } = require("./literary-stylist");
+const { createSemanticOrchestrator } = require("./semantic/semantic-orchestrator");
 
 const HAN = /\p{Script=Han}/u;
 
@@ -479,8 +480,6 @@ function createConvertEngine({
     return joinTokens(applyGrammarRules ? applyGrammar(tokens) : tokens);
   }
 
-  // Convert a whole chapter, preserving paragraph structure. Paragraph count must
-  // match the source so the reader and the LLM tier stay aligned.
   function convert(text) {
     if (typeof text !== "string" || !text) return "";
     const converted = text
@@ -493,7 +492,25 @@ function createConvertEngine({
     return polishLiteraryProse(converted);
   }
 
-  return { convert, convertLine, tokenize };
+  // Semantic 1-Pass conversion orchestrated via the Symbolic NLP Engine
+  const semanticOrchestrator = createSemanticOrchestrator({
+    baseConvertFunction: (raw) => (raw.trim() ? convertLine(raw) : "")
+  });
+
+  function convertSemantic(text) {
+    if (typeof text !== "string" || !text) return "";
+    return semanticOrchestrator.translateChapter(text).text;
+  }
+
+  return { convert, convertSemantic, convertLine, tokenize, semanticOrchestrator };
 }
 
-module.exports = { createConvertEngine, isHan, buildTrie, matchPhrase, PUNCT, DROP_TOKENS };
+module.exports = {
+  createConvertEngine,
+  createSemanticOrchestrator,
+  isHan,
+  buildTrie,
+  matchPhrase,
+  PUNCT,
+  DROP_TOKENS
+};
