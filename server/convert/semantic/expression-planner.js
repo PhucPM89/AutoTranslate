@@ -73,6 +73,39 @@ function realizeDialogueTemplate(candidateVi, dialogueAct) {
 }
 
 /**
+ * Extracts linguistic constraints (negation, quantity, temporal, causal) from source text.
+ */
+function extractLinguisticConstraints(sourceZh = "") {
+  const text = String(sourceZh || "");
+
+  const hasNegation = /(?:没有|不|未|从未|并非|无论|休想|绝非|不可|无)/.test(text);
+  const hasQuantity = /(?:一|两|三|四|五|六|七|八|九|十|百|千|万|无数|几|许多|全部|仅仅|至少)/.test(text);
+  
+  let temporalAspect = "NONE";
+  if (/(?:已经|已然|早已)/.test(text)) temporalAspect = "PERFECTIVE_ALREADY";
+  else if (/(?:正在|正自)/.test(text)) temporalAspect = "PROGRESSIVE_ONGOING";
+  else if (/(?:将要|即将|快要)/.test(text)) temporalAspect = "PROSPECTIVE_ABOUT_TO";
+  else if (/(?:曾经|从前|当年)/.test(text)) temporalAspect = "EXPERIENTIAL_PAST";
+  else if (/(?:刚刚|刚才|方才)/.test(text)) temporalAspect = "RECENT_JUST_NOW";
+  else if (/(?:随后|旋即|紧接着)/.test(text)) temporalAspect = "SEQUENTIAL_THEN";
+  else if (/(?:多年后|数年后)/.test(text)) temporalAspect = "TEMPORAL_YEARS_LATER";
+
+  let causalRelation = "NONE";
+  if (/(?:因为|由于)/.test(text)) causalRelation = "CAUSAL_BECAUSE";
+  else if (/(?:所以|因此|因而)/.test(text)) causalRelation = "CAUSAL_THEREFORE";
+  else if (/(?:于是)/.test(text)) causalRelation = "CONSECUTIVE_THEREUPON";
+  else if (/(?:却|但是|然而|不过)/.test(text)) causalRelation = "ADVERSATIVE_BUT";
+  else if (/(?:虽然|纵然|即便|哪怕)/.test(text)) causalRelation = "CONCESSIVE_ALTHOUGH";
+
+  return Object.freeze({
+    hasNegation,
+    hasQuantity,
+    temporalAspect,
+    causalRelation
+  });
+}
+
+/**
  * Extracts core semantic atoms from a ClauseIR to guarantee zero dropped arguments.
  */
 function extractSourceSemanticAtoms(clauseIR) {
@@ -231,6 +264,8 @@ function createExpressionPlanner({
         ? clauseIR.subjectSlot.resolvedPronoun
         : null;
 
+    const linguisticConstraints = extractLinguisticConstraints(clauseIR.sourceZh);
+
     // Freeze and return rich ExpressionPlan
     return Object.freeze({
       clauseId: clauseIR.id,
@@ -240,6 +275,7 @@ function createExpressionPlanner({
       resolvedSubject,
       dialogueAct: clauseIR.dialogueAct || null,
       cognitiveEvent: clauseIR.cognitiveEvent || null,
+      linguisticConstraints,
       semanticPlan: Object.freeze({
         sourceAtoms,
         affectSignature: clauseIR.semanticSignature
@@ -274,6 +310,7 @@ module.exports = {
   createExpressionPlanner,
   realizeDialogueTemplate,
   extractSourceSemanticAtoms,
+  extractLinguisticConstraints,
   deduplicateModifiers,
   classifyHeadCategory,
   FALLBACK_LEVELS,

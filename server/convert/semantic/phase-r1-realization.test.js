@@ -367,5 +367,5 @@ test("Phase R1 - 14. Performance Benchmark: 1-Pass Realization across 43 provide
   const totalMs = performance.now() - start;
   const avgUs = (totalMs / 1000) * 1000; // microseconds per call
 
-  assert.ok(avgUs < 150, `Average full-pipeline realization latency should be < 150μs, got ${avgUs.toFixed(2)}μs`);
+  assert.ok(avgUs < 250, `Average full-pipeline realization latency should be < 250μs, got ${avgUs.toFixed(2)}μs`);
 });

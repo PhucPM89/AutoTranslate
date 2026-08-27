@@ -1,15 +1,16 @@
 "use strict";
 
 /**
- * 1-Pass Vietnamese Realizer (Phase R1 Hardened)
+ * 1-Pass Vietnamese Realizer (Phase R2 Hardened)
  * 
  * Layer C: Surface Realization
  * 
  * Synthesizes publication-grade Vietnamese prose from ExpressionPlan in a single deterministic pass.
  * Implements:
+ * - Constraint-Aware Verification (Negation, Quantity, Temporal, Discourse Connectors).
+ * - Semantic Round-Trip Check.
  * - 12-Assertion Quality Gate (validateSemanticAssertions).
- * - Semantic atom preservation check.
- * - Discourse-grounded pronoun and honorific title insertion.
+ * - Discourse-grounded pronoun and honorific title insertion with repetition suppression.
  * - Anti-repetition lexical rotation.
  * - End-to-end compositional Provenance Trace.
  */
@@ -35,13 +36,84 @@ const SEMANTIC_ASSERTIONS = Object.freeze({
   NEW_RELATIONSHIP: "NEW_RELATIONSHIP"
 });
 
+// =========================================================================
+// Constraint-Aware Linguistic Verifiers (Phase R2 Hardened)
+// =========================================================================
+
+/**
+ * Negation Safety:
+ * Verifies that negative polarity is strictly preserved from source to target.
+ * (e.g. "他没有死" -> must contain "không chết" / "chưa chết", never "hắn đã chết").
+ */
+function checkNegationSafety(renderedText, sourceZh) {
+  const zh = String(sourceZh || "");
+  const vi = String(renderedText || "").toLowerCase();
+
+  const isNegatedZh = /(?:没有|不|未|从未|并非|无论|休想|绝非|不可|无)\b/u.test(zh) ||
+                      /(?:没有|不是|并未|从未|不可|无|休想)/.test(zh);
+
+  if (!isNegatedZh) {
+    return { passed: true };
+  }
+
+  // Target Vietnamese MUST contain at least one valid negative marker
+  const hasNegationVi = /(?:\bkhông\b|\bchưa\b|\bchẳng\b|\bchưa từng\b|\bkhông hề\b|\bđừng\b|\bkhông có\b|\bchớ\b|\bvô\b|\bchẳng hề\b)/i.test(vi);
+
+  if (!hasNegationVi) {
+    return {
+      passed: false,
+      reason: "NEGATION_POLARITY_LOST"
+    };
+  }
+
+  return { passed: true };
+}
+
+/**
+ * Temporal & Aspectual Safety:
+ * Verifies that aspectual markers (already, ongoing, then, years later) are preserved.
+ */
+function checkTemporalSafety(renderedText, sourceZh, temporalAspect) {
+  const zh = String(sourceZh || "");
+  const vi = String(renderedText || "").toLowerCase();
+
+  if (temporalAspect === "PERFECTIVE_ALREADY" || /(?:已经|已然|早已)/.test(zh)) {
+    const hasAlreadyVi = /(?:\bđã\b|\bsớm đã\b|\bđã sớm\b|\bxong\b|\brồi\b)/i.test(vi);
+    if (!hasAlreadyVi) {
+      return { passed: false, reason: "PERFECTIVE_ASPECT_LOST" };
+    }
+  }
+
+  if (temporalAspect === "SEQUENTIAL_THEN" || /(?:随后|旋即|紧接着)/.test(zh)) {
+    const hasSequentialVi = /(?:\bsau đó\b|\btiếp theo\b|\bngay sau đó\b|\bliền\b|\brồi\b)/i.test(vi);
+    if (!hasSequentialVi) {
+      return { passed: false, reason: "SEQUENTIAL_TEMPORAL_LOST" };
+    }
+  }
+
+  return { passed: true };
+}
+
+/**
+ * Discourse & Causal Connector Safety:
+ * Verifies that causal and adversative relations are preserved.
+ */
+function checkDiscourseSafety(renderedText, sourceZh, causalRelation) {
+  const zh = String(sourceZh || "");
+  const vi = String(renderedText || "").toLowerCase();
+
+  if (causalRelation === "ADVERSATIVE_BUT" || /(?:却|但是|然而|不过)/.test(zh)) {
+    const hasButVi = /(?:\bnhưng\b|\btuy nhiên\b|\blại\b|\bsong\b|\bngặt nỗi\b)/i.test(vi);
+    if (!hasButVi) {
+      return { passed: false, reason: "ADVERSATIVE_CONNECTOR_LOST" };
+    }
+  }
+
+  return { passed: true };
+}
+
 /**
  * Validates that the rendered output does NOT introduce ungrounded assertions.
- * 
- * @param {string} renderedText
- * @param {Object} clauseIR
- * @param {Object} context
- * @returns {{ passed: boolean, violatedAssertions: string[], reason: string }}
  */
 function validateSemanticAssertions(renderedText, clauseIR, context = {}) {
   const violations = [];
@@ -74,6 +146,42 @@ function validateSemanticAssertions(renderedText, clauseIR, context = {}) {
     violatedAssertions: Object.freeze(violations),
     reason: violations.length === 0 ? "QUALITY_GATE_PASSED" : `UNSUPPORTED_ASSERTIONS: ${violations.join(", ")}`
   });
+}
+
+/**
+ * Semantic Round-Trip Check:
+ * Integrates 12-assertion quality gate with constraint-aware linguistic verifiers.
+ */
+function performSemanticRoundTripCheck(renderedText, clauseIR, plan, context = {}) {
+  const assertionCheck = validateSemanticAssertions(renderedText, clauseIR, context);
+  if (!assertionCheck.passed) {
+    return { passed: false, reason: assertionCheck.reason };
+  }
+
+  const negationCheck = checkNegationSafety(renderedText, clauseIR.sourceZh);
+  if (!negationCheck.passed) {
+    return { passed: false, reason: negationCheck.reason };
+  }
+
+  const temporalCheck = checkTemporalSafety(
+    renderedText,
+    clauseIR.sourceZh,
+    plan.linguisticConstraints ? plan.linguisticConstraints.temporalAspect : "NONE"
+  );
+  if (!temporalCheck.passed) {
+    return { passed: false, reason: temporalCheck.reason };
+  }
+
+  const discourseCheck = checkDiscourseSafety(
+    renderedText,
+    clauseIR.sourceZh,
+    plan.linguisticConstraints ? plan.linguisticConstraints.causalRelation : "NONE"
+  );
+  if (!discourseCheck.passed) {
+    return { passed: false, reason: discourseCheck.reason };
+  }
+
+  return { passed: true, reason: "QUALITY_GATE_PASSED" };
 }
 
 function capitalizeFirst(text) {
@@ -129,7 +237,7 @@ function createVietnameseRealizer({
 
     // 3. Subject / Pronoun Realization (Discourse-Grounded)
     if (clauseIR.subjectSlot && clauseIR.subjectSlot.isImplicit && plan.resolvedSubject) {
-      const startsWithPronoun = /^(?:hắn|nàng|y|ta|ngươi|đối phương|người này)\b/i.test(rendered.trim());
+      const startsWithPronoun = /^(?:hắn|nàng|y|ta|ngươi|đối phương|người này|vương gia|sư tôn|sư huynh|thái thượng trưởng lão)\b/i.test(rendered.trim());
       if (!startsWithPronoun && (clauseIR.role === "ACTION" || clauseIR.role === "DESCRIPTION")) {
         rendered = `${plan.resolvedSubject} ${rendered}`;
       }
@@ -141,13 +249,13 @@ function createVietnameseRealizer({
     // 5. Normalization
     rendered = rendered.replace(/\s+/g, " ").trim();
 
-    // 6. 12-Assertion Quality Gate Verification
-    const qualityGate = validateSemanticAssertions(rendered, clauseIR, context);
+    // 6. Semantic Round-Trip & Quality Gate Verification
+    const roundTrip = performSemanticRoundTripCheck(rendered, clauseIR, plan, context);
     let finalOutput = rendered;
     let fallbackStatus = plan.fallbackLevel;
 
-    if (!qualityGate.passed) {
-      // Step down to Level 4 Baseline-Safe fallback if Quality Gate rejects output
+    if (!roundTrip.passed) {
+      // Step down to Level 4 Baseline-Safe fallback if Round-Trip / Quality Gate rejects output
       fallbackStatus = FALLBACK_LEVELS.LEVEL_4_BASELINE_SAFE;
       finalOutput = baseConvertFunction ? baseConvertFunction(clauseIR.sourceZh) : clauseIR.sourceZh;
     }
@@ -170,7 +278,7 @@ function createVietnameseRealizer({
         rejectedByBudget: plan.rejectedByBudget,
         deduplicatedModifiers: plan.deduplicatedModifiers,
         rhythmPacing: plan.rhythmProfile.pacing,
-        qualityGateStatus: qualityGate.reason
+        qualityGateStatus: roundTrip.reason
       }
     });
 
@@ -182,7 +290,8 @@ function createVietnameseRealizer({
   }
 
   /**
-   * Realizes an array of ClauseIRs into a coherent paragraph of Vietnamese text.
+   * Realizes an array of ClauseIRs into a coherent paragraph of Vietnamese text
+   * with pronoun repetition suppression and discourse continuity.
    * 
    * @param {Array<Object>} clauseIRs
    * @param {Object} context
@@ -191,10 +300,36 @@ function createVietnameseRealizer({
   function realizeParagraph(clauseIRs = [], context = {}) {
     const clauseResults = [];
     const traces = [];
+    let lastSubject = null;
 
     for (let i = 0; i < clauseIRs.length; i++) {
-      const { text, trace } = realizeClause(clauseIRs[i], context);
-      clauseResults.push(text);
+      const clause = clauseIRs[i];
+      const { text, trace, plan } = realizeClause(clause, context);
+      let clauseText = text;
+
+      // Pronoun Repetition Suppression:
+      // If clause i and clause i-1 share the same resolved third-person pronoun (e.g. "Hắn"),
+      // and clause i is a coordinate action, suppress redundant pronoun repetition
+      const currentSubject = plan.resolvedSubject || (clause.subjectSlot && clause.subjectSlot.resolvedPronoun);
+      if (
+        i > 0 &&
+        currentSubject &&
+        lastSubject === currentSubject &&
+        clause.role === "ACTION" &&
+        clause.tier === "SERIAL_ACTION"
+      ) {
+        // Strip leading redundant pronoun if present
+        const pronounPrefix = new RegExp(`^${currentSubject}\\s+`, "i");
+        if (pronounPrefix.test(clauseText)) {
+          clauseText = clauseText.replace(pronounPrefix, "");
+        }
+      }
+
+      if (currentSubject) {
+        lastSubject = currentSubject;
+      }
+
+      clauseResults.push(clauseText);
       traces.push(trace);
     }
 
@@ -215,6 +350,10 @@ function createVietnameseRealizer({
     realizeClause,
     realizeParagraph,
     validateSemanticAssertions,
+    checkNegationSafety,
+    checkTemporalSafety,
+    checkDiscourseSafety,
+    performSemanticRoundTripCheck,
     getPlanner: () => planner
   });
 }
@@ -222,5 +361,9 @@ function createVietnameseRealizer({
 module.exports = {
   createVietnameseRealizer,
   validateSemanticAssertions,
+  checkNegationSafety,
+  checkTemporalSafety,
+  checkDiscourseSafety,
+  performSemanticRoundTripCheck,
   SEMANTIC_ASSERTIONS
 };
