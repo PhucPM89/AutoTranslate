@@ -83,7 +83,14 @@ const DOMAIN_PAIR_RELATIONS = [
   { domainA: "CHANT_POETRY", domainB: "TITLE_HIERARCHY", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Hero titles/names and poetic declarations realize on separate slots" },
   { domainA: "CHANT_POETRY", domainB: "BANTER", relation: INTERACTION_RELATIONS.ORTHOGONAL, note: "Classical poetic couplets and colloquial banter operate on separate registers" },
   { domainA: "CHANT_POETRY", domainB: "MONOLOGUE_PSYCHOLOGY", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Inner recitation of cultivation maxims and thought operate on separate slots" },
-  { domainA: "CHANT_POETRY", domainB: "COURTLY_BEAUTY", relation: INTERACTION_RELATIONS.ORTHOGONAL, note: "Heroic cultivation couplets and maiden aesthetics realize on separate slots" }
+  { domainA: "CHANT_POETRY", domainB: "COURTLY_BEAUTY", relation: INTERACTION_RELATIONS.ORTHOGONAL, note: "Heroic cultivation couplets and maiden aesthetics realize on separate slots" },
+
+  // Wave C3-B1 Madness & Frenzy Relations
+  { domainA: "MADNESS_FRENZY", domainB: "COMBAT", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Combat strikes fueled by demonic frenzy coexist cleanly" },
+  { domainA: "MADNESS_FRENZY", domainB: "SUPERNATURAL_HORROR", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Eldritch dread and psychological collapse harmonize on separate slots" },
+  { domainA: "MADNESS_FRENZY", domainB: "COURTLY_BEAUTY", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Corrupted demonic beauty coexists with maiden aesthetic description" },
+  { domainA: "MADNESS_FRENZY", domainB: "MONOLOGUE_PSYCHOLOGY", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Inner monologue of mental disintegration realizes across cognitive and affect slots" },
+  { domainA: "MADNESS_FRENZY", domainB: "BANTER", relation: INTERACTION_RELATIONS.ORTHOGONAL, note: "Psychological breakdown and colloquial banter operate on distinct text roles" }
 ];
 
 /**

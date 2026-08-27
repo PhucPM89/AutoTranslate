@@ -1127,6 +1127,23 @@ const STYLE_SLOT_DEFINITIONS = Object.freeze({
     conflictPolicy: CONFLICT_POLICIES.COMPOSITE_SCORE,
     description: "Hiện thực hóa thi ca, khẩu quyết tu tiên, chiến ca hào hùng và thi đối cổ phong với niêm luật và nhịp điệu tiếng Việt phù hợp",
     sourceSemantics: "Source contains classical cultivation chants, heroic couplets, battle cries, or Daoist philosophical maxims requiring meter-aware and cadence-preserving realization while strictly preserving syntactic arguments and causal truth"
+  }),
+
+  // =========================================================================
+  // 15. WAVE C3-B1 MADNESS & FRENZY (1 Canonical Slot)
+  // =========================================================================
+  CORRUPTED_MADNESS: defineStyleSlot({
+    id: "CORRUPTED_MADNESS",
+    semanticRole: SEMANTIC_ROLES.AFFECT,
+    realizationDimensions: [REALIZATION_DIMENSIONS.LEXICAL, REALIZATION_DIMENSIONS.AFFECTIVE],
+    canMerge: false,
+    canCompete: true,
+    maxMultiplicity: 1,
+    allowedTextRoles: ["DESCRIPTION", "ACTION", "DIALOGUE", "EXPOSITION"],
+    requiredEvidence: ["MADNESS_EVIDENCE"],
+    conflictPolicy: CONFLICT_POLICIES.COMPOSITE_SCORE,
+    description: "Hiện thực hóa trạng thái tâm ma xâm nhập, tẩu hỏa nhập ma, cuồng loạn và mất hết lý trí dựa trên bằng chứng tâm lý/ngữ nghĩa đã được xác nhận",
+    sourceSemantics: "Source Semantic IR denotes verified qi deviation, heart-demon corruption, or cognitive breakdown/frenzy without ungrounded event or physical amplification"
   })
 });
 
@@ -1153,6 +1170,7 @@ const PROVIDER_SLOT_COMPATIBILITY_MAP = Object.freeze({
   "imperial-edict-provider": ["IMPERIAL_PROCLAMATION", "IMPERIAL_SALUTATION"],
   "inscript-provider": ["INSCRIPTION_LEGACY", "TALISMAN_ACTIVATION"],
   "karma-provider": ["KARMA_SAMSARA", "DESTINED_DUEL"],
+  "madness-provider": ["CORRUPTED_MADNESS"],
   "mantra-provider": ["MANTRA_SEAL", "WORD_AS_LAW"],
   "meridian-healing-provider": ["MERIDIAN_ACUPOINT", "HEALING_PURGE"],
   "monologue-provider": ["INNER_MONOLOGUE"],
