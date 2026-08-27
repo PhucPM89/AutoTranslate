@@ -110,6 +110,7 @@ const { polishEldritchProse } = require("./eldritch-stylist");
 const { polishGrimoireProse } = require("./grimoire-magic-stylist");
 const { polishApocalypseProse } = require("./apocalypse-stylist");
 const { polishForensicProse } = require("./forensic-deduction-stylist");
+const { polishSupernaturalProse } = require("./supernatural-stylist");
 
 /**
  * Polish and naturalize text.
@@ -138,6 +139,9 @@ function polishLiteraryProse(text) {
 
   // Apply time skips & transcendence stylist
   result = polishTranscendenceProse(result);
+
+  // Apply supernatural, folklore & taoist exorcism stylist
+  result = polishSupernaturalProse(result);
 
   // Apply apocalypse & genetic mutant stylist
   result = polishApocalypseProse(result);
