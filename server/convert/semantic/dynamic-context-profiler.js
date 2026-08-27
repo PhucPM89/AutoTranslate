@@ -91,6 +91,11 @@ function createContextProfiler({
     const text = clauseIR.sourceZh || "";
     const evidence = {};
 
+    // Dialogue-domain activation comes from Semantic IR, never from a banter keyword.
+    if (clauseIR.dialogueAct && clauseIR.dialogueAct.status === "RESOLVED" && clauseIR.dialogueAct.dialogueAct !== "NONE") {
+      evidence.BANTER_DIALOGUE = clauseIR.dialogueAct.confidence;
+    }
+
     // Determine syntactic position weight
     let weightMultiplier = 1.0;
     if (clauseIR.role === "DESCRIPTION") weightMultiplier = 0.7;

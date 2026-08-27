@@ -191,7 +191,11 @@ function createStylistRouter({
         let isCompatible = true;
         let rejectReason = null;
 
-        if (sourceSig && cand.semanticSignature) {
+        // Social/title lexical meaning is orthogonal to the surrounding dialogue
+        // affect (e.g. an enemy may sarcastically say 师兄). Banter must not erase
+        // the title merely because clause-level valence is hostile.
+        const isAffectOrthogonalAddress = [STYLE_SLOTS.SOCIAL_ADDRESS, STYLE_SLOTS.TITLE_HONORIFIC].includes(cand.targetSlot);
+        if (sourceSig && cand.semanticSignature && !isAffectOrthogonalAddress) {
           const compat = checkSignatureCompatibility(sourceSig, cand.semanticSignature, {
             maxValenceDiff: 0.85,
             maxIntensityDiff: 0.65,

@@ -28,13 +28,13 @@ const { createClauseIR, createSemanticSignature } = require("./contracts");
 // 1. StyleSlot Exact Inventory & Reconciliation Tests
 // =========================================================================
 
-test("Wave B.5.1 - 1. Reconciliation Audit: exact 72 canonical slots, 0 orphans, 0 undeclared", () => {
+test("Wave B.5.1 - 1. Reconciliation Audit: exact 74 canonical slots, 0 orphans, 0 undeclared", () => {
   const canonicalKeys = Object.keys(STYLE_SLOTS);
   const definitionKeys = Object.keys(STYLE_SLOT_DEFINITIONS);
 
-  // Exact 72 slots
-  assert.equal(canonicalKeys.length, 72, "Canonical slots count must be exactly 72");
-  assert.equal(definitionKeys.length, 72, "Defined slots count must be exactly 72");
+  // Exact 74 slots
+  assert.equal(canonicalKeys.length, 74, "Canonical slots count must be exactly 74");
+  assert.equal(definitionKeys.length, 74, "Defined slots count must be exactly 74");
 
   // Every canonical slot has a corresponding definition
   for (const key of canonicalKeys) {
@@ -56,7 +56,7 @@ test("Wave B.5.1 - 1. Reconciliation Audit: exact 72 canonical slots, 0 orphans,
     }
   }
 
-  // 0 orphan slots (all 72 are targeted)
+  // 0 orphan slots (all 74 are targeted)
   for (const key of canonicalKeys) {
     assert.ok(targetedSlots.has(key), `Slot ${key} must be targeted by at least 1 provider (no orphan slots)`);
   }
@@ -102,7 +102,7 @@ test("Wave B.5.1 - 2. Contract Separation: every slot strictly separates semanti
 // 3. Category Breakdown & Ontology Distribution
 // =========================================================================
 
-test("Wave B.5.1 - 3. Ontology Integrity: 72 slots correctly distributed across 8 semantic roles", () => {
+test("Wave B.5.1 - 3. Ontology Integrity: 74 slots correctly distributed across semantic roles", () => {
   const allSlots = getAllSlotDefinitions();
   const distribution = {};
 
@@ -114,15 +114,16 @@ test("Wave B.5.1 - 3. Ontology Integrity: 72 slots correctly distributed across 
   assert.equal(distribution[SEMANTIC_ROLES.ACTION], 16, "ACTION slots count");
   assert.equal(distribution[SEMANTIC_ROLES.OBJECT], 6, "OBJECT slots count");
   assert.equal(distribution[SEMANTIC_ROLES.EVENT], 12, "EVENT slots count");
-  assert.equal(distribution[SEMANTIC_ROLES.STATE], 13, "STATE slots count");
-  assert.equal(distribution[SEMANTIC_ROLES.AFFECT], 6, "AFFECT slots count");
+  assert.equal(distribution[SEMANTIC_ROLES.STATE], 14, "STATE slots count");
+  assert.equal(distribution[SEMANTIC_ROLES.AFFECT], 5, "AFFECT slots count");
+  assert.equal(distribution[SEMANTIC_ROLES.COGNITION], 1, "COGNITION slots count");
   assert.equal(distribution[SEMANTIC_ROLES.ATMOSPHERE], 14, "ATMOSPHERE slots count");
-  assert.equal(distribution[SEMANTIC_ROLES.DIALOGUE_ACT], 3, "DIALOGUE_ACT slots count");
+  assert.equal(distribution[SEMANTIC_ROLES.DIALOGUE_ACT], 4, "DIALOGUE_ACT slots count");
   assert.equal(distribution[SEMANTIC_ROLES.NARRATIVE_FUNCTION], 2, "NARRATIVE_FUNCTION slots count");
 
-  // Sum = 16 + 6 + 12 + 13 + 6 + 14 + 3 + 2 = 72
+  // C2B-2: BANTER_RETORT renames old DIALOGUE_ACT slot (count stays 4); MODERN_VERNACULAR adds STATE (13->14)
   const total = Object.values(distribution).reduce((a, b) => a + b, 0);
-  assert.equal(total, 72, "Total slots distribution must sum to exactly 72");
+  assert.equal(total, 74, "Total slots distribution must sum to exactly 74");
 });
 
 // =========================================================================

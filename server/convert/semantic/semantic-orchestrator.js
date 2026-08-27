@@ -38,7 +38,7 @@ function createSemanticOrchestrator({
       return { text: "", analyzedChapter: null, traces: [] };
     }
 
-    const analyzed = analyzer.analyzeChapter(text);
+    const analyzed = analyzer.analyzeChapter(text, options);
     const renderedParas = [];
     const allTraces = [];
 
@@ -67,13 +67,13 @@ function createSemanticOrchestrator({
    * @param {string} text
    * @returns {{ baselineOutput: string, lexicalResolutionAnalysis: Object, traces: Array<Object> }}
    */
-  function translateShadow(text) {
+  function translateShadow(text, options = {}) {
     if (!text || typeof text !== "string") {
       return { baselineOutput: "", lexicalResolutionAnalysis: null, traces: [] };
     }
 
     const baselineOutput = baseConvertFunction ? baseConvertFunction(text) : "";
-    const analyzed = analyzer.analyzeChapter(text);
+    const analyzed = analyzer.analyzeChapter(text, options);
     const traces = [];
     const allStylistContributions = [];
     const allConflictResolutions = [];

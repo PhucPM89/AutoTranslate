@@ -14,18 +14,13 @@
  */
 
 const { createClauseIR } = require("./contracts");
+const { analyzeCognitiveEvent, COGNITIVE_KINDS } = require("./cognitive-event-analyzer");
 
 // Speech & Dialogue Indicator Markers
 const SPEECH_VERBS = new Set([
   "道", "说道", "冷笑道", "喝道", "怒喝道", "大喝道", "冷哼道",
   "微笑道", "淡笑道", "苦笑道", "叹道", "沉声道", "低语道", "轻声道",
   "询问道", "质问道", "喊道", "惊呼道", "喃喃道", "笑骂道", "吩咐道"
-]);
-
-// Inner Thought Markers
-const THOUGHT_VERBS = new Set([
-  "心道", "心中暗道", "暗道", "暗想", "心中暗想", "心想", "暗自思忖",
-  "心中冷笑", "暗自冷笑", "暗自沉吟", "心中忖度", "暗忖"
 ]);
 
 // Common Chinese Pronouns & Subject Markers
@@ -221,18 +216,13 @@ function classifyClauseRole(clauseText, contextHints = {}) {
     return "DIALOGUE";
   }
 
-  // 3. Inner Thought
-  for (const tv of THOUGHT_VERBS) {
-    if (text.includes(tv)) {
-      return "INNER_THOUGHT";
-    }
-  }
-  if (contextHints.inThoughtBlock) {
-    return "INNER_THOUGHT";
-  }
+  // 3. Cognitive/state semantics are classified before assigning a text role.
+  // A surface marker such as 心中 is never sufficient on its own.
+  const cognitiveEvent = contextHints.cognitiveEvent || analyzeCognitiveEvent(text);
+  if (cognitiveEvent.kind !== COGNITIVE_KINDS.NONE) return cognitiveEvent.textRole;
 
   // 4. Action vs Description vs Exposition heuristics
-  const hasActionVerbs = /(?:拔剑|斩|杀|冲|跃|踢|击|轰|出拳|闪身|掠出|退后|吐血|捏碎|结印|破空)/.test(text);
+  const hasActionVerbs = /(?:拔剑|斩|杀|冲|跃|踢|击|轰|出拳|闪身|掠出|退后|吐血|捏碎|结印|破空|看着|看向|望着)/.test(text);
   if (hasActionVerbs) {
     return "ACTION";
   }
@@ -329,8 +319,6 @@ function segmentParagraphToClauseIRs(paraText, {
   const clauseIRs = [];
 
   let clauseCounter = 0;
-  let inThoughtBlock = false;
-
   for (let sIdx = 0; sIdx < sentences.length; sIdx++) {
     const sentence = sentences[sIdx];
     const rawClauses = splitSentenceIntoClauses(sentence);
@@ -345,11 +333,8 @@ function segmentParagraphToClauseIRs(paraText, {
       const clauseId = `${baseId}_p${paraIndex}_s${sIdx + 1}_c${clauseCounter}`;
 
       const hasSpeechVerb = Array.from(SPEECH_VERBS).some((v) => rawText.endsWith(v) || rawText.includes(v + "："));
-      const hasThoughtVerb = Array.from(THOUGHT_VERBS).some((v) => rawText.includes(v));
-
-      if (hasThoughtVerb) inThoughtBlock = true;
-
-      const role = classifyClauseRole(rawText, { precedingSpeechVerb, inThoughtBlock });
+      const cognitiveEvent = analyzeCognitiveEvent(rawText);
+      const role = classifyClauseRole(rawText, { precedingSpeechVerb, cognitiveEvent });
       const structure = analyzeClauseStructure(rawText, role);
 
       const clauseIR = createClauseIR({
@@ -357,6 +342,7 @@ function segmentParagraphToClauseIRs(paraText, {
         tier: structure.tier,
         sourceZh: rawText,
         role,
+        cognitiveEvent: Object.freeze({ ...cognitiveEvent, textRole: role }),
         subjectSlot: {
           isImplicit: structure.isImplicitSubject,
           entityId: null,
@@ -372,9 +358,6 @@ function segmentParagraphToClauseIRs(paraText, {
       clauseIRs.push(clauseIR);
 
       precedingSpeechVerb = hasSpeechVerb;
-      if (rawText.endsWith("。") || rawText.endsWith("！")) {
-        inThoughtBlock = false;
-      }
     }
   }
 

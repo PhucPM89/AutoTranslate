@@ -27,7 +27,8 @@ const DEFAULT_ROLE_PRONOUNS = {
  */
 function createDiscourseTracker({
   initialEntities = [],
-  decayFactor = 0.75
+  decayFactor = 0.75,
+  initialPOV = "THIRD_PERSON_OMNISCIENT"
 } = {}) {
   // Entity Registry: Map of entityId -> EntityData
   const registry = new Map();
@@ -36,7 +37,8 @@ function createDiscourseTracker({
   let salienceStack = [];
 
   // Active POV
-  let activePOV = "THIRD_PERSON_OMNISCIENT"; // THIRD_PERSON_OMNISCIENT | FIRST_PERSON | THIRD_PERSON_LIMITED
+  const VALID_POVS = new Set(["FIRST_PERSON", "THIRD_PERSON_LIMITED", "THIRD_PERSON_OMNISCIENT", "OBJECTIVE_NARRATION"]);
+  let activePOV = VALID_POVS.has(initialPOV) ? initialPOV : "THIRD_PERSON_OMNISCIENT";
 
   // Register initial entities
   for (const ent of initialEntities) {
@@ -48,6 +50,8 @@ function createDiscourseTracker({
         gender: ent.gender || "UNKNOWN", // MALE | FEMALE | UNKNOWN
         role: ent.role || "CHARACTER",   // PROTAGONIST | MASTER | DISCIPLE | ELDER | ENEMY | EMPEROR
         socialRank: ent.socialRank || "PEER",
+        persona: ent.persona || null,
+        speechStyle: ent.speechStyle || null,
         relationships: { ...(ent.relationships || {}) }
       });
     }
@@ -60,6 +64,8 @@ function createDiscourseTracker({
     gender = "UNKNOWN",
     role = "CHARACTER",
     socialRank = "PEER",
+    persona = null,
+    speechStyle = null,
     relationships = {}
   }) {
     if (!id || !name) return null;
@@ -70,6 +76,8 @@ function createDiscourseTracker({
       gender,
       role,
       socialRank,
+      persona,
+      speechStyle,
       relationships: { ...relationships }
     };
     registry.set(id, entity);
@@ -78,6 +86,173 @@ function createDiscourseTracker({
 
   function getEntity(entityId) {
     return registry.get(entityId) || null;
+  }
+
+  function resolvedParticipant(entity, confidence, reason) {
+    return {
+      status: "RESOLVED",
+      entityId: entity ? entity.id : null,
+      entityRole: entity ? entity.role : null,
+      confidence,
+      reason
+    };
+  }
+
+  function unresolvedParticipant(status, reason, candidates = []) {
+    return {
+      status,
+      entityId: null,
+      entityRole: null,
+      confidence: 0.0,
+      reason,
+      candidates
+    };
+  }
+
+  function entitiesMatchingSource(sourceZh) {
+    const matches = [];
+    for (const entity of registry.values()) {
+      const mentions = [entity.name, ...entity.aliases].filter(Boolean);
+      const matchedMention = mentions.find((mention) => sourceZh.includes(mention));
+      if (matchedMention) matches.push({ entity, mention: matchedMention, index: sourceZh.indexOf(matchedMention) });
+    }
+    return matches;
+  }
+
+  /**
+   * Resolves thinker/referent strictly from the existing entity registry and
+   * salience state. It does not create entities or social/persona hypotheses.
+   */
+  function resolveCognitiveParticipants(sourceZh) {
+    const text = String(sourceZh || "");
+    const namedMatches = entitiesMatchingSource(text);
+    const cognitiveMarkerIndex = text.search(/心中|心头|脑海|想|决定|推断|皱眉/);
+    const namedSubjects = namedMatches.filter(({ index }) => cognitiveMarkerIndex >= 0 && index <= cognitiveMarkerIndex);
+    let thinker;
+
+    if (/我|吾|余/.test(text)) {
+      thinker = {
+        status: "RESOLVED",
+        entityId: null,
+        entityRole: "SELF",
+        confidence: 0.99,
+        reason: "FIRST_PERSON_GRAMMATICAL_SELF"
+      };
+    } else if (namedSubjects.length === 1) {
+      thinker = resolvedParticipant(namedSubjects[0].entity, 0.98, "EXPLICIT_NAMED_SUBJECT");
+    } else if (namedSubjects.length > 1) {
+      thinker = unresolvedParticipant("AMBIGUOUS", "MULTIPLE_NAMED_THINKER_CANDIDATES", namedSubjects.map(({ entity }) => entity.id));
+    } else if (/^(?:他|她|其)/.test(text)) {
+      const pronoun = text[0];
+      const candidates = salienceStack
+        .map((item) => ({ item, entity: registry.get(item.entityId) }))
+        .filter(({ entity }) => entity && !(pronoun === "他" && entity.gender === "FEMALE") && !(pronoun === "她" && entity.gender === "MALE"));
+      if (candidates.length === 1 || (candidates[0] && (!candidates[1] || candidates[0].item.salience - candidates[1].item.salience >= 0.20))) {
+        thinker = resolvedParticipant(candidates[0].entity, candidates[0].item.salience, "PRONOUN_RESOLVED_FROM_DISCOURSE_SALIENCE");
+      } else if (candidates.length > 1) {
+        thinker = unresolvedParticipant("AMBIGUOUS", "THIRD_PERSON_PRONOUN_AMBIGUOUS", candidates.map(({ entity }) => entity.id));
+      } else {
+        thinker = unresolvedParticipant("UNKNOWN", "THIRD_PERSON_PRONOUN_WITHOUT_DISCOURSE_ANTECEDENT");
+      }
+    } else {
+      thinker = unresolvedParticipant("UNKNOWN", "NO_EXPLICIT_THINKER_EVIDENCE");
+    }
+
+    let referent = null;
+    const relationalRole = /师尊|师父|师傅/.test(text) ? "MASTER" : (/敌人|仇敌|对手/.test(text) ? "ENEMY" : null);
+    if (relationalRole) {
+      const candidates = [...registry.values()].filter((entity) => entity.role === relationalRole);
+      if (candidates.length === 1) referent = resolvedParticipant(candidates[0], 0.95, `UNIQUE_${relationalRole}_ROLE_REFERENCE`);
+      else if (candidates.length > 1) referent = unresolvedParticipant("AMBIGUOUS", `${relationalRole}_ROLE_REFERENCE_AMBIGUOUS`, candidates.map((entity) => entity.id));
+    }
+    if (!referent) {
+      const otherNamed = namedMatches.filter(({ entity }) => entity.id !== thinker.entityId);
+      if (otherNamed.length === 1) referent = resolvedParticipant(otherNamed[0].entity, 0.95, "EXPLICIT_NAMED_REFERENT");
+      else if (otherNamed.length > 1) referent = unresolvedParticipant("AMBIGUOUS", "MULTIPLE_NAMED_REFERENTS", otherNamed.map(({ entity }) => entity.id));
+      else referent = unresolvedParticipant("UNKNOWN", "NO_REFERENT_EVIDENCE");
+    }
+
+    return Object.freeze({ thinker: Object.freeze(thinker), referent: Object.freeze(referent) });
+  }
+
+  const RELATIONSHIP_ALIASES = Object.freeze({
+    MORTAL_ENEMY: "ENEMY",
+    ENEMY_ENEMY: "ENEMY",
+    MASTER_AND_DISCIPLE: "MASTER_DISCIPLE",
+    SENIOR_AND_JUNIOR: "SENIOR_JUNIOR",
+    RULER_AND_SUBJECT: "RULER_SUBJECT"
+  });
+
+  function normalizeRelationship(rawRelationship) {
+    if (!rawRelationship) return null;
+    const relation = typeof rawRelationship === "string"
+      ? { type: rawRelationship }
+      : { ...rawRelationship };
+    const rawType = String(relation.type || "").toUpperCase();
+    if (!rawType) return null;
+    return Object.freeze({
+      ...relation,
+      type: RELATIONSHIP_ALIASES[rawType] || rawType
+    });
+  }
+
+  /**
+   * Resolves an explicitly supplied dialogue pair. The tracker validates IDs,
+   * returns existing character voice state, and is the sole relationship authority.
+   * It never guesses a pair from quotation contents.
+   */
+  function resolveDialogueContext({ speakerId = null, listenerId = null } = {}) {
+    const speakerEntity = speakerId ? registry.get(speakerId) : null;
+    const listenerEntity = listenerId ? registry.get(listenerId) : null;
+
+    const speaker = speakerEntity
+      ? Object.freeze({
+          status: "RESOLVED",
+          entityId: speakerEntity.id,
+          socialRank: speakerEntity.socialRank,
+          persona: speakerEntity.persona,
+          speechStyle: speakerEntity.speechStyle,
+          realization: Object.freeze(resolveDialoguePronoun({ pronounZh: "我", speakerId, targetId: listenerId }))
+        })
+      : Object.freeze({ status: "UNKNOWN", entityId: null, confidence: 0.0, reason: "SPEAKER_NOT_SUPPLIED_OR_UNKNOWN" });
+
+    const listener = listenerEntity
+      ? Object.freeze({
+          status: "RESOLVED",
+          entityId: listenerEntity.id,
+          socialRank: listenerEntity.socialRank,
+          persona: listenerEntity.persona,
+          speechStyle: listenerEntity.speechStyle,
+          realization: Object.freeze(resolveDialoguePronoun({ pronounZh: "你", speakerId, targetId: listenerId }))
+        })
+      : Object.freeze({ status: "UNKNOWN", entityId: null, confidence: 0.0, reason: "LISTENER_NOT_SUPPLIED_OR_UNKNOWN" });
+
+    let rawRelationship = null;
+    let relationshipSource = null;
+    if (speakerEntity && listenerEntity) {
+      rawRelationship = speakerEntity.relationships[listenerId] || null;
+      relationshipSource = rawRelationship ? "SPEAKER_RELATIONSHIP_STATE" : null;
+      if (!rawRelationship) {
+        rawRelationship = listenerEntity.relationships[speakerId] || null;
+        relationshipSource = rawRelationship ? "LISTENER_RECIPROCAL_RELATIONSHIP_STATE" : null;
+      }
+    }
+    const normalizedRelationship = normalizeRelationship(rawRelationship);
+    const relationship = normalizedRelationship
+      ? Object.freeze({ status: "RESOLVED", ...normalizedRelationship, source: relationshipSource, confidence: 0.98 })
+      : Object.freeze({ status: "UNKNOWN", type: "UNKNOWN", confidence: 0.0, reason: "NO_EXPLICIT_RELATIONSHIP_STATE" });
+
+    const status = speaker.status === "RESOLVED" && listener.status === "RESOLVED" && relationship.status === "RESOLVED"
+      ? "RESOLVED"
+      : "UNKNOWN";
+
+    return Object.freeze({
+      status,
+      speaker,
+      listener,
+      relationship,
+      reason: status === "RESOLVED" ? "EXPLICIT_DIALOGUE_PAIR_AND_RELATIONSHIP" : "INCOMPLETE_DIALOGUE_DISCOURSE_STATE"
+    });
   }
 
   /**
@@ -272,6 +447,14 @@ function createDiscourseTracker({
     resolveDialoguePronoun,
     resolveNarrativePronoun,
     populateClauseDiscourse,
+    resolveCognitiveParticipants,
+    resolveDialogueContext,
+    getActivePOV: () => activePOV,
+    setActivePOV: (pov) => {
+      if (!VALID_POVS.has(pov)) return false;
+      activePOV = pov;
+      return true;
+    },
     getState: () => ({ salienceStack: [...salienceStack], registry: new Map(registry) }),
     getSalienceStack: () => [...salienceStack],
     getRegistry: () => new Map(registry)

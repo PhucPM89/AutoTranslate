@@ -20,6 +20,7 @@ const CANONICAL_AFFECTS = Object.freeze([
   "WRATH",       // Phẫn nộ, thịnh nộ (暴怒, 厉喝)
   "JOY",         // Hân hoan, vui sướng (大喜, 欣喜)
   "AMUSEMENT",   // Buồn cười, thích thú (莞尔, 忍俊不禁, 苦笑中的一丝戏谑)
+  "AFFECTION",    // Thân ái, trìu mến, trêu đùa có thiện ý
   "SORROW",      // Bi thương, đau đớn (悲痛, 凄凉, 哀伤)
   "FEAR",        // Khiếp đảm, kinh hoàng (惊恐, 战栗)
   "SURPRISE",    // Kinh ngạc, bất ngờ (震惊, 愕然)
@@ -186,6 +187,8 @@ function createClauseIR({
   semanticSignature = null,
   contextWeights = {},
   lexicalResolution = null, // { resolvedSlots, resolutionRecords, method, confidence }
+  cognitiveEvent = null, // Source-semantic cognitive/state/reaction analysis (C2B-1.1)
+  dialogueAct = null, // Source-semantic dialogue/discourse act analysis (C2B2-1)
   invariants = {},
   uncertainty = null
 } = {}) {
@@ -200,6 +203,8 @@ function createClauseIR({
     semanticSignature: semanticSignature || createSemanticSignature(),
     contextWeights: Object.freeze({ ...contextWeights }),
     lexicalResolution: lexicalResolution ? Object.freeze({ ...lexicalResolution }) : null,
+    cognitiveEvent: cognitiveEvent ? Object.freeze({ ...cognitiveEvent }) : null,
+    dialogueAct: dialogueAct ? Object.freeze({ ...dialogueAct }) : null,
     invariants: Object.freeze({
       preserveClauseOrder: invariants.preserveClauseOrder !== false,
       maxAdjectives: invariants.maxAdjectives ?? 1,
@@ -375,6 +380,8 @@ function createProvenanceTrace({
   contextSnapshot = {},
   discourseResolution = {},
   lexicalAudit = [],
+  cognitiveAudit = null,
+  dialogueAudit = null,
   stylistAudit = [],
   budgetAudit = {}
 } = {}) {
@@ -385,6 +392,8 @@ function createProvenanceTrace({
     contextSnapshot: Object.freeze({ ...contextSnapshot }),
     discourseResolution: Object.freeze({ ...discourseResolution }),
     lexicalAudit: Object.freeze(lexicalAudit.map((l) => Object.freeze({ ...l }))),
+    cognitiveAudit: cognitiveAudit ? Object.freeze({ ...cognitiveAudit }) : null,
+    dialogueAudit: dialogueAudit ? Object.freeze({ ...dialogueAudit }) : null,
     stylistAudit: Object.freeze(stylistAudit.map((s) => Object.freeze({ ...s }))),
     budgetAudit: Object.freeze({ ...budgetAudit }),
     timestamp: new Date().toISOString()

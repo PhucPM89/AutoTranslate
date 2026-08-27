@@ -53,6 +53,10 @@ const { createTitleHierarchyProvider } = require("./title-hierarchy-provider");
 // Wave C2B-1 Providers (Monologue & Inner Thought)
 const { createMonologueProvider } = require("./monologue-provider");
 
+// Wave C2B-2 Providers (Banter / Dialogue Act + Urban Slang)
+const { createBanterProvider } = require("./banter-provider");
+const { createUrbanSlangProvider } = require("./urban-slang-provider");
+
 function createDefaultProviderRegistry() {
   const providers = [
     // Phase 2A Pilot
@@ -101,7 +105,11 @@ function createDefaultProviderRegistry() {
     createTitleHierarchyProvider(),
 
     // Phase 2B Wave C2B-1 (1 Provider)
-    createMonologueProvider()
+    createMonologueProvider(),
+
+    // Phase 2B Wave C2B-2 (2 Providers)
+    createBanterProvider(),
+    createUrbanSlangProvider()
   ];
 
   return Object.freeze({

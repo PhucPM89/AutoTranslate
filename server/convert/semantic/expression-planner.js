@@ -12,6 +12,17 @@ const { evaluateExpansionBudget } = require("./expansion-budget");
 const { createRhythmProfile } = require("./rhythm-governor");
 const { createAntiRepetitionTracker } = require("./anti-repetition");
 
+function realizeDialogueTemplate(candidateVi, dialogueAct) {
+  if (!candidateVi || !dialogueAct || dialogueAct.status !== "RESOLVED") return candidateVi;
+  const speakerValue = dialogueAct.speaker && dialogueAct.speaker.realization && dialogueAct.speaker.realization.resolvedValue;
+  const listenerValue = dialogueAct.listener && dialogueAct.listener.realization && dialogueAct.listener.realization.resolvedValue;
+  return candidateVi
+    .replace(/\{\{SPEAKER\}\}/g, speakerValue || "")
+    .replace(/\{\{LISTENER\}\}/g, listenerValue || "")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
 function createExpressionPlanner({
   router = createStylistRouter(),
   antiRepetitionTracker = createAntiRepetitionTracker()
@@ -34,7 +45,9 @@ function createExpressionPlanner({
 
     for (const contrib of winningContributions) {
       const slotId = contrib.sourceSpanZh || contrib.targetSlot || contrib.slotId || "";
-      const candidateVi = contrib.candidateVi || "";
+      const candidateVi = contrib.providerId === "banter-provider"
+        ? realizeDialogueTemplate(contrib.candidateVi || "", clauseIR.dialogueAct)
+        : (contrib.candidateVi || "");
 
       // Evaluate against Expansion Budget
       const budgetCheck = evaluateExpansionBudget(clauseIR, {
@@ -70,6 +83,7 @@ function createExpressionPlanner({
       role: clauseIR.role,
       tier: clauseIR.tier,
       resolvedSubject,
+      dialogueAct: clauseIR.dialogueAct || null,
       slotReplacements: Object.freeze(slotReplacements),
       rejectedByBudget: Object.freeze(rejectedByBudget),
       rhythmProfile,
@@ -85,5 +99,6 @@ function createExpressionPlanner({
 }
 
 module.exports = {
-  createExpressionPlanner
+  createExpressionPlanner,
+  realizeDialogueTemplate
 };

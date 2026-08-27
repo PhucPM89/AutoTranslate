@@ -57,7 +57,19 @@ const DOMAIN_PAIR_RELATIONS = [
   // Wave C2B-1 Monologue Psychology Relations
   { domainA: "MONOLOGUE_PSYCHOLOGY", domainB: "TITLE_HIERARCHY", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Internal thoughts regarding masters or sovereigns harmonize" },
   { domainA: "MONOLOGUE_PSYCHOLOGY", domainB: "COMBAT", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Tactical calculations and martial combat harmonize" },
-  { domainA: "MONOLOGUE_PSYCHOLOGY", domainB: "SUPERNATURAL_HORROR", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Inner apprehension and horror atmosphere harmonize" }
+  { domainA: "MONOLOGUE_PSYCHOLOGY", domainB: "SUPERNATURAL_HORROR", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Inner apprehension and horror atmosphere harmonize" },
+
+  // Wave C2B-2 Banter / Dialogue Act Relations
+  { domainA: "BANTER", domainB: "TITLE_HIERARCHY", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Dialogue act realization and social-title address semantics occupy distinct slots" },
+  { domainA: "BANTER", domainB: "ZEN_TEA", relation: INTERACTION_RELATIONS.ORTHOGONAL, note: "Banter during tea discourse does not alter zen atmosphere" },
+  { domainA: "BANTER", domainB: "COMBAT", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Taunts may coexist with combat without creating combat facts" },
+  { domainA: "BANTER", domainB: "SUPERNATURAL_HORROR", relation: INTERACTION_RELATIONS.ORTHOGONAL, note: "Dialogue act and horror atmosphere remain independent" },
+  { domainA: "BANTER", domainB: "MONOLOGUE_PSYCHOLOGY", relation: INTERACTION_RELATIONS.ORTHOGONAL, note: "Spoken banter and internal thought belong to separate clauses and semantic layers" },
+
+  // Wave C2B-2 Urban Slang Relations
+  { domainA: "URBAN_SLANG", domainB: "BANTER", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Modern slang expressions may appear within banter dialogue" },
+  { domainA: "URBAN_SLANG", domainB: "COMBAT", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Face-slap metaphors coexist with combat narrative" },
+  { domainA: "URBAN_SLANG", domainB: "MONOLOGUE_PSYCHOLOGY", relation: INTERACTION_RELATIONS.ORTHOGONAL, note: "Register localization and inner monologue operate on separate dimensions" }
 ];
 
 /**

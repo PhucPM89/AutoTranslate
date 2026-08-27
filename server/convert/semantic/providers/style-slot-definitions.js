@@ -20,6 +20,7 @@ const SEMANTIC_ROLES = Object.freeze({
   AFFECT: "AFFECT",                         // Psychological, spiritual aura, or mood pressure
   ATMOSPHERE: "ATMOSPHERE",                 // Environmental scenery or background ambiance
   DIALOGUE_ACT: "DIALOGUE_ACT",             // Direct or formal spoken proclamation / address
+  COGNITION: "COGNITION",                   // Thought, memory, decision, and inference realization
   NARRATIVE_FUNCTION: "NARRATIVE_FUNCTION"  // Structural forensic or revelation function
 });
 
@@ -82,7 +83,7 @@ function defineStyleSlot({
   });
 }
 
-// Canonical StyleSlot Definitions (66 Slots)
+// Canonical StyleSlot Definitions (75 Slots)
 const STYLE_SLOT_DEFINITIONS = Object.freeze({
   // =========================================================================
   // 1. ACTION SLOTS (16 Canonical Slots)
@@ -1052,16 +1053,46 @@ const STYLE_SLOT_DEFINITIONS = Object.freeze({
   // =========================================================================
   INNER_MONOLOGUE: defineStyleSlot({
     id: "INNER_MONOLOGUE",
-    semanticRole: SEMANTIC_ROLES.AFFECT,
+    semanticRole: SEMANTIC_ROLES.COGNITION,
     realizationDimensions: [REALIZATION_DIMENSIONS.LEXICAL, REALIZATION_DIMENSIONS.REGISTER],
     canMerge: false,
     canCompete: true,
     maxMultiplicity: 1,
-    allowedTextRoles: ["INNER_THOUGHT", "DESCRIPTION"],
-    requiredEvidence: ["MENTAL_VERB", "COGNITIVE_MARKER", "PSYCHOLOGICAL_STATE"],
+    allowedTextRoles: ["INNER_THOUGHT"],
+    requiredEvidence: ["RESOLVED_COGNITIVE_EVENT"],
     conflictPolicy: CONFLICT_POLICIES.COMPOSITE_SCORE,
-    description: "Dòng độc thoại nội tâm, suy tính thầm kín, cảm xúc nội tâm và nhận thức tâm lý",
-    sourceSemantics: "Source denotes internal monologue, psychological deliberation, or cognitive reflection"
+    description: "Hiện thực hóa độc thoại nội tâm, hồi tưởng, quyết định hoặc suy luận đã được Semantic IR xác nhận",
+    sourceSemantics: "Source Semantic IR denotes a resolved cognitive/discourse event; inner affective states are excluded"
+  }),
+
+  // =========================================================================
+  // 12. WAVE C2B-2 BANTER & URBAN SLANG SLOTS (2 Canonical Slots)
+  // =========================================================================
+  BANTER_RETORT: defineStyleSlot({
+    id: "BANTER_RETORT",
+    semanticRole: SEMANTIC_ROLES.DIALOGUE_ACT,
+    realizationDimensions: [REALIZATION_DIMENSIONS.LEXICAL, REALIZATION_DIMENSIONS.AFFECTIVE, REALIZATION_DIMENSIONS.DIALOGUE_STYLE],
+    canMerge: false,
+    canCompete: true,
+    maxMultiplicity: 1,
+    allowedTextRoles: ["DIALOGUE"],
+    requiredEvidence: ["RESOLVED_SPEAKER", "RESOLVED_LISTENER", "RESOLVED_RELATIONSHIP"],
+    conflictPolicy: CONFLICT_POLICIES.COMPOSITE_SCORE,
+    description: "Hiện thực hóa lời thoại mỉa mai, chế giễu, khiêu khích giữa hai nhân vật có quan hệ đã xác nhận",
+    sourceSemantics: "Source Semantic IR denotes a resolved banter/taunt/insult/retort dialogue act with confirmed Speaker, Listener, Relationship, Affect, and Register"
+  }),
+  MODERN_VERNACULAR: defineStyleSlot({
+    id: "MODERN_VERNACULAR",
+    semanticRole: SEMANTIC_ROLES.STATE,
+    realizationDimensions: [REALIZATION_DIMENSIONS.LEXICAL, REALIZATION_DIMENSIONS.REGISTER],
+    canMerge: false,
+    canCompete: true,
+    maxMultiplicity: 1,
+    allowedTextRoles: ["ACTION", "DESCRIPTION", "DIALOGUE", "EXPOSITION"],
+    requiredEvidence: ["MODERN_SLANG_EXPRESSION"],
+    conflictPolicy: CONFLICT_POLICIES.COMPOSITE_SCORE,
+    description: "Localise thuật ngữ internet, urban slang, gaming và meme hiện đại sang tiếng Việt tương đương",
+    sourceSemantics: "Source contains contemporary Chinese internet slang, gaming jargon, or modern social meme expressions requiring register-aware localization"
   })
 });
 
@@ -1089,6 +1120,8 @@ const PROVIDER_SLOT_COMPATIBILITY_MAP = Object.freeze({
   "mantra-provider": ["MANTRA_SEAL", "WORD_AS_LAW"],
   "meridian-healing-provider": ["MERIDIAN_ACUPOINT", "HEALING_PURGE"],
   "monologue-provider": ["INNER_MONOLOGUE"],
+  "banter-provider": ["BANTER_RETORT"],
+  "urban-slang-provider": ["MODERN_VERNACULAR"],
   "musical-dao-provider": ["MUSICAL_PERFORMANCE", "MUSICAL_ATTACK"],
   "necropolis-provider": ["NECROPOLIS_ATMOSPHERE"],
   "sensory-provider": ["ATMOSPHERIC_DETAIL", "TOPOGRAPHY_LANDSCAPE"],

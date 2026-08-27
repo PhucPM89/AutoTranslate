@@ -3,16 +3,24 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { createClauseIR, createSemanticSignature } = require("./contracts");
+const { createClauseIR: createRawClauseIR, createSemanticSignature } = require("./contracts");
+const { analyzeCognitiveEvent } = require("./cognitive-event-analyzer");
 const { STYLE_SLOTS } = require("./providers/stylist-contribution");
 const { createMonologueProvider } = require("./providers/monologue-provider");
 const { createStylistRouter } = require("./stylist-router");
+
+function createClauseIR(spec) {
+  return createRawClauseIR({
+    ...spec,
+    cognitiveEvent: spec.cognitiveEvent || analyzeCognitiveEvent(spec.sourceZh, { fallbackRole: spec.role })
+  });
+}
 
 // =========================================================================
 // 1. Positive Tests & Explicit Inner Thoughts
 // =========================================================================
 
-test("Wave C2B-1 - 1. Monologue Provider: resolves explicit thoughts, cognitive insights, and inner state sensations", () => {
+test("Wave C2B-1 - 1. Monologue Provider: realizes resolved explicit thoughts but rejects state/reaction umbrellas", () => {
   const provider = createMonologueProvider();
 
   // Test 1: 心中忍不住想 (Uncontrollable thought marker)
@@ -62,8 +70,7 @@ test("Wave C2B-1 - 1. Monologue Provider: resolves explicit thoughts, cognitive 
     })
   });
   const contribs3 = provider.contribute(clause3);
-  assert.equal(contribs3.length, 1);
-  assert.equal(contribs3[0].candidateVi, "trong lòng dâng lên một luồng ớn lạnh");
+  assert.equal(contribs3.length, 0, "INNER_STATE is semantic state, not INNER_MONOLOGUE");
 
   // Test 4: 想到这里，眼中闪过精光 (Decision trigger - ZERO hardcoded pronoun)
   const clause4 = createClauseIR({
@@ -78,9 +85,7 @@ test("Wave C2B-1 - 1. Monologue Provider: resolves explicit thoughts, cognitive 
     })
   });
   const contribs4 = provider.contribute(clause4);
-  assert.equal(contribs4.length, 1);
-  assert.equal(contribs4[0].candidateVi, "nghĩ đến đây, trong mắt lóe lên tia sáng sắc lạnh");
-  assert.equal(contribs4[0].candidateVi.includes("hắn"), false, "Must not hardcode third-person pronoun 'hắn'");
+  assert.equal(contribs4.length, 0, "NARRATIVE_REACTION is not authorized for INNER_MONOLOGUE");
 });
 
 // =========================================================================

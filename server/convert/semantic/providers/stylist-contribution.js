@@ -86,7 +86,9 @@ const STYLE_SLOTS = Object.freeze({
   ATMOSPHERIC_DETAIL: "ATMOSPHERIC_DETAIL",   // Chi tiết cảm giác, ánh trăng, hương thơm, sương mù linh khí, hàn ý
   SOCIAL_ADDRESS: "SOCIAL_ADDRESS",           // Xưng hô đối thoại tôn ti, sư đồ, quân thần, tiền bối - vãn bối
   TITLE_HONORIFIC: "TITLE_HONORIFIC",         // Tôn xưng, chức vị tông môn, quan tước triều đình
-  INNER_MONOLOGUE: "INNER_MONOLOGUE"          // Độc thoại nội tâm, suy tính thầm kín, cảm xúc nội tâm
+  INNER_MONOLOGUE: "INNER_MONOLOGUE",         // Độc thoại nội tâm, suy tính thầm kín, cảm xúc nội tâm
+  BANTER_RETORT: "BANTER_RETORT",             // Lời thoại mỉa mai, chế giễu, khiêu khích có Speaker+Listener+Relationship đã resolved
+  MODERN_VERNACULAR: "MODERN_VERNACULAR"      // Localise urban slang, gaming, internet meme sang tiếng Việt
 });
 
 const {
@@ -129,6 +131,8 @@ function createStylistContribution({
   introducedInformation = [],
   introducedMetaphor = false,
   introducedEmotion = null,
+  introducedInterpretation = null,
+  dialogueAct = null,
   surfaceRealization = true,
   semanticAssertions = [],
   provenance = ""
@@ -152,6 +156,8 @@ function createStylistContribution({
     introducedInformation: Object.freeze([...introducedInformation]),
     introducedMetaphor: Boolean(introducedMetaphor),
     introducedEmotion: introducedEmotion ? String(introducedEmotion) : null,
+    introducedInterpretation: introducedInterpretation ? String(introducedInterpretation) : null,
+    dialogueAct: dialogueAct ? String(dialogueAct) : null,
     surfaceRealization: Boolean(surfaceRealization),
     semanticAssertions: Object.freeze([...semanticAssertions]),
     provenance: String(provenance || "")
