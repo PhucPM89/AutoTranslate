@@ -1,15 +1,15 @@
 "use strict";
 
 /**
- * Semantic & Context Engine — Core Data Contracts & Schema Validators (Phase 0)
+ * Semantic & Context Engine — Core Data Contracts & Schema Validators (Phase 0 & 1)
  * 
  * Defines schemas, interfaces, and invariant checkers for:
  * 1. SemanticSignature (Multi-label Affect Distribution, Valence, Intensity, Register)
  * 2. ClauseIR (Resilient Slot-Based Intermediate Representation)
  * 3. SemanticContext & Multi-Domain Weights
  * 4. ShockEvidence & ShockScorer (Multi-Stream Event Boundary Detection)
- * 5. Uncertainty & Abstention Contract
- * 6. StylistContribution Contract & Candidate Gating
+ * 5. Uncertainty & Multi-Factor Abstention Contract
+ * 6. StylistContribution Contract & Candidate Gating + Continuous Scoring
  * 7. ProvenanceTrace Contract
  */
 
@@ -52,7 +52,6 @@ function createSemanticSignature({
   intensity = 0.5,
   register = "VERNACULAR"
 } = {}) {
-  // Normalize affect distribution: ensure all non-zero keys are valid canonical affects
   const cleanDistribution = {};
   for (const [key, val] of Object.entries(affectDistribution)) {
     const upperKey = String(key).toUpperCase();
@@ -66,7 +65,6 @@ function createSemanticSignature({
     cleanDistribution.NEUTRAL = 1.0;
   }
 
-  // Clamped bounds
   const clampedValence = Math.min(1.0, Math.max(-1.0, Number(valence.toFixed(3))));
   const clampedIntensity = Math.min(1.0, Math.max(0.0, Number(intensity.toFixed(3))));
   const validRegister = CANONICAL_REGISTERS.includes(register) ? register : "VERNACULAR";
@@ -81,45 +79,50 @@ function createSemanticSignature({
 }
 
 /**
- * Evaluates semantic compatibility between Source Signature and Candidate Signature.
- * Ensures:
- * 1. Affect vector distance is within threshold (Cosine or Overlap similarity).
- * 2. Valence difference <= maxValenceDiff (strictly forbids polarity inversion).
- * 3. Intensity difference <= maxIntensityDiff.
+ * Evaluates semantic compatibility between Source Signature and Candidate Signature
+ * using Soft Gating + Continuous Distance Scoring.
+ * 
+ * Prevents absolute hard drops when subtle, contextually rich variations occur,
+ * while strictly guarding against severe polarity inversions (e.g. negative to positive).
+ * 
  * @param {Object} sourceSig
  * @param {Object} candidateSig
  * @param {Object} options
  * @returns {{ compatible: boolean, score: number, reasons: string[] }}
  */
 function checkSignatureCompatibility(sourceSig, candidateSig, {
-  maxValenceDiff = 0.25,
-  maxIntensityDiff = 0.30,
-  minAffectSimilarity = 0.40
+  maxValenceDiff = 0.35,
+  maxIntensityDiff = 0.40,
+  minAffectSimilarity = 0.30
 } = {}) {
   const reasons = [];
 
-  // Check valence polarity drift
+  // Hard Invariant: Severe Polarity Inversion (e.g., negative contempt to positive tranquil joy)
+  const isSeverePolarityFlip =
+    (sourceSig.valence < -0.25 && candidateSig.valence > 0.25) ||
+    (sourceSig.valence > 0.25 && candidateSig.valence < -0.25);
+
+  if (isSeverePolarityFlip) {
+    return {
+      compatible: false,
+      score: 0.0,
+      reasons: [`Polarity Inversion: Source valence (${sourceSig.valence}) vs Candidate valence (${candidateSig.valence})`]
+    };
+  }
+
+  // Soft Valence Drift Check
   const valenceDiff = Math.abs(sourceSig.valence - candidateSig.valence);
   if (valenceDiff > maxValenceDiff) {
-    // If sign flipped (e.g. negative to positive), strictly reject
-    if ((sourceSig.valence < -0.2 && candidateSig.valence > 0.2) ||
-        (sourceSig.valence > 0.2 && candidateSig.valence < -0.2)) {
-      return {
-        compatible: false,
-        score: 0,
-        reasons: [`Polarity Inversion: Source valence (${sourceSig.valence}) vs Candidate valence (${candidateSig.valence})`]
-      };
-    }
-    reasons.push(`Valence diff exceeds threshold: ${valenceDiff.toFixed(2)} > ${maxValenceDiff}`);
+    reasons.push(`Valence drift: ${valenceDiff.toFixed(2)} > ${maxValenceDiff}`);
   }
 
-  // Check intensity drift
+  // Soft Intensity Drift Check
   const intensityDiff = Math.abs(sourceSig.intensity - candidateSig.intensity);
   if (intensityDiff > maxIntensityDiff) {
-    reasons.push(`Intensity diff exceeds threshold: ${intensityDiff.toFixed(2)} > ${maxIntensityDiff}`);
+    reasons.push(`Intensity drift: ${intensityDiff.toFixed(2)} > ${maxIntensityDiff}`);
   }
 
-  // Calculate Affect Vector Similarity (Dot Product / Cosine Similarity of distributions)
+  // Calculate Affect Vector Similarity (Cosine Similarity)
   const srcAff = sourceSig.affectDistribution;
   const candAff = candidateSig.affectDistribution;
   const allKeys = new Set([...Object.keys(srcAff), ...Object.keys(candAff)]);
@@ -143,15 +146,19 @@ function checkSignatureCompatibility(sourceSig, candidateSig, {
   if (affectSimilarity < minAffectSimilarity) {
     return {
       compatible: false,
-      score: affectSimilarity,
+      score: Number(affectSimilarity.toFixed(3)),
       reasons: [`Affect similarity too low: ${affectSimilarity.toFixed(2)} < ${minAffectSimilarity}`]
     };
   }
 
-  const overallScore = Number((affectSimilarity * 0.6 + (1 - valenceDiff / 2) * 0.2 + (1 - intensityDiff) * 0.2).toFixed(3));
+  // Continuous Composite Compatibility Score (0.0 to 1.0)
+  const valenceScore = Math.max(0, 1 - (valenceDiff / 1.5));
+  const intensityScore = Math.max(0, 1 - intensityDiff);
+  const compositeScore = Number((affectSimilarity * 0.55 + valenceScore * 0.25 + intensityScore * 0.20).toFixed(3));
+
   return {
     compatible: reasons.length === 0,
-    score: overallScore,
+    score: compositeScore,
     reasons
   };
 }
@@ -206,50 +213,49 @@ function createClauseIR({
 function scoreContextShock(evidence = {}) {
   const {
     isQuotedOrRecollection = false,
-    hasAcousticShock = false,      // Ầm, Rầm, Keng, Phập, Bỗng nhiên...
-    hasViolentActionShock = false,  // Kiếm khí bùng nổ, máu bắn tung tóe, sát khí ngập trời...
-    hasSpatioTemporalJump = false, // Ba năm sau, sau khi trở về, ở một diễn biến khác...
+    hasAcousticShock = false,
+    hasViolentActionShock = false,
+    hasSpatioTemporalJump = false,
     isSpeakerChange = false,
-    syntacticRole = "MAIN_ASSERTION" // MAIN_ASSERTION | EMBEDDED_QUOTE | SUBORDINATE_CLAUSE
+    syntacticRole = "MAIN_ASSERTION"
   } = evidence;
 
-  // RULE 1: If evidence occurs inside a quoted text, ancient book reading, or past memory,
-  // it MUST NOT trigger an active scene transition shock!
+  // If evidence occurs inside a quoted text, ancient book reading, or past memory,
+  // it MUST NOT trigger an active scene transition shock.
   if (isQuotedOrRecollection || syntacticRole === "EMBEDDED_QUOTE") {
     return Object.freeze({
       isShock: false,
       transitionType: "RECOLLECTION_FILTERED",
       shockScore: 0.0,
-      recommendedAlpha: 0.85, // Retain current scene context strongly
+      recommendedAlpha: 0.85,
       reason: "Shock words detected inside quotation/recollection; suppressed to prevent context poisoning."
     });
   }
 
-  // Calculate composite shock score
   let score = 0.0;
-  if (hasAcousticShock) score += 0.45;
+  if (hasAcousticShock) score += 0.50;
   if (hasViolentActionShock) score += 0.50;
   if (hasSpatioTemporalJump) score += 0.40;
   if (isSpeakerChange) score += 0.15;
 
   score = Math.min(1.0, score);
 
-  if (score >= 0.70) {
+  if (score >= 0.50) {
     return Object.freeze({
       isShock: true,
       transitionType: "PUNCTUAL_EVENT_SHOCK",
       shockScore: score,
-      recommendedAlpha: 0.0, // Instantly drop inertia, transition fully to new event
+      recommendedAlpha: 0.0,
       reason: "High-intensity punctual shock event detected in primary narrative stream."
     });
   }
 
-  if (score >= 0.40) {
+  if (score >= 0.35) {
     return Object.freeze({
       isShock: false,
       transitionType: "MODERATE_SHIFT",
       shockScore: score,
-      recommendedAlpha: 0.35, // Accelerated blending
+      recommendedAlpha: 0.35,
       reason: "Moderate event shift detected; accelerating context adaptation."
     });
   }
@@ -258,22 +264,31 @@ function scoreContextShock(evidence = {}) {
     isShock: false,
     transitionType: "CONTINUOUS_FLOW",
     shockScore: score,
-    recommendedAlpha: 0.75, // Standard temporal inertia
+    recommendedAlpha: 0.75,
     reason: "Standard continuous narrative flow."
   });
 }
 
 /**
- * Uncertainty & Abstention Evaluator.
- * Adheres to: Correct Resolution + Correct Abstention = Success.
+ * Multi-Factor Uncertainty & Abstention Evaluator.
  * 
- * @param {Array<{ id: string, value: string, score: number }>} candidates
+ * Combines:
+ * 1. Absolute Confidence of top candidate ($S_{top}$)
+ * 2. Margin Delta ($S_{top} - S_{runnerUp}$)
+ * 3. Evidence Quality / Overwhelming Evidence Threshold
+ * 4. Candidate Type
+ * 
+ * Rule: If $S_{top} \ge 0.85$ (Overwhelming Absolute Confidence), resolve confidently even if margin is slightly close.
+ * If candidates are truly tied ($S_{top} \approx S_{runnerUp} < 0.85$), abstain cleanly with AMBIGUOUS.
+ * 
+ * @param {Array<{ id: string, value: string, score: number, evidenceQuality?: number }>} candidates
  * @param {Object} options
  * @returns {Object} ResolutionResult
  */
 function resolveWithAbstention(candidates = [], {
   confidenceThreshold = 0.65,
   marginDeltaThreshold = 0.20,
+  overwhelmingConfidenceThreshold = 0.85,
   neutralFallback = "đối phương",
   unknownFallback = "người này"
 } = {}) {
@@ -292,7 +307,19 @@ function resolveWithAbstention(candidates = [], {
   const top = sorted[0];
   const runnerUp = sorted[1];
 
-  // If there is a close contender (ambiguity)
+  // If top candidate has overwhelming absolute confidence (> 0.85), resolve directly
+  if (top.score >= overwhelmingConfidenceThreshold) {
+    return Object.freeze({
+      status: "RESOLVED",
+      resolvedValue: top.value,
+      confidence: top.score,
+      selectedId: top.id,
+      flag: "OVERWHELMING_EVIDENCE_RESOLUTION",
+      abstentionReason: null
+    });
+  }
+
+  // If there is a close contender without overwhelming evidence -> Abstain as AMBIGUOUS
   if (runnerUp && (top.score - runnerUp.score < marginDeltaThreshold)) {
     return Object.freeze({
       status: "AMBIGUOUS",
@@ -305,7 +332,7 @@ function resolveWithAbstention(candidates = [], {
     });
   }
 
-  // If top candidate is below confidence threshold
+  // If top candidate is below minimum confidence threshold -> Abstain as LOW_CONFIDENCE
   if (top.score < confidenceThreshold) {
     return Object.freeze({
       status: "LOW_CONFIDENCE",
