@@ -90,7 +90,15 @@ const DOMAIN_PAIR_RELATIONS = [
   { domainA: "MADNESS_FRENZY", domainB: "SUPERNATURAL_HORROR", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Eldritch dread and psychological collapse harmonize on separate slots" },
   { domainA: "MADNESS_FRENZY", domainB: "COURTLY_BEAUTY", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Corrupted demonic beauty coexists with maiden aesthetic description" },
   { domainA: "MADNESS_FRENZY", domainB: "MONOLOGUE_PSYCHOLOGY", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Inner monologue of mental disintegration realizes across cognitive and affect slots" },
-  { domainA: "MADNESS_FRENZY", domainB: "BANTER", relation: INTERACTION_RELATIONS.ORTHOGONAL, note: "Psychological breakdown and colloquial banter operate on distinct text roles" }
+  { domainA: "MADNESS_FRENZY", domainB: "BANTER", relation: INTERACTION_RELATIONS.ORTHOGONAL, note: "Psychological breakdown and colloquial banter operate on distinct text roles" },
+
+  // Wave C3-B2 Dramatic Escalation Relations
+  { domainA: "DRAMATIC_CLIMAX", domainB: "ELEGY", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Tragic climax and hero funeral mourning harmonize cleanly" },
+  { domainA: "DRAMATIC_CLIMAX", domainB: "COMBAT", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Solemn death vows during battle clash coexist on separate slots" },
+  { domainA: "DRAMATIC_CLIMAX", domainB: "MADNESS_FRENZY", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Vengeance pathos and demonic rage operate on separate slots" },
+  { domainA: "DRAMATIC_CLIMAX", domainB: "TITLE_HIERARCHY", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Hero titles and dramatic oaths realize on distinct slots" },
+  { domainA: "DRAMATIC_CLIMAX", domainB: "COURTLY_BEAUTY", relation: INTERACTION_RELATIONS.ORTHOGONAL, note: "Tragic vows and aesthetic descriptions remain separate" },
+  { domainA: "DRAMATIC_CLIMAX", domainB: "DAOIST_MANTRA", relation: INTERACTION_RELATIONS.ORTHOGONAL, note: "Dramatic vows and mantra seals operate on separate text spans" }
 ];
 
 /**

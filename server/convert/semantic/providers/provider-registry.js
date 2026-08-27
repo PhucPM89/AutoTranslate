@@ -61,8 +61,9 @@ const { createUrbanSlangProvider } = require("./urban-slang-provider");
 const { createCourtlyBeautyProvider } = require("./courtly-beauty-provider");
 const { createChantVersifierProvider } = require("./chant-versifier-provider");
 
-// Phase 3 Wave C3-B Providers (Madness)
+// Phase 3 Wave C3-B Providers (Madness & Dramatic Escalator)
 const { createMadnessProvider } = require("./madness-provider");
+const { createDramaticEscalatorProvider } = require("./dramatic-escalator-provider");
 
 function createDefaultProviderRegistry() {
   const providers = [
@@ -122,8 +123,9 @@ function createDefaultProviderRegistry() {
     createCourtlyBeautyProvider(),
     createChantVersifierProvider(),
 
-    // Phase 3 Wave C3-B (1 Provider)
-    createMadnessProvider()
+    // Phase 3 Wave C3-B (2 Providers)
+    createMadnessProvider(),
+    createDramaticEscalatorProvider()
   ];
 
   return Object.freeze({

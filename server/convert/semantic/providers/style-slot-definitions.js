@@ -1144,6 +1144,23 @@ const STYLE_SLOT_DEFINITIONS = Object.freeze({
     conflictPolicy: CONFLICT_POLICIES.COMPOSITE_SCORE,
     description: "Hiện thực hóa trạng thái tâm ma xâm nhập, tẩu hỏa nhập ma, cuồng loạn và mất hết lý trí dựa trên bằng chứng tâm lý/ngữ nghĩa đã được xác nhận",
     sourceSemantics: "Source Semantic IR denotes verified qi deviation, heart-demon corruption, or cognitive breakdown/frenzy without ungrounded event or physical amplification"
+  }),
+
+  // =========================================================================
+  // 16. WAVE C3-B2 DRAMATIC ESCALATION & RHETORICAL CLIMAX (1 Canonical Slot)
+  // =========================================================================
+  DRAMATIC_CLIMAX: defineStyleSlot({
+    id: "DRAMATIC_CLIMAX",
+    semanticRole: SEMANTIC_ROLES.AFFECT,
+    realizationDimensions: [REALIZATION_DIMENSIONS.LEXICAL, REALIZATION_DIMENSIONS.RHYTHMIC, REALIZATION_DIMENSIONS.AFFECTIVE],
+    canMerge: false,
+    canCompete: true,
+    maxMultiplicity: 1,
+    allowedTextRoles: ["ACTION", "DESCRIPTION", "DIALOGUE", "EXPOSITION"],
+    requiredEvidence: ["DRAMATIC_CLIMAX_EVIDENCE"],
+    conflictPolicy: CONFLICT_POLICIES.COMPOSITE_SCORE,
+    description: "Hiện thực hóa điểm cao trào kịch tính, lời thề sinh tử, bi thương cực độ và sự hủy diệt theo văn phong trang trọng mà không thêu dệt sự kiện mới",
+    sourceSemantics: "Source Semantic IR denotes high-pathos narrative climax, solemn vengeance vows, tragic grief, or catastrophic destruction requiring rhetorical elevation without fabricating ungrounded casualties, blood, or events"
   })
 });
 
@@ -1163,6 +1180,7 @@ const PROVIDER_SLOT_COMPATIBILITY_MAP = Object.freeze({
   "cyber-scifi-provider": ["CYBER_INTERFACE", "CYBER_MECHA"],
   "daoist-array-provider": ["ARRAY_NODE", "TALISMAN_ACTIVATION"],
   "divine-sense-provider": ["DIVINE_SENSE_SCAN", "SOUL_PRESSURE", "DOMAIN_EXPANSION"],
+  "dramatic-escalator-provider": ["DRAMATIC_CLIMAX"],
   "eldritch-provider": ["ELDRITCH_HORROR", "SANITY_COLLAPSE", "FORBIDDEN_GAZE"],
   "elegy-provider": ["ELEGY_SOUL_CALL", "ELEGY_HEROIC_SPIRIT"],
   "forensic-deduction-provider": ["FORENSIC_MYSTERY", "FORENSIC_TRUTH"],
