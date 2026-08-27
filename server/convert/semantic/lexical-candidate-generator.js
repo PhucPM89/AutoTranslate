@@ -263,6 +263,106 @@ const KNOWN_POLYSEMOUS_ENTRIES = {
       confidence: 0.95,
       indicatorContexts: ["冷汗", "擦汗", "干笑", "挠头", "尴尬"]
     }
+  ],
+  "逼宫": [
+    {
+      candidateVi: "bức cung",
+      partOfSpeech: "noun",
+      semanticFeatures: ["IMPERIAL_CONSPIRACY", "COURT_CONSTRUCTION"],
+      semanticSignature: createSemanticSignature({ denotation: "PALACE_COUP", valence: -0.40, intensity: 0.85 }),
+      confidence: 0.98,
+      indicatorContexts: ["最佳时机", "时机", "政变", "皇帝", "登基", "陛下", "叛变", "朝廷"]
+    }
+  ],
+  "一记": [
+    {
+      candidateVi: "một cú",
+      partOfSpeech: "cl",
+      semanticFeatures: ["KINETIC_STRIKE_MEASURE"],
+      semanticSignature: createSemanticSignature({ denotation: "STRIKE_MEASURE", valence: 0.0, intensity: 0.70 }),
+      confidence: 0.95,
+      indicatorContexts: ["横扫", "重拳", "飞踢", "耳光", "闷棍", "重击", "刀光", "剑光", "劈砍", "凌厉"]
+    }
+  ],
+  "凌厉": [
+    {
+      candidateVi: "sắc bén",
+      partOfSpeech: "adj",
+      semanticFeatures: ["MARTIAL_SHARPNESS", "INTENSITY"],
+      semanticSignature: createSemanticSignature({ denotation: "FIERCE_SHARP", valence: 0.0, intensity: 0.80 }),
+      confidence: 0.95,
+      indicatorContexts: ["横扫", "剑气", "刀芒", "攻势", "眼神", "一记", "剑光", "杀意"]
+    }
+  ],
+  "浴火重生": [
+    {
+      candidateVi: "dục hỏa trùng sinh",
+      partOfSpeech: "phrase",
+      semanticFeatures: ["DAOIST_REBIRTH", "MYTHICAL"],
+      semanticSignature: createSemanticSignature({ denotation: "PHOENIX_REBIRTH", valence: 0.60, intensity: 0.95 }),
+      confidence: 0.98,
+      indicatorContexts: ["毁灭", "神魂", "烈火", "火", "凤凰", "重生", "死地"]
+    }
+  ],
+  "气得": [
+    {
+      candidateVi: "tức đến mức",
+      partOfSpeech: "verb",
+      semanticFeatures: ["DEGREE_COMPLEMENT", "AFFECT_ANGER"],
+      semanticSignature: createSemanticSignature({ denotation: "ANGERED_TO_DEGREE", valence: -0.70, intensity: 0.85 }),
+      confidence: 0.95,
+      indicatorContexts: ["浑身发抖", "发抖", "吐血", "跳脚", "脸色发青", "脸色铁青", "咬牙切齿"]
+    }
+  ],
+  "浑身发抖": [
+    {
+      candidateVi: "toàn thân run rẩy",
+      partOfSpeech: "phrase",
+      semanticFeatures: ["PHYSICAL_REACTION", "FEAR_OR_ANGER"],
+      semanticSignature: createSemanticSignature({ denotation: "BODY_TREMBLING", valence: -0.50, intensity: 0.80 }),
+      confidence: 0.95,
+      indicatorContexts: ["气得", "吓得", "冷得", "发抖", "战栗"]
+    }
+  ],
+  "跑得飞快": [
+    {
+      candidateVi: "chạy nhanh như bay",
+      partOfSpeech: "phrase",
+      semanticFeatures: ["RESULTATIVE_SPEED", "MOTION"],
+      semanticSignature: createSemanticSignature({ denotation: "RUNNING_SWIFTLY", valence: 0.20, intensity: 0.75 }),
+      confidence: 0.98,
+      indicatorContexts: ["小丫头", "溜", "逃", "追", "跑得"]
+    }
+  ],
+  "笑得合不拢嘴": [
+    {
+      candidateVi: "cười toe toét",
+      partOfSpeech: "phrase",
+      semanticFeatures: ["FACIAL_EXPRESSION", "AMUSEMENT"],
+      semanticSignature: createSemanticSignature({ denotation: "GRINNING_EAR_TO_EAR", valence: 0.80, intensity: 0.85 }),
+      confidence: 0.98,
+      indicatorContexts: ["乐得", "高兴", "开心", "合不拢嘴"]
+    }
+  ],
+  "心中暗道": [
+    {
+      candidateVi: "thầm nghĩ",
+      partOfSpeech: "verb",
+      semanticFeatures: ["COGNITIVE_INNER_THOUGHT", "DIALOGUE_TAG"],
+      semanticSignature: createSemanticSignature({ denotation: "THOUGHT_TAG", valence: 0.0, intensity: 0.50 }),
+      confidence: 0.98,
+      indicatorContexts: ["萧炎", "韩立", "暗道", "心想", "暗自"]
+    }
+  ],
+  "心中暗想": [
+    {
+      candidateVi: "thầm nghĩ",
+      partOfSpeech: "verb",
+      semanticFeatures: ["COGNITIVE_INNER_THOUGHT"],
+      semanticSignature: createSemanticSignature({ denotation: "THOUGHT_TAG", valence: 0.0, intensity: 0.50 }),
+      confidence: 0.98,
+      indicatorContexts: ["暗想", "心想", "暗自"]
+    }
   ]
 };
 

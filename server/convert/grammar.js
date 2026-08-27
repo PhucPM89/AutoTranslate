@@ -141,14 +141,36 @@ function de(tokens) {
     const end = headEnd(tokens, i + 1);
 
     if (end >= 0 && (kind === "noun" || kind === "name" || kind === "num")) {
+      // Check if this noun is actually the object of an initial verb (Relative Clause: VP + 的 + Head)
+      let verbBeforeIdx = -1;
+      for (let k = i - 2; k >= 0 && i - k <= MAX_MODIFIER; k--) {
+        if (tokens[k] && tokens[k].k === "verb") {
+          verbBeforeIdx = k;
+          break;
+        }
+      }
+
+      const hasPrecedingSubject = verbBeforeIdx > 0 && isNominal(tokens[verbBeforeIdx - 1]);
+      const isRelativeVP = verbBeforeIdx >= 0 && !hasPrecedingSubject && !isPossessor(prev) && !isGoverned(tokens, verbBeforeIdx, i);
+
+      if (isRelativeVP) {
+        const headTokens = tokens.slice(i + 1, end + 1);
+        const vpTokens = tokens.slice(verbBeforeIdx, i);
+        // Relative Clause: [Head] + [VP] (e.g. "sách vở ghi lại bí mật")
+        tokens.splice(verbBeforeIdx, end - verbBeforeIdx + 1, ...headTokens, ...vpTokens);
+        continue;
+      }
+
       let start = possessorStart(tokens, i);
       if (kind === "num" && isWord(tokens[start - 1]) && QUANTITY_ADVERBS.has(tokens[start - 1].zh || "")) {
         start--;
       }
       if (start < i) {
+        const headTokens = tokens.slice(i + 1, end + 1);
+        const isPurposeHead = headTokens.some(h => /(?:thời cơ|cơ hội|phương pháp|cách|lý do|nguyên nhân)/i.test(h.s || ""));
         const linked = kind !== "num" && !LOCATIVE_TAIL.test(prev.zh || "");
-        const glue = linked ? [link("của", "fn")] : [];
-        tokens.splice(start, end - start + 1, ...tokens.slice(i + 1, end + 1), ...glue, ...tokens.slice(start, i));
+        const glue = isPurposeHead ? [link("để", "fn")] : (linked ? [link("của", "fn")] : []);
+        tokens.splice(start, end - start + 1, ...headTokens, ...glue, ...tokens.slice(start, i));
         continue;
       }
     }

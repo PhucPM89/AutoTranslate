@@ -222,7 +222,7 @@ function classifyClauseRole(clauseText, contextHints = {}) {
   if (cognitiveEvent.kind !== COGNITIVE_KINDS.NONE) return cognitiveEvent.textRole;
 
   // 4. Action vs Description vs Exposition heuristics
-  const hasActionVerbs = /(?:拔剑|斩|杀|冲|跃|踢|击|轰|出拳|闪身|掠出|退后|吐血|捏碎|结印|破空|看着|看向|望着)/.test(text);
+  const hasActionVerbs = /(?:拔剑|斩|杀|冲|跃|踢|击|轰|出拳|闪身|掠出|退后|吐血|捏碎|结印|破空|看着|看向|望着|走|走过去|走来|拿起|转身|回过头|回头|站起|坐下|迈步|伸手|握住|闭目|盘膝|抬头|低头|飞出|掠过|穿过|踏入|跨步|推开|打开|合上|挥手|拂袖|长叹|点头|摇头|皱眉|撇嘴|擦|抹|拔|握|拿)/.test(text);
   if (hasActionVerbs) {
     return "ACTION";
   }

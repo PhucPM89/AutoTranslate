@@ -17,6 +17,7 @@
 
 const { createExpressionPlanner, FALLBACK_LEVELS } = require("./expression-planner");
 const { createProvenanceTrace } = require("./contracts");
+const { polishLiteraryProse } = require("../literary-stylist");
 
 // =========================================================================
 // 12-Assertion Invariant Taxonomy (C3-0 Hardened)
@@ -211,28 +212,40 @@ function createVietnameseRealizer({
     const plan = planner.planClause(clauseIR, context);
     let rawText = clauseIR.sourceZh || "";
 
-    // 1. Apply Planned Slot Replacements
     let rendered = rawText;
     const appliedRules = [];
 
-    for (const slot of plan.slotReplacements) {
-      if (rendered.includes(slot.slotId)) {
-        rendered = rendered.split(slot.slotId).join(` ${slot.replacementVi} `);
-        appliedRules.push({
-          provider: slot.providerId,
-          slot: slot.targetSlot || slot.slotId,
-          chosenCandidate: slot.replacementVi,
-          priority: slot.priority,
-          dimension: slot.dimension,
-          provenance: slot.provenance
-        });
+    // 1. If text contains Chinese, run baseConvertFunction first so that Chinese grammar rules (de, adjective, locative, disposal) process intact Chinese syntax
+    if (baseConvertFunction && /[\u4e00-\u9fa5]/.test(rendered)) {
+      // Pre-replace resolved lexical idioms/terms unless attached to '的'
+      for (const slot of plan.slotReplacements) {
+        const isAroundDe = slot.slotId && (rendered.includes(`${slot.slotId}的`) || rendered.includes(`的${slot.slotId}`));
+        if (slot.slotId && !isAroundDe && rendered.includes(slot.slotId)) {
+          rendered = rendered.split(slot.slotId).join(` ${slot.replacementVi} `);
+        }
+      }
+      if (/[\u4e00-\u9fa5]/.test(rendered)) {
+        rendered = baseConvertFunction(rendered);
       }
     }
 
-    // 2. Base converter fallback for remaining Chinese characters
-    if (baseConvertFunction && /[\u4e00-\u9fa5]/.test(rendered)) {
-      rendered = baseConvertFunction(rendered);
+    // 2. Apply any remaining planned slot replacements
+    for (const slot of plan.slotReplacements) {
+      if (rendered.includes(slot.slotId)) {
+        rendered = rendered.split(slot.slotId).join(` ${slot.replacementVi} `);
+      }
+      appliedRules.push({
+        provider: slot.providerId,
+        slot: slot.targetSlot || slot.slotId,
+        chosenCandidate: slot.replacementVi,
+        priority: slot.priority,
+        dimension: slot.dimension,
+        provenance: slot.provenance
+      });
     }
+
+    // 3. Polish literary prose and remove stiff translation artifacts
+    rendered = polishLiteraryProse(rendered);
 
     // 3. Subject / Pronoun Realization (Discourse-Grounded)
     if (clauseIR.subjectSlot && clauseIR.subjectSlot.isImplicit && plan.resolvedSubject) {
@@ -319,11 +332,11 @@ function createVietnameseRealizer({
 
       // Pronoun Repetition Suppression:
       // If clause i and clause i-1 share the same resolved third-person pronoun (e.g. "Hắn"),
-      // and clause i is a coordinate action, suppress redundant pronoun repetition
+      // and clause i is a coordinate action or exposition, suppress redundant pronoun repetition
       const currentSubject = plan.resolvedSubject || (clause.subjectSlot && clause.subjectSlot.resolvedPronoun);
       if (
         i > 0 &&
-        clause.role === "ACTION"
+        (clause.role === "ACTION" || clause.role === "EXPOSITION")
       ) {
         // Strip leading redundant pronoun if present
         const pronounPrefix = /^(?:hắn|nàng|y|ta|ngươi)\s+/i;
@@ -333,7 +346,7 @@ function createVietnameseRealizer({
       }
 
       // Coordinate Action Casing: Maintain lowercase on coordinate verbs
-      if (i > 0 && clause.role === "ACTION") {
+      if (i > 0 && (clause.role === "ACTION" || clause.role === "EXPOSITION")) {
         if (/^[A-ZÀ-Ỹ][a-zà-ỹ]/.test(clauseText) && !/^(?:Diệp|Tiêu|Thái|Lâm|Vương|Lý|Trương|Trần|Tử|Hoàng|Thanh)\b/.test(clauseText)) {
           clauseText = clauseText.charAt(0).toLowerCase() + clauseText.slice(1);
         }
@@ -342,8 +355,8 @@ function createVietnameseRealizer({
       // Dialogue Reporting Verb Punctuation: Join reporting verb with colon before quote
       if (i > 0) {
         const prevText = clauseResults[i - 1];
-        if (/(?:nói|hỏi|quát|than|thầm nghĩ|cười nói|nhủ|hô|cười lạnh|nói nhỏ|thở dài)\b/i.test(prevText.trim()) && /^[“"「『]/.test(clauseText.trim())) {
-          clauseResults[i - 1] = prevText.trim() + ":";
+        if (/(?:nói|hỏi|quát|than|thầm nghĩ|cười nói|nhủ|hô|cười lạnh|nói nhỏ|thở dài|cười trêu nói|cười gượng nói|trêu chọc nói|nghĩ thầm|tự nhủ|nhủ thầm)(?!\p{L})/iu.test(prevText.trim()) && /^[“"「『]/.test(clauseText.trim())) {
+          clauseResults[i - 1] = prevText.trim().replace(/[,，:：]$/, "") + ":";
         }
       }
 
@@ -369,6 +382,14 @@ function createVietnameseRealizer({
       }
     }
     paragraph = capitalizeFirst(paragraph);
+
+    // Naturalness Polish: Clean duplicate locatives ("ở trong ... bên trong" -> "trong ...")
+    paragraph = paragraph.replace(/(?:ở trong|trong|từ trong)\s+([^,.;!?\n]+?)\s+bên trong\b/gi, "trong $1");
+    paragraph = paragraph.replace(/\bở trong\s+([^,.;!?\n]+?)\s+trong\b/gi, "trong $1");
+    // Clean double punctuation / Chinese full stops before closing quote or end
+    paragraph = paragraph.replace(/[ \t]*[。\.][ \t]*([\.\!\?])/g, "$1");
+    paragraph = paragraph.replace(/[ \t]*[。][ \t]*/g, "");
+    paragraph = paragraph.replace(/\s+/g, " ").trim();
 
     if (!/[.!?…”’"]$/.test(paragraph)) {
       paragraph += ".";

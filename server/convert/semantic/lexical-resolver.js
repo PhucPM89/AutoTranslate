@@ -218,6 +218,24 @@ function createLexicalResolver({
             contextIndicatorScore = 1.00;
           } else if (cand.spanZh === "戏谑道" || cand.spanZh === "干笑道") {
             contextIndicatorScore = 1.00;
+          } else if (cand.spanZh === "逼宫") {
+            contextIndicatorScore = 1.00;
+          } else if (cand.spanZh === "一记") {
+            contextIndicatorScore = 1.00;
+          } else if (cand.spanZh === "凌厉") {
+            contextIndicatorScore = 1.00;
+          } else if (cand.spanZh === "浴火重生") {
+            contextIndicatorScore = 1.00;
+          } else if (cand.spanZh === "气得") {
+            contextIndicatorScore = 1.00;
+          } else if (cand.spanZh === "浑身发抖") {
+            contextIndicatorScore = 1.00;
+          } else if (cand.spanZh === "跑得飞快") {
+            contextIndicatorScore = 1.00;
+          } else if (cand.spanZh === "笑得合不拢嘴") {
+            contextIndicatorScore = 1.00;
+          } else if (cand.spanZh === "心中暗道" || cand.spanZh === "心中暗想") {
+            contextIndicatorScore = 1.00;
           }
         }
 
