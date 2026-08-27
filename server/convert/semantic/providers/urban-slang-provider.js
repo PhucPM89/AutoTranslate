@@ -1,26 +1,79 @@
 "use strict";
 
 /**
- * Urban & Internet Slang Localization Provider (Phase 2B - Wave C2B-2)
+ * Urban & Internet Slang Localization Provider (Phase 2B - Wave C2B-2.1 Hardened)
  * Domain: URBAN_SLANG
  *
  * Semantic Model:
- * - No Speaker/Listener requirement — operates on Register only.
- * - Activates on any text role: ACTION, DESCRIPTION, DIALOGUE, EXPOSITION.
- * - Converts contemporary Chinese internet slang, gaming jargon, and modern
- *   social meme expressions into natural, register-equivalent Vietnamese.
+ * - Register-aware localization provider mapping contemporary Chinese internet slang,
+ *   gaming jargon, and modern social meme expressions into Vietnamese equivalents.
+ * - StyleSlot: MODERN_VERNACULAR (semanticRole: NARRATIVE_FUNCTION, dimensions: [LEXICAL, REGISTER]).
+ * - Target stylistic register does NOT construct source-state facts.
  *
- * Architecture Invariants:
- * - Zero Discourse Dependency: Does NOT require Speaker/Listener/Relationship resolution.
- * - Register Awareness: Preserves MODERN_INTERNET register throughout.
- * - Semantic Preservation: Output meaning is strictly equivalent to input.
- *   No introduced metaphors or invented information.
- * - Zero Emotional Escalation: Contempt stays contempt; amusement stays amusement.
- * - Migrates 11 legacy urban-slang-adapter.js rules.
+ * Boundary & Context Gating Rules (Wave C2B-2.1):
+ * 1. Genre Safety:
+ *    - PERMITTED_GENRES: MODERN, URBAN, SCI_FI, GAME, CYBERPUNK, CONTEMPORARY, PARODY, TRANSMIGRATION, SYSTEM.
+ *    - RESTRICTED_GENRES: XIANXIA, WUXIA, HISTORICAL, IMPERIAL, RELIGIOUS, COURT, DAOIST, ANCIENT.
+ * 2. Text-Role Safety in Restricted Genres:
+ *    - Narration / Description / Exposition / Action: 100% ABSTAIN (zero modern slang pollution in classical prose).
+ *    - Inner Thought: ABSTAIN unless thinker persona has explicit modern/transmigrator tag.
+ *    - Dialogue: ABSTAIN unless speaker persona/speechStyle has explicit modern/transmigrator tag.
+ * 3. Persona Safety in Permitted Genres:
+ *    - Archaic/formal speakers (e.g. ancient master, formal imperial dignitary) suppress modern slang.
+ * 4. Zero Discourse Creation:
+ *    - Never invents Dialogue Acts, speaker intentions, or relationship facts.
  */
 
 const { createSemanticSignature } = require("../contracts");
 const { STYLE_SLOTS, createStylistContribution } = require("./stylist-contribution");
+
+// =========================================================================
+// Genre Categorization Constants
+// =========================================================================
+const PERMITTED_SLANG_GENRES = Object.freeze(new Set([
+  "MODERN",
+  "URBAN",
+  "SCI_FI",
+  "SCIFI",
+  "GAME",
+  "CYBERPUNK",
+  "CONTEMPORARY",
+  "PARODY",
+  "TRANSMIGRATION",
+  "SYSTEM",
+  "CYBER_SCIFI"
+]));
+
+const RESTRICTED_CLASSICAL_GENRES = Object.freeze(new Set([
+  "XIANXIA",
+  "WUXIA",
+  "HISTORICAL",
+  "IMPERIAL",
+  "RELIGIOUS",
+  "COURT",
+  "DAOIST",
+  "ANCIENT",
+  "CULTIVATION"
+]));
+
+const MODERN_SPEAKER_PERSONAS = Object.freeze(new Set([
+  "MODERN_CASUAL",
+  "GAMER",
+  "TRANSMIGRATOR",
+  "SLANG",
+  "MODERN",
+  "NETIZEN",
+  "CASUAL"
+]));
+
+const ARCHAIC_FORMAL_PERSONAS = Object.freeze(new Set([
+  "ARCHAIC_FORMAL",
+  "ANCIENT_MASTER",
+  "FORMAL_COURT",
+  "SOLEMN",
+  "IMPERIAL_NOBLE",
+  "DAOIST_ELDER"
+]));
 
 // =========================================================================
 // Slang Categories
@@ -239,6 +292,155 @@ const URBAN_SLANG_CONTRIBUTION_DEFINITIONS = Object.freeze([
 ]);
 
 // =========================================================================
+// Context Gating Evaluator
+// =========================================================================
+
+/**
+ * Determines whether urban slang realization is permitted for a given clause and context.
+ *
+ * @param {Object} clauseIR
+ * @param {Object} context
+ * @returns {{ allowed: boolean, reason: string, genre: string }}
+ */
+function evaluateSlangContextEligibility(clauseIR, context = {}) {
+  const rawGenre = String(
+    context.genre ||
+    clauseIR.genre ||
+    (context.profilerState && context.profilerState.genre) ||
+    ""
+  ).toUpperCase();
+
+  const primaryDomain = String(context.primaryDomain || "").toUpperCase();
+  const role = String(clauseIR.role || "NARRATION").toUpperCase();
+
+  // Extract persona / speech style if available
+  const dialogueCtx = context.dialogueContext || {};
+  const speakerObj = dialogueCtx.speaker || {};
+  const speakerStyle = String(
+    speakerObj.speechStyle ||
+    speakerObj.persona ||
+    context.speakerStyle ||
+    context.speakerPersona ||
+    ""
+  ).toUpperCase();
+
+  const thinkerObj = (clauseIR.cognitiveEvent && clauseIR.cognitiveEvent.thinker) || {};
+  const thinkerStyle = String(
+    thinkerObj.speechStyle ||
+    thinkerObj.persona ||
+    context.thinkerStyle ||
+    ""
+  ).toUpperCase();
+
+  // Determine effective genre
+  let effectiveGenre = rawGenre;
+  if (!effectiveGenre) {
+    if (primaryDomain === "URBAN_SLANG" || (context.domainWeights && context.domainWeights.URBAN_SLANG >= 0.5)) {
+      effectiveGenre = "URBAN";
+    }
+  }
+
+  // 1. Restricted Classical Genres: XIANXIA, WUXIA, HISTORICAL, IMPERIAL, RELIGIOUS, etc.
+  if (effectiveGenre && RESTRICTED_CLASSICAL_GENRES.has(effectiveGenre)) {
+    // Non-dialogue narration/description/action in classical genre: STRICTLY FORBIDDEN
+    if (role !== "DIALOGUE" && role !== "INNER_THOUGHT") {
+      return {
+        allowed: false,
+        reason: `SUPPRESSED_IN_${effectiveGenre}_${role}_TO_PREVENT_GENRE_POLLUTION`,
+        genre: effectiveGenre
+      };
+    }
+
+    // Inner thought in classical genre: only permitted if thinker is explicitly modern/transmigrator
+    if (role === "INNER_THOUGHT") {
+      if (MODERN_SPEAKER_PERSONAS.has(thinkerStyle)) {
+        return {
+          allowed: true,
+          reason: `PERMITTED_IN_${effectiveGenre}_INNER_THOUGHT_BY_MODERN_THINKER_PERSONA`,
+          genre: effectiveGenre
+        };
+      }
+      return {
+        allowed: false,
+        reason: `SUPPRESSED_IN_${effectiveGenre}_INNER_THOUGHT_FOR_CLASSICAL_THINKER`,
+        genre: effectiveGenre
+      };
+    }
+
+    // Dialogue in classical genre: only permitted if speaker has explicit modern persona
+    if (role === "DIALOGUE") {
+      if (MODERN_SPEAKER_PERSONAS.has(speakerStyle)) {
+        return {
+          allowed: true,
+          reason: `PERMITTED_IN_${effectiveGenre}_DIALOGUE_BY_MODERN_SPEAKER_PERSONA`,
+          genre: effectiveGenre
+        };
+      }
+      return {
+        allowed: false,
+        reason: `SUPPRESSED_IN_${effectiveGenre}_DIALOGUE_FOR_CLASSICAL_SPEAKER`,
+        genre: effectiveGenre
+      };
+    }
+
+    return { allowed: false, reason: `RESTRICTED_GENRE_${effectiveGenre}`, genre: effectiveGenre };
+  }
+
+  // 2. Permitted Modern / Sci-Fi / Game Genres
+  if (effectiveGenre && PERMITTED_SLANG_GENRES.has(effectiveGenre)) {
+    // In dialogue, check for archaic formal speaker override
+    if (role === "DIALOGUE" && ARCHAIC_FORMAL_PERSONAS.has(speakerStyle)) {
+      return {
+        allowed: false,
+        reason: `SUPPRESSED_IN_${effectiveGenre}_DIALOGUE_DUE_TO_ARCHAIC_FORMAL_SPEAKER`,
+        genre: effectiveGenre
+      };
+    }
+
+    // In inner thought, check for archaic formal thinker override
+    if (role === "INNER_THOUGHT" && ARCHAIC_FORMAL_PERSONAS.has(thinkerStyle)) {
+      return {
+        allowed: false,
+        reason: `SUPPRESSED_IN_${effectiveGenre}_INNER_THOUGHT_DUE_TO_ARCHAIC_FORMAL_THINKER`,
+        genre: effectiveGenre
+      };
+    }
+
+    return {
+      allowed: true,
+      reason: `PERMITTED_IN_${effectiveGenre}_GENRE_FOR_${role}`,
+      genre: effectiveGenre
+    };
+  }
+
+  // 3. Fallback / Unspecified Genre:
+  // If primary domain is explicit URBAN_SLANG, allow.
+  if (primaryDomain === "URBAN_SLANG") {
+    return { allowed: true, reason: "PERMITTED_BY_PRIMARY_DOMAIN_URBAN_SLANG", genre: "URBAN" };
+  }
+
+  // If a classical domain is explicitly active without modern override, suppress.
+  const classicalDomains = new Set([
+    "TITLE_HIERARCHY", "ZEN_TEA", "DAOIST_ARRAY", "SWORD_DAO", "WARFARE_SIEGE",
+    "ALCHEMY", "IMPERIAL_EDICT", "MANTRA_SEAL", "DIVINE_SENSE"
+  ]);
+  if (classicalDomains.has(primaryDomain)) {
+    return {
+      allowed: false,
+      reason: `SUPPRESSED_DUE_TO_ACTIVE_CLASSICAL_DOMAIN_${primaryDomain}`,
+      genre: "CLASSICAL"
+    };
+  }
+
+  // Default neutral context: permit in dialogue/action if no classical constraint
+  return {
+    allowed: true,
+    reason: "PERMITTED_IN_UNCONSTRAINED_CONTEXT",
+    genre: "GENERAL"
+  };
+}
+
+// =========================================================================
 // Provider Factory
 // =========================================================================
 function createUrbanSlangProvider() {
@@ -248,12 +450,8 @@ function createUrbanSlangProvider() {
     supportedSlots: [STYLE_SLOTS.MODERN_VERNACULAR],
 
     /**
-     * Contribute modern-vernacular candidates for any clause with a matching slang pattern.
-     *
-     * Activation Conditions:
-     * - NO role restriction (ACTION, DESCRIPTION, DIALOGUE, EXPOSITION all valid).
-     * - NO Speaker/Listener/Relationship required.
-     * - Pattern match only.
+     * Contribute modern-vernacular candidates for clauses with matching slang patterns,
+     * subject to strict genre, textRole, and persona context gating.
      *
      * @param {Object} clauseIR
      * @param {Object} [context]
@@ -262,7 +460,13 @@ function createUrbanSlangProvider() {
     contribute(clauseIR, context = {}) {
       if (!clauseIR || !clauseIR.sourceZh) return [];
 
-      // Search Vietnamese translated text (primary) or source Chinese (fallback)
+      // 1. Context Gating: Check genre, textRole, persona eligibility
+      const eligibility = evaluateSlangContextEligibility(clauseIR, context);
+      if (!eligibility.allowed) {
+        return [];
+      }
+
+      // 2. Search Vietnamese translated text (primary) or source Chinese (fallback)
       const searchText = (context && context.translatedText) || clauseIR.sourceZh;
       const contributions = [];
 
@@ -279,7 +483,9 @@ function createUrbanSlangProvider() {
             candidateVi: def.candidateVi,
             semanticRequirements: {
               slangCategory: def.slangCategory,
-              requiredEvidence: ["MODERN_SLANG_EXPRESSION"]
+              requiredEvidence: ["MODERN_SLANG_EXPRESSION"],
+              eligibleGenre: eligibility.genre,
+              allowReason: eligibility.reason
             },
             semanticSignature: def.signature,
             tone: def.tone,
@@ -291,7 +497,7 @@ function createUrbanSlangProvider() {
             introducedInformation: [],
             introducedMetaphor: false,
             surfaceRealization: true,
-            provenance: `urban-slang-provider:${def.ruleId}->${STYLE_SLOTS.MODERN_VERNACULAR}:${def.slangCategory}`
+            provenance: `urban-slang-provider:${def.ruleId}->${STYLE_SLOTS.MODERN_VERNACULAR}:${def.slangCategory}:genre=${eligibility.genre}:role=${clauseIR.role || "NARRATION"}:reason=${eligibility.reason}`
           })
         );
       }
@@ -315,6 +521,11 @@ function createUrbanSlangProvider() {
 
 module.exports = {
   createUrbanSlangProvider,
+  evaluateSlangContextEligibility,
   URBAN_SLANG_CONTRIBUTION_DEFINITIONS,
-  SLANG_CATEGORIES
+  SLANG_CATEGORIES,
+  PERMITTED_SLANG_GENRES,
+  RESTRICTED_CLASSICAL_GENRES,
+  MODERN_SPEAKER_PERSONAS,
+  ARCHAIC_FORMAL_PERSONAS
 };

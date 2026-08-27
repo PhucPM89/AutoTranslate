@@ -1,24 +1,24 @@
 "use strict";
 
 /**
- * Banter & Satirical Retort Contribution Provider (Phase 2B - Wave C2B-2)
+ * Banter & Satirical Retort Contribution Provider (Phase 2B - Wave C2B-2.1 Hardened)
  * Domain: BANTER
  *
  * Semantic Model (6-Axis):
  * 1. SPEAKER     — EntityId resolved by DiscourseTracker (not guessed from raw text)
  * 2. LISTENER    — EntityId resolved by DiscourseTracker (not guessed from raw text)
- * 3. RELATIONSHIP— Type: MORTAL_ENEMY | PEER | SENIOR_JUNIOR | MASTER_DISCIPLE | RULER_SUBJECT
- * 4. DIALOGUE ACT— TAUNT | RETORT | MOCK | INSULT | BANTER | CHALLENGE | SHAME_FACE
- * 5. AFFECT      — Contempt, Amusement, Arrogance, Rivalry
+ * 3. RELATIONSHIP— Type: MORTAL_ENEMY | ENEMY | PEER | SENIOR_JUNIOR | MASTER_DISCIPLE | RULER_SUBJECT | FRIEND | RIVAL
+ * 4. DIALOGUE ACT— TAUNT | RETORT | MOCK | INSULT | BANTER | TEASING | SARCASM | AFFECTIONATE_TEASING | CHALLENGE
+ * 5. AFFECT      — Contempt, Amusement, Arrogance, Rivalry, Affection, Hostility
  * 6. REGISTER    — CLASSICAL_TRASH_TALK | WUXIA_BANTER | VERNACULAR_PUNCHY
  *
  * Architecture Invariants:
- * - Discourse Authority: Provider ABSTAIN if speaker, listener, or relationship is not RESOLVED.
- * - Relationship Safety: Some dialogue acts are forbidden for certain relationship types.
- *   (e.g. a disciple cannot insult their master with pattern-based certainty)
+ * - Banter ≠ Insult: Playful teasing between peers/friends is distinct from hostile taunt/insult between enemies.
+ * - Discourse Authority: Provider ABSTAINS if speaker, listener, or relationship is not RESOLVED.
+ * - Relationship & Hierarchy Safety: Irreverent banter/insult forbidden in MASTER_DISCIPLE (disciple to master) and RULER_SUBJECT.
+ * - Contextual Disambiguation: Same surface sentence (e.g. "你可真厉害") yields TEASING with friends, SARCASM with enemies, ABSTAIN in court.
  * - Zero Pronoun Injection: Never hardcodes pronouns — candidates are pronoun-neutral phrases.
  * - Zero Text-Role Violation: Only activates when ClauseIR.role === "DIALOGUE".
- * - Migrates 9 legacy banter-adapter.js rules into discourse-aware contributions.
  */
 
 const { createSemanticSignature } = require("../contracts");
@@ -34,19 +34,27 @@ const RELATIONSHIP_TYPES = Object.freeze({
   SENIOR_JUNIOR: "SENIOR_JUNIOR",
   MASTER_DISCIPLE: "MASTER_DISCIPLE",
   RULER_SUBJECT: "RULER_SUBJECT",
+  FRIEND: "FRIEND",
+  RIVAL: "RIVAL",
+  LOVER: "LOVER",
   UNKNOWN: "UNKNOWN"
 });
 
-// Relationships where banter/insult is plausible
-const HOSTILE_RELATIONSHIPS = new Set([
+// Relationships where hostile insults/taunts are valid
+const HOSTILE_RELATIONSHIPS = Object.freeze(new Set([
   RELATIONSHIP_TYPES.MORTAL_ENEMY,
-  RELATIONSHIP_TYPES.ENEMY
-]);
+  RELATIONSHIP_TYPES.ENEMY,
+  RELATIONSHIP_TYPES.RIVAL
+]));
 
-const PEER_RELATIONSHIPS = new Set([
+// Relationships where playful banter/teasing is valid
+const PLAYFUL_RELATIONSHIPS = Object.freeze(new Set([
   RELATIONSHIP_TYPES.PEER,
-  RELATIONSHIP_TYPES.SENIOR_JUNIOR
-]);
+  RELATIONSHIP_TYPES.SENIOR_JUNIOR,
+  RELATIONSHIP_TYPES.FRIEND,
+  RELATIONSHIP_TYPES.RIVAL,
+  RELATIONSHIP_TYPES.LOVER
+]));
 
 // =========================================================================
 // Dialogue Act Classification
@@ -57,25 +65,18 @@ const DIALOGUE_ACTS = Object.freeze({
   INSULT: "INSULT",
   RETORT: "RETORT",
   BANTER: "BANTER",
+  TEASING: "TEASING",
+  SARCASM: "SARCASM",
+  AFFECTIONATE_TEASING: "AFFECTIONATE_TEASING",
+  PLAYFUL_INSULT: "PLAYFUL_INSULT",
   CHALLENGE: "CHALLENGE",
-  SHAME_FACE: "SHAME_FACE"
+  SHAME_FACE: "SHAME_FACE",
+  NONE: "NONE"
 });
 
 // =========================================================================
-// Banter Contribution Definitions (9 Migrated Rules)
+// Banter Contribution Definitions
 // =========================================================================
-
-/**
- * Each definition specifies:
- * - targetVi: Vietnamese pattern to match (from old banter-adapter rules)
- * - pattern: Vietnamese regex (provider operates on post-translation text)
- * - candidateVi: Semantically improved replacement candidate
- * - dialogueAct: The specific communicative act being performed
- * - allowedRelationships: Set of relationship types this act is valid for
- * - forbiddenRelationships: Set of relationship types where this act must ABSTAIN
- * - affectDistribution: Emotional makeup of the contribution
- * - register: Rhetorical register of the output
- */
 const BANTER_CONTRIBUTION_DEFINITIONS = Object.freeze([
   // Rule 1: Trash-talk / Disbelief challenge
   {
@@ -84,7 +85,7 @@ const BANTER_CONTRIBUTION_DEFINITIONS = Object.freeze([
     pattern: /ngươi (?:đây )?(?:là )?đang (?:cùng ta )?nói đùa sao\??/i,
     candidateVi: "ngươi đang kể chuyện cười cho ta nghe đấy à?",
     dialogueAct: DIALOGUE_ACTS.TAUNT,
-    allowedRelationships: [RELATIONSHIP_TYPES.PEER, RELATIONSHIP_TYPES.ENEMY, RELATIONSHIP_TYPES.MORTAL_ENEMY, RELATIONSHIP_TYPES.SENIOR_JUNIOR],
+    allowedRelationships: [RELATIONSHIP_TYPES.PEER, RELATIONSHIP_TYPES.ENEMY, RELATIONSHIP_TYPES.MORTAL_ENEMY, RELATIONSHIP_TYPES.SENIOR_JUNIOR, RELATIONSHIP_TYPES.RIVAL],
     forbiddenRelationships: [RELATIONSHIP_TYPES.RULER_SUBJECT, RELATIONSHIP_TYPES.MASTER_DISCIPLE],
     signature: createSemanticSignature({
       denotation: "MOCKING_DISBELIEF_CHALLENGE",
@@ -104,8 +105,8 @@ const BANTER_CONTRIBUTION_DEFINITIONS = Object.freeze([
     pattern: /cho mặt mà không (?:cần|muốn) mặt/i,
     candidateVi: "rượu mời không uống lại muốn uống rượu phạt",
     dialogueAct: DIALOGUE_ACTS.INSULT,
-    allowedRelationships: [RELATIONSHIP_TYPES.ENEMY, RELATIONSHIP_TYPES.MORTAL_ENEMY, RELATIONSHIP_TYPES.SENIOR_JUNIOR],
-    forbiddenRelationships: [RELATIONSHIP_TYPES.RULER_SUBJECT, RELATIONSHIP_TYPES.MASTER_DISCIPLE],
+    allowedRelationships: [RELATIONSHIP_TYPES.ENEMY, RELATIONSHIP_TYPES.MORTAL_ENEMY, RELATIONSHIP_TYPES.SENIOR_JUNIOR, RELATIONSHIP_TYPES.RIVAL],
+    forbiddenRelationships: [RELATIONSHIP_TYPES.RULER_SUBJECT, RELATIONSHIP_TYPES.MASTER_DISCIPLE, RELATIONSHIP_TYPES.FRIEND],
     signature: createSemanticSignature({
       denotation: "COURTESY_REFUSED_COMEUPPANCE",
       affectDistribution: { CONTEMPT: 0.85, ARROGANCE: 0.70 },
@@ -117,14 +118,14 @@ const BANTER_CONTRIBUTION_DEFINITIONS = Object.freeze([
     priority: 0.90
   },
 
-  // Rule 3 & 4: Who do you think you are?
+  // Rule 3: Who do you think you are? (Insult)
   {
     ruleId: "BANTER_R03",
     targetVi: "ngươi tính là cái thứ gì",
     pattern: /ngươi tính là cái th(?:ứ|á) gì/i,
     candidateVi: "ngươi là cái thá gì chứ",
     dialogueAct: DIALOGUE_ACTS.INSULT,
-    allowedRelationships: [RELATIONSHIP_TYPES.PEER, RELATIONSHIP_TYPES.ENEMY, RELATIONSHIP_TYPES.MORTAL_ENEMY, RELATIONSHIP_TYPES.SENIOR_JUNIOR],
+    allowedRelationships: [RELATIONSHIP_TYPES.PEER, RELATIONSHIP_TYPES.ENEMY, RELATIONSHIP_TYPES.MORTAL_ENEMY, RELATIONSHIP_TYPES.SENIOR_JUNIOR, RELATIONSHIP_TYPES.RIVAL],
     forbiddenRelationships: [RELATIONSHIP_TYPES.RULER_SUBJECT, RELATIONSHIP_TYPES.MASTER_DISCIPLE],
     signature: createSemanticSignature({
       denotation: "DISDAINFUL_DISMISSAL",
@@ -137,15 +138,15 @@ const BANTER_CONTRIBUTION_DEFINITIONS = Object.freeze([
     priority: 0.92
   },
 
-  // Rule 5 & 6: Tired of living
+  // Rule 5: Tired of living (Combat Taunt)
   {
     ruleId: "BANTER_R05",
     targetVi: "ngươi đây là tự tìm cái chết",
     pattern: /ngươi (?:đây )?là tự tìm (?:cái )?(?:chết|đường chết)/i,
     candidateVi: "ngươi đúng là chán sống rồi",
     dialogueAct: DIALOGUE_ACTS.TAUNT,
-    allowedRelationships: [RELATIONSHIP_TYPES.ENEMY, RELATIONSHIP_TYPES.MORTAL_ENEMY],
-    forbiddenRelationships: [RELATIONSHIP_TYPES.PEER, RELATIONSHIP_TYPES.SENIOR_JUNIOR, RELATIONSHIP_TYPES.RULER_SUBJECT, RELATIONSHIP_TYPES.MASTER_DISCIPLE],
+    allowedRelationships: [RELATIONSHIP_TYPES.ENEMY, RELATIONSHIP_TYPES.MORTAL_ENEMY, RELATIONSHIP_TYPES.RIVAL],
+    forbiddenRelationships: [RELATIONSHIP_TYPES.PEER, RELATIONSHIP_TYPES.SENIOR_JUNIOR, RELATIONSHIP_TYPES.RULER_SUBJECT, RELATIONSHIP_TYPES.MASTER_DISCIPLE, RELATIONSHIP_TYPES.FRIEND],
     signature: createSemanticSignature({
       denotation: "DEATH_WISH_TAUNTING",
       affectDistribution: { CONTEMPT: 0.85, ARROGANCE: 0.90 },
@@ -157,14 +158,14 @@ const BANTER_CONTRIBUTION_DEFINITIONS = Object.freeze([
     priority: 0.93
   },
 
-  // Rule 7: Thick-faced shamelessness (strong)
+  // Rule 7: Thick-faced shamelessness (Mockery / Teasing)
   {
     ruleId: "BANTER_R07",
     targetVi: "da mặt của ngươi thật dày",
     pattern: /da mặt (?:của )?ngươi (?:thật|cũng thật) dày/i,
     candidateVi: "da mặt ngươi cũng dày bằng tường thành đấy nhỉ",
     dialogueAct: DIALOGUE_ACTS.MOCK,
-    allowedRelationships: [RELATIONSHIP_TYPES.PEER, RELATIONSHIP_TYPES.ENEMY, RELATIONSHIP_TYPES.MORTAL_ENEMY, RELATIONSHIP_TYPES.SENIOR_JUNIOR],
+    allowedRelationships: [RELATIONSHIP_TYPES.PEER, RELATIONSHIP_TYPES.ENEMY, RELATIONSHIP_TYPES.MORTAL_ENEMY, RELATIONSHIP_TYPES.SENIOR_JUNIOR, RELATIONSHIP_TYPES.FRIEND, RELATIONSHIP_TYPES.RIVAL],
     forbiddenRelationships: [RELATIONSHIP_TYPES.RULER_SUBJECT, RELATIONSHIP_TYPES.MASTER_DISCIPLE],
     signature: createSemanticSignature({
       denotation: "SHAMELESSNESS_MOCKERY",
@@ -177,14 +178,14 @@ const BANTER_CONTRIBUTION_DEFINITIONS = Object.freeze([
     priority: 0.85
   },
 
-  // Rule 8: Thick-faced shamelessness (light)
+  // Rule 8: Light thick-faced (Playful Teasing)
   {
     ruleId: "BANTER_R08",
     targetVi: "da mặt cũng thật là dày",
     pattern: /da mặt cũng thật là dày/i,
     candidateVi: "da mặt cũng dày thật đấy",
-    dialogueAct: DIALOGUE_ACTS.MOCK,
-    allowedRelationships: [RELATIONSHIP_TYPES.PEER, RELATIONSHIP_TYPES.SENIOR_JUNIOR],
+    dialogueAct: DIALOGUE_ACTS.TEASING,
+    allowedRelationships: [RELATIONSHIP_TYPES.PEER, RELATIONSHIP_TYPES.SENIOR_JUNIOR, RELATIONSHIP_TYPES.FRIEND],
     forbiddenRelationships: [RELATIONSHIP_TYPES.RULER_SUBJECT, RELATIONSHIP_TYPES.MASTER_DISCIPLE],
     signature: createSemanticSignature({
       denotation: "LIGHT_SHAMELESSNESS_MOCK",
@@ -197,14 +198,14 @@ const BANTER_CONTRIBUTION_DEFINITIONS = Object.freeze([
     priority: 0.82
   },
 
-  // Rule 9: Toad aspiring to swan's flesh
+  // Rule 9: Toad aspiring to swan's flesh (Insult / Ridicule)
   {
     ruleId: "BANTER_R09",
     targetVi: "con cóc đòi ăn thịt thiên nga",
     pattern: /con? cóc (?:ghẻ )?(?:mà )?đòi ăn thịt thiên nga/i,
     candidateVi: "cóc ghẻ mà đòi ăn thịt thiên nga",
     dialogueAct: DIALOGUE_ACTS.MOCK,
-    allowedRelationships: [RELATIONSHIP_TYPES.PEER, RELATIONSHIP_TYPES.ENEMY, RELATIONSHIP_TYPES.MORTAL_ENEMY, RELATIONSHIP_TYPES.SENIOR_JUNIOR],
+    allowedRelationships: [RELATIONSHIP_TYPES.PEER, RELATIONSHIP_TYPES.ENEMY, RELATIONSHIP_TYPES.MORTAL_ENEMY, RELATIONSHIP_TYPES.SENIOR_JUNIOR, RELATIONSHIP_TYPES.RIVAL],
     forbiddenRelationships: [RELATIONSHIP_TYPES.RULER_SUBJECT, RELATIONSHIP_TYPES.MASTER_DISCIPLE],
     signature: createSemanticSignature({
       denotation: "ASPIRATION_MOCKERY_IDIOM",
@@ -217,14 +218,14 @@ const BANTER_CONTRIBUTION_DEFINITIONS = Object.freeze([
     priority: 0.90
   },
 
-  // Rule 10: You're still green
+  // Rule 10: You're still green (Retort / Inexperience Taunt)
   {
     ruleId: "BANTER_R10",
     targetVi: "ngươi còn non và xanh lắm",
     pattern: /ngươi còn (?:non (?:và|nớt)|quá non (?:và|nớt)) ?(?:xanh)? lắm/i,
     candidateVi: "ngươi còn non nớt lắm",
     dialogueAct: DIALOGUE_ACTS.RETORT,
-    allowedRelationships: [RELATIONSHIP_TYPES.PEER, RELATIONSHIP_TYPES.SENIOR_JUNIOR],
+    allowedRelationships: [RELATIONSHIP_TYPES.PEER, RELATIONSHIP_TYPES.SENIOR_JUNIOR, RELATIONSHIP_TYPES.RIVAL],
     forbiddenRelationships: [RELATIONSHIP_TYPES.RULER_SUBJECT, RELATIONSHIP_TYPES.MASTER_DISCIPLE],
     signature: createSemanticSignature({
       denotation: "INEXPERIENCE_RETORT",
@@ -235,6 +236,47 @@ const BANTER_CONTRIBUTION_DEFINITIONS = Object.freeze([
     }),
     tone: "DISMISSIVE",
     priority: 0.85
+  },
+
+  // Rule 11: Context-Dependent Ambiguous Praise ("你可真厉害")
+  // Resolved conditionally based on relationship & affect
+  {
+    ruleId: "BANTER_R11_CONTEXTUAL_PRAISE",
+    targetVi: "ngươi (?:thật|quả)? là lợi hại",
+    pattern: /(?:ngươi|huynh|đệ|muội) (?:thật|quả|cũng)? (?:là )?(?:lợi hại|giỏi|ghê gớm)(?: thật)?(?: đấy)?\??/i,
+    candidateVi: "ngươi cũng cừ thật đấy nhỉ",
+    dialogueAct: DIALOGUE_ACTS.TEASING,
+    allowedRelationships: [RELATIONSHIP_TYPES.FRIEND, RELATIONSHIP_TYPES.PEER, RELATIONSHIP_TYPES.LOVER],
+    forbiddenRelationships: [RELATIONSHIP_TYPES.RULER_SUBJECT, RELATIONSHIP_TYPES.MASTER_DISCIPLE],
+    signature: createSemanticSignature({
+      denotation: "PLAYFUL_PRAISE_TEASING",
+      affectDistribution: { AMUSEMENT: 0.75, AFFECTION: 0.50 },
+      valence: 0.40,
+      intensity: 0.50,
+      register: "VERNACULAR_PUNCHY"
+    }),
+    tone: "PLAYFUL",
+    priority: 0.86
+  },
+
+  // Rule 12: Ambiguous Praise in Hostile Context -> Sarcastic Mockery
+  {
+    ruleId: "BANTER_R12_SARCASM_PRAISE",
+    targetVi: "ngươi quả là ghê gớm",
+    pattern: /(?:ngươi|hắn) (?:quả là|đúng là) (?:lợi hại|ghê gớm)(?: đấy)?/i,
+    candidateVi: "ngươi quả là ghê gớm đấy",
+    dialogueAct: DIALOGUE_ACTS.SARCASM,
+    allowedRelationships: [RELATIONSHIP_TYPES.ENEMY, RELATIONSHIP_TYPES.MORTAL_ENEMY, RELATIONSHIP_TYPES.RIVAL],
+    forbiddenRelationships: [RELATIONSHIP_TYPES.RULER_SUBJECT, RELATIONSHIP_TYPES.MASTER_DISCIPLE],
+    signature: createSemanticSignature({
+      denotation: "SARCASM_MOCKERY",
+      affectDistribution: { CONTEMPT: 0.85, HOSTILITY: 0.60 },
+      valence: -0.60,
+      intensity: 0.70,
+      register: "CLASSICAL_TRASH_TALK"
+    }),
+    tone: "SARCASTIC",
+    priority: 0.88
   }
 ]);
 
@@ -252,11 +294,10 @@ function createBanterProvider() {
      *
      * Strict activation conditions:
      * 1. ClauseIR.role must be "DIALOGUE".
-     * 2. dialogueContext.speaker.status must be "RESOLVED".
-     * 3. dialogueContext.listener.status must be "RESOLVED".
-     * 4. dialogueContext.relationship.status must be "RESOLVED".
-     * 5. Pattern must match candidate Vietnamese text.
-     * 6. Relationship type must not be in rule's forbiddenRelationships.
+     * 2. Speaker, Listener, and Relationship must be RESOLVED (via context or clauseIR.dialogueAct).
+     * 3. Relationship type must match allowed relationships and NOT be forbidden.
+     * 4. Formal court / solemn decrees strictly suppress banter.
+     * 5. Pattern matches search text.
      *
      * @param {Object} clauseIR
      * @param {Object} [context]
@@ -268,31 +309,60 @@ function createBanterProvider() {
       // Strict role gate: only DIALOGUE
       if (clauseIR.role !== "DIALOGUE") return [];
 
-      // Strict discourse gate: require resolved Speaker + Listener + Relationship
+      // Check for formal court setting override -> ABSTAIN
+      if (context.formalSetting === true || context.register === "SOLEMN_DECREE") {
+        return [];
+      }
+
+      // Discourse gate: Extract dialogue context from context or clauseIR
       const dialogueCtx = context.dialogueContext || null;
-      if (!dialogueCtx) return [];
+      const irDialogueAct = clauseIR.dialogueAct || null;
 
-      const speakerResolved = dialogueCtx.speaker && dialogueCtx.speaker.status === "RESOLVED";
-      const listenerResolved = dialogueCtx.listener && dialogueCtx.listener.status === "RESOLVED";
-      const relationshipResolved = dialogueCtx.relationship && dialogueCtx.relationship.status === "RESOLVED";
+      let speakerResolved = false;
+      let listenerResolved = false;
+      let relationshipResolved = false;
+      let relationshipType = RELATIONSHIP_TYPES.UNKNOWN;
 
-      if (!speakerResolved || !listenerResolved || !relationshipResolved) return [];
+      if (dialogueCtx) {
+        speakerResolved = dialogueCtx.speaker && dialogueCtx.speaker.status === "RESOLVED";
+        listenerResolved = dialogueCtx.listener && dialogueCtx.listener.status === "RESOLVED";
+        relationshipResolved = dialogueCtx.relationship && dialogueCtx.relationship.status === "RESOLVED";
+        if (dialogueCtx.relationship) {
+          relationshipType = dialogueCtx.relationship.type || RELATIONSHIP_TYPES.UNKNOWN;
+        }
+      } else if (irDialogueAct && irDialogueAct.status === "RESOLVED") {
+        speakerResolved = irDialogueAct.speaker && irDialogueAct.speaker.status === "RESOLVED";
+        listenerResolved = irDialogueAct.listener && irDialogueAct.listener.status === "RESOLVED";
+        relationshipResolved = irDialogueAct.relationship && irDialogueAct.relationship.status === "RESOLVED";
+        if (irDialogueAct.relationship) {
+          relationshipType = irDialogueAct.relationship.type || RELATIONSHIP_TYPES.UNKNOWN;
+        }
+      }
 
-      const relationshipType = dialogueCtx.relationship.type || RELATIONSHIP_TYPES.UNKNOWN;
+      if (!speakerResolved || !listenerResolved || !relationshipResolved) {
+        return [];
+      }
 
       // Search Vietnamese translated text (primary) or source Chinese (fallback)
-      // Banter patterns match translated Vietnamese output supplied by context.translatedText
       const searchText = (context && context.translatedText) || clauseIR.sourceZh;
       const contributions = [];
 
       for (const def of BANTER_CONTRIBUTION_DEFINITIONS) {
         if (!def.pattern.test(searchText)) continue;
 
-        // Forbidden relationship gate
+        // Forbidden relationship gate (e.g. disciple insulting master, or subject insulting ruler)
         if (def.forbiddenRelationships.includes(relationshipType)) continue;
 
-        // Must be an allowed relationship (if list is specified)
-        if (def.allowedRelationships.length > 0 && !def.allowedRelationships.includes(relationshipType)) continue;
+        // Allowed relationship gate
+        if (def.allowedRelationships.length > 0 && !def.allowedRelationships.includes(relationshipType)) {
+          continue;
+        }
+
+        // Align with dialogueAct if IR has already resolved a specific act
+        let effectiveAct = def.dialogueAct;
+        if (irDialogueAct && irDialogueAct.dialogueAct && irDialogueAct.dialogueAct !== "NONE") {
+          effectiveAct = irDialogueAct.dialogueAct;
+        }
 
         contributions.push(
           createStylistContribution({
@@ -303,11 +373,12 @@ function createBanterProvider() {
             sourceSpanZh: def.targetVi,
             candidateVi: def.candidateVi,
             semanticRequirements: {
-              dialogueAct: def.dialogueAct,
+              dialogueAct: effectiveAct,
               allowedRelationships: def.allowedRelationships,
               forbiddenRelationships: def.forbiddenRelationships,
               requiredRole: "DIALOGUE",
-              requiredDiscourseResolution: ["SPEAKER", "LISTENER", "RELATIONSHIP"]
+              requiredDiscourseResolution: ["SPEAKER", "LISTENER", "RELATIONSHIP"],
+              relationshipType
             },
             semanticSignature: def.signature,
             tone: def.tone,
@@ -319,7 +390,7 @@ function createBanterProvider() {
             introducedInformation: [],
             introducedMetaphor: false,
             surfaceRealization: true,
-            provenance: `banter-provider:${def.ruleId}->${STYLE_SLOTS.BANTER_RETORT}:${def.dialogueAct}:${relationshipType}`
+            provenance: `banter-provider:${def.ruleId}->${STYLE_SLOTS.BANTER_RETORT}:${effectiveAct}:${relationshipType}`
           })
         );
       }
@@ -345,5 +416,7 @@ module.exports = {
   createBanterProvider,
   BANTER_CONTRIBUTION_DEFINITIONS,
   DIALOGUE_ACTS,
-  RELATIONSHIP_TYPES
+  RELATIONSHIP_TYPES,
+  HOSTILE_RELATIONSHIPS,
+  PLAYFUL_RELATIONSHIPS
 };

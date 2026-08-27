@@ -114,14 +114,14 @@ test("Wave B.5.1 - 3. Ontology Integrity: 74 slots correctly distributed across 
   assert.equal(distribution[SEMANTIC_ROLES.ACTION], 16, "ACTION slots count");
   assert.equal(distribution[SEMANTIC_ROLES.OBJECT], 6, "OBJECT slots count");
   assert.equal(distribution[SEMANTIC_ROLES.EVENT], 12, "EVENT slots count");
-  assert.equal(distribution[SEMANTIC_ROLES.STATE], 14, "STATE slots count");
+  assert.equal(distribution[SEMANTIC_ROLES.STATE], 13, "STATE slots count");
   assert.equal(distribution[SEMANTIC_ROLES.AFFECT], 5, "AFFECT slots count");
   assert.equal(distribution[SEMANTIC_ROLES.COGNITION], 1, "COGNITION slots count");
   assert.equal(distribution[SEMANTIC_ROLES.ATMOSPHERE], 14, "ATMOSPHERE slots count");
   assert.equal(distribution[SEMANTIC_ROLES.DIALOGUE_ACT], 4, "DIALOGUE_ACT slots count");
-  assert.equal(distribution[SEMANTIC_ROLES.NARRATIVE_FUNCTION], 2, "NARRATIVE_FUNCTION slots count");
+  assert.equal(distribution[SEMANTIC_ROLES.NARRATIVE_FUNCTION], 3, "NARRATIVE_FUNCTION slots count");
 
-  // C2B-2: BANTER_RETORT renames old DIALOGUE_ACT slot (count stays 4); MODERN_VERNACULAR adds STATE (13->14)
+  // C2B-2.1: MODERN_VERNACULAR classified under NARRATIVE_FUNCTION (2->3); STATE returns to 13; Total: 74
   const total = Object.values(distribution).reduce((a, b) => a + b, 0);
   assert.equal(total, 74, "Total slots distribution must sum to exactly 74");
 });

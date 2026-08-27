@@ -1083,7 +1083,7 @@ const STYLE_SLOT_DEFINITIONS = Object.freeze({
   }),
   MODERN_VERNACULAR: defineStyleSlot({
     id: "MODERN_VERNACULAR",
-    semanticRole: SEMANTIC_ROLES.STATE,
+    semanticRole: SEMANTIC_ROLES.NARRATIVE_FUNCTION,
     realizationDimensions: [REALIZATION_DIMENSIONS.LEXICAL, REALIZATION_DIMENSIONS.REGISTER],
     canMerge: false,
     canCompete: true,
@@ -1091,8 +1091,8 @@ const STYLE_SLOT_DEFINITIONS = Object.freeze({
     allowedTextRoles: ["ACTION", "DESCRIPTION", "DIALOGUE", "EXPOSITION"],
     requiredEvidence: ["MODERN_SLANG_EXPRESSION"],
     conflictPolicy: CONFLICT_POLICIES.COMPOSITE_SCORE,
-    description: "Localise thuật ngữ internet, urban slang, gaming và meme hiện đại sang tiếng Việt tương đương",
-    sourceSemantics: "Source contains contemporary Chinese internet slang, gaming jargon, or modern social meme expressions requiring register-aware localization"
+    description: "Localise thuật ngữ internet, urban slang, gaming và meme hiện đại theo narrative register phù hợp",
+    sourceSemantics: "Source contains contemporary Chinese internet slang, gaming jargon, or modern social meme expressions requiring register-aware narrative/lexical adaptation"
   })
 });
 
