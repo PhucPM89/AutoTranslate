@@ -1,66 +1,60 @@
 "use strict";
 
 /**
- * Stylist Provider Registry (Phase 2)
+ * Central Stylist Provider Registry
  * 
- * Manages the lifecycle, domain mapping, and retrieval of all Stylist Contribution Providers.
+ * Registers and instantiates all domain contribution providers.
  */
 
 const { createActionProvider } = require("./action-provider");
 const { createSwordProvider } = require("./sword-provider");
-const { createSupernaturalProvider } = require("./supernatural-provider");
 const { createZenTeaProvider } = require("./zen-tea-provider");
-const { createCourtProvider } = require("./court-provider");
-const { createCultivationProvider } = require("./cultivation-provider");
+const { createSupernaturalProvider } = require("./supernatural-provider");
 
-function createProviderRegistry() {
-  const providers = new Map();
+// Wave A Providers
+const { createAlchemyProvider } = require("./alchemy-provider");
+const { createBeastContractProvider } = require("./beast-contract-provider");
+const { createBestiaryProvider } = require("./bestiary-provider");
+const { createCulinaryProvider } = require("./culinary-provider");
+const { createCyberScifiProvider } = require("./cyber-scifi-provider");
+const { createDaoistArrayProvider } = require("./daoist-array-provider");
+const { createInscriptProvider } = require("./inscript-provider");
+const { createMeridianHealingProvider } = require("./meridian-healing-provider");
+const { createNecropolisProvider } = require("./necropolis-provider");
+const { createSoulTokenProvider } = require("./soul-token-provider");
+const { createSpatialProvider } = require("./spatial-provider");
+const { createAuctionProvider } = require("./auction-provider");
 
-  // Register built-in providers
-  const list = [
+function createDefaultProviderRegistry() {
+  const providers = [
+    // Phase 2A Pilot
     createActionProvider(),
     createSwordProvider(),
-    createSupernaturalProvider(),
     createZenTeaProvider(),
-    createCourtProvider(),
-    createCultivationProvider()
+    createSupernaturalProvider(),
+
+    // Phase 2B Wave A (12 Providers)
+    createAlchemyProvider(),
+    createBeastContractProvider(),
+    createBestiaryProvider(),
+    createCulinaryProvider(),
+    createCyberScifiProvider(),
+    createDaoistArrayProvider(),
+    createInscriptProvider(),
+    createMeridianHealingProvider(),
+    createNecropolisProvider(),
+    createSoulTokenProvider(),
+    createSpatialProvider(),
+    createAuctionProvider()
   ];
 
-  for (const p of list) {
-    providers.set(p.providerId, p);
-  }
-
-  function registerProvider(provider) {
-    if (!provider || !provider.providerId) return;
-    providers.set(provider.providerId, provider);
-  }
-
-  function getProvider(providerId) {
-    return providers.get(providerId) || null;
-  }
-
-  function getProvidersForDomain(domain) {
-    const matched = [];
-    for (const p of providers.values()) {
-      if (p.domain === domain) {
-        matched.push(p);
-      }
-    }
-    return matched;
-  }
-
-  function getAllProviders() {
-    return Array.from(providers.values());
-  }
-
   return Object.freeze({
-    registerProvider,
-    getProvider,
-    getProvidersForDomain,
-    getAllProviders
+    getAllProviders: () => [...providers],
+    getProviders: () => [...providers],
+    providers: Object.freeze(providers)
   });
 }
 
 module.exports = {
-  createProviderRegistry
+  createDefaultProviderRegistry
 };

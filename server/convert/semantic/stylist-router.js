@@ -9,7 +9,7 @@
  */
 
 const { checkSignatureCompatibility } = require("./contracts");
-const { createProviderRegistry } = require("./providers/provider-registry");
+const { createDefaultProviderRegistry } = require("./providers/provider-registry");
 const { STYLE_SLOTS } = require("./providers/stylist-contribution");
 
 // Domain Mutual Suppression Matrix
@@ -35,7 +35,7 @@ const ROUTER_SCORING_WEIGHTS = Object.freeze({
 });
 
 function createStylistRouter({
-  registry = createProviderRegistry(),
+  registry = createDefaultProviderRegistry(),
   minDomainActivationWeight = 0.15,
   weights = ROUTER_SCORING_WEIGHTS
 } = {}) {
@@ -65,7 +65,9 @@ function createStylistRouter({
     }
 
     // 2. Select Eligible Providers based on Context & Clause Role
-    const allProviders = registry.getAllProviders();
+    const allProviders = Array.isArray(registry)
+      ? registry
+      : (typeof registry.getAllProviders === "function" ? registry.getAllProviders() : []);
     const activeProviders = [];
 
     for (const provider of allProviders) {
