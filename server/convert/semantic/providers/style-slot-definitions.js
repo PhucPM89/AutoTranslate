@@ -1110,6 +1110,23 @@ const STYLE_SLOT_DEFINITIONS = Object.freeze({
     conflictPolicy: CONFLICT_POLICIES.COMPOSITE_SCORE,
     description: "Hiện thực hóa nét thanh tao, dung mạo, xiêm y và thần thái cổ phong của mỹ nhân dựa trên bằng chứng ngữ nghĩa có sẵn",
     sourceSemantics: "Source denotes explicit classical maiden visual aesthetics, attire, ethereal grace, or poetic beauty metaphors without invented physical or erotic attributes"
+  }),
+
+  // =========================================================================
+  // 14. WAVE C3-A2 CHANT & POETRY VERSIFIER (1 Canonical Slot)
+  // =========================================================================
+  POETIC_VERSE: defineStyleSlot({
+    id: "POETIC_VERSE",
+    semanticRole: SEMANTIC_ROLES.NARRATIVE_FUNCTION,
+    realizationDimensions: [REALIZATION_DIMENSIONS.LEXICAL, REALIZATION_DIMENSIONS.RHYTHMIC, REALIZATION_DIMENSIONS.REGISTER],
+    canMerge: false,
+    canCompete: true,
+    maxMultiplicity: 1,
+    allowedTextRoles: ["DIALOGUE", "ACTION", "DESCRIPTION", "EXPOSITION"],
+    requiredEvidence: ["POETIC_CHANT_EVIDENCE"],
+    conflictPolicy: CONFLICT_POLICIES.COMPOSITE_SCORE,
+    description: "Hiện thực hóa thi ca, khẩu quyết tu tiên, chiến ca hào hùng và thi đối cổ phong với niêm luật và nhịp điệu tiếng Việt phù hợp",
+    sourceSemantics: "Source contains classical cultivation chants, heroic couplets, battle cries, or Daoist philosophical maxims requiring meter-aware and cadence-preserving realization while strictly preserving syntactic arguments and causal truth"
   })
 });
 
@@ -1121,6 +1138,7 @@ const PROVIDER_SLOT_COMPATIBILITY_MAP = Object.freeze({
   "auction-provider": ["AUCTION_EVENT"],
   "beast-contract-provider": ["BEAST_CONTRACT", "BEAST_EVOLUTION"],
   "bestiary-provider": ["BEAST_ROAR", "BEAST_EVOLUTION"],
+  "chant-versifier-provider": ["POETIC_VERSE"],
   "chronology-provider": ["TEMPORAL_MEASURE", "TRANSCENDENCE_TIME"],
   "cosmic-chess-provider": ["COSMIC_CHESS_BOARD", "CHESS_STRATEGY_MOVE"],
   "courtly-beauty-provider": ["AESTHETIC_ELEGANCE"],

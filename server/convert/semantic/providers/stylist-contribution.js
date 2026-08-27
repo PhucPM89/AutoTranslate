@@ -89,7 +89,8 @@ const STYLE_SLOTS = Object.freeze({
   INNER_MONOLOGUE: "INNER_MONOLOGUE",         // Độc thoại nội tâm, suy tính thầm kín, cảm xúc nội tâm
   BANTER_RETORT: "BANTER_RETORT",             // Lời thoại mỉa mai, chế giễu, khiêu khích có Speaker+Listener+Relationship đã resolved
   MODERN_VERNACULAR: "MODERN_VERNACULAR",     // Localise urban slang, gaming, internet meme sang tiếng Việt
-  AESTHETIC_ELEGANCE: "AESTHETIC_ELEGANCE"    // Nét thanh tao, dung mạo, xiêm y, thần thái cổ phong của mỹ nhân
+  AESTHETIC_ELEGANCE: "AESTHETIC_ELEGANCE",   // Nét thanh tao, dung mạo, xiêm y, thần thái cổ phong của mỹ nhân
+  POETIC_VERSE: "POETIC_VERSE"                // Thi ca, khẩu quyết tu tiên, thi đối và chiến ca cổ phong
 });
 
 const {
