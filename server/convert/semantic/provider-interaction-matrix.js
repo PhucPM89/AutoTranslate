@@ -52,7 +52,12 @@ const DOMAIN_PAIR_RELATIONS = [
   { domainA: "WARFARE_SIEGE", domainB: "SOUNDSCAPE", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "War drums, explosions, and battlefield charges harmonize" },
   { domainA: "SUPERNATURAL_HORROR", domainB: "SENSORY_ATMOSPHERE", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Ghostly specters and eerie cold mist harmonize" },
   { domainA: "ZEN_TEA", domainB: "SENSORY_ATMOSPHERE", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Tea discourse and serene fragrances harmonize" },
-  { domainA: "TRANSCENDENCE_TIME", domainB: "CHRONOLOGY", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Temporal measures and retrospective time skips harmonize" }
+  { domainA: "TRANSCENDENCE_TIME", domainB: "CHRONOLOGY", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Temporal measures and retrospective time skips harmonize" },
+
+  // Wave C2B-1 Monologue Psychology Relations
+  { domainA: "MONOLOGUE_PSYCHOLOGY", domainB: "TITLE_HIERARCHY", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Internal thoughts regarding masters or sovereigns harmonize" },
+  { domainA: "MONOLOGUE_PSYCHOLOGY", domainB: "COMBAT", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Tactical calculations and martial combat harmonize" },
+  { domainA: "MONOLOGUE_PSYCHOLOGY", domainB: "SUPERNATURAL_HORROR", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Inner apprehension and horror atmosphere harmonize" }
 ];
 
 /**

@@ -1045,6 +1045,23 @@ const STYLE_SLOT_DEFINITIONS = Object.freeze({
     conflictPolicy: CONFLICT_POLICIES.COMPOSITE_SCORE,
     description: "Tôn xưng, chức vị tông môn, quan tước triều đình, danh xưng tự xưng tôn kính",
     sourceSemantics: "Source denotes institutional or relational honorific title or self-designation"
+  }),
+
+  // =========================================================================
+  // 11. WAVE C2B-1 MONOLOGUE & INNER THOUGHT SLOTS (1 Canonical Slot)
+  // =========================================================================
+  INNER_MONOLOGUE: defineStyleSlot({
+    id: "INNER_MONOLOGUE",
+    semanticRole: SEMANTIC_ROLES.AFFECT,
+    realizationDimensions: [REALIZATION_DIMENSIONS.LEXICAL, REALIZATION_DIMENSIONS.REGISTER],
+    canMerge: false,
+    canCompete: true,
+    maxMultiplicity: 1,
+    allowedTextRoles: ["INNER_THOUGHT", "DESCRIPTION"],
+    requiredEvidence: ["MENTAL_VERB", "COGNITIVE_MARKER", "PSYCHOLOGICAL_STATE"],
+    conflictPolicy: CONFLICT_POLICIES.COMPOSITE_SCORE,
+    description: "Dòng độc thoại nội tâm, suy tính thầm kín, cảm xúc nội tâm và nhận thức tâm lý",
+    sourceSemantics: "Source denotes internal monologue, psychological deliberation, or cognitive reflection"
   })
 });
 
@@ -1071,6 +1088,7 @@ const PROVIDER_SLOT_COMPATIBILITY_MAP = Object.freeze({
   "karma-provider": ["KARMA_SAMSARA", "DESTINED_DUEL"],
   "mantra-provider": ["MANTRA_SEAL", "WORD_AS_LAW"],
   "meridian-healing-provider": ["MERIDIAN_ACUPOINT", "HEALING_PURGE"],
+  "monologue-provider": ["INNER_MONOLOGUE"],
   "musical-dao-provider": ["MUSICAL_PERFORMANCE", "MUSICAL_ATTACK"],
   "necropolis-provider": ["NECROPOLIS_ATMOSPHERE"],
   "sensory-provider": ["ATMOSPHERIC_DETAIL", "TOPOGRAPHY_LANDSCAPE"],
