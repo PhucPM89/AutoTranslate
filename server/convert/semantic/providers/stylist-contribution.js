@@ -92,7 +92,8 @@ const STYLE_SLOTS = Object.freeze({
   AESTHETIC_ELEGANCE: "AESTHETIC_ELEGANCE",   // Nét thanh tao, dung mạo, xiêm y, thần thái cổ phong của mỹ nhân
   POETIC_VERSE: "POETIC_VERSE",               // Thi ca, khẩu quyết tu tiên, thi đối và chiến ca cổ phong
   CORRUPTED_MADNESS: "CORRUPTED_MADNESS",     // Tâm ma nhập thể, tẩu hỏa nhập ma, cuồng loạn và mất hết lý trí
-  DRAMATIC_CLIMAX: "DRAMATIC_CLIMAX"          // Cao trào kịch tính, thề sinh tử, bi thương cực độ và diệt môn
+  DRAMATIC_CLIMAX: "DRAMATIC_CLIMAX",         // Cao trào kịch tính, thề sinh tử, bi thương cực độ và diệt môn
+  POLITICAL_INTRIGUE: "POLITICAL_INTRIGUE"    // Mưu lược cung đình, sóng ngầm triều chính, khi quân phạm thượng
 });
 
 const {

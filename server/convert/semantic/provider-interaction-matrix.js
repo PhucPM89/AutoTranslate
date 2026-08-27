@@ -98,7 +98,15 @@ const DOMAIN_PAIR_RELATIONS = [
   { domainA: "DRAMATIC_CLIMAX", domainB: "MADNESS_FRENZY", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Vengeance pathos and demonic rage operate on separate slots" },
   { domainA: "DRAMATIC_CLIMAX", domainB: "TITLE_HIERARCHY", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Hero titles and dramatic oaths realize on distinct slots" },
   { domainA: "DRAMATIC_CLIMAX", domainB: "COURTLY_BEAUTY", relation: INTERACTION_RELATIONS.ORTHOGONAL, note: "Tragic vows and aesthetic descriptions remain separate" },
-  { domainA: "DRAMATIC_CLIMAX", domainB: "DAOIST_MANTRA", relation: INTERACTION_RELATIONS.ORTHOGONAL, note: "Dramatic vows and mantra seals operate on separate text spans" }
+  { domainA: "DRAMATIC_CLIMAX", domainB: "DAOIST_MANTRA", relation: INTERACTION_RELATIONS.ORTHOGONAL, note: "Dramatic vows and mantra seals operate on separate text spans" },
+
+  // Wave C3-C1 Conspiracy & Political Intrigue Relations
+  { domainA: "POLITICAL_INTRIGUE", domainB: "TITLE_HIERARCHY", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Royal titles and court schemes operate on separate slots" },
+  { domainA: "POLITICAL_INTRIGUE", domainB: "IMPERIAL_EDICT", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Imperial decrees and forged edict intrigue coexist cleanly" },
+  { domainA: "POLITICAL_INTRIGUE", domainB: "MONOLOGUE_PSYCHOLOGY", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Inner plotting thought and conspiracy realize on separate slots" },
+  { domainA: "POLITICAL_INTRIGUE", domainB: "BANTER", relation: INTERACTION_RELATIONS.ORTHOGONAL, note: "Sarcastic banter and political schemes operate on separate registers" },
+  { domainA: "POLITICAL_INTRIGUE", domainB: "MADNESS_FRENZY", relation: INTERACTION_RELATIONS.ORTHOGONAL, note: "Cold calculating schemes and demonic madness operate on separate domains" },
+  { domainA: "POLITICAL_INTRIGUE", domainB: "COURTLY_BEAUTY", relation: INTERACTION_RELATIONS.COMPLEMENT, note: "Palace beauty and palace intrigue harmonize on separate slots" }
 ];
 
 /**

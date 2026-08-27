@@ -65,6 +65,9 @@ const { createChantVersifierProvider } = require("./chant-versifier-provider");
 const { createMadnessProvider } = require("./madness-provider");
 const { createDramaticEscalatorProvider } = require("./dramatic-escalator-provider");
 
+// Phase 3 Wave C3-C Providers (Conspiracy / Political Intrigue)
+const { createConspiracyProvider } = require("./conspiracy-provider");
+
 function createDefaultProviderRegistry() {
   const providers = [
     // Phase 2A Pilot
@@ -125,7 +128,10 @@ function createDefaultProviderRegistry() {
 
     // Phase 3 Wave C3-B (2 Providers)
     createMadnessProvider(),
-    createDramaticEscalatorProvider()
+    createDramaticEscalatorProvider(),
+
+    // Phase 3 Wave C3-C (1 Provider)
+    createConspiracyProvider()
   ];
 
   return Object.freeze({

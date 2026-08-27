@@ -1161,6 +1161,23 @@ const STYLE_SLOT_DEFINITIONS = Object.freeze({
     conflictPolicy: CONFLICT_POLICIES.COMPOSITE_SCORE,
     description: "Hiện thực hóa điểm cao trào kịch tính, lời thề sinh tử, bi thương cực độ và sự hủy diệt theo văn phong trang trọng mà không thêu dệt sự kiện mới",
     sourceSemantics: "Source Semantic IR denotes high-pathos narrative climax, solemn vengeance vows, tragic grief, or catastrophic destruction requiring rhetorical elevation without fabricating ungrounded casualties, blood, or events"
+  }),
+
+  // =========================================================================
+  // 17. WAVE C3-C1 CONSPIRACY & COURT POLITICS (1 Canonical Slot)
+  // =========================================================================
+  POLITICAL_INTRIGUE: defineStyleSlot({
+    id: "POLITICAL_INTRIGUE",
+    semanticRole: SEMANTIC_ROLES.EVENT,
+    realizationDimensions: [REALIZATION_DIMENSIONS.LEXICAL, REALIZATION_DIMENSIONS.REGISTER],
+    canMerge: false,
+    canCompete: true,
+    maxMultiplicity: 1,
+    allowedTextRoles: ["DESCRIPTION", "ACTION", "DIALOGUE", "EXPOSITION", "INNER_THOUGHT"],
+    requiredEvidence: ["CONSPIRACY_EVIDENCE"],
+    conflictPolicy: CONFLICT_POLICIES.COMPOSITE_SCORE,
+    description: "Hiện thực hóa mưu lược cung đình, sóng ngầm triều chính, khi quân phạm thượng và các kế sách chính trị dựa trên bằng chứng ngữ nghĩa đã xác nhận",
+    sourceSemantics: "Source Semantic IR denotes verified court intrigue, treason, political manipulation, or stratagems without ungrounded intent inference from neutral demeanor"
   })
 });
 
@@ -1174,6 +1191,7 @@ const PROVIDER_SLOT_COMPATIBILITY_MAP = Object.freeze({
   "bestiary-provider": ["BEAST_ROAR", "BEAST_EVOLUTION"],
   "chant-versifier-provider": ["POETIC_VERSE"],
   "chronology-provider": ["TEMPORAL_MEASURE", "TRANSCENDENCE_TIME"],
+  "conspiracy-provider": ["POLITICAL_INTRIGUE"],
   "cosmic-chess-provider": ["COSMIC_CHESS_BOARD", "CHESS_STRATEGY_MOVE"],
   "courtly-beauty-provider": ["AESTHETIC_ELEGANCE"],
   "culinary-provider": ["CULINARY_DELICACY", "CULINARY_SENSATION"],
