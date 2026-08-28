@@ -412,8 +412,8 @@ async function main() {
                   chapter,
                   translation,
                   translationStatus: "completed",
-                  provider: isHachimi ? "hachimi" : "gemini",
-                  model: isHachimi ? "HachimiMT-60-QT" : "gemini-3.6-flash"
+                  provider: "gemini",
+                  model: "gemini-3.6-flash"
                 })
               )
             );
@@ -747,8 +747,8 @@ async function refreshBookOutputs({ storage, db, job, state }) {
       chapterNumber: entry.n,
       title: entry.title,
       translationStatus,
-      provider: entry.provider || (isCompleted ? (isHachimi ? "hachimi" : "gemini") : "crawler-convert"),
-      model: entry.model || (isCompleted ? (isHachimi ? "HachimiMT-60-QT" : "gemini-3.6-flash") : undefined),
+      provider: entry.provider || (isCompleted ? "gemini" : "crawler-convert"),
+      model: entry.model || (isCompleted ? "gemini-3.6-flash" : undefined),
       qaReviewed: entry.qaReviewed
     };
   });
