@@ -34,3 +34,4 @@ supabase/.temp/
 # Neural model weights
 models/*.onnx
 models/*.bin
+*.ipynb
