@@ -627,7 +627,7 @@ test("admin gemini translate proxies translation successfully", async () => {
   let geminiRequest = null;
   global.fetch = async (url, options) => {
     const target = String(url);
-    if (target.includes("generativelanguage.googleapis.com")) {
+    if (target.includes("generativelanguage.googleapis.com") || target.includes("gateway.ai.cloudflare.com")) {
       geminiRequest = { target, options };
       return new Response(
         JSON.stringify({
