@@ -193,7 +193,8 @@ async function main() {
 
   const isHachimi = process.env.TRANSLATION_PROVIDER === "hachimi" || Boolean(process.env.HACHIMI_API_URL);
 
-  const allUniqueKeys = Array.from(new Set([...keyList, ...envKeys]))
+  const selectedKeys = keyList.length > 0 ? keyList : envKeys;
+  const allUniqueKeys = Array.from(new Set(selectedKeys))
     .filter(Boolean)
     .sort((a, b) => translationKeyPriority(a) - translationKeyPriority(b));
   if (!allUniqueKeys.length && !isHachimi) {
