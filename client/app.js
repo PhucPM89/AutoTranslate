@@ -99,7 +99,17 @@ const PROGRESS_STORE = "progress";
 const TRANSLATION_STORE = "translations";
 const LEGACY_MIGRATION_KEY = "epubTranslator.cacheMigratedV2";
 const CHAPTER_DECODE_CONCURRENCY = 6;
+const CHAPTER_ROW_HEIGHT = 50;
+const CHAPTER_LIST_OVERSCAN = 8;
 const SEARCH_DEBOUNCE_MS = 160;
+
+const chapterListView = {
+  indices: [],
+  positions: new Map(),
+  start: -1,
+  end: -1,
+  raf: 0
+};
 const CACHE_WRITE_DEBOUNCE_MS = 800;
 const ANALYTICS_VISIT_KEY = "epubTranslator.visitCounted";
 const ANALYTICS_READ_KEY = "epubTranslator.readCounted";
@@ -551,7 +561,13 @@ function bindEvents() {
     const item = event.target.closest(".document-item");
     if (item) goToChapter(Number(item.dataset.index));
   });
-  els.globalSearch?.addEventListener("input", debounce(renderChapterControls, SEARCH_DEBOUNCE_MS));
+  els.chapterList?.addEventListener("scroll", scheduleChapterWindowRender, { passive: true });
+  els.globalSearch?.addEventListener("input", debounce(() => {
+    renderChapterControls({ resetScroll: true });
+  }, SEARCH_DEBOUNCE_MS));
+  window.addEventListener("resize", debounce(() => {
+    renderChapterControls({ ensureCurrent: true });
+  }, 120));
   els.translateButton?.addEventListener("click", () => translateCurrentChapter(false));
   els.retranslateButton?.addEventListener("click", () => translateCurrentChapter(true));
   els.themeToggle?.addEventListener("click", toggleTheme);
@@ -1406,6 +1422,7 @@ function showReader() {
   if (els.epubStudioView) els.epubStudioView.hidden = true;
   if (els.readerView) els.readerView.hidden = false;
   window.scrollTo({ top: 0 });
+  requestAnimationFrame(() => renderChapterControls({ ensureCurrent: true }));
 }
 
 function showLibrary() {
@@ -1960,31 +1977,113 @@ function guessChapterTitle(html) {
   return normalizeSpace(doc.querySelector("h1, h2, h3, title")?.textContent || "");
 }
 
-function renderChapterControls() {
-  const query = els.globalSearch.value.trim().toLowerCase();
-  const listFragment = document.createDocumentFragment();
-  let visibleCount = 0;
+function isChapterListVisible() {
+  return Boolean(
+    els.chapterList &&
+    getComputedStyle(els.chapterList).display !== "none" &&
+    els.chapterList.clientHeight > 0
+  );
+}
 
+function createChapterListItem(index, position, total) {
+  const chapter = state.chapters[index];
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "document-item";
+  button.dataset.index = String(index);
+  button.setAttribute("aria-posinset", String(position + 1));
+  button.setAttribute("aria-setsize", String(total));
+  if (index === state.currentIndex) button.classList.add("active");
+  const chapterIndex = appendTextElement(button, "span", "document-index", String(index + 1));
+  chapterIndex.setAttribute("aria-hidden", "true");
+  appendTextElement(button, "span", "", displayChapterTitle(index));
+  appendTextElement(button, "small", "", formatWordCount(chapter));
+  return button;
+}
+
+function renderChapterWindow(force = false) {
+  if (!isChapterListVisible()) {
+    els.chapterList?.replaceChildren();
+    chapterListView.start = -1;
+    chapterListView.end = -1;
+    return;
+  }
+
+  const total = chapterListView.indices.length;
+  if (!total) {
+    const empty = document.createElement("div");
+    empty.className = "empty-list";
+    empty.textContent = "Không tìm thấy chương phù hợp";
+    els.chapterList.replaceChildren(empty);
+    chapterListView.start = 0;
+    chapterListView.end = 0;
+    return;
+  }
+
+  const visibleRows = Math.max(1, Math.ceil(els.chapterList.clientHeight / CHAPTER_ROW_HEIGHT));
+  const firstVisible = Math.floor(els.chapterList.scrollTop / CHAPTER_ROW_HEIGHT);
+  const start = Math.max(0, firstVisible - CHAPTER_LIST_OVERSCAN);
+  const end = Math.min(total, firstVisible + visibleRows + CHAPTER_LIST_OVERSCAN);
+  if (!force && start === chapterListView.start && end === chapterListView.end) return;
+
+  const fragment = document.createDocumentFragment();
+  const topSpacer = document.createElement("div");
+  topSpacer.className = "chapter-list-spacer";
+  topSpacer.style.height = `${start * CHAPTER_ROW_HEIGHT}px`;
+  topSpacer.setAttribute("aria-hidden", "true");
+  fragment.appendChild(topSpacer);
+
+  for (let position = start; position < end; position += 1) {
+    fragment.appendChild(createChapterListItem(chapterListView.indices[position], position, total));
+  }
+
+  const bottomSpacer = document.createElement("div");
+  bottomSpacer.className = "chapter-list-spacer";
+  bottomSpacer.style.height = `${Math.max(0, total - end) * CHAPTER_ROW_HEIGHT}px`;
+  bottomSpacer.setAttribute("aria-hidden", "true");
+  fragment.appendChild(bottomSpacer);
+
+  els.chapterList.replaceChildren(fragment);
+  chapterListView.start = start;
+  chapterListView.end = end;
+}
+
+function scheduleChapterWindowRender() {
+  if (chapterListView.raf) return;
+  chapterListView.raf = requestAnimationFrame(() => {
+    chapterListView.raf = 0;
+    renderChapterWindow();
+  });
+}
+
+function centerChapterInList(index) {
+  if (!isChapterListVisible()) return;
+  const position = chapterListView.positions.get(index);
+  if (!Number.isInteger(position)) return;
+  const centeredTop = position * CHAPTER_ROW_HEIGHT -
+    (els.chapterList.clientHeight - CHAPTER_ROW_HEIGHT) / 2;
+  els.chapterList.scrollTop = Math.max(0, centeredTop);
+  renderChapterWindow(true);
+}
+
+function renderChapterControls({ resetScroll = false, ensureCurrent = false } = {}) {
+  const query = els.globalSearch.value.trim().toLowerCase();
+  const indices = [];
   state.chapters.forEach((chapter, index) => {
     const title = displayChapterTitle(index);
     if (query && !title.toLowerCase().includes(query)) return;
-
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "document-item";
-    button.dataset.index = String(index);
-    if (index === state.currentIndex) button.classList.add("active");
-    const chapterIndex = appendTextElement(button, "span", "document-index", String(index + 1));
-    chapterIndex.setAttribute("aria-hidden", "true");
-    appendTextElement(button, "span", "", title);
-    appendTextElement(button, "small", "", formatWordCount(chapter));
-    listFragment.appendChild(button);
-    visibleCount += 1;
+    indices.push(index);
   });
 
-  if (!visibleCount) appendTextElement(listFragment, "div", "empty-list", "Không tìm thấy chương phù hợp");
-
-  els.chapterList.replaceChildren(listFragment);
+  chapterListView.indices = indices;
+  chapterListView.positions = new Map(indices.map((index, position) => [index, position]));
+  chapterListView.start = -1;
+  chapterListView.end = -1;
+  if (chapterListView.raf) {
+    cancelAnimationFrame(chapterListView.raf);
+    chapterListView.raf = 0;
+  }
+  if (resetScroll && els.chapterList) els.chapterList.scrollTop = 0;
   els.documentCount.textContent = String(state.chapters.length);
   const hasChapters = Boolean(state.chapters.length);
   els.chapterJumpInput.disabled = !hasChapters;
@@ -1992,6 +2091,15 @@ function renderChapterControls() {
   els.chapterJumpInput.max = String(state.chapters.length || 1);
   els.chapterJumpInput.value = hasChapters ? String(state.currentIndex + 1) : "";
   els.chapterJumpTotal.textContent = `/ ${state.chapters.length}`;
+  if (
+    ensureCurrent &&
+    isChapterListVisible() &&
+    chapterListView.positions.has(state.currentIndex)
+  ) {
+    centerChapterInList(state.currentIndex);
+  } else {
+    renderChapterWindow(true);
+  }
 }
 
 function goToChapterFromPicker() {
@@ -2042,17 +2150,7 @@ function goToChapter(index) {
   els.translateButton.disabled = false;
 
   els.chapterList.querySelector(".document-item.active")?.classList.remove("active");
-  const activeChapterItem = els.chapterList.querySelector(`.document-item[data-index="${state.currentIndex}"]`);
-  activeChapterItem?.classList.add("active");
-  // Keep keyboard jumps and direct chapter links visible in the sidebar. The
-  // old native select hid this problem by opening its own full-screen menu.
-  if (activeChapterItem && getComputedStyle(els.chapterList).display !== "none") {
-    requestAnimationFrame(() => {
-      const centeredTop = activeChapterItem.offsetTop -
-        (els.chapterList.clientHeight - activeChapterItem.offsetHeight) / 2;
-      els.chapterList.scrollTop = Math.max(0, centeredTop);
-    });
-  }
+  requestAnimationFrame(() => centerChapterInList(state.currentIndex));
 
   scrollReaderToChapterStart();
 

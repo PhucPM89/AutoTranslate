@@ -2969,27 +2969,32 @@ body:not(.dark) .theme-moon {
 }
 
 .chapter-list {
+  --chapter-row-height: 50px;
   min-height: 0;
   overflow: auto;
   padding: 0.75rem;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 600px;
+  overflow-anchor: none;
 }
 
-/* A long novel puts thousands of rows in this list; skipping layout and paint
-   for the off-screen ones keeps scrolling and search re-renders cheap. */
+.chapter-list-spacer {
+  width: 1px;
+  pointer-events: none;
+}
+
+/* Rows have a fixed height so the virtualized list can preserve an accurate
+   scrollbar while only mounting the visible chapter buttons. */
 .document-item {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 44px;
   position: relative;
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr);
   align-items: center;
   gap: 0.65rem;
   width: 100%;
-  min-height: 44px;
-  margin: 0 0 0.18rem;
+  height: var(--chapter-row-height);
+  min-height: var(--chapter-row-height);
+  margin: 0;
   padding: 0.55rem 0.6rem;
+  box-sizing: border-box;
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
