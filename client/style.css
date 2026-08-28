@@ -1073,11 +1073,17 @@ dialog:not([open]) {
   overflow: hidden;
   overscroll-behavior: contain;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 16px;
   background: var(--surface);
   color: var(--text);
   box-shadow: var(--shadow);
   margin: auto;
+  transition: width 0.2s ease, max-height 0.2s ease;
+}
+
+.admin-dialog:not(.is-authenticated) {
+  width: min(440px, calc(100% - 1.5rem));
+  max-height: min(340px, calc(100dvh - 2rem));
 }
 
 .admin-dialog::backdrop {
@@ -1203,11 +1209,30 @@ dialog:not([open]) {
 
 .admin-login-form {
   display: flex;
-  align-items: end;
-  gap: 0.8rem;
+  flex-direction: column;
+  gap: 1.1rem;
+  padding: 1.35rem;
 }
 
-.admin-login-form .admin-field { flex: 1; }
+.admin-login-form .admin-field {
+  width: 100%;
+}
+
+.admin-login-form .admin-field input {
+  width: 100%;
+  min-height: 44px;
+  font-size: 1rem;
+  padding: 0 0.9rem;
+  border-radius: 9px;
+}
+
+.admin-login-form .primary-action {
+  width: 100%;
+  min-height: 44px;
+  font-size: 0.95rem;
+  justify-content: center;
+  border-radius: 9px;
+}
 
 .admin-form-grid {
   display: grid;

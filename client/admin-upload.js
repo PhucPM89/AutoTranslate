@@ -226,13 +226,20 @@ async function handleStudioLogin(e) {
   }
 }
 
-export function mountAdmin(options = {}) {
   if (!mounted) {
     mounted = true;
-    els.open?.addEventListener("click", () => openAdmin());
     els.close?.addEventListener("click", () => els.dialog.close());
     els.dialog?.addEventListener("click", (event) => {
-      if (event.target === els.dialog) els.dialog.close();
+      if (event.target === els.dialog) {
+        const rect = els.dialog.getBoundingClientRect();
+        const isOutside = (
+          event.clientX < rect.left ||
+          event.clientX > rect.right ||
+          event.clientY < rect.top ||
+          event.clientY > rect.bottom
+        );
+        if (isOutside) els.dialog.close();
+      }
     });
     els.loginForm?.addEventListener("submit", login);
     els.studioAuthForm?.addEventListener("submit", handleStudioLogin);
@@ -355,11 +362,24 @@ export function mountAdmin(options = {}) {
 }
 
 async function openAdmin(options = {}) {
-  els.dialog.showModal();
+  if (!els.dialog) return;
+  if (!els.dialog.open) {
+    els.dialog.showModal();
+  }
   if (options?.tab) {
     pendingAdminTab = options.tab;
     selectAdminTab(options.tab);
   }
+  
+  // Show login form immediately so user never sees an empty backdrop
+  if (!els.dialog.classList.contains("is-authenticated")) {
+    if (els.loginForm) els.loginForm.hidden = false;
+    if (els.tabs) els.tabs.hidden = true;
+    if (els.password) {
+      setTimeout(() => els.password?.focus(), 60);
+    }
+  }
+
   setStatus("Đang kiểm tra phiên quản trị...");
   try {
     const session = await requestJson("/api/admin/session");
@@ -1531,12 +1551,15 @@ async function requestJson(url, options = {}) {
 }
 
 function showAuthenticated(authenticated) {
+  els.dialog?.classList.toggle("is-authenticated", Boolean(authenticated));
   els.loginForm.hidden = authenticated;
   els.tabs.hidden = !authenticated;
   ADMIN_TABS.forEach(({ key, panel }) => {
     if (els[panel]) els[panel].hidden = !authenticated || activeAdminTab !== key;
   });
-  if (!authenticated) requestAnimationFrame(() => els.password.focus());
+  if (!authenticated) {
+    setTimeout(() => els.password?.focus(), 60);
+  }
 }
 
 function setBusy(busy) {
