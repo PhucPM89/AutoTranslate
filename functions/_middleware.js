@@ -26,7 +26,22 @@ const CDN_BASE = "https://cdn.tram-chu.online";
 const SITE_NAME = "Trạm Chữ";
 const SITE_URL = "https://tram-chu.online";
 const DEFAULT_COVER = "https://tram-chu.online/library/covers/misty-pagoda-hero.webp";
-const { escapeHtmlAttribute, safeJsonLd } = require("../server/seo-security.js");
+
+function escapeHtmlAttribute(value) {
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function safeJsonLd(value) {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026");
+}
 
 export async function onRequest(context) {
   const { request, next } = context;
@@ -39,13 +54,17 @@ export async function onRequest(context) {
 
   const userAgent = (request.headers.get("user-agent") || "").toLowerCase();
   const isCrawler = BOT_USER_AGENTS.some((bot) => userAgent.includes(bot));
-  const bookId = url.searchParams.get("book");
+  const rawBookParam = url.searchParams.get("book");
   const chapterParam = url.searchParams.get("chapter") || url.searchParams.get("ch");
 
   // If not a crawler or no book specified, pass through to normal static handling
-  if (!isCrawler || !bookId) {
+  if (!isCrawler || !rawBookParam) {
     return next();
   }
+
+  // Support both 'fanqie-123' and 'toan-cau-bang-phong--fanqie-123'
+  const matchId = rawBookParam.match(/--([A-Za-z0-9._-]+)$/);
+  const bookId = matchId ? matchId[1] : rawBookParam;
 
   // Fetch book metadata from CDN
   let book = null;
@@ -96,8 +115,8 @@ export async function onRequest(context) {
 
   const coverUrl = normalizeCoverUrl(book.cover);
   const canonicalUrl = isChapterView
-    ? `${SITE_URL}/?book=${encodeURIComponent(bookId)}&chapter=${chapterNum}`
-    : `${SITE_URL}/?book=${encodeURIComponent(bookId)}`;
+    ? `${SITE_URL}/?book=${encodeURIComponent(rawBookParam)}&ch=${chapterNum}`
+    : `${SITE_URL}/?book=${encodeURIComponent(rawBookParam)}`;
 
   const keywords = [
     book.title,
@@ -139,7 +158,7 @@ export async function onRequest(context) {
             "@type": "ListItem",
             "position": 2,
             "name": book.title,
-            "item": `${SITE_URL}/?book=${encodeURIComponent(bookId)}`
+            "item": `${SITE_URL}/?book=${encodeURIComponent(rawBookParam)}`
           },
           ...(isChapterView ? [{
             "@type": "ListItem",
@@ -171,7 +190,7 @@ export async function onRequest(context) {
           "isPartOf": {
             "@type": "Book",
             "name": book.title,
-            "url": `${SITE_URL}/?book=${encodeURIComponent(bookId)}`
+            "url": `${SITE_URL}/?book=${encodeURIComponent(rawBookParam)}`
           },
           "position": String(chapterNum)
         } : {

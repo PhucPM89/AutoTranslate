@@ -67,6 +67,7 @@ const ROUTES = {
   "/api/admin/catalog": handleCatalog,
   "/api/admin/analytics": handleAnalytics,
   "/api/admin/users": handleAdminUsers,
+  "/api/admin/community": handleAdminCommunity,
   "/api/admin/gemini-translate": handleAdminGeminiTranslate
 };
 
@@ -914,6 +915,101 @@ async function handleAdminUsers({ request, env }) {
   });
 }
 
+// ---- admin community ------------------------------------------------------
+async function handleAdminCommunity({ request, env }) {
+  await requireAdmin(request, env);
+
+  const url = String(env.SUPABASE_URL || "").replace(/\/$/, "");
+  const key = env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (request.method === "DELETE") {
+    const reqUrl = new URL(request.url);
+    const id = reqUrl.searchParams.get("id");
+    if (!id) throw fail(400, "Thiếu ID bình luận.");
+    if (!url || !key) throw fail(503, "Supabase chưa được cấu hình.");
+
+    const delRes = await fetch(`${url}/rest/v1/paragraph_comments?id=eq.${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: { apikey: key, Authorization: `Bearer ${key}` }
+    });
+    if (!delRes.ok) throw fail(delRes.status, "Không thể xóa bình luận.");
+    return json({ ok: true, message: "Đã xóa bình luận thành công." });
+  }
+
+  if (request.method !== "GET") return methodNotAllowed("GET, DELETE");
+
+  // Fetch comments & book list from Supabase
+  let comments = [];
+  let books = [];
+
+  if (url && key) {
+    const [commentsRes, booksRes] = await Promise.all([
+      fetch(`${url}/rest/v1/paragraph_comments?select=id,book_id,chapter_index,paragraph_index,author_name,content,likes_count,created_at&order=created_at.desc&limit=300`, {
+        headers: { apikey: key, Authorization: `Bearer ${key}` },
+        signal: AbortSignal.timeout(10000)
+      }).catch(() => null),
+      fetch(`${url}/rest/v1/books?select=id,title,author&limit=500`, {
+        headers: { apikey: key, Authorization: `Bearer ${key}` },
+        signal: AbortSignal.timeout(10000)
+      }).catch(() => null)
+    ]);
+
+    if (commentsRes?.ok) comments = (await commentsRes.json().catch(() => [])) || [];
+    if (booksRes?.ok) books = (await booksRes.json().catch(() => [])) || [];
+  }
+
+  const bookMap = new Map();
+  for (const b of books) {
+    if (b.id) bookMap.set(b.id, b);
+  }
+
+  const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+  let todayCommentsCount = 0;
+  const bookCommentCountMap = new Map();
+
+  const formattedComments = (Array.isArray(comments) ? comments : []).map((c) => {
+    const b = bookMap.get(c.book_id) || {};
+    const createdAtTime = new Date(c.created_at).getTime();
+    if (createdAtTime > oneDayAgo) todayCommentsCount++;
+    const count = (bookCommentCountMap.get(c.book_id) || 0) + 1;
+    bookCommentCountMap.set(c.book_id, count);
+
+    return {
+      id: c.id,
+      bookId: c.book_id,
+      bookTitle: b.title || c.book_id,
+      chapterIndex: Number(c.chapter_index) || 0,
+      chapterNumber: (Number(c.chapter_index) || 0) + 1,
+      paragraphIndex: Number(c.paragraph_index) || 0,
+      authorName: c.author_name || "Độc giả",
+      content: c.content || "",
+      likesCount: Number(c.likes_count) || 0,
+      createdAt: c.created_at
+    };
+  });
+
+  let topBookId = "";
+  let topBookCount = 0;
+  for (const [bid, cnt] of bookCommentCountMap.entries()) {
+    if (cnt > topBookCount) {
+      topBookCount = cnt;
+      topBookId = bid;
+    }
+  }
+  const topBookObj = bookMap.get(topBookId);
+  const topBookTitle = topBookObj ? topBookObj.title : (topBookId || "Chưa có");
+
+  return json({
+    ok: true,
+    stats: {
+      totalComments: formattedComments.length,
+      todayComments: todayCommentsCount,
+      topDiscussedBook: topBookTitle
+    },
+    comments: formattedComments
+  });
+}
+
 // ---- shared ----------------------------------------------------------------
 
 function readerStorage(env) {
@@ -1521,34 +1617,38 @@ async function handleTermFeedback({ request, env }) {
   const bookId = String(body?.bookId || "").trim();
   const originalTerm = String(body?.originalTerm || "").trim().slice(0, 50);
   const suggestedTranslation = String(body?.suggestedTranslation || "").trim().slice(0, 80);
+  const contextSnippet = String(body?.contextSnippet || "").trim().slice(0, 300);
+  const note = String(body?.note || "").trim().slice(0, 200);
 
   if (!bookId || !originalTerm || !suggestedTranslation) {
     return json({ error: "Thiếu thông tin bắt buộc (mã truyện, từ gốc, bản dịch đề xuất)." }, 400);
   }
 
-  const archiveBucket = env.ARCHIVE_STORAGE || env.NOVEL_STORAGE || env.R2_ARCHIVE || env.R2_READER;
-  if (!archiveBucket) {
-    return json({ ok: true, message: "Góp ý đã được ghi nhận vào bộ nhớ tạm." });
-  }
+  const url = String(env.SUPABASE_URL || "").replace(/\/$/, "");
+  const key = env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_ANON_KEY;
 
-  const storage = createR2BindingStorage(archiveBucket);
-  const key = `glossary/${encodeURIComponent(bookId)}.json`;
-  let existing = {};
-  try {
-    const raw = await storage.get(key);
-    if (raw) existing = JSON.parse(raw.toString("utf8"));
-  } catch {
-    existing = {};
+  if (url && key) {
+    await fetch(`${url}/rest/v1/glossary_suggestions`, {
+      method: "POST",
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        book_id: bookId,
+        source_term: originalTerm,
+        suggested_term: suggestedTranslation,
+        context_snippet: contextSnippet,
+        note: note,
+        status: "pending"
+      })
+    }).catch(() => null);
   }
-
-  existing[originalTerm] = suggestedTranslation;
-  await storage.put(key, JSON.stringify(existing, null, 2), {
-    contentType: "application/json; charset=utf-8"
-  });
 
   return json({
     ok: true,
-    message: "Cảm ơn bạn! Thuật ngữ đã được cập nhật thành công vào bộ nhớ dịch của truyện.",
+    message: "Cảm ơn bạn! Đề xuất sửa đổi thuật ngữ đã được gửi tới Ban Quản Trị để duyệt.",
     term: { zh: originalTerm, vi: suggestedTranslation }
   });
 }

@@ -229,6 +229,17 @@ function writeHtml({ appUrl, styleUrl }) {
   console.log(`/index.html ${formatKb(Buffer.byteLength(html))}`);
 }
 
+function toSlug(text) {
+  if (!text) return "";
+  return String(text)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[đĐ]/g, "d")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 async function writeSitemapAndRobots() {
   const siteUrl = "https://tram-chu.online";
   const now = new Date().toISOString().split("T")[0];
@@ -260,7 +271,7 @@ async function writeSitemapAndRobots() {
     }
   }
 
-  // Generate sitemap.xml
+  // Generate sitemap.xml with Vietnamese SEO slugs
   let sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
   sitemapXml += `  <url>\n    <loc>${siteUrl}/</loc>\n    <lastmod>${now}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n`;
   sitemapXml += `  <url>\n    <loc>${siteUrl}/#catalog</loc>\n    <lastmod>${now}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.8</priority>\n  </url>\n`;
@@ -268,10 +279,21 @@ async function writeSitemapAndRobots() {
   let urlCount = 2;
   for (const book of books) {
     if (book.id) {
+      const slug = toSlug(book.title);
+      const bookParam = slug ? `${slug}--${book.id}` : book.id;
       const bookDate = book.updatedAt ? String(book.updatedAt).split("T")[0] : now;
-      sitemapXml += `  <url>\n    <loc>${siteUrl}/?book=${encodeURIComponent(book.id)}</loc>\n    <lastmod>${bookDate}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.9</priority>\n  </url>\n`;
-      sitemapXml += `  <url>\n    <loc>${siteUrl}/?book=${encodeURIComponent(book.id)}&amp;ch=1</loc>\n    <lastmod>${bookDate}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
-      urlCount += 2;
+
+      // Book detail page URL
+      sitemapXml += `  <url>\n    <loc>${siteUrl}/?book=${encodeURIComponent(bookParam)}</loc>\n    <lastmod>${bookDate}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.9</priority>\n  </url>\n`;
+      urlCount++;
+
+      // Key translated chapters (up to 50 chapters per book to keep sitemap clean and fast)
+      const transCount = Number(book.translatedChapters || 0);
+      const chMax = Math.min(transCount > 0 ? transCount : 1, 50);
+      for (let ch = 1; ch <= chMax; ch++) {
+        sitemapXml += `  <url>\n    <loc>${siteUrl}/?book=${encodeURIComponent(bookParam)}&amp;ch=${ch}</loc>\n    <lastmod>${bookDate}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
+        urlCount++;
+      }
     }
   }
   sitemapXml += `</urlset>\n`;

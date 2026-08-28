@@ -82,8 +82,8 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/style.css?v=3d9867168c14">
-    <script src="/app.js?v=356a554f2ecc" defer></script>
+    <link rel="stylesheet" href="/style.css?v=bc02e1faf1ce">
+    <script src="/app.js?v=bfe21ee516b3" defer></script>
   </head>
   <body class="dark">
     <section id="libraryView" class="library-view">
@@ -95,10 +95,6 @@
 
         <nav class="library-nav" aria-label="Điều hướng thư viện">
           <a href="#catalog">Thư viện</a>
-          <button id="navEpubStudioBtn" class="nav-vip-btn" type="button" title="Dịch EPUB Cá Nhân bằng Gemini API (Đặc quyền VIP/Admin)">
-            <span class="nav-vip-badge">VIP</span>
-            <span class="nav-vip-text">Dịch EPUB</span>
-          </button>
           <a href="#request">Yêu cầu truyện</a>
           <a href="#support">Ủng hộ</a>
         </nav>
@@ -176,7 +172,7 @@
           <header class="catalog-header">
             <div><p class="eyebrow">Khám phá kho truyện</p><h2>Truyện trong thư viện</h2><p class="catalog-subtitle">Từ tiên hiệp, huyền huyễn đến linh dị và trinh thám.</p></div>
             <div class="catalog-controls">
-              <label class="catalog-search"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><input id="librarySearch" type="search" placeholder="Tìm tên truyện, tác giả..." autocomplete="off"></label>
+              <label class="catalog-search"><span class="sr-only">Tìm truyện theo tên hoặc tác giả</span><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><input id="librarySearch" type="search" placeholder="Tìm tên truyện, tác giả..." autocomplete="off" aria-describedby="catalogPaginationSummary"></label>
               <label class="genre-filter" aria-hidden="true"><span class="sr-only">Lọc thể loại</span><select id="libraryGenre" tabindex="-1"><option value="">Tất cả thể loại</option></select></label>
             </div>
           </header>
@@ -379,7 +375,7 @@
       </div>
 
       <div id="authGuest" class="auth-guest">
-        <p class="auth-intro">Đăng nhập bằng tài khoản Google để lưu và đồng bộ tiến độ đọc truyện trên mọi thiết bị.</p>
+        <p class="auth-intro">Bạn có thể đọc truyện không cần tài khoản. Đăng nhập Google để lưu tủ truyện, đồng bộ tiến độ và tích lũy cảnh giới trên mọi thiết bị.</p>
         <button id="authGoogleBtn" class="google-login-btn" type="button">
           <svg class="google-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -389,19 +385,24 @@
           </svg>
           <span>Đăng nhập với Google</span>
         </button>
-        <span class="auth-note">Tài khoản chỉ dùng để lưu lịch sử và tiến độ đọc.</span>
+        <span class="auth-note">Đăng nhập là tùy chọn. Tài khoản chỉ dùng cho các tính năng cá nhân và cộng đồng.</span>
       </div>
 
       <div id="authAccount" class="auth-account" hidden>
-        <div class="auth-avatar-wrap">
-          <img id="authAccountAvatar" class="auth-avatar-img" src="" alt="" hidden>
-          <span id="authAccountInitial" class="auth-avatar" aria-hidden="true">?</span>
+        <div class="auth-account-card">
+          <div class="auth-avatar-wrap">
+            <img id="authAccountAvatar" class="auth-avatar-img" src="" alt="" hidden>
+            <span id="authAccountInitial" class="auth-avatar" aria-hidden="true">?</span>
+          </div>
+          <div class="auth-account-copy">
+            <strong id="authAccountName"></strong>
+            <small id="authAccountEmail">Đang đăng nhập</small>
+          </div>
         </div>
-        <div class="auth-account-copy">
-          <strong id="authAccountName"></strong>
-          <small id="authAccountEmail">Đang đăng nhập</small>
-        </div>
-        <button id="authSignOut" class="secondary-action" type="button">Đăng xuất</button>
+        <button id="authSignOut" class="auth-signout-btn secondary-action" type="button">
+          <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+          <span>Đăng xuất</span>
+        </button>
       </div>
 
       <p id="authMessage" class="auth-message" role="status" aria-live="polite" hidden></p>
@@ -477,20 +478,6 @@
           <p id="transStopReasonDesc" class="trans-stop-desc">Tiến trình đang quét các bộ truyện chưa đạt chuẩn để tái dịch sang văn phong lưu loát.</p>
         </div>
 
-        <div class="trans-focus-picker">
-          <label for="adminTranslateFocusBook">
-            <strong>Bộ truyện ưu tiên</strong>
-            <small>Chọn một bộ để worker chỉ dịch bộ đó đến 100%. Chọn tự động để hệ thống tự quyết định bộ tiếp theo.</small>
-          </label>
-          <div class="trans-focus-picker-controls">
-            <select id="adminTranslateFocusBook">
-              <option value="">Tự động chọn khi không có bộ ưu tiên</option>
-            </select>
-            <button id="adminTranslateFocusSave" class="primary-action" type="button">Lưu ưu tiên</button>
-          </div>
-          <p id="adminTranslateFocusHint" class="trans-focus-picker-hint">Đang tải cấu hình...</p>
-        </div>
-
         <!-- THE MAIN FOCUS HERO CARD: Single Novel Center -->
         <div id="transActiveCard" class="trans-focus-card">
           <div class="trans-focus-topbar">
@@ -506,9 +493,9 @@
               <img id="transActiveCoverImg" class="trans-focus-cover" src="/library/covers/misty-pagoda.webp" alt="Bìa truyện đang dịch">
             </div>
             <div class="trans-focus-info">
-              <span class="trans-tag">🎯 BỘ TRUYỆN ĐANG TẬP TRUNG DỊCH FULL</span>
+              <span class="trans-tag">🎯 BỘ TRUYỆN ĐANG TIẾN HÀNH DỊCH</span>
               <h3 id="transActiveBookTitle" class="trans-focus-title">Đang đồng bộ truyện...</h3>
-              <p id="translateStateMessage" class="trans-focus-desc">Hệ thống đang dồn toàn bộ 17 AI Keys để dịch hoàn tất bộ truyện này.</p>
+              <p id="translateStateMessage" class="trans-focus-desc">Hệ thống đang sử dụng cụm AI Keys Gemini để dịch tự động theo hàng đợi.</p>
               
               <div class="trans-focus-badges">
                 <span id="transActiveChapterBadge" class="trans-focus-pill highlight-purple">Chương 0 / 0</span>
@@ -532,34 +519,6 @@
               <span id="translateProgressLabel">Đã dịch: 0 / 0 chương (0%)</span>
               <span id="transStatSpeed">Tốc độ thực: 0 chương/giờ</span>
             </div>
-          </div>
-
-          <!-- Bottom 3 Operational Specs Grid -->
-          <div class="trans-focus-specs-grid">
-            <div class="trans-spec-item">
-              <span class="trans-spec-label">⏱️ Năng suất 1 giờ qua</span>
-              <strong id="transStatLastHourCh" class="trans-spec-val text-accent-green">+0 chương</strong>
-              <small id="transHourlySummaryText" class="trans-spec-sub">trong phiên hiện tại</small>
-            </div>
-            <div class="trans-spec-item">
-              <span class="trans-spec-label">🔑 Cụm AI Keys</span>
-              <strong id="transStatKeysActive" class="trans-spec-val text-accent-purple">Đang kiểm tra Keys</strong>
-              <small class="trans-spec-sub">Google Gemini &amp; Model chất lượng cao</small>
-            </div>
-            <div class="trans-spec-item">
-              <span class="trans-spec-label">⚡ Cơ chế điều tốc</span>
-              <strong class="trans-spec-val text-accent-cyan">Tự động 24/7</strong>
-              <small id="translateStateMeta" class="trans-spec-sub">Điều tốc tự động theo quota</small>
-            </div>
-          </div>
-        </div>
-
-        <!-- Next Novel Teaser (Chỉ 1 thẻ nhỏ gọn duy nhất) -->
-        <div id="transNextTeaserCard" class="trans-next-teaser-card">
-          <span class="trans-next-icon">⏭️</span>
-          <div class="trans-next-content">
-            <span class="trans-next-label">BỘ TRUYỆN KẾ TIẾP (SAU KHI DỊCH XONG BỘ TRÊN):</span>
-            <strong id="transNextBookTitle" class="trans-next-title">Đang tính toán bộ tiếp theo...</strong>
           </div>
         </div>
 

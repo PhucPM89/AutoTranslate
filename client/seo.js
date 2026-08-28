@@ -71,6 +71,33 @@ function cleanExcerpt(str, max = 200) {
   return cleaned.slice(0, max - 3) + "...";
 }
 
+function toSlug(text) {
+  if (!text) return "";
+  return String(text)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[đĐ]/g, "d")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function cleanBookId(rawId) {
+  if (!rawId) return "";
+  let id = String(rawId).replace(/^(cdn|library):/, "").split(":")[0];
+  const match = id.match(/--([A-Za-z0-9._-]+)$/);
+  return match ? match[1] : id;
+}
+
+function getBookSlugParam(book) {
+  if (!book) return "";
+  const id = typeof book === "string" ? book : (book.id || "");
+  const title = typeof book === "object" ? (book.title || "") : "";
+  const cleanId = cleanBookId(id);
+  const slug = toSlug(title);
+  return slug && cleanId ? `${slug}--${cleanId}` : (cleanId || id);
+}
+
 function updateJsonLd({ book, chapter, title, desc, url, image }) {
   let script = document.getElementById("dynamicJsonLd");
   if (!script) {
@@ -81,11 +108,12 @@ function updateJsonLd({ book, chapter, title, desc, url, image }) {
   }
 
   if (book) {
+    const bookParam = getBookSlugParam(book);
     const graph = [
       {
         "@context": "https://schema.org",
         "@type": "Book",
-        "@id": `${BASE_URL}/?book=${encodeURIComponent(book.id)}#book`,
+        "@id": `${BASE_URL}/?book=${encodeURIComponent(bookParam)}#book`,
         "name": book.title,
         "headline": title,
         "description": desc,
@@ -120,53 +148,39 @@ function updateJsonLd({ book, chapter, title, desc, url, image }) {
           "priceCurrency": "VND",
           "availability": "https://schema.org/InStock"
         }
-      },
-      {
-        "@context": "https://schema.org",
-        "@type": "BreadcrumbList",
-        "itemListElement": [
-          {
-            "@type": "ListItem",
-            "position": 1,
-            "name": "Trang chủ",
-            "item": BASE_URL
-          },
-          {
-            "@type": "ListItem",
-            "position": 2,
-            "name": book.genre || "Truyện dịch",
-            "item": `${BASE_URL}/#catalog`
-          },
-          {
-            "@type": "ListItem",
-            "position": 3,
-            "name": book.title,
-            "item": `${BASE_URL}/?book=${encodeURIComponent(book.id)}`
-          }
-        ]
       }
     ];
 
     if (chapter) {
-      graph[1].itemListElement.push({
-        "@type": "ListItem",
-        "position": 4,
-        "name": chapter.title || `Chương ${chapter.number || 1}`,
-        "item": url
+      graph.push({
+        "@context": "https://schema.org",
+        "@type": "Chapter",
+        "@id": `${url}#chapter`,
+        "name": chapter.title || title,
+        "position": String(chapter.number || chapter.n || 1),
+        "isPartOf": {
+          "@type": "Book",
+          "name": book.title,
+          "url": `${BASE_URL}/?book=${encodeURIComponent(bookParam)}`
+        }
       });
     }
 
-    script.textContent = JSON.stringify({ "@context": "https://schema.org", "@graph": graph });
+    script.textContent = JSON.stringify({
+      "@context": "https://schema.org",
+      "@graph": graph
+    });
   } else {
+    // Default Website Schema
     script.textContent = JSON.stringify({
       "@context": "https://schema.org",
       "@graph": [
         {
           "@type": "WebSite",
-          "name": "Trạm Chữ",
+          "@id": `${BASE_URL}/#website`,
           "url": BASE_URL,
+          "name": "Trạm Chữ",
           "description": DEFAULT_DESC,
-          "inLanguage": "vi",
           "potentialAction": {
             "@type": "SearchAction",
             "target": `${BASE_URL}/#catalog?q={search_term_string}`,
@@ -213,6 +227,9 @@ async function shareContent({ title, text, url }, showToast) {
 export {
   updatePageMeta,
   shareContent,
+  toSlug,
+  cleanBookId,
+  getBookSlugParam,
   DEFAULT_TITLE,
   DEFAULT_DESC,
   DEFAULT_IMAGE,

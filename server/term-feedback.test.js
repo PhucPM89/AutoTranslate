@@ -38,7 +38,7 @@ test("Reader Term Feedback: validates required fields", async () => {
   assert.match(data.error, /Thiếu thông tin/);
 });
 
-test("Reader Term Feedback: saves suggested term to book glossary", async () => {
+test("Reader Term Feedback: saves suggested term as pending for admin approval", async () => {
   const env = createMockEnv();
   const req = new Request("https://tram-chu.online/api/reader/term-feedback", {
     method: "POST",
@@ -54,11 +54,9 @@ test("Reader Term Feedback: saves suggested term to book glossary", async () => 
   assert.equal(res.status, 200);
   const data = await res.json();
   assert.equal(data.ok, true);
-  assert.match(data.message, /thành công/);
+  assert.match(data.message, /duyệt|ghi nhận/i);
 
-  // Check stored in mock R2
+  // Term is NOT immediately committed into R2 glossary without admin approval
   const storedJson = env.store.get("glossary/kiem-lai-123.json");
-  assert.ok(storedJson);
-  const parsed = JSON.parse(storedJson);
-  assert.equal(parsed["落井下石"], "giậu đổ bìm leo");
+  assert.equal(storedJson, undefined);
 });

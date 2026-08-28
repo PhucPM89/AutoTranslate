@@ -28,7 +28,7 @@ const { createUserSync } = require("./user-sync.js");
 const { renderQuoteCard } = require("./quote-card.js");
 const { applyInvisibleWatermark, initSecurityGuards } = require("./security.js");
 const { extractTitleFromContent, formatVietnameseChapterTitle } = require("./chapter-title.js");
-const { updatePageMeta, shareContent } = require("./seo.js");
+const { updatePageMeta, shareContent, getBookSlugParam } = require("./seo.js");
 const { createTTS } = require("./tts.js");
 const { drawQRCodeToCanvas } = require("./qr-generator.js");
 const {
@@ -1447,11 +1447,12 @@ async function showBookDetail(book, { updateHash = true } = {}) {
   const fallbackCover = fallbackCoverForBook(book);
   const cover = book.cover || fallbackCover;
   const fullCoverUrl = cover.startsWith("http") ? cover : (cover.startsWith("/") ? `${window.location.origin}${cover}` : `${CDN_BASE}/${cover}`);
+  const bookSlugParam = getBookSlugParam(book);
   updatePageMeta({
     title: book.title,
     description: book.description,
     image: fullCoverUrl,
-    url: `${window.location.origin}/?book=${encodeURIComponent(book.id)}`,
+    url: `${window.location.origin}/?book=${encodeURIComponent(bookSlugParam)}`,
     book
   });
   window.scrollTo({ top: 0 });
@@ -2004,11 +2005,12 @@ function goToChapter(index) {
 
   if (state.title) {
     const coverUrl = state.cover ? (state.cover.startsWith("http") ? state.cover : (state.cover.startsWith("/") ? `${window.location.origin}${state.cover}` : `${CDN_BASE}/${state.cover}`)) : null;
+    const bookSlugParam = getBookSlugParam({ id: state.bookId, title: state.title });
     updatePageMeta({
       title: `${documentLabel} — ${state.title}`,
       description: `Đọc ${documentLabel} truyện ${state.title} (${state.author || "Khuyết danh"}) trên Trạm Chữ`,
       image: coverUrl,
-      url: `${window.location.origin}/?book=${encodeURIComponent(state.bookId)}&ch=${state.currentIndex + 1}`,
+      url: `${window.location.origin}/?book=${encodeURIComponent(bookSlugParam)}&ch=${state.currentIndex + 1}`,
       book: { title: state.title, author: state.author, genre: state.genre }
     });
   }
@@ -4060,7 +4062,9 @@ function syncChapterUiTitle(index) {
 
 function cleanBookId(rawId) {
   if (!rawId) return "";
-  return String(rawId).replace(/^(cdn|library):/, "").split(":")[0];
+  let id = String(rawId).replace(/^(cdn|library):/, "").split(":")[0];
+  const match = id.match(/--([A-Za-z0-9._-]+)$/);
+  return match ? match[1] : id;
 }
 
 function bookIdFromState() {

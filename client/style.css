@@ -1126,6 +1126,7 @@ dialog:not([open]) {
 .admin-stats,
 .admin-keys-panel,
 .admin-users-panel,
+.admin-community-panel,
 .admin-translate-panel {
   flex: 1 1 auto;
   overflow-y: auto;
@@ -3752,8 +3753,8 @@ body.theme-forest .document-text .tts-paragraph-highlight.tts-speaking {
     display: none;
   }
 
-  .primary-action,
-  .secondary-action {
+  .document-toolbar .primary-action,
+  .document-toolbar .secondary-action {
     width: 100%;
   }
 
@@ -5109,20 +5110,21 @@ body.theme-forest .document-text .tts-paragraph-highlight.tts-speaking {
 }
 
 .auth-dialog {
-  width: min(430px, calc(100% - 2rem));
+  width: min(430px, calc(100% - 1.5rem));
   max-height: calc(100dvh - 2rem);
   padding: 0;
   overflow: auto;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 14px;
   background: var(--surface);
   color: var(--text);
-  box-shadow: var(--shadow);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75), 0 0 30px rgba(168, 85, 247, 0.12);
 }
 
 .auth-dialog::backdrop {
-  background: rgba(4, 7, 5, 0.72);
-  backdrop-filter: blur(4px);
+  background: rgba(4, 7, 5, 0.75);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .auth-dialog-header {
@@ -5130,13 +5132,23 @@ body.theme-forest .document-text .tts-paragraph-highlight.tts-speaking {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 1.25rem 1.35rem;
+  padding: 1.2rem 1.35rem;
   border-bottom: 1px solid var(--border-soft);
 }
 
+.auth-dialog-header .eyebrow {
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0;
+  font-weight: 700;
+}
+
 .auth-dialog-header h2 {
-  margin: 0.2rem 0 0;
-  font-size: 1.3rem;
+  margin: 0.15rem 0 0;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
 }
 
 .auth-guest {
@@ -5144,14 +5156,14 @@ body.theme-forest .document-text .tts-paragraph-highlight.tts-speaking {
   flex-direction: column;
   align-items: stretch;
   gap: 1.15rem;
-  padding: 1.5rem 1.4rem 1.6rem;
+  padding: 1.4rem 1.35rem 1.5rem;
   text-align: center;
 }
 
 .auth-intro {
   margin: 0;
   color: var(--muted);
-  font-size: 0.86rem;
+  font-size: 0.88rem;
   line-height: 1.6;
 }
 
@@ -5161,9 +5173,10 @@ body.theme-forest .document-text .tts-paragraph-highlight.tts-speaking {
   justify-content: center;
   gap: 0.75rem;
   min-height: 48px;
+  width: 100%;
   padding: 0.75rem 1.4rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--app-bg);
   color: var(--text);
   font-family: inherit;
@@ -5194,90 +5207,162 @@ body.theme-forest .document-text .tts-paragraph-highlight.tts-speaking {
 .auth-note {
   margin: 0 auto;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   line-height: 1.45;
   max-width: 18rem;
 }
 
 .auth-account {
   display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem 1.35rem 1.35rem;
+}
+
+.auth-account-card {
+  display: flex;
   align-items: center;
-  gap: 0.85rem;
-  padding: 1.2rem 1.35rem 1.35rem;
+  gap: 0.95rem;
+  padding: 0.85rem 1rem;
+  background: color-mix(in srgb, var(--app-bg) 60%, var(--surface));
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  min-width: 0;
 }
 
 .auth-avatar-wrap {
   position: relative;
-  width: 42px;
-  height: 42px;
-  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
 }
 
 .auth-avatar-img {
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   border-radius: 999px;
   object-fit: cover;
   border: 2px solid var(--accent);
+  display: block;
 }
 
 .auth-avatar {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
-  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
   border-radius: 999px;
   background: linear-gradient(135deg, var(--accent), var(--accent-2));
   color: var(--accent-ink);
-  font-size: 1.05rem;
+  font-size: 1.1rem;
   font-weight: 800;
 }
 
 .auth-account-copy {
-  display: grid;
-  gap: 0.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
   min-width: 0;
   flex: 1;
+  overflow: hidden;
 }
 
-/* An email or name is one long unbreakable token, so it needs an explicit escape or it
-   pushes the sign-out button off the dialog. */
 .auth-account-copy strong {
-  font-size: 0.88rem;
-  overflow-wrap: anywhere;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
 }
 
 .auth-account-copy small {
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+
+.auth-signout-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 42px;
+  padding: 0.6rem 1rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--danger, #ef4444) 35%, var(--border));
+  background: color-mix(in srgb, var(--surface) 88%, var(--danger, #ef4444) 12%);
+  color: color-mix(in srgb, var(--danger, #ef4444) 85%, var(--text));
+  font-family: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.auth-signout-btn:hover {
+  background: color-mix(in srgb, var(--danger, #ef4444) 22%, var(--surface));
+  border-color: var(--danger, #ef4444);
+  color: #ff6b6b;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.18);
+}
+
+.auth-signout-btn:active {
+  transform: translateY(0);
 }
 
 .auth-message {
   margin: 0 1.35rem 1.35rem;
-  padding: 0.7rem 0.85rem;
+  padding: 0.75rem 0.95rem;
   border: 1px solid var(--border-soft);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--app-bg);
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.82rem;
   line-height: 1.55;
+  word-break: break-word;
 }
 
 .auth-message.is-error {
   border-color: color-mix(in srgb, var(--danger) 45%, transparent);
   color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, var(--app-bg));
 }
 
 .auth-message.is-success {
   border-color: color-mix(in srgb, var(--accent-2) 40%, transparent);
   color: var(--accent-2);
+  background: color-mix(in srgb, var(--accent-2) 10%, var(--app-bg));
 }
 
 @media (max-width: 540px) {
   .auth-dialog {
-    width: calc(100% - 1.5rem);
+    width: calc(100% - 1.25rem);
+    border-radius: 12px;
+  }
+
+  .auth-dialog-header {
+    padding: 1rem 1.15rem;
+  }
+
+  .auth-account {
+    padding: 1rem 1.15rem 1.15rem;
+  }
+
+  .auth-guest {
+    padding: 1.2rem 1.15rem 1.3rem;
+  }
+
+  .auth-message {
+    margin: 0 1.15rem 1.15rem;
   }
 }
 
@@ -10804,4 +10889,170 @@ body.zen-mode .document-paper {
   .book-card:hover { transform: none; }
   .book-card:hover .book-cover img { transform: none; }
   .book-cover-progress > span { transition: none; }
+}
+
+/* --- Community & Feedback Panel Styles --- */
+.community-view-toggle {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1.25rem 0 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 0.75rem;
+}
+
+.sub-tab-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-muted, #94a3b8);
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sub-tab-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text, #f8fafc);
+}
+
+.sub-tab-btn.active {
+  background: rgba(14, 165, 233, 0.15);
+  border-color: rgba(14, 165, 233, 0.4);
+  color: #38bdf8;
+  font-weight: 600;
+}
+
+.community-table-wrap {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 550px;
+  margin-top: 1rem;
+  background: rgba(18, 14, 34, 0.6);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.comment-book-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.comment-book-title {
+  font-size: 0.92rem;
+  color: var(--text, #f8fafc);
+  font-weight: 600;
+}
+
+.comment-chapter-badge {
+  font-size: 0.76rem;
+  color: #38bdf8;
+  background: rgba(14, 165, 233, 0.1);
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  display: inline-block;
+  width: fit-content;
+}
+
+.comment-content-cell {
+  max-width: 320px;
+}
+
+.comment-bubble-text {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  border-left: 3px solid #38bdf8;
+  word-break: break-word;
+}
+
+.danger-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #f87171;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.danger-action-btn:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: #ef4444;
+  color: #fee2e2;
+}
+
+.glossary-term-original {
+  font-family: monospace;
+  font-size: 0.88rem;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+  padding: 0.2rem 0.45rem;
+  border-radius: 4px;
+}
+
+.glossary-term-suggested {
+  color: #34d399;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.glossary-context-text {
+  color: var(--text-muted, #94a3b8);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.community-action-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.approve-glossary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #34d399;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.approve-glossary-btn:hover {
+  background: rgba(16, 185, 129, 0.3);
+  border-color: #10b981;
+  color: #a7f3d0;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+}
+
+.admin-community-panel .crawler-overview {
+  margin-top: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.admin-community-panel .crawler-overview h3 {
+  margin: 0.35rem 0 0;
+  font-size: 1.25rem;
 }

@@ -267,7 +267,7 @@
 问道=hỏi
 答道=trả lời
 叹道=than thở
-冷笑道=cười lạnh nói
+冷笑道=cười lạnh
 怒道=tức giận nói
 喝道=quát
 叫道=kêu lên
@@ -283,3 +283,40 @@
 你的手=tay bạn
 他的手=tay hắn
 她的手=tay nàng
+
+# Literary construction and corpus-audit corrections. These are source-licensed
+# whole phrases; keeping them here lets longest-match lexical authority win
+# before single-character Hán-Việt fallbacks.
+青云门=Thanh Vân Môn
+于青峰之巅=trên đỉnh núi xanh
+白骨蔽野=xương trắng phủ đồng
+令人不胜唏嘘=khiến người ta không khỏi ngậm ngùi
+绝无背叛宗门之意=tuyệt đối không có ý phản bội tông môn
+今日怎的这般局促=hôm nay sao lại lúng túng thế
+此獠=tên này
+正面迎敌=đối đầu trực diện
+青丝如绢=mái tóc đen óng như tơ
+眼若秋水=đôi mắt trong veo như làn nước thu
+清风徐来=làn gió mát khẽ thổi tới
+正冒着袅袅白烟=đang tỏa làn khói trắng lượn lờ
+狂暴的杀意如海啸般倾泻而出=sát ý cuồng bạo trào ra như sóng dữ
+当年=năm xưa
+宗门被灭的惨状=cảnh tông môn bị tiêu diệt thảm khốc
+真的已经离开了=thật sự đã rời đi
+吃得比谁都多=ăn nhiều hơn bất kỳ ai
+跑得比谁都慢=chạy chậm hơn bất kỳ ai
+九缕紫气=chín luồng tử khí
+殿下=Điện hạ
+切不可优柔寡断=tuyệt đối không được do dự thiếu quyết đoán
+戛然而止=đột ngột im bặt
+发狂般扑来=điên cuồng lao tới
+百年前的初见=cuộc gặp gỡ đầu tiên trăm năm trước
+诏曰=chiếu rằng
+肉身破碎=thân xác tan vỡ
+暗流涌动=sóng ngầm cuộn trào
+夺嫡之策=kế hoạch tranh ngôi
+馊主意=ý tưởng tồi tệ
+一口灵茶=một ngụm linh trà
+厉声道=quát lớn
+淡淡道=thản nhiên nói
+斩杀=chém chết

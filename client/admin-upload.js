@@ -113,6 +113,16 @@ const els = {
   statActive7Days: document.getElementById("statActive7Days"),
   statTotalReadChapters: document.getElementById("statTotalReadChapters"),
   statTotalUserExp: document.getElementById("statTotalUserExp"),
+  communityTab: document.getElementById("adminCommunityTab"),
+  communityPanel: document.getElementById("adminCommunityPanel"),
+  communityRefresh: document.getElementById("adminCommunityRefresh"),
+  statTotalComments: document.getElementById("statTotalComments"),
+  statTodayComments: document.getElementById("statTodayComments"),
+  statTopDiscussedBook: document.getElementById("statTopDiscussedBook"),
+  adminCommentsSearch: document.getElementById("adminCommentsSearch"),
+  adminCommentsTbody: document.getElementById("adminCommentsTbody"),
+  adminCommentsEmpty: document.getElementById("adminCommentsEmpty"),
+  adminCommunityLoading: document.getElementById("adminCommunityLoading"),
   bookSelect: document.getElementById("adminBookSelect"),
   password: document.getElementById("adminPassword"),
   epub: document.getElementById("adminEpub"),
@@ -252,6 +262,9 @@ export function mountAdmin(options = {}) {
     els.crawlerTab?.addEventListener("click", () => selectAdminTab("crawler"));
     els.statsTab?.addEventListener("click", () => selectAdminTab("stats"));
     els.usersTab?.addEventListener("click", () => selectAdminTab("users"));
+    els.communityTab?.addEventListener("click", () => selectAdminTab("community"));
+    els.communityRefresh?.addEventListener("click", loadAdminCommunity);
+    els.adminCommentsSearch?.addEventListener("input", filterAdminComments);
     els.keysPingBtn?.addEventListener("click", runKeysPingTest);
     els.addKeyForm?.addEventListener("submit", handleAddKeySubmit);
     els.translateStartBtn?.addEventListener("click", handleStartTranslate);
@@ -1275,10 +1288,12 @@ const ADMIN_TABS = [
   { key: "keys", tab: "keysTab", panel: "keysPanel" },
   { key: "crawler", tab: "crawlerTab", panel: "crawlerForm" },
   { key: "stats", tab: "statsTab", panel: "statsPanel" },
-  { key: "users", tab: "usersTab", panel: "usersPanel" }
+  { key: "users", tab: "usersTab", panel: "usersPanel" },
+  { key: "community", tab: "communityTab", panel: "communityPanel" }
 ];
 
 let adminUsersData = [];
+let adminCommentsData = [];
 
 function selectAdminTab(tab) {
   activeAdminTab = ADMIN_TABS.some((entry) => entry.key === tab) ? tab : "library";
@@ -1295,6 +1310,7 @@ function selectAdminTab(tab) {
   if (activeAdminTab === "keys") loadAdminKeys();
   if (activeAdminTab === "stats") loadAnalytics();
   if (activeAdminTab === "users") loadAdminUsers();
+  if (activeAdminTab === "community") loadAdminCommunity();
   if (activeAdminTab === "crawler") startCrawlerPolling();
   else stopCrawlerPolling();
 }
@@ -1744,6 +1760,116 @@ function formatRelativeTime(isoString) {
   } catch {
     return isoString;
   }
+}
+
+async function loadAdminCommunity() {
+  if (!els.adminCommentsTbody) return;
+  if (els.adminCommunityLoading) els.adminCommunityLoading.hidden = false;
+  if (els.adminCommentsEmpty) els.adminCommentsEmpty.hidden = true;
+
+  try {
+    const data = await requestJson("/api/admin/community");
+    adminCommentsData = data.comments || [];
+
+    if (els.statTotalComments) els.statTotalComments.textContent = Number(data.stats?.totalComments || 0).toLocaleString("vi-VN");
+    if (els.statTodayComments) els.statTodayComments.textContent = Number(data.stats?.todayComments || 0).toLocaleString("vi-VN");
+    if (els.statTopDiscussedBook) els.statTopDiscussedBook.textContent = data.stats?.topDiscussedBook || "Chưa có";
+
+    renderAdminComments(adminCommentsData);
+  } catch (error) {
+    els.adminCommentsTbody.innerHTML = `<tr><td colspan="5" class="users-error-row">Lỗi tải dữ liệu bình luận: ${escapeHtml(error.message)}</td></tr>`;
+  } finally {
+    if (els.adminCommunityLoading) els.adminCommunityLoading.hidden = true;
+  }
+}
+
+function filterAdminComments() {
+  const query = String(els.adminCommentsSearch?.value || "").toLowerCase().trim();
+  if (!query) {
+    renderAdminComments(adminCommentsData);
+    return;
+  }
+  const filtered = adminCommentsData.filter((c) => {
+    return (
+      String(c.authorName || "").toLowerCase().includes(query) ||
+      String(c.bookTitle || "").toLowerCase().includes(query) ||
+      String(c.content || "").toLowerCase().includes(query) ||
+      String(c.bookId || "").toLowerCase().includes(query)
+    );
+  });
+  renderAdminComments(filtered);
+}
+
+function renderAdminComments(comments) {
+  if (!els.adminCommentsTbody) return;
+  if (!comments || !comments.length) {
+    els.adminCommentsTbody.innerHTML = "";
+    if (els.adminCommentsEmpty) els.adminCommentsEmpty.hidden = false;
+    return;
+  }
+  if (els.adminCommentsEmpty) els.adminCommentsEmpty.hidden = true;
+
+  els.adminCommentsTbody.innerHTML = comments.map((c) => {
+    const timeFormatted = c.createdAt ? formatRelativeTime(c.createdAt) : "—";
+    return `
+      <tr class="user-table-row comment-table-row" data-comment-id="${escapeHtml(String(c.id))}">
+        <td>
+          <div class="user-info-cell">
+            <span class="user-avatar-initial" style="background: rgba(14, 165, 233, 0.15); color: #38bdf8;">💬</span>
+            <div class="user-name-group">
+              <strong class="user-display-name">${escapeHtml(c.authorName)}</strong>
+              <small class="user-id-text">ID: #${escapeHtml(String(c.id))}</small>
+            </div>
+          </div>
+        </td>
+        <td>
+          <div class="comment-book-cell">
+            <strong class="comment-book-title">${escapeHtml(c.bookTitle)}</strong>
+            <span class="comment-chapter-badge">Chương ${c.chapterNumber} (Đoạn #${c.paragraphIndex + 1})</span>
+          </div>
+        </td>
+        <td>
+          <div class="comment-content-cell">
+            <p class="comment-bubble-text">${escapeHtml(c.content)}</p>
+          </div>
+        </td>
+        <td>
+          <span class="user-last-active">${escapeHtml(timeFormatted)}</span>
+        </td>
+        <td>
+          <button class="danger-action-btn delete-comment-btn" type="button" data-id="${escapeHtml(String(c.id))}" title="Xóa bình luận này">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 15H6L5 6M10 11v6M14 11v6"></path></svg>
+            <span>Xóa</span>
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  // Attach delete handlers
+  els.adminCommentsTbody.querySelectorAll(".delete-comment-btn").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const id = btn.getAttribute("data-id");
+      if (!id) return;
+      if (!confirm("Bạn có chắc chắn muốn xóa bình luận này không?")) return;
+      btn.disabled = true;
+      btn.textContent = "Đang xóa...";
+      try {
+        await requestJson(`/api/admin/community?type=comment&id=${encodeURIComponent(id)}`, { method: "DELETE" });
+        adminCommentsData = adminCommentsData.filter((c) => String(c.id) !== String(id));
+        renderAdminComments(adminCommentsData);
+        if (els.statTotalComments) {
+          els.statTotalComments.textContent = Number(adminCommentsData.length).toLocaleString("vi-VN");
+        }
+        setStatus("✓ Đã xóa bình luận thành công.");
+      } catch (err) {
+        alert(`Lỗi khi xóa bình luận: ${err.message}`);
+        btn.disabled = false;
+        btn.textContent = "Xóa";
+      }
+    });
+  });
 }
 
 function escapeHtml(str) {
