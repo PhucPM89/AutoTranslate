@@ -128,6 +128,16 @@ npm run dev
 
 ## Deploy Cloudflare
 
+Mỗi lần có commit được push lên nhánh `main`, workflow
+`.github/workflows/deploy-pages.yml` sẽ tự chạy test, build lại `public/` với cấu
+hình production và deploy project Cloudflare Pages `tram-chu-web`. Có thể chạy
+lại thủ công từ tab **Actions → Deploy website → Run workflow**.
+
+Workflow cần các GitHub Actions secrets: `CLOUDFLARE_API_TOKEN`,
+`R2_ACCOUNT_ID`, `R2_PUBLIC_BASE_URL`, `SUPABASE_URL` và tùy chọn
+`SUPABASE_ANON_KEY` (build có publishable key mặc định nếu secret này chưa được
+đặt).
+
 Toàn bộ site là một Cloudflare Worker: `worker/index.js` phục vụ file tĩnh qua
 binding `ASSETS` và xử lý các route `/api/admin/*`. Người đọc không chạm Worker —
 catalogue và mọi chapter là object tĩnh trên R2 do CDN phục vụ.
