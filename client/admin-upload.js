@@ -226,6 +226,7 @@ async function handleStudioLogin(e) {
   }
 }
 
+export function mountAdmin(options = {}) {
   if (!mounted) {
     mounted = true;
     els.close?.addEventListener("click", () => els.dialog.close());
