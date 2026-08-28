@@ -411,7 +411,9 @@ async function main() {
                   revision: job.revision,
                   chapter,
                   translation,
-                  translationStatus: "completed"
+                  translationStatus: "completed",
+                  provider: isHachimi ? "hachimi" : "gemini",
+                  model: isHachimi ? "HachimiMT-60-QT" : "gemini-3.6-flash"
                 })
               )
             );

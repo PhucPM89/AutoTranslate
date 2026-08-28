@@ -121,6 +121,7 @@ async function listAllBooks() {
 }
 
 const TRANSLATE_STATUS_KEY = "jobs/translate-status.json";
+const QA_AUDIT_LOG_KEY = "jobs/qa-audit-log.json";
 
 async function writeQaStatus(stor, status) {
   try {
@@ -130,6 +131,24 @@ async function writeQaStatus(stor, status) {
     }));
   } catch (err) {
     console.warn("Không thể ghi QA status:", err.message);
+  }
+}
+
+async function appendQaAuditLog(stor, entry) {
+  try {
+    const raw = await stor.get(QA_AUDIT_LOG_KEY).catch(() => null);
+    let log = [];
+    if (raw) {
+      try {
+        log = JSON.parse(raw.toString("utf8"));
+      } catch {}
+    }
+    if (!Array.isArray(log)) log = [];
+    log.unshift(entry);
+    if (log.length > 1000) log = log.slice(0, 1000);
+    await stor.put(QA_AUDIT_LOG_KEY, JSON.stringify(log, null, 2));
+  } catch (err) {
+    console.warn("Không thể ghi QA audit log:", err.message);
   }
 }
 
@@ -232,12 +251,19 @@ async function runQaReview() {
             if (res && res.translation) {
               const polishedContent = engine.postProcessTranslation(res.translation, glossary);
               const updatedDoc = {
+                schema: 1,
                 bookId,
                 revision,
                 chapterNumber,
                 title: chDoc?.title || origDoc?.title || `Chương ${chapterNumber}`,
                 content: polishedContent,
                 translationStatus: "completed",
+                provider: "gemini",
+                model: "gemini-3.6-flash",
+                qaReviewed: true,
+                qaReviewedAt: new Date().toISOString(),
+                qaIssuesFixed: audit.issues,
+                fluencyScore: 10,
                 characters: polishedContent.length,
                 updatedAt: new Date().toISOString()
               };
@@ -245,7 +271,26 @@ async function runQaReview() {
               await storage.put(chKey, JSON.stringify(updatedDoc));
               totalRepaired += 1;
               bookRepaired += 1;
-              console.log(`     ✅ Đã sửa chữa & hoàn thiện bằng Gemini (${polishedContent.length} ký tự).`);
+
+              if (index.chapters[idx]) {
+                index.chapters[idx].provider = "gemini";
+                index.chapters[idx].model = "gemini-3.6-flash";
+                index.chapters[idx].qaReviewed = true;
+                index.chapters[idx].translationStatus = "completed";
+                index.chapters[idx].status = "completed";
+              }
+
+              await appendQaAuditLog(storage, {
+                timestamp: new Date().toISOString(),
+                bookId,
+                bookTitle,
+                chapterNumber,
+                issuesFound: audit.issues,
+                repairedWith: "gemini-3.6-flash",
+                charCount: polishedContent.length
+              });
+
+              console.log(`     ✅ Đã sửa chữa & hoàn thiện bằng Gemini (${polishedContent.length} ký tự). Lý do: ${audit.issues.join(", ")}`);
 
               await writeQaStatus(storage, {
                 state: "running",
@@ -279,6 +324,11 @@ async function runQaReview() {
       }
 
       if (stoppedReason) break;
+    }
+
+    if (bookRepaired > 0) {
+      index.updatedAt = new Date().toISOString();
+      await storage.put(`books/${bookId}/index.json`, JSON.stringify(index));
     }
 
     scannedBooksList.push({
