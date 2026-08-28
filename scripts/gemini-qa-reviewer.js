@@ -56,6 +56,8 @@ const DRY_RUN = hasFlag("--dry-run");
 const FORCE = hasFlag("--force");
 const CONTINUOUS = hasFlag("--continuous") || hasFlag("-c");
 
+const MIN_SCORE = Number(getArg("--min-score", process.env.QA_MIN_SCORE || "8.5"));
+
 const waitMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function readJson(stor, key) {
@@ -73,28 +75,28 @@ function auditChapterQuality(chapterDoc, originalText = "") {
   const content = String(chapterDoc?.content || "").trim();
 
   if (!content) {
-    return { ok: false, issues: ["Nội dung rỗng"] };
+    return { ok: false, issues: ["Nội dung rỗng"], score: 0 };
   }
 
-  // 1. Check for raw Chinese glyphs
+  // 1. Check for ANY raw Chinese glyphs
   const hanMatches = content.match(/[\u4e00-\u9fa5]/g);
-  if (hanMatches && hanMatches.length > 2) {
+  if (hanMatches && hanMatches.length > 0) {
     issues.push(`Sót ${hanMatches.length} chữ Hán chưa dịch`);
   }
 
-  // 2. Check length ratio if original is available
+  // 2. Check length ratio if original is available (tighter bound: 60% to 350%)
   if (originalText && originalText.length >= 250) {
     const ratio = content.length / originalText.length;
-    if (ratio < 0.55) {
+    if (ratio < 0.60) {
       issues.push(`Bản dịch bị cụt câu (độ dài chỉ đạt ${Math.round(ratio * 100)}% bản gốc)`);
-    } else if (ratio > 4.5) {
+    } else if (ratio > 3.5) {
       issues.push(`Bản dịch dài bất thường (${Math.round(ratio * 100)}% bản gốc)`);
     }
   }
 
-  // 3. Fluency score
+  // 3. High-Quality Fluency score check (Threshold: >= 8.5 / 10)
   const { score, issues: fluencyIssues } = calculateFluencyScore(content);
-  if (score < 6.0) {
+  if (score < MIN_SCORE) {
     issues.push(...fluencyIssues);
   }
 
