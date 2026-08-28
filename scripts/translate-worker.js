@@ -740,11 +740,18 @@ async function refreshBookOutputs({ storage, db, job, state }) {
   const index = await readJson(storage, `books/${job.bookId}/index.json`);
   if (!index) return;
   const statusByNumber = new Map(state.chapters.map((entry) => [entry.n, entry.status]));
-  const chapters = index.chapters.map((entry) => ({
-    chapterNumber: entry.n,
-    title: entry.title,
-    translationStatus: statusByNumber.get(entry.n) || entry.status
-  }));
+  const chapters = index.chapters.map((entry) => {
+    const translationStatus = statusByNumber.get(entry.n) || entry.status;
+    const isCompleted = translationStatus === "completed";
+    return {
+      chapterNumber: entry.n,
+      title: entry.title,
+      translationStatus,
+      provider: entry.provider || (isCompleted ? (isHachimi ? "hachimi" : "gemini") : "crawler-convert"),
+      model: entry.model || (isCompleted ? (isHachimi ? "HachimiMT-60-QT" : "gemini-3.6-flash") : undefined),
+      qaReviewed: entry.qaReviewed
+    };
+  });
   await publishIndex({
     storage,
     book: {

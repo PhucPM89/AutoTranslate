@@ -98,9 +98,12 @@ function buildBookIndex({ book, revision, chapters, publicUrlFor }) {
     translatedChapters: chapters.filter((c) => c.translationStatus === "completed").length,
     updatedAt: new Date().toISOString(),
     chapters: chapters.map((chapter) => ({
-      n: chapter.chapterNumber,
+      n: chapter.chapterNumber != null ? chapter.chapterNumber : chapter.n,
       title: chapter.title,
-      status: chapter.translationStatus
+      status: chapter.translationStatus || chapter.status || "pending",
+      ...(chapter.provider ? { provider: chapter.provider } : {}),
+      ...(chapter.model ? { model: chapter.model } : {}),
+      ...(chapter.qaReviewed !== undefined ? { qaReviewed: chapter.qaReviewed } : {})
     }))
   };
 }
