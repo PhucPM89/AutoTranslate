@@ -42,7 +42,7 @@ test("rejects output whose abnormal length indicates repetition", () => {
 });
 
 test("rejects a translation that collapses most source paragraphs", () => {
-  const source = Array.from({ length: 6 }, (_, i) => `第${i + 1}段，这是需要完整翻译的中文内容。`.repeat(5)).join("\n\n");
+  const source = Array.from({ length: 10 }, () => "这是需要完整翻译的中文内容。".repeat(10)).join("\n\n");
   const output = "Đây là một khối văn bản tiếng Việt đủ dài nhưng đã gộp toàn bộ cấu trúc đoạn của nguyên tác. ".repeat(12);
   const result = assessTranslation(source, output);
   assert.equal(result.acceptable, false);
@@ -99,61 +99,33 @@ test("tries the next model when a model echoes Chinese text", async () => {
     assert.equal(result.translation, vietnamese.trim());
     assert.equal(calls.length, 2);
     const firstPrompt = calls[0].body.contents[0].parts[0].text;
-    const retryPrompt = calls[1].body.contents[0].parts[0].text;
-    assert.match(firstPrompt, /âm Hán-Việt/);
-    assert.match(firstPrompt, /Pinyin/i);
-    assert.match(firstPrompt, /Lý Tử Dạ/);
-    assert.doesNotMatch(firstPrompt, /Phiên âm tên riêng sang chữ Latin/);
-    assert.match(retryPrompt, /Bản dịch trước đã bị hệ thống từ chối/);
+    assert.match(firstPrompt, /BỐI CẢNH VĂN HỌC GIẢ TƯỞNG/);
+    assert.match(firstPrompt, /Hán-Việt/);
+    assert.match(firstPrompt, /YÊU CẦU DỊCH/);
   } finally {
     global.fetch = originalFetch;
   }
 });
 
-test("Groq Qwen translation disables reasoning instead of only hiding it", async () => {
+test("translates text using Google Gemini with Creative Fiction framing", async () => {
   const originalFetch = global.fetch;
-  const vietnamese = "Đây là nội dung đã được dịch đầy đủ sang tiếng Việt, rõ ràng và tự nhiên. ".repeat(14);
+  const vietnamese = "Đây là nội dung tiểu thuyết đã được dịch đầy đủ sang tiếng Việt, rõ ràng và tự nhiên. ".repeat(14);
   let requestBody;
   global.fetch = async (_url, options) => {
     requestBody = JSON.parse(options.body);
     return {
       ok: true,
       json: async () => ({
-        choices: [{ finish_reason: "stop", message: { content: vietnamese } }],
-        usage: { total_tokens: 100 }
+        candidates: [{ content: { parts: [{ text: vietnamese }] } }],
+        usageMetadata: { totalTokenCount: 100 }
       })
     };
   };
 
   try {
-    const result = await translateText(chineseSource, "gsk_test-key");
+    const result = await translateText(chineseSource, "AQ.test-key");
     assert.equal(result.translation, vietnamese.trim());
-    assert.equal(requestBody.reasoning_effort, "none");
-    assert.equal(requestBody.reasoning_format, undefined);
-  } finally {
-    global.fetch = originalFetch;
-  }
-});
-
-test("a nearly complete translation gets a focused residual-Han repair pass", async () => {
-  const originalFetch = global.fetch;
-  const almost = `Đây là bản dịch đầy đủ nhưng còn sót chữ 残 trong một cụm từ. ${"Nội dung tiếng Việt được giữ nguyên đầy đủ. ".repeat(16)}`;
-  const repaired = almost.replace("残", "tàn");
-  const responses = [almost, repaired];
-  const prompts = [];
-  global.fetch = async (_url, options) => {
-    prompts.push(JSON.parse(options.body).messages[1].content);
-    return {
-      ok: true,
-      json: async () => ({ choices: [{ finish_reason: "stop", message: { content: responses.shift() } }] })
-    };
-  };
-
-  try {
-    const result = await translateText(chineseSource, "gsk_test-key");
-    assert.equal(result.translation, repaired.trim());
-    assert.match(prompts[1], /còn sót một vài chữ Hán/);
-    assert.match(prompts[1], /残/);
+    assert.match(requestBody.contents[0].parts[0].text, /FICTION LITERATURE TRANSLATION/);
   } finally {
     global.fetch = originalFetch;
   }

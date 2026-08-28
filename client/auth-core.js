@@ -16,12 +16,21 @@ function decodeJwt(token) {
     if (!part) return null;
     let base64 = part.replace(/-/g, "+").replace(/_/g, "/");
     while (base64.length % 4) base64 += "=";
-    const json =
-      typeof atob === "function"
-        ? typeof decodeURIComponent === "function" && typeof escape === "function"
-          ? decodeURIComponent(escape(atob(base64)))
-          : atob(base64)
-        : Buffer.from(base64, "base64").toString("utf8");
+    let json = "";
+    if (typeof atob === "function") {
+      const binary = atob(base64);
+      if (typeof TextDecoder !== "undefined") {
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        json = new TextDecoder().decode(bytes);
+      } else if (typeof decodeURIComponent === "function" && typeof escape === "function") {
+        json = decodeURIComponent(escape(binary));
+      } else {
+        json = binary;
+      }
+    } else if (typeof Buffer !== "undefined") {
+      json = Buffer.from(base64, "base64").toString("utf8");
+    }
     return JSON.parse(json);
   } catch {
     return null;
@@ -116,7 +125,9 @@ const ERROR_MESSAGES = {
   user_banned: "Tài khoản này đang bị khóa.",
   validation_failed: "Thông tin chưa hợp lệ.",
   refresh_token_not_found: "Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.",
-  refresh_token_already_used: "Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại."
+  refresh_token_already_used: "Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.",
+  disabled_client: "Google OAuth Client đã bị vô hiệu hóa hoặc chưa kích hoạt trong Google Cloud Console.",
+  invalid_client: "Google Client ID hoặc Secret không hợp lệ trong Supabase Auth."
 };
 
 function authErrorMessage(status, body) {
@@ -132,34 +143,70 @@ function authErrorMessage(status, body) {
   return "Không đăng nhập được. Vui lòng thử lại.";
 }
 
-// The OAuth redirect lands back on the site with tokens in the URL fragment.
-// They have to be consumed and wiped before anything else reads the hash, or
-// they sit in the address bar and travel into any link the reader shares.
-function sessionFromUrlHash(hash, now = Date.now()) {
-  const raw = String(hash || "").replace(/^#/, "");
-  if (!raw || !raw.includes("access_token=")) return null;
-  const params = new URLSearchParams(raw);
-  return normalizeSession(
-    {
-      access_token: params.get("access_token"),
-      refresh_token: params.get("refresh_token"),
-      expires_in: params.get("expires_in"),
-      expires_at: params.get("expires_at")
-    },
-    now
-  );
+// Checks both URL fragment (#) and query params (?) for session tokens.
+function sessionFromUrl(hash = "", search = "", now = Date.now()) {
+  const sources = [
+    String(hash || "").replace(/^#/, ""),
+    String(search || "").replace(/^\?/, "")
+  ];
+  for (const raw of sources) {
+    if (!raw || !raw.includes("access_token=")) continue;
+    const params = new URLSearchParams(raw);
+    const at = params.get("access_token");
+    if (!at) continue;
+    return normalizeSession(
+      {
+        access_token: at,
+        refresh_token: params.get("refresh_token") || "",
+        expires_in: params.get("expires_in"),
+        expires_at: params.get("expires_at")
+      },
+      now
+    );
+  }
+  return null;
 }
 
-// Supabase reports OAuth failures in the fragment too.
+function sessionFromUrlHash(hash, now = Date.now()) {
+  return sessionFromUrl(hash, "", now);
+}
+
+// Checks both URL fragment (#) and query params (?) for OAuth errors.
+function errorFromUrl(hash = "", search = "") {
+  const sources = [
+    String(hash || "").replace(/^#/, ""),
+    String(search || "").replace(/^\?/, "")
+  ];
+  for (const raw of sources) {
+    if (!raw || !raw.includes("error")) continue;
+    const params = new URLSearchParams(raw);
+    const err = params.get("error");
+    const code = params.get("error_code") || "";
+    const desc = params.get("error_description") || "";
+    if (!err && !code) continue;
+    const detail = `${code} ${desc} ${err}`.toLowerCase();
+    if (detail.includes("disabled_client") || detail.includes("oauth client was disabled")) {
+      return "Google OAuth Client đã bị vô hiệu hóa trong Google Cloud Console. Vui lòng kiểm tra lại cấu hình.";
+    }
+    if (detail.includes("access_denied")) {
+      return "Đã hủy đăng nhập Google.";
+    }
+    if (detail.includes("expired")) {
+      return "Phiên đăng nhập đã hết hạn. Hãy thử lại.";
+    }
+    if (detail.includes("redirect_uri_mismatch")) {
+      return "Lỗi redirect_uri_mismatch: Chưa cấu hình đúng Redirect URL trong Google Cloud Console.";
+    }
+    if (detail.includes("invalid_client")) {
+      return "Google Client ID hoặc Secret không hợp lệ.";
+    }
+    return desc ? `Đăng nhập Google thất bại: ${desc}` : "Đăng nhập Google không thành công. Hãy thử lại.";
+  }
+  return "";
+}
+
 function errorFromUrlHash(hash) {
-  const raw = String(hash || "").replace(/^#/, "");
-  if (!raw || !raw.includes("error")) return "";
-  const params = new URLSearchParams(raw);
-  if (!params.get("error") && !params.get("error_code")) return "";
-  const detail = `${params.get("error_code") || ""} ${params.get("error_description") || ""}`;
-  if (/access_denied/i.test(detail)) return "Đã hủy đăng nhập Google.";
-  if (/expired/i.test(detail)) return "Phiên đăng nhập đã hết hạn. Hãy thử lại.";
-  return "Đăng nhập Google không thành công. Hãy thử lại.";
+  return errorFromUrl(hash, "");
 }
 
 // Shown on the header button and profile dialog.
@@ -188,7 +235,9 @@ module.exports = {
   readSession,
   writeSession,
   authErrorMessage,
+  sessionFromUrl,
   sessionFromUrlHash,
+  errorFromUrl,
   errorFromUrlHash,
   accountLabel,
   accountInitial

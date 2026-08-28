@@ -39,20 +39,20 @@ test("translation-engine: buildContextualPrompt injects glossary section", () =>
     glossary
   });
 
-  assert.ok(prompt.includes("BẢNG TỪ ĐIỂN THUẬT NGỮ"));
+  assert.ok(prompt.includes("THUẬT NGỮ & TÊN RIÊNG"));
   assert.ok(prompt.includes('"林枫" ➔ "Lâm Phong"'));
   assert.ok(prompt.includes('"大板" ➔ "Osaka"'));
-  assert.ok(prompt.includes("Nội dung tiếng Trung cần dịch:"));
+  assert.ok(prompt.includes("Văn bản tiếng Trung cần dịch:"));
   assert.ok(prompt.includes("林枫到达了大板机场。"));
 });
 
-test("translation-engine: prompt carries book context and numeric fidelity rule", () => {
+test("translation-engine: prompt carries book context and fiction literature framing", () => {
   const prompt = createTranslationEngine().buildContextualPrompt({
     text: "他有1200块灵石。",
     bookTitle: "Kiếm Đạo Trường Sinh"
   });
   assert.match(prompt, /Tác phẩm: Kiếm Đạo Trường Sinh/);
-  assert.match(prompt, /Giữ nguyên mọi con số/);
+  assert.match(prompt, /FICTION LITERATURE TRANSLATION/);
 });
 
 test("translation-engine: postProcessTranslation cleans markdown & enforces glossary", () => {

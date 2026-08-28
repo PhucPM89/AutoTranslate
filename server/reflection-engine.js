@@ -7,9 +7,6 @@
  * publication-grade prose.
  */
 
-const { polishLiteraryProse } = require("./convert/literary-stylist");
-const { adaptLiteraryIdioms } = require("./convert/idiom-adapter");
-
 // Stiff Sino-Vietnamese grammar patterns requiring reflection polishing
 const STIFF_REFLECTION_RULES = [
   // Word order & preposition artifacts
@@ -116,6 +113,22 @@ function auditGlossaryCompliance(text, glossary = {}) {
   };
 }
 
+function polishLiteraryProse(text) {
+  if (!text || typeof text !== "string") return "";
+  return text
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/\s+([,.!?;:])/g, "$1")
+    .replace(/(["'\[])\s+/g, "$1")
+    .replace(/\s+(["'\]])/g, "$1")
+    .replace(/[^\S\r\n]+/g, " ")
+    .trim();
+}
+
+function adaptLiteraryIdioms(text) {
+  return text || "";
+}
+
 /**
  * Dual-Pass Reflection: Evaluates candidate translation, applies targeted polishing
  * and returns enhanced literary-grade text.
@@ -138,10 +151,7 @@ function reflectAndPolish(translation, { sourceText = "", glossary = {}, scene =
     }
   }
 
-  // Adapt any stray idioms
-  polished = adaptLiteraryIdioms(polished);
-
-  // Apply prose stylistics
+  // Apply prose stylistics & spacing normalization
   polished = polishLiteraryProse(polished);
 
   const finalScore = calculateFluencyScore(polished).score;

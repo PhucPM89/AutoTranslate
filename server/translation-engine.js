@@ -1,18 +1,14 @@
 "use strict";
 
-// Trạm Chữ — Bulletproof Translation Engine with Anti-Ban Safety Shield
+// Trạm Chữ — Translation & QA Engine with Anti-Ban Safety Shield
 // Provides:
 // 1. Glossary Manager: per-book dictionary (characters, terms, ranks, sects) stored on R2.
-// 2. Translation Memory (TM): sentence/phrase pattern matching to save tokens & ensure consistency.
+// 2. Translation Memory (TM): sentence/phrase pattern matching.
 // 3. Pre-Flight Content Sanitizer: softens extreme trigger words to prevent AI provider bans.
-// 4. Prompt Builder with creative fiction framing.
-// 5. Post-Processor: punctuation normalization, Markdown cleanup, and quality assessment.
+// 4. Creative Fiction Prompt Builder (Anti-Ban Safety Shield compliant).
+// 5. Post-Processor: punctuation normalization, Markdown cleanup, and quality reflection.
 
-const { polishLiteraryProse } = require("./convert/literary-stylist");
 const { mineNovelGlossary } = require("./glossary-miner");
-const { classifyScene, getScenePronounInstruction } = require("./convert/relationship-matrix");
-const { findMatchedIdioms } = require("./convert/idiom-adapter");
-const { detectPersonas, formatPersonaPrompt } = require("./convert/persona-modulator");
 const { reflectAndPolish } = require("./reflection-engine");
 
 const GLOSSARY_PREFIX = "glossary";
@@ -51,9 +47,12 @@ function glossaryKey(bookId) {
   return `${GLOSSARY_PREFIX}/${bookId}.json`;
 }
 
+/**
+ * Pre-Flight Content Sanitizer (Anti-Ban Safety Shield)
+ * Softens extreme trigger phrases in raw web novel text to prevent false positive AI safety flags.
+ */
 function sanitizeContentSafety(text) {
   if (typeof text !== "string") return "";
-  // Soften extreme trigger phrases in raw text to prevent false positive AI safety flags
   return text
     .replace(/自杀/g, " tự tuyệt ")
     .replace(/性奴/g, " nô lệ ")
@@ -134,6 +133,10 @@ function createTranslationEngine({ storage = null } = {}) {
     return matched;
   }
 
+  /**
+   * Builds an optimized, loosened, literary fiction prompt for Google Gemini
+   * with Creative Fiction context framing to prevent Google API policy violations.
+   */
   function buildContextualPrompt({
     text,
     index = 0,
@@ -143,61 +146,36 @@ function createTranslationEngine({ storage = null } = {}) {
     isRetry = false
   }) {
     const matchedTerms = findMatchedGlossaryTerms(text, glossary);
-    const matchedIdioms = findMatchedIdioms(text);
-    const allTerms = [...matchedTerms];
-    for (const idiom of matchedIdioms) {
-      if (!allTerms.some((t) => t.zh === idiom.zh)) {
-        allTerms.push(idiom);
-      }
-    }
-
-    const scene = classifyScene(text);
-    const sceneInstruction = getScenePronounInstruction(scene);
-
-    const personas = detectPersonas(text);
-    const personaInstruction = formatPersonaPrompt(personas);
-
-    const chunkNote =
-      total > 1
-        ? `Đây là phần ${index + 1}/${total} của cùng một chương. Hãy chỉ dịch phần này, không thêm tiêu đề phần.`
-        : "";
-
     let glossarySection = "";
-    if (allTerms.length > 0) {
+    if (matchedTerms.length > 0) {
       glossarySection = [
-        "BẢNG TỪ ĐIỂN THUẬT NGỮ, TÊN RIÊNG & THÀNH NGỮ BẮT BUỘC DÙNG (Không được dịch khác):",
-        ...allTerms.map((t) => `  - "${t.zh}" ➔ "${t.vi}"`),
+        "THUẬT NGỮ & TÊN RIÊNG CẦN DÙNG:",
+        ...matchedTerms.map((t) => `  - "${t.zh}" ➔ "${t.vi}"`),
         ""
       ].join("\n");
     }
 
+    const chunkNote =
+      total > 1
+        ? `(Phần ${index + 1}/${total} của chương)`
+        : "";
+
     return [
-      "Bạn là dịch giả văn học và tiểu thuyết mạng Trung - Việt chuyên nghiệp và tận tụy nhất (Tiên hiệp, Huyền huyễn, Đô thị, Mạt thế, Khoa huyễn, Võng du).",
-      "Hãy dịch toàn bộ văn bản tiếng Trung sau sang tiếng Việt tự nhiên, văn phong mượt mà, thuần chất tiểu thuyết mạng.",
+      "[BỐI CẢNH VĂN HỌC GIẢ TƯỞNG / FICTION LITERATURE TRANSLATION]",
+      "Bạn là một biên tập viên và dịch giả tiểu thuyết Trung - Việt xuất sắc.",
+      "Hãy dịch/hiệu đính đoạn văn bản tiểu thuyết sau sang tiếng Việt mượt mà, tự nhiên, đậm chất văn học kiếm hiệp/tiên hiệp/tiểu thuyết mạng.",
       bookTitle ? `Tác phẩm: ${sanitizeContentSafety(bookTitle)}` : "",
+      chunkNote,
       "",
-      sceneInstruction ? sceneInstruction + "\n" : "",
-      personaInstruction ? personaInstruction + "\n" : "",
-      "QUY TẮC BẮT BUỘC ĐỂ ĐẢM BẢO CHẤT LƯỢNG:",
-      "1. NGUYÊN VĂN 1:1 - TUYỆT ĐỐI KHÔNG TÓM TẮT:",
-      "   - Dịch đầy đủ 100% từng câu, từng chữ, từng lời thoại và từng đoạn miêu tả.",
-      "   - TUYỆT ĐỐI KHÔNG tóm tắt, KHÔNG lược bớt, KHÔNG gộp các đoạn văn, KHÔNG bỏ qua cảnh chiến đấu hay hội thoại dù dài.",
-      "   - Giữ nguyên cấu trúc số đoạn văn tương ứng với bản gốc.",
-      "   - Giữ nguyên mọi con số, số lượng, ngày tháng, cấp bậc và đơn vị; chỉ Việt hóa cách viết đơn vị khi cần.",
-      "2. DANH TỪ RIÊNG & THUẬT NGỮ (Hán-Việt 100%):",
-      "   - BẮT BUỘC chuyển toàn bộ tên nhân vật, địa danh, cảnh giới, chiêu thức, công pháp, tông môn sang âm Hán-Việt chuẩn mực (Ví dụ: 李子夜 ➔ Lý Tử Dạ, 白忘语 ➔ Bạch Vọng Ngữ, 云影圣主 ➔ Vân Ảnh Thánh Chủ, 冥土 ➔ Minh Thổ, 夕阳西落 ➔ Tà dương lặn về tây / Hoàng hôn buông xuống).",
-      "   - Tuyệt đối KHÔNG để sót chữ Hán hay Pinyin trong bản dịch.",
-      "3. NHÂN XƯNG & XƯNG HÔ:",
-      "   - Dùng đúng xưng hô tiểu thuyết kiếm hiệp/tiên hiệp: 'ta - ngươi', 'huynh - đệ', 'tỷ - muội', 'sư phụ / sư tôn - đồ nhi', 'tiền bối - vãn bối', 'bổn tọa', 'tiểu tử', 'lão đầu tử'...",
-      "   - Tuyệt đối KHÔNG dùng 'tôi - bạn', 'cậu - tớ' trong tiểu thuyết tu tiên/cổ trang.",
-      "4. KẾT QUẢ:",
-      "   - Chỉ trả về duy nhất nội dung bản dịch tiếng Việt, KHÔNG kèm lời chào, lời giải thích hay ghi chú ngoài lề.",
+      "YÊU CẦU DỊCH:",
+      "1. Văn phong tự nhiên, trôi chảy, giữ đúng mạch cảm xúc của câu chuyện.",
+      "2. Xưng hô phù hợp bối cảnh tiểu thuyết (ta - ngươi, hắn - nàng, huynh - đệ, sư phụ - đồ nhi...).",
+      "3. Tên nhân vật, địa danh, công pháp chuyển sang âm Hán-Việt chuẩn mực.",
+      "4. Giữ nguyên cấu trúc các đoạn văn và hội thoại tương ứng với bản gốc.",
+      "5. Chỉ trả về nội dung bản dịch tiếng Việt hoàn chỉnh, không kèm lời chào hay ghi chú.",
       "",
       glossarySection,
-      chunkNote,
-      isRetry ? "Lưu ý đặc biệt: Bản dịch trước đã bị hệ thống từ chối do thiếu câu từ hoặc chưa đạt chuẩn. Hãy dịch lại thật đầy đủ 100% nguyên văn sang tiếng Việt." : "",
-      "",
-      "Nội dung tiếng Trung cần dịch:",
+      "Văn bản tiếng Trung cần dịch:",
       sanitizeContentSafety(text)
     ]
       .filter(Boolean)
@@ -230,7 +208,7 @@ function createTranslationEngine({ storage = null } = {}) {
       .replace(/^(?:Bản dịch|Dưới đây là|Sau đây là|Dịch nghĩa|Bản dịch chuẩn)[^:\n]*:?\s*\n*/i, "")
       .replace(/^[\*\-_~]{3,}\s*\n*/gm, "");
 
-    // Ensure matched glossary terms are strictly applied if LLM mistakenly used Pinyin
+    // Ensure matched glossary terms are strictly applied
     for (const [zh, vi] of Object.entries(glossary)) {
       if (vi && clean.includes(zh)) {
         clean = clean.split(zh).join(vi);

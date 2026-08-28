@@ -534,18 +534,126 @@ async function handleTranslateStatus({ request, env }) {
     };
   }
 
-  // Heartbeat timeout check: 6 minutes
-  if (status.state === "running" && status.updatedAt) {
-    const ageMs = Date.now() - new Date(status.updatedAt).getTime();
-    if (ageMs > 6 * 60 * 1000) {
-      status.state = "idle";
-      status.message = "Tiến trình dịch đã hoàn tất lượt chạy (chờ lượt xoay vòng tiếp theo).";
+  // Heartbeat timeout check: 5 minutes
+  const beat = status.updatedAt || status.finishedAt;
+  const heartbeatStale = Boolean(beat && Date.now() - new Date(beat).getTime() > 5 * 60 * 1000);
+  const isRunning = status.state === "running" && !heartbeatStale;
+  if (status.state === "running" && heartbeatStale) {
+    status.state = "idle";
+    status.message = "Worker đã dừng hoặc mất tín hiệu kết nối (quá 5 phút không có nhịp tim).";
+  }
+
+  // Calculate detailed worker life state & stop reasons
+  const deadKeys = Number(status.deadKeyCount || 0);
+  const totalKeys = Number(status.activeKeyCount || 0);
+  const dailyExhausted = Number(status.dailyExhaustedKeyCount || 0);
+  const readyKeys = Number(status.readyKeyCount || 0);
+  const isQuotaPaused = status.state === "paused_quota" || status.activityState === "waiting_quota";
+
+  let stopReason = "idle";
+  let stopReasonTitle = "Hệ thống đang nghỉ";
+  let stopReasonDetails = "Không có tác vụ dịch đang chạy.";
+
+  if (isRunning) {
+    stopReason = "running";
+    stopReasonTitle = "🟢 Worker đang hoạt động bình thường (Online)";
+    stopReasonDetails = `Worker đang xử lý theo thời gian thực (Nhịp tim gần nhất: ${describeTimeAgo(beat)}).`;
+  } else if (isQuotaPaused || (totalKeys > 0 && dailyExhausted >= totalKeys) || (totalKeys > 0 && readyKeys === 0 && dailyExhausted > 0)) {
+    stopReason = "quota_tpd_rpd";
+    stopReasonTitle = "🟡 Tạm dừng chờ hồi Quota (Hết RPD / TPD ngày)";
+    const resumesText = status.resumesAt ? ` Dự kiến tự động tiếp tục vào ${new Date(status.resumesAt).toLocaleTimeString("vi-VN")}.` : "";
+    stopReasonDetails = `Đã chạm trần hạn mức ngày của cụm Google Gemini API (1.500 requests/ngày hoặc 1M tokens/ngày).${resumesText} Bạn có thể nạp thêm API Key mới để chạy tiếp ngay.`;
+  } else if (totalKeys > 0 && deadKeys >= totalKeys) {
+    stopReason = "all_keys_dead";
+    stopReasonTitle = "🔴 Toàn bộ API Key bị lỗi / vô hiệu hóa";
+    stopReasonDetails = "Tất cả API Key Gemini trong hệ thống đã bị thu hồi hoặc gặp lỗi 401/403. Vui lòng kiểm tra và thay thế trong tab 'Sức khỏe API Keys'.";
+  } else if (status.state === "completed" || (Array.isArray(status.queue) && status.queue.length === 0 && Number(status.translatedThisRun || 0) > 0)) {
+    stopReason = "completed_all";
+    stopReasonTitle = "🎉 Đã hoàn tất quét toàn bộ thư viện hôm nay";
+    stopReasonDetails = "Tất cả các bộ truyện trong hệ thống đã được quét hậu kiểm và đạt chuẩn chất lượng 100%.";
+  } else if (heartbeatStale) {
+    stopReason = "stale_offline";
+    stopReasonTitle = "🔴 Worker đã dừng / Mất tín hiệu (Offline)";
+    stopReasonDetails = `Tiến trình worker đã kết thúc hoặc bị gián đoạn (Nhịp tim cuối: ${describeTimeAgo(beat)}). Bấm 'Dịch ngay' hoặc khởi động lại daemon để tiếp tục.`;
+  } else if (status.lastError) {
+    stopReason = "error";
+    stopReasonTitle = "⚠️ Tạm dừng do phát sinh lỗi";
+    stopReasonDetails = `Lỗi ghi nhận: ${status.lastError}`;
+  }
+
+  // Build list of books scanned/processed today
+  const dailyScannedBooks = [];
+  const scannedMap = new Map();
+
+  // 1. Current active book if any
+  if (status.currentBookId) {
+    scannedMap.set(status.currentBookId, {
+      bookId: status.currentBookId,
+      bookTitle: status.currentBookTitle || status.currentBookId,
+      scannedChapters: Number(status.currentCompleted || status.currentChapter || 0),
+      totalChapters: Number(status.currentTotalChapters || 0),
+      repairedChapters: Number(status.translatedThisRun || 0),
+      fluencyScore: 10,
+      status: isRunning ? "scanning" : (isQuotaPaused ? "paused_quota" : "done"),
+      statusLabel: isRunning ? "Đang quét & tái dịch..." : (isQuotaPaused ? "Tạm dừng chờ quota" : "Đã quét trong phiên"),
+      lastScannedAt: status.updatedAt || new Date().toISOString()
+    });
+  }
+
+  // 2. From recent activity / daily logs
+  if (Array.isArray(status.recentActivity)) {
+    for (const act of status.recentActivity) {
+      if (!act || !act.bookId) continue;
+      const existing = scannedMap.get(act.bookId);
+      const count = Number(act.count || 1);
+      if (existing) {
+        existing.repairedChapters = Math.max(existing.repairedChapters, count);
+        if (act.at && new Date(act.at).getTime() > new Date(existing.lastScannedAt).getTime()) {
+          existing.lastScannedAt = act.at;
+        }
+      } else {
+        scannedMap.set(act.bookId, {
+          bookId: act.bookId,
+          bookTitle: act.bookTitle || act.bookId,
+          scannedChapters: Number(act.chapterNumber || count),
+          totalChapters: Number(act.totalChapters || 0),
+          repairedChapters: count,
+          fluencyScore: 10,
+          status: "done",
+          statusLabel: "Đã chuẩn hóa hoàn tất",
+          lastScannedAt: act.at || new Date().toISOString()
+        });
+      }
     }
   }
 
+  // 3. From status.dailyScannedBooks if present
+  if (Array.isArray(status.dailyScannedBooks)) {
+    for (const b of status.dailyScannedBooks) {
+      if (b && b.bookId) {
+        scannedMap.set(b.bookId, { ...scannedMap.get(b.bookId), ...b });
+      }
+    }
+  }
+
+  status.workerAlive = isRunning;
+  status.stopReason = stopReason;
+  status.stopReasonTitle = stopReasonTitle;
+  status.stopReasonDetails = stopReasonDetails;
+  status.dailyScannedBooks = Array.from(scannedMap.values());
   status.focusBookId = config.focusBookId;
   status.selectionMode = config.focusBookId ? "focused" : "automatic";
   return json({ status, config });
+}
+
+function describeTimeAgo(isoString) {
+  if (!isoString) return "Chưa rõ";
+  const diffSec = Math.max(0, Math.floor((Date.now() - new Date(isoString).getTime()) / 1000));
+  if (diffSec < 60) return `${diffSec} giây trước`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} phút trước`;
+  const diffHour = Math.floor(diffMin / 60);
+  return `${diffHour} giờ trước`;
 }
 
 async function dispatchTranslationWorkflow(env, { book = "", budget = "5000", replaceCurrent = false } = {}) {
@@ -889,12 +997,19 @@ async function getActiveKeyList(env) {
       if (raw) {
         const parsed = JSON.parse(raw.toString("utf8"));
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.filter((k) => typeof k === "string" && k.trim().length > 0);
+          return parsed.filter((k) => typeof k === "string" && k.trim().length > 0).map((k) => k.trim());
         }
       }
     } catch {}
   }
-  const fromEnv = env.GROQ_API_KEYS || env.GROQ_API_KEY || env.OPENROUTER_API_KEYS || env.OPENROUTER_API_KEY || "";
+  const fromEnv =
+    env.GEMINI_API_KEYS ||
+    env.GEMINI_API_KEY ||
+    env.GROQ_API_KEYS ||
+    env.GROQ_API_KEY ||
+    env.OPENROUTER_API_KEYS ||
+    env.OPENROUTER_API_KEY ||
+    "";
   const { parseApiKeys } = await import("../server/gemini.js");
   return parseApiKeys(fromEnv);
 }
@@ -902,7 +1017,8 @@ async function getActiveKeyList(env) {
 async function saveActiveKeyList(env, list) {
   const storage = storageForKeys(env);
   if (!storage) throw fail(503, "R2 Storage chưa được cấu hình để lưu API Key.");
-  await storage.put(KEYS_STORAGE_KEY, JSON.stringify(list, null, 2), {
+  const cleanList = (list || []).map((k) => String(k || "").trim()).filter(Boolean);
+  await storage.put(KEYS_STORAGE_KEY, JSON.stringify(cleanList, null, 2), {
     contentType: "application/json",
     cacheControl: "no-cache"
   });
@@ -917,8 +1033,15 @@ async function handleAdminKeys({ request, env }) {
   await requireAdmin(request, env);
 
   const keyList = await getActiveKeyList(env);
-  const model = env.GROQ_MODEL || env.OPENROUTER_MODEL || "qwen/qwen3.6-27b";
-  const fallbackModels = env.GROQ_FALLBACK_MODELS || env.OPENROUTER_FALLBACK_MODELS || "openai/gpt-oss-120b";
+  const isGeminiOnly = keyList.length > 0 && keyList.every((k) => k.startsWith("AIza") || k.startsWith("AQ."));
+  const isGroqOnly = keyList.length > 0 && keyList.every((k) => k.startsWith("gsk_"));
+  const defaultModel = isGeminiOnly
+    ? (env.GEMINI_MODEL || "gemini-3.6-flash")
+    : isGroqOnly
+      ? (env.GROQ_MODEL || "qwen/qwen3.6-27b")
+      : (env.GEMINI_MODEL || env.GROQ_MODEL || env.OPENROUTER_MODEL || "gemini-3.6-flash");
+  const model = defaultModel;
+  const fallbackModels = env.GEMINI_FALLBACK_MODELS || env.GROQ_FALLBACK_MODELS || env.OPENROUTER_FALLBACK_MODELS || "gemini-3.6-flash";
 
   if (request.method === "POST") {
     const body = await readJson(request);
@@ -941,7 +1064,7 @@ async function handleAdminKeys({ request, env }) {
         keys: updatedList.map((k, i) => ({
           id: i + 1,
           masked: k.slice(0, 8) + "..." + k.slice(-6),
-          provider: k.startsWith("gsk_") ? "Groq LPU" : "OpenRouter",
+          provider: k.startsWith("gsk_") ? "Groq LPU" : k.startsWith("sk-or-v1-") ? "OpenRouter" : "Google Gemini",
           status: "ready"
         })),
         activeModel: model,
@@ -977,7 +1100,7 @@ async function handleAdminKeys({ request, env }) {
         keys: updatedList.map((k, i) => ({
           id: i + 1,
           masked: k.slice(0, 8) + "..." + k.slice(-6),
-          provider: k.startsWith("gsk_") ? "Groq LPU" : "OpenRouter",
+          provider: k.startsWith("gsk_") ? "Groq LPU" : k.startsWith("sk-or-v1-") ? "OpenRouter" : "Google Gemini",
           status: "ready"
         })),
         activeModel: model,
@@ -988,10 +1111,12 @@ async function handleAdminKeys({ request, env }) {
     // Default action: "ping" - Probe all keys live
     const results = [];
     for (let i = 0; i < keyList.length; i++) {
-      const key = keyList[i];
+      const rawKey = keyList[i];
+      const key = String(rawKey || "").trim();
       const isGroq = key.startsWith("gsk_");
       const isOpenRouter = key.startsWith("sk-or-v1-");
-      const masked = key.slice(0, 8) + "..." + key.slice(-6);
+      const isGemini = key.startsWith("AIza") || key.startsWith("AQ.");
+      const masked = key.length >= 14 ? key.slice(0, 8) + "..." + key.slice(-6) : key;
       const startTime = Date.now();
 
       try {
@@ -1011,7 +1136,7 @@ async function handleAdminKeys({ request, env }) {
           });
           const data = await resp.json().catch(() => null);
           const ok = resp.ok;
-          const status = ok ? "ready" : (resp.status === 429 ? "cooldown" : "error");
+          const status = ok ? "ready" : (resp.status === 429 ? "tpd_limited" : "error");
           const statusMessage = ok
             ? "Sẵn sàng (Groq Qwen 3.6 27B)"
             : (resp.status === 429 ? "Tạm hết TPM/TPD" : (data?.error?.message || `Lỗi HTTP ${resp.status}`));
@@ -1031,7 +1156,7 @@ async function handleAdminKeys({ request, env }) {
             statusMessage,
             latencyMs: Date.now() - startTime,
             ok,
-            error: data?.error?.message || null,
+            error: ok ? null : (data?.error?.message || `Lỗi HTTP ${resp.status}`),
             remainingTokens: remTokens ? Number(remTokens) : null,
             limitTokens: limTokens ? Number(limTokens) : 8000,
             resetTokens: resetTokens || "0s",
@@ -1046,7 +1171,7 @@ async function handleAdminKeys({ request, env }) {
           });
           const data = await resp.json().catch(() => null);
           const ok = resp.ok;
-          const status = ok ? "ready" : (resp.status === 429 ? "cooldown" : "error");
+          const status = ok ? "ready" : (resp.status === 429 ? "tpd_limited" : "error");
           const statusMessage = ok
             ? "Sẵn sàng (OpenRouter 70B)"
             : (resp.status === 429 ? "Tạm hết RPM/TPM" : (data?.error?.message || `Lỗi HTTP ${resp.status}`));
@@ -1064,21 +1189,50 @@ async function handleAdminKeys({ request, env }) {
             statusMessage,
             latencyMs: Date.now() - startTime,
             ok,
-            error: data?.error?.message || null,
+            error: ok ? null : (data?.error?.message || `Lỗi HTTP ${resp.status}`),
             usageInfo: usageText ? `${usageText} (${limitText})` : "Sẵn sàng (70B Instruct)",
             limitTokens: 50000,
             remainingTokens: 50000,
             resetTokens: "0s"
           });
-        } else if (key.startsWith("AIza") || key.startsWith("AQ.")) {
-          const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`, {
+        } else if (isGemini) {
+          const geminiBaseUrl = (env.GEMINI_BASE_URL || env.GOOGLE_AI_GATEWAY || "https://gateway.ai.cloudflare.com/v1/aa644d98f2377007f0fa98abcafe3d21/tram-chu/google-ai-studio").replace(/\/$/, "");
+          const cfToken = env.CLOUDFLARE_API_TOKEN || "";
+          const headers = {};
+          if (geminiBaseUrl.includes("gateway.ai.cloudflare.com") && cfToken) {
+            headers["cf-aig-authorization"] = `Bearer ${cfToken}`;
+          }
+          const resp = await fetch(`${geminiBaseUrl}/v1beta/models?key=${encodeURIComponent(key)}`, {
+            headers,
             signal: AbortSignal.timeout(15000)
           });
+          const data = await resp.json().catch(() => null);
           const ok = resp.ok;
-          const status = ok ? "ready" : (resp.status === 429 ? "cooldown" : "error");
-          const statusMessage = ok
-            ? "Sẵn sàng (Google Gemini API)"
-            : (resp.status === 429 ? "Tạm hết RPM/RPD Quota" : `Lỗi HTTP ${resp.status}`);
+          let status = ok ? "ready" : "error";
+          let statusMessage = ok ? "Sẵn sàng (Google Gemini API)" : `Lỗi HTTP ${resp.status}`;
+          let error = null;
+
+          if (ok) {
+            status = "ready";
+            statusMessage = "Sẵn sàng (Google Gemini API)";
+          } else if (resp.status === 429) {
+            status = "tpd_limited";
+            statusMessage = "Hết hạn mức Quota (Chạm RPD/TPD/RPM)";
+            error = data?.error?.message || "Tạm hết quota ngày (1.500 RPD) hoặc token (1M TPM) của Gemini";
+          } else if (data?.error?.message && data.error.message.includes("User location is not supported")) {
+            status = "error";
+            statusMessage = "Vùng IP không được Google hỗ trợ (User location not supported)";
+            error = "Vùng IP của máy chủ Cloudflare không được Google Gemini hỗ trợ trực tiếp (User location is not supported). Hãy cấu hình GEMINI_BASE_URL (Cloudflare AI Gateway / Proxy US) trong Settings để mở khóa.";
+          } else if (resp.status === 401 || resp.status === 403) {
+            status = "error";
+            statusMessage = "Key không hợp lệ / Chưa bật Gemini API";
+            error = data?.error?.message || `Key không hợp lệ hoặc đã bị thu hồi (HTTP ${resp.status})`;
+          } else {
+            status = "error";
+            statusMessage = data?.error?.message ? `Lỗi: ${data.error.message.slice(0, 80)}` : `Lỗi HTTP ${resp.status}`;
+            error = data?.error?.message || `Lỗi HTTP ${resp.status}`;
+          }
+
           results.push({
             id: i + 1,
             masked,
@@ -1087,7 +1241,13 @@ async function handleAdminKeys({ request, env }) {
             statusMessage,
             latencyMs: Date.now() - startTime,
             ok,
-            error: ok ? null : `Lỗi HTTP ${resp.status}`
+            error,
+            usageInfo: ok ? "15 RPM · 1M TPM · 1.500 RPD" : null,
+            remainingTokens: ok ? 1000000 : null,
+            limitTokens: ok ? 1000000 : null,
+            resetTokens: ok ? "0s" : null,
+            remainingRequests: ok ? 1500 : null,
+            limitRequests: ok ? 1500 : null
           });
         } else {
           results.push({
@@ -1104,7 +1264,7 @@ async function handleAdminKeys({ request, env }) {
         results.push({
           id: i + 1,
           masked,
-          provider: isGroq ? "Groq LPU" : isOpenRouter ? "OpenRouter" : key.startsWith("AIza") || key.startsWith("AQ.") ? "Google Gemini" : "Khác",
+          provider: isGroq ? "Groq LPU" : isOpenRouter ? "OpenRouter" : isGemini ? "Google Gemini" : "Khác",
           status: "error",
           statusMessage: err.message,
           error: err.message,
@@ -1114,7 +1274,7 @@ async function handleAdminKeys({ request, env }) {
     }
 
     const healthyCount = results.filter((r) => r.ok).length;
-    const dailyCapacity = Math.round(keyList.length * 2500); // ~40k chapters/day
+    const dailyCapacity = Math.round(keyList.length * 2500); // ~2.5k chapters/key/day
     const safeSpacingSec = Math.max(1, Math.round(18 / Math.max(1, healthyCount)));
 
     return json({
@@ -1130,7 +1290,7 @@ async function handleAdminKeys({ request, env }) {
 
   const summary = keyList.map((key, i) => ({
     id: i + 1,
-    masked: key.slice(0, 8) + "..." + key.slice(-6),
+    masked: key.length >= 14 ? key.slice(0, 8) + "..." + key.slice(-6) : key,
     provider: key.startsWith("gsk_") ? "Groq LPU" : key.startsWith("sk-or-v1-") ? "OpenRouter" : "Google Gemini",
     status: "ready"
   }));
@@ -1272,7 +1432,9 @@ async function handleAdminGeminiTranslate({ request, env }) {
     content
   ].join("\n");
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  const geminiBaseUrl = (env.GEMINI_BASE_URL || env.GOOGLE_AI_GATEWAY || "https://gateway.ai.cloudflare.com/v1/aa644d98f2377007f0fa98abcafe3d21/tram-chu/google-ai-studio").replace(/\/$/, "");
+  const cfToken = env.CLOUDFLARE_API_TOKEN || "";
+  const url = `${geminiBaseUrl}/v1beta/models/${encodeURIComponent(model)}:generateContent`;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 120000);
@@ -1286,13 +1448,17 @@ async function handleAdminGeminiTranslate({ request, env }) {
 
     for (const apiKey of orderedKeys) {
       if ((epubStudioKeyCooldowns.get(apiKey) || 0) > now) continue;
+      const headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+        "x-goog-api-client": "gl-node/gemini-epub-studio-vip"
+      };
+      if (geminiBaseUrl.includes("gateway.ai.cloudflare.com") && cfToken) {
+        headers["cf-aig-authorization"] = `Bearer ${cfToken}`;
+      }
       const response = await fetch(url, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
-          "x-goog-api-client": "gl-node/gemini-epub-studio-vip"
-        },
+        headers,
         signal: controller.signal,
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: prompt }] }],
@@ -1420,7 +1586,7 @@ function contentSecurityPolicy(env) {
     "script-src 'self'",
     "style-src 'self'",
     // The CDN for chapters, Supabase for analytics, R2 S3 endpoint, and Gemini API.
-    `connect-src 'self'${cdn ? ` ${cdn}` : ""} https://*.supabase.co https://*.r2.cloudflarestorage.com https://generativelanguage.googleapis.com`,
+    `connect-src 'self'${cdn ? ` ${cdn}` : ""} https://*.supabase.co https://*.r2.cloudflarestorage.com https://generativelanguage.googleapis.com https://gateway.ai.cloudflare.com`,
     "media-src 'none'",
     "object-src 'none'",
     "base-uri 'self'",

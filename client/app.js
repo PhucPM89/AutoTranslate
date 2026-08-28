@@ -1297,18 +1297,24 @@ function createBookCard(book, index = 0) {
   body.className = "book-card-body";
   const meta = document.createElement("div");
   meta.className = "book-card-meta";
-  appendTextElement(meta, "span", "genre-tag", book.genre || "Chưa phân loại");
-  const isFull = book.status === "Hoàn thành" || book.status === "Đã hoàn thành" || book.status === "Full";
+  const catalogBook = libraryState.books.find((b) => b.id === book.id) || book;
+  const translated = Number(catalogBook.translatedChapters || book.translatedChapters || 0);
+  const total = Number(catalogBook.chapterCount || book.chapterCount || catalogBook.totalChapters || book.totalChapters || 0);
+  const isFull =
+    book.status === "Hoàn thành" ||
+    book.status === "Đã hoàn thành" ||
+    book.status === "Full" ||
+    catalogBook.status === "Hoàn thành" ||
+    catalogBook.status === "Đã hoàn thành" ||
+    (total > 0 && translated >= total);
   const statusLabel = isFull ? "Full" : "Đang ra";
+  appendTextElement(meta, "span", "genre-tag", book.genre || catalogBook.genre || "Chưa phân loại");
   appendTextElement(meta, "span", `book-status ${isFull ? "status-full" : "status-ongoing"}`, statusLabel);
   const title = appendTextElement(body, "h3", "", book.title);
   const author = appendTextElement(body, "p", "book-author", book.author ? `Tác giả: ${book.author}` : "Tác giả chưa cập nhật");
   const description = appendTextElement(body, "p", "book-description", book.description || "Mở truyện để xem mục lục và bắt đầu dịch theo chương.");
   const footer = document.createElement("div");
   footer.className = "book-card-footer";
-  const catalogBook = libraryState.books.find((b) => b.id === book.id) || book;
-  const translated = Number(catalogBook.translatedChapters || book.translatedChapters || 0);
-  const total = Number(catalogBook.chapterCount || book.chapterCount || catalogBook.totalChapters || book.totalChapters || 0);
   if (total > 0 && translated > 0) {
     coverProgressFill.style.width = `${Math.max(2, Math.min(100, (translated / total) * 100))}%`;
   } else {
@@ -1460,14 +1466,20 @@ async function showBookDetail(book, { updateHash = true } = {}) {
   els.bookViewCover.addEventListener("error", () => { els.bookViewCover.src = fallbackCover; }, { once: true });
   els.bookViewBackdrop.src = book.cover || heroVariant(fallbackCover);
   els.bookViewGenre.textContent = book.genre || "Chưa phân loại";
-  const isFullDetail = book.status === "Hoàn thành" || book.status === "Đã hoàn thành" || book.status === "Full";
+  const catalogBook = libraryState.books.find((b) => b.id === book.id) || book;
+  const totalCh = Number(catalogBook.chapterCount || catalogBook.totalChapters || book.chapterCount || book.totalChapters || 0);
+  const transCh = Number(catalogBook.translatedChapters || book.translatedChapters || 0);
+  const isFullDetail =
+    book.status === "Hoàn thành" ||
+    book.status === "Đã hoàn thành" ||
+    book.status === "Full" ||
+    catalogBook.status === "Hoàn thành" ||
+    catalogBook.status === "Đã hoàn thành" ||
+    (totalCh > 0 && transCh >= totalCh);
   els.bookViewStatus.textContent = isFullDetail ? "Đã hoàn thành (Full)" : "Đang ra (Chưa Full)";
   els.bookViewStatus.className = `book-status ${isFullDetail ? "status-full" : "status-ongoing"}`;
   els.bookViewTitle.textContent = book.title;
   els.bookViewAuthor.textContent = book.author ? `Tác giả: ${book.author}` : "Tác giả chưa cập nhật";
-  const catalogBook = libraryState.books.find((b) => b.id === book.id) || book;
-  const totalCh = Number(catalogBook.chapterCount || catalogBook.totalChapters || book.chapterCount || book.totalChapters || 0);
-  const transCh = Number(catalogBook.translatedChapters || book.translatedChapters || 0);
   els.bookViewChapters.textContent = totalCh > 0 ? `${totalCh.toLocaleString("vi-VN")} chương` : "Đang cập nhật";
 
   let transPctStr = "0%";

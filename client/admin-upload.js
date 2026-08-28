@@ -77,6 +77,14 @@ const els = {
   transHeartbeatText: document.getElementById("transHeartbeatText"),
   transHourlySummaryText: document.getElementById("transHourlySummaryText"),
   transNextBookTitle: document.getElementById("transNextBookTitle"),
+  transStopReasonBox: document.getElementById("transStopReasonBox"),
+  transWorkerStatusBadge: document.getElementById("transWorkerStatusBadge"),
+  transStopReasonTitle: document.getElementById("transStopReasonTitle"),
+  transStopReasonDesc: document.getElementById("transStopReasonDesc"),
+  transDailyScannedSection: document.getElementById("transDailyScannedSection"),
+  transDailyScannedCount: document.getElementById("transDailyScannedCount"),
+  transDailyScannedTbody: document.getElementById("transDailyScannedTbody"),
+  keysDailyQuotaText: document.getElementById("keysDailyQuotaText"),
   statsTab: document.getElementById("adminStatsTab"),
   statsPanel: document.getElementById("adminStatsPanel"),
   statsGrid: document.getElementById("adminStatsGrid"),
@@ -843,14 +851,60 @@ function renderTranslateStatus(status = {}) {
       : "Nhịp tim: Đang chờ";
   }
 
+  const isRunning = status.state === "running" && !heartbeatStale;
+  const isQuotaPaused = status.state === "paused_quota" || status.stopReason === "quota_tpd_rpd" || status.activityState === "waiting_quota";
+  const isAllKeysDead = status.stopReason === "all_keys_dead";
+  const isCompleted = status.stopReason === "completed_all" || status.state === "completed";
+
+  // Render Stop Reason & Worker Alive/Dead Diagnostic Card
+  if (els.transStopReasonBox) {
+    if (isRunning) {
+      els.transStopReasonBox.className = "trans-stop-reason-box is-alive";
+    } else if (isQuotaPaused) {
+      els.transStopReasonBox.className = "trans-stop-reason-box is-quota-stop";
+    } else if (isCompleted) {
+      els.transStopReasonBox.className = "trans-stop-reason-box is-completed-stop";
+    } else {
+      els.transStopReasonBox.className = "trans-stop-reason-box is-offline-stop";
+    }
+  }
+
+  if (els.transWorkerStatusBadge) {
+    if (isRunning) {
+      els.transWorkerStatusBadge.className = "worker-alive-badge is-online";
+      els.transWorkerStatusBadge.textContent = "🟢 ONLINE (24/7)";
+    } else if (isQuotaPaused) {
+      els.transWorkerStatusBadge.className = "worker-alive-badge is-paused";
+      els.transWorkerStatusBadge.textContent = "🟡 CHỜ QUOTA";
+    } else if (isAllKeysDead) {
+      els.transWorkerStatusBadge.className = "worker-alive-badge is-offline";
+      els.transWorkerStatusBadge.textContent = "🔴 LỖI KEY";
+    } else if (isCompleted) {
+      els.transWorkerStatusBadge.className = "worker-alive-badge is-online";
+      els.transWorkerStatusBadge.textContent = "🎉 HOÀN TẤT";
+    } else {
+      els.transWorkerStatusBadge.className = "worker-alive-badge is-offline";
+      els.transWorkerStatusBadge.textContent = "🔴 OFFLINE";
+    }
+  }
+
+  if (els.transStopReasonTitle) {
+    let title = status.stopReasonTitle || (isRunning ? "Worker đang quét & chuẩn hóa các bộ truyện" : "Hệ thống đang tạm nghỉ");
+    // Strip leading emojis if present to avoid redundancy with the badge
+    title = title.replace(/^[🟢🟡🔴🎉⚠️\s]+/, "");
+    els.transStopReasonTitle.textContent = title;
+  }
+
+  if (els.transStopReasonDesc) {
+    els.transStopReasonDesc.textContent = status.stopReasonDetails || status.message || "Chưa có tác vụ quét AI đang chạy.";
+  }
+
   // 1. Current Active Focus Novel Info
   const total = Number(status.currentTotalChapters || 0);
   const saved = Number(status.currentCompleted || status.currentChapter || 0);
   const matched = (adminCatalog.books || []).find((b) => b.id === status.currentBookId);
   const bookTitle = status.currentBookTitle || (matched ? matched.title : status.currentBookId) || "Đang chờ lượt...";
   const percent = total ? Math.min(100, Math.round((saved / total) * 1000) / 10) : 0;
-  const isRunning = status.state === "running";
-  const isQuotaPaused = status.state === "paused_quota";
   const activityState = String(status.activityState || "");
   const hasProgressThisRun = Number(status.translatedThisRun || status.sessionChaptersTranslated || 0) > 0;
 
@@ -870,8 +924,6 @@ function renderTranslateStatus(status = {}) {
     let stateMsg = isRunning && bookTitle
       ? (status.activityMessage || `Worker đang xử lý bộ [${bookTitle}], nhưng chưa nhận được chi tiết lượt dịch.`)
       : (status.message || "Chưa có tác vụ dịch đang chạy.");
-    // When nothing is advancing, show the real reason (last provider/quality
-    // error) instead of leaving the admin guessing why it looks frozen.
     const lastErr = String(status.lastError || "").trim();
     const stalled = activityState === "waiting_quota" || activityState === "retrying" || isQuotaPaused;
     if (lastErr && stalled) {
@@ -990,9 +1042,6 @@ function renderTranslateStatus(status = {}) {
     if (!keys) {
       els.transStatKeysActive.textContent = "Đang kiểm tra Keys";
     } else if (Number.isFinite(ready)) {
-      // Break the pool down so it is obvious whether a key is DEAD (needs
-      // replacing) or just resting on quota. Silence on a stalled run used to
-      // look identical to a healthy one.
       const parts = [`${ready}/${keys} key sẵn sàng`];
       if (daily) parts.push(`${daily} hết quota ngày`);
       if (cooldown) parts.push(`${cooldown} đang nghỉ`);
@@ -1044,6 +1093,48 @@ function renderTranslateStatus(status = {}) {
       els.transNextBookTitle.textContent = `${nextTitle} (Đã có ${doneNext.toLocaleString("vi-VN")}/${totalNext.toLocaleString("vi-VN")} chương — Còn ${pendingNext.toLocaleString("vi-VN")} chương)`;
     } else {
       els.transNextBookTitle.textContent = "Không còn bộ truyện nào đang chờ (Tất cả 100% hoàn tất).";
+    }
+  }
+
+  // 4. Render Daily Scanned Books Table
+  const scannedList = Array.isArray(status.dailyScannedBooks) ? status.dailyScannedBooks : [];
+  if (els.transDailyScannedCount) {
+    els.transDailyScannedCount.textContent = `${scannedList.length} bộ đã quét hôm nay`;
+  }
+  if (els.transDailyScannedTbody) {
+    if (!scannedList.length) {
+      els.transDailyScannedTbody.innerHTML = '<tr><td colspan="6" class="stats-empty">Chưa có dữ liệu quét trong phiên hôm nay.</td></tr>';
+    } else {
+      els.transDailyScannedTbody.innerHTML = "";
+      scannedList.forEach((b) => {
+        const tr = document.createElement("tr");
+        const bMatched = (adminCatalog.books || []).find((book) => book.id === b.bookId);
+        const bTitle = b.bookTitle || (bMatched ? bMatched.title : b.bookId) || b.bookId;
+        const bCover = bMatched?.cover || `${CDN_BASE}/covers/${b.bookId}.jpg` || "/library/covers/misty-pagoda.webp";
+        const scannedCh = Number(b.scannedChapters || 0);
+        const totalCh = Number(b.totalChapters || bMatched?.chapterCount || 0);
+        const repairedCh = Number(b.repairedChapters || 0);
+        const fluency = Number(b.fluencyScore || 10);
+        const statusClass = b.status === "scanning" ? "is-scanning" : b.status === "paused_quota" ? "is-paused" : "is-done";
+
+        tr.innerHTML = `
+          <td>
+            <div class="scanned-book-title-cell">
+              <img class="scanned-book-mini-cover" src="${bCover}" alt="Bìa" onerror="this.src='/library/covers/misty-pagoda.webp'">
+              <div>
+                <div class="scanned-book-name">${escapeHtml(bTitle)}</div>
+                <small class="text-muted" style="font-size: 0.72rem; color: #64748b;">ID: ${escapeHtml(b.bookId)}</small>
+              </div>
+            </div>
+          </td>
+          <td><strong>${scannedCh.toLocaleString("vi-VN")}</strong> / ${totalCh ? totalCh.toLocaleString("vi-VN") : "?"} ch</td>
+          <td><strong style="color: #4ade80;">+${repairedCh.toLocaleString("vi-VN")} ch đã sửa</strong></td>
+          <td><span class="quality-score-badge">⭐ ${fluency}/10 Chuẩn</span></td>
+          <td><span class="scanned-time-tag">${describeAge(b.lastScannedAt)}</span></td>
+          <td><span class="scanned-status-pill ${statusClass}">${escapeHtml(b.statusLabel || "Đã kiểm định")}</span></td>
+        `;
+        els.transDailyScannedTbody.appendChild(tr);
+      });
     }
   }
 }
@@ -1193,7 +1284,10 @@ async function loadAdminKeys() {
   try {
     const data = await requestJson("/api/admin/keys");
     if (els.keysTotalCount) els.keysTotalCount.textContent = `${data.totalKeys || 0} Keys`;
-    if (els.keysActiveModel) els.keysActiveModel.textContent = data.activeModel || "qwen/qwen3.6-27b";
+    if (els.keysActiveModel) els.keysActiveModel.textContent = data.activeModel || "gemini-3.6-flash";
+    if (els.keysDailyQuotaText) {
+      els.keysDailyQuotaText.textContent = data.dailyCapacityEstimate || `~${Math.round((data.totalKeys || 1) * 2500).toLocaleString("vi-VN")} chương/ngày`;
+    }
     renderKeysList(data.keys || []);
   } catch (error) {
     els.keysList.innerHTML = `<p class="stats-empty text-error">Không tải được thông tin key: ${escapeHtml(error.message)}</p>`;
@@ -1211,9 +1305,14 @@ async function runKeysPingTest() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "ping" })
     });
+    if (els.keysTotalCount) els.keysTotalCount.textContent = `${data.totalKeys || 0} Keys`;
+    if (els.keysActiveModel) els.keysActiveModel.textContent = data.activeModel || "gemini-3.6-flash";
+    if (els.keysDailyQuotaText) {
+      els.keysDailyQuotaText.textContent = data.dailyCapacityEstimate || `~${Math.round((data.totalKeys || 1) * 2500).toLocaleString("vi-VN")} chương/ngày`;
+    }
     renderKeysList(data.keys || [], true);
     const capacityText = data.dailyCapacityEstimate ? ` [Công suất 24/7: ~${data.dailyCapacityEstimate}, ${data.safePacingEstimate}]` : "";
-    setStatus(`Đã hoàn tất kiểm tra tải thực tế toàn bộ Key.${capacityText}`);
+    setStatus(`Đã hoàn tất kiểm tra tải thực tế toàn bộ Key (${data.healthyKeys || 0}/${data.totalKeys || 0} sẵn sàng).${capacityText}`);
   } catch (error) {
     setStatus(`Lỗi khi ping keys: ${error.message}`, true);
   } finally {
@@ -1240,6 +1339,7 @@ async function handleAddKeySubmit(event) {
     });
     if (els.newApiKeyInput) els.newApiKeyInput.value = "";
     if (els.keysTotalCount) els.keysTotalCount.textContent = `${data.totalKeys || 0} Keys`;
+    if (els.keysActiveModel) els.keysActiveModel.textContent = data.activeModel || "gemini-3.6-flash";
     renderKeysList(data.keys || []);
     setStatus("Đã thêm API Key mới thành công.");
   } catch (error) {
@@ -1262,6 +1362,7 @@ async function handleDeleteKey(masked, index) {
       body: JSON.stringify({ action: "delete", masked, index })
     });
     if (els.keysTotalCount) els.keysTotalCount.textContent = `${data.totalKeys || 0} Keys`;
+    if (els.keysActiveModel) els.keysActiveModel.textContent = data.activeModel || "gemini-3.6-flash";
     renderKeysList(data.keys || []);
     setStatus("Đã xóa API Key thành công.");
   } catch (error) {
@@ -1286,7 +1387,7 @@ function renderKeysList(keys, isPingResult = false) {
 
     let statusBadge = '<span class="key-status-badge is-ready">🟢 Sẵn sàng (24/7)</span>';
     if (k.status === "tpd_limited") {
-      statusBadge = '<span class="key-status-badge is-warning" title="Hết 200k tokens/ngày - đang nhả dần theo giờ">🟡 Đang hồi TPD</span>';
+      statusBadge = `<span class="key-status-badge is-warning" title="${escapeHtml(k.error || "Hết hạn mức Quota RPD/TPD ngày")}">🟡 Hết Quota (RPD/TPD)</span>`;
     } else if (k.status === "tpm_limited" || k.status === "rate_limited") {
       statusBadge = '<span class="key-status-badge is-warning" title="Đang điều tốc">🟡 Đang chờ TPM</span>';
     } else if (k.ok === false) {
@@ -1294,18 +1395,33 @@ function renderKeysList(keys, isPingResult = false) {
     }
 
     let quotaHtml = "";
-    if (k.usageInfo) {
+    if (k.ok) {
+      if (k.usageInfo) {
+        quotaHtml = `
+          <div class="key-quota-row">
+            <span class="key-quota-pill highlight-purple" title="Hạn mức & Giới hạn API">⚡ ${escapeHtml(k.usageInfo)}</span>
+          </div>
+        `;
+      } else if (k.remainingTokens != null) {
+        quotaHtml = `
+          <div class="key-quota-row">
+            <span class="key-quota-pill" title="Tokens Per Minute">⚡ ${Number(k.remainingTokens).toLocaleString("vi-VN")} / ${Number(k.limitTokens || 8000).toLocaleString("vi-VN")} TPM</span>
+            <span class="key-quota-pill recovery" title="Thời gian khôi phục quota">⏱ Hồi phục: ${escapeHtml(k.resetTokens || "0s")}</span>
+            ${k.remainingRequests != null ? `<span class="key-quota-pill daily" title="Requests hôm nay">📅 Còn: ${k.remainingRequests}/1.000 req</span>` : ""}
+          </div>
+        `;
+      }
+    } else if (k.error) {
+      let errorText = k.error;
+      if (errorText.includes("User location is not supported")) {
+        errorText = "Vùng IP máy chủ Cloudflare bị Google chặn địa lý (User location not supported). Cần cấu hình GEMINI_BASE_URL (Cloudflare AI Gateway / Proxy US) để kết nối.";
+      }
       quotaHtml = `
         <div class="key-quota-row">
-          <span class="key-quota-pill highlight-purple" title="Chi phí / Hạn mức OpenRouter">💳 ${escapeHtml(k.usageInfo)}</span>
-        </div>
-      `;
-    } else if (k.remainingTokens != null) {
-      quotaHtml = `
-        <div class="key-quota-row">
-          <span class="key-quota-pill" title="Tokens Per Minute">⚡ ${Number(k.remainingTokens).toLocaleString("vi-VN")} / ${Number(k.limitTokens || 8000).toLocaleString("vi-VN")} TPM</span>
-          <span class="key-quota-pill recovery" title="Thời gian khôi phục quota">⏱ Hồi phục: ${escapeHtml(k.resetTokens || "0s")}</span>
-          ${k.remainingRequests != null ? `<span class="key-quota-pill daily" title="Requests hôm nay">📅 Còn: ${k.remainingRequests}/1.000 req</span>` : ""}
+          <div class="key-error-box" title="${escapeHtml(k.error)}">
+            <span class="key-error-icon">⚠️</span>
+            <span class="key-error-text">${escapeHtml(errorText)}</span>
+          </div>
         </div>
       `;
     }
@@ -1314,7 +1430,7 @@ function renderKeysList(keys, isPingResult = false) {
       <div class="key-card-header">
         <div class="key-card-info">
           <span class="key-card-num">Key #${idx + 1}</span>
-          <strong class="key-card-masked">${k.masked || "gsk_..."}</strong>
+          <strong class="key-card-masked">${k.masked || "AQ.Ab8..."}</strong>
         </div>
         <div class="key-card-header-actions">
           ${statusBadge}
@@ -1324,7 +1440,7 @@ function renderKeysList(keys, isPingResult = false) {
         </div>
       </div>
       <div class="key-card-meta">
-        <span class="key-provider-tag">${k.provider || "Groq LPU"}</span>
+        <span class="key-provider-tag">${k.provider || "Google Gemini"}</span>
         ${latencyHtml}
       </div>
       ${quotaHtml}

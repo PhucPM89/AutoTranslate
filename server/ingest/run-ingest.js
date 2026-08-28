@@ -30,22 +30,23 @@ async function runIngest({
   const archiveStorage = createArchiveStorage();
   const metadataStore = createMetadataStore();
   const apiKey = process.env.GEMINI_API_KEY || "";
+  const isHachimi = process.env.TRANSLATION_PROVIDER === "hachimi" || Boolean(process.env.HACHIMI_API_URL);
 
   if (hasR2Credentials(process.env) && !archiveStorage) {
     throw new Error("Thiếu R2_ARCHIVE_BUCKET: không được lưu EPUB nguồn vào bucket public.");
   }
 
   const translate =
-    translateEnabled && apiKey
+    translateEnabled && (apiKey || isHachimi)
       ? async (chapter) => {
-          const result = await translateText(chapter.content, apiKey);
-          if (!result || !result.translation) throw new Error("Gemini không trả bản dịch.");
+          const result = await translateText(chapter.content, apiKey, { provider: isHachimi ? "hachimi" : undefined });
+          if (!result || !result.translation) throw new Error("Translation engine không trả bản dịch.");
           return result.translation;
         }
       : null;
 
-  if (translateEnabled && !apiKey) {
-    log({ event: "ingest.translate_skipped", reason: "GEMINI_API_KEY chưa được cấu hình" });
+  if (translateEnabled && !apiKey && !isHachimi) {
+    log({ event: "ingest.translate_skipped", reason: "Chưa cấu hình GEMINI_API_KEY hoặc HACHIMI_API_URL" });
   }
 
   // Offline convert tier: makes every chapter readable the instant it is ingested,

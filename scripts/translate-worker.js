@@ -191,10 +191,17 @@ async function main() {
     process.env.GROQ_API_KEY,
   ].filter(Boolean).flatMap(k => parseApiKeys(k));
 
+  const isHachimi = process.env.TRANSLATION_PROVIDER === "hachimi" || Boolean(process.env.HACHIMI_API_URL);
+
   const allUniqueKeys = Array.from(new Set([...keyList, ...envKeys]))
     .filter(Boolean)
     .sort((a, b) => translationKeyPriority(a) - translationKeyPriority(b));
-  if (!allUniqueKeys.length) throw new Error("Thiếu API Keys (Gemini / Groq).");
+  if (!allUniqueKeys.length && !isHachimi) {
+    throw new Error("Thiếu API Keys (Gemini / Groq) hoặc HACHIMI_API_URL.");
+  }
+  if (isHachimi && !allUniqueKeys.length) {
+    allUniqueKeys.push("hachimi-colab-endpoint");
+  }
   importKeyPoolState(privateStorage ? await readJson(privateStorage, TRANSLATE_KEY_HEALTH_KEY) : null, allUniqueKeys);
   const persistKeyHealth = () => privateStorage
     ? privateStorage.put(

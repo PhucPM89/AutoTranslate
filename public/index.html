@@ -82,8 +82,8 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/style.css?v=44111fd9b9a7">
-    <script src="/app.js?v=7ebcd66eadb6" defer></script>
+    <link rel="stylesheet" href="/style.css?v=3d9867168c14">
+    <script src="/app.js?v=356a554f2ecc" defer></script>
   </head>
   <body class="dark">
     <section id="libraryView" class="library-view">
@@ -457,15 +457,24 @@
         <div class="crawler-overview">
           <div>
             <div class="trans-header-badge-row">
-              <p class="eyebrow">Dịch Thuật Đa Nền Tảng (Groq LPU &amp; OpenRouter)</p>
-              <span class="trans-mode-badge"><svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg> Chế độ: Dịch Dứt Điểm Từng Bộ 100%</span>
+              <p class="eyebrow">Google Gemini AI Engine &amp; Post-Check Reviewer</p>
+              <span class="trans-mode-badge"><svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3"></circle></svg> Chế độ: Quét Hậu Kiểm &amp; Tái Dịch Chuẩn Hóa</span>
             </div>
-            <h3 id="translateMonitorTitle">Tiến trình Dịch Tự Động 24/7</h3>
+            <h3 id="translateMonitorTitle">Tiến trình AI Quét &amp; Tái Dịch 24/7</h3>
           </div>
           <div class="overview-actions">
             <button id="adminTranslateStartBtn" class="primary-action" type="button" title="Chạy dịch ngay"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>Dịch ngay</button>
             <button id="adminTranslateRefresh" class="secondary-action" type="button"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v6h-6M4 18v-6h6"></path><path d="M18.49 9A7 7 0 0 0 5.64 6.64L4 9M20 15l-1.64 2.36A7 7 0 0 1 5.51 15"></path></svg>Làm mới</button>
           </div>
+        </div>
+
+        <!-- Live Status & Stop Reason Diagnostic Card -->
+        <div id="transStopReasonBox" class="trans-stop-reason-box is-alive">
+          <div class="trans-stop-reason-header">
+            <span id="transWorkerStatusBadge" class="worker-alive-badge is-online">🟢 Đang hoạt động (Online)</span>
+            <strong id="transStopReasonTitle" class="trans-stop-title">Hệ thống đang quét &amp; chuẩn hóa các bộ truyện</strong>
+          </div>
+          <p id="transStopReasonDesc" class="trans-stop-desc">Tiến trình đang quét các bộ truyện chưa đạt chuẩn để tái dịch sang văn phong lưu loát.</p>
         </div>
 
         <div class="trans-focus-picker">
@@ -535,7 +544,7 @@
             <div class="trans-spec-item">
               <span class="trans-spec-label">🔑 Cụm AI Keys</span>
               <strong id="transStatKeysActive" class="trans-spec-val text-accent-purple">Đang kiểm tra Keys</strong>
-              <small class="trans-spec-sub">Chỉ dùng model đã qua cổng chất lượng</small>
+              <small class="trans-spec-sub">Google Gemini &amp; Model chất lượng cao</small>
             </div>
             <div class="trans-spec-item">
               <span class="trans-spec-label">⚡ Cơ chế điều tốc</span>
@@ -553,35 +562,63 @@
             <strong id="transNextBookTitle" class="trans-next-title">Đang tính toán bộ tiếp theo...</strong>
           </div>
         </div>
+
+        <!-- Daily Scanned Books & Quality Audit Section -->
+        <div id="transDailyScannedSection" class="trans-daily-scanned-section">
+          <div class="trans-section-header">
+            <div>
+              <span class="trans-section-tag">📊 HẬU KIỂM CHẤT LƯỢNG TRONG NGÀY</span>
+              <h4>Các bộ truyện đã quét &amp; chuẩn hóa hôm nay</h4>
+            </div>
+            <span id="transDailyScannedCount" class="trans-scanned-count-badge">0 bộ đã quét</span>
+          </div>
+          <div class="trans-scanned-table-wrap">
+            <table class="trans-scanned-table">
+              <thead>
+                <tr>
+                  <th>Tên bộ truyện</th>
+                  <th>Chương đã kiểm tra</th>
+                  <th>Chương đã sửa</th>
+                  <th>Đánh giá chất lượng</th>
+                  <th>Thời gian quét</th>
+                  <th>Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody id="transDailyScannedTbody">
+                <tr><td colspan="6" class="stats-empty">Chưa có dữ liệu quét trong phiên hôm nay.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </section>
 
-      <!-- Groq API Key Pool & Health Monitor Panel -->
+      <!-- Google Gemini / AI Key Pool & Health Monitor Panel -->
       <section id="adminKeysPanel" class="admin-keys-panel" hidden aria-labelledby="adminKeysTitle">
         <div class="crawler-overview">
-          <div><p class="eyebrow">Quản lý Cụm 7 API Key</p><h3 id="adminKeysTitle">Sức khỏe &amp; Độ trễ Groq LPU</h3></div>
+          <div><p class="eyebrow">Quản lý Cụm API Key</p><h3 id="adminKeysTitle">Sức khỏe &amp; Quota Google Gemini / AI</h3></div>
           <button id="adminKeysPingBtn" class="primary-action" type="button"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>Kiểm tra kết nối (Ping Test)</button>
         </div>
 
         <div class="keys-summary-card">
           <div class="keys-summary-item">
             <span>Tổng số Key</span>
-            <strong id="keysTotalCount">7 Keys</strong>
+            <strong id="keysTotalCount">0 Keys</strong>
           </div>
           <div class="keys-summary-item">
             <span>Model chính</span>
-            <strong id="keysActiveModel">qwen/qwen3.6-27b</strong>
+            <strong id="keysActiveModel">gemini-3.6-flash</strong>
           </div>
           <div class="keys-summary-item">
             <span>Tổng hạn mức ngày</span>
-            <strong class="text-accent">~100.800 requests</strong>
+            <strong id="keysDailyQuotaText" class="text-accent">~100.800 requests</strong>
           </div>
         </div>
 
         <!-- Add New Key Form -->
         <form id="adminAddKeyForm" class="add-key-form">
-          <label for="newApiKeyInput" class="add-key-label">Thêm Groq / AI API Key mới:</label>
+          <label for="newApiKeyInput" class="add-key-label">Thêm Google Gemini / AI API Key mới:</label>
           <div class="add-key-input-row">
-            <input id="newApiKeyInput" class="add-key-input" type="password" placeholder="Nhập API Key mới (VD: gsk_...)" required autocomplete="off">
+            <input id="newApiKeyInput" class="add-key-input" type="password" placeholder="Nhập API Key mới (VD: AQ.Ab8... hoặc AIza...)" required autocomplete="off">
             <button id="adminAddKeyBtn" class="primary-action add-key-submit-btn" type="submit">
               <svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg>
               <span>Thêm Key</span>

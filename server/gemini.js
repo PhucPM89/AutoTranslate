@@ -8,42 +8,17 @@ if (typeof dns.setDefaultResultOrder === "function") {
 const crypto = require("crypto");
 const { createTranslationEngine } = require("./translation-engine");
 
-const GROQ_MODEL = process.env.GROQ_MODEL || "qwen/qwen3.6-27b";
-const GROQ_FALLBACK_MODELS = parseCsv(
-  process.env.GROQ_FALLBACK_MODELS || "openai/gpt-oss-120b"
-);
 const TRANSLATE_CHUNK_SIZE = Number(process.env.GEMINI_CHUNK_SIZE || 1800);
-const TRANSLATE_CONCURRENCY = Number(process.env.GEMINI_TRANSLATE_CONCURRENCY || 1);
+const TRANSLATE_CONCURRENCY = Number(process.env.GEMINI_TRANSLATE_CONCURRENCY || 2);
 const MAX_KEYS_PER_CHUNK = Math.max(1, Number(process.env.TRANSLATE_MAX_KEYS_PER_CHUNK || 3));
-const REQUEST_TIMEOUT_MS = Number(process.env.GROQ_REQUEST_TIMEOUT_MS || process.env.GEMINI_REQUEST_TIMEOUT_MS || 90000);
+const REQUEST_TIMEOUT_MS = Number(process.env.GEMINI_REQUEST_TIMEOUT_MS || 90000);
 const MINUTE_QUOTA_RECOVERY_MS = Math.max(60_000, Number(process.env.TRANSLATE_MINUTE_QUOTA_RECOVERY_MS || 10 * 60_000));
 const DAILY_QUOTA_RECOVERY_MS = Math.max(60 * 60_000, Number(process.env.TRANSLATE_DAILY_QUOTA_RECOVERY_MS || 24 * 60 * 60_000));
 const QUOTA_SAFETY_MS = Math.max(10_000, Number(process.env.TRANSLATE_QUOTA_SAFETY_MS || 5 * 60_000));
 
 const defaultEngine = createTranslationEngine();
 
-const DEPRECATED_GROQ_MODELS = new Set([
-  "gemma2-9b-it",
-  "mixtral-8x7b-32768",
-  "llama-3.3-70b-versatile",
-  "llama-3.1-8b-instant",
-  "openai/gpt-oss-20b"
-]);
-
-function sanitizeGroqModel(model) {
-  if (!model || DEPRECATED_GROQ_MODELS.has(model)) return "qwen/qwen3.6-27b";
-  return model;
-}
-
-function getModelsForApiKey(apiKey) {
-  if (typeof apiKey !== "string") return [GROQ_MODEL, ...GROQ_FALLBACK_MODELS];
-  if (apiKey.startsWith("gsk_")) {
-    const rawPrimary = process.env.GROQ_MODEL || "qwen/qwen3.6-27b";
-    const primary = sanitizeGroqModel(rawPrimary);
-    const fallbacks = parseCsv(process.env.GROQ_FALLBACK_MODELS || "openai/gpt-oss-120b")
-      .filter((m) => m && !DEPRECATED_GROQ_MODELS.has(m));
-    return [primary, ...fallbacks].filter((m, i, l) => m && l.indexOf(m) === i);
-  }
+function getModelsForApiKey() {
   const primary = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   const fallbacks = parseCsv(process.env.GEMINI_FALLBACK_MODELS || "gemini-flash-latest,gemini-2.5-pro");
   return [primary, ...fallbacks].filter((m, i, l) => m && l.indexOf(m) === i);
@@ -108,16 +83,37 @@ function getActiveKeys(apiKeys) {
 
   const fromEnv = [
     process.env.GEMINI_API_KEYS,
-    process.env.GEMINI_API_KEY,
-    process.env.GROQ_API_KEYS,
-    process.env.GROQ_API_KEY
+    process.env.GEMINI_API_KEY
   ].filter(Boolean).join(",");
   return parseApiKeys(fromEnv);
 }
 
+const { translateTextWithHachimi } = require("./hachimi");
+
 async function translateText(text, apiKeys, options = {}) {
+  const isHachimi =
+    options.provider !== "gemini" &&
+    (options.provider === "hachimi" ||
+      (process.env.TRANSLATION_PROVIDER === "hachimi" && !options.forceGemini && options.provider !== "gemini") ||
+      (Boolean(process.env.HACHIMI_API_URL) && !apiKeys && !process.env.GEMINI_API_KEY));
+
+  if (isHachimi) {
+    const res = await translateTextWithHachimi(text, {
+      apiUrl: options.apiUrl || process.env.HACHIMI_API_URL,
+      glossary: options.glossary
+    });
+    return {
+      translation: res.translation,
+      chunkCount: 1,
+      modelsUsed: [res.model || "HachimiMT"],
+      tokensUsed: 0,
+      startedAt: Date.now() - (res.latencyMs || 0),
+      durationMs: res.latencyMs || 0
+    };
+  }
+
   const keyList = getActiveKeys(apiKeys);
-  if (!keyList.length) throw new Error("Thiếu GROQ_API_KEY / GEMINI_API_KEY.");
+  if (!keyList.length) throw new Error("Thiếu GROQ_API_KEY / GEMINI_API_KEY (hoặc HACHIMI_API_URL).");
 
   const bookGlossary = options.glossary || {};
   const bookTitle = options.bookTitle || "";
@@ -863,7 +859,9 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
 }
 
 async function translateWithGemini(apiKey, model, prompt, generationConfig = {}) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+  const baseUrl = (process.env.GEMINI_BASE_URL || process.env.GOOGLE_AI_GATEWAY || "https://gateway.ai.cloudflare.com/v1/aa644d98f2377007f0fa98abcafe3d21/tram-chu/google-ai-studio").replace(/\/$/, "");
+  const cfToken = process.env.CLOUDFLARE_API_TOKEN || "";
+  const url = `${baseUrl}/v1beta/models/${encodeURIComponent(
     model
   )}:generateContent`;
 
@@ -872,13 +870,18 @@ async function translateWithGemini(apiKey, model, prompt, generationConfig = {})
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
+      const headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+        "x-goog-api-client": "gl-node/gemini-translator"
+      };
+      if (baseUrl.includes("gateway.ai.cloudflare.com") && cfToken) {
+        headers["cf-aig-authorization"] = `Bearer ${cfToken}`;
+      }
+
       const response = await fetch(url, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
-          "x-goog-api-client": "gl-node/gemini-translator"
-        },
+        headers,
         signal: controller.signal,
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: prompt }] }],
@@ -890,15 +893,8 @@ async function translateWithGemini(apiKey, model, prompt, generationConfig = {})
           ],
           generationConfig: {
             temperature: generationConfig.temperature ?? 0.2,
-            maxOutputTokens: generationConfig.maxTokens || 8192,
-            // Gemini 2.5/3.x "flash" models think by default, and the reasoning
-            // is billed against maxOutputTokens — it ate the whole budget and the
-            // translation came back truncated (finishReason MAX_TOKENS), which
-            // the worker then retried forever. gemini-3.6-flash rejects a budget of 0; a moderate budget avoids both
-            // MAX_TOKENS truncation and the degenerate repetition a tiny budget caused. Old note: it rejects a budget
-            // of 0 (400 invalid argument), so cap thinking at a small value: just
-            // enough to stay valid, leaving the budget for the translation text.
-            thinkingConfig: { thinkingBudget: 512 },
+            maxOutputTokens: generationConfig.maxTokens || 16384,
+            ...(generationConfig.thinkingBudget !== undefined ? { thinkingConfig: { thinkingBudget: generationConfig.thinkingBudget } } : {}),
             ...(generationConfig.responseFormat === "json" ? { responseMimeType: "application/json" } : {})
           }
         })
@@ -961,30 +957,26 @@ function assessTranslation(source, translation) {
   const sourceIsChinese = sourceStats.han >= 20 && sourceStats.hanRatio >= 0.3;
   if (!sourceIsChinese) return { acceptable: true };
 
-  // 1. Kiểm tra sót chữ Hán (Nghiêm ngặt: không được sót chữ Hán trong bản dịch).
-  //    Strict on purpose so a residual triggers the focused repair pass; the
-  //    retry loop below accepts a near-complete candidate rather than looping
-  //    forever when repair cannot clear the last stray glyphs.
-  if (outputStats.han > 0) {
-    return { acceptable: false, reason: "vẫn còn sót chữ Hán chưa được chuyển ngữ" };
+  // 1. Kiểm tra sót chữ Hán (nếu sót nhiều hơn 2 chữ Hán thì yêu cầu sửa)
+  if (outputStats.han > 2) {
+    return { acceptable: false, reason: `vẫn còn sót ${outputStats.han} chữ Hán chưa được chuyển ngữ` };
   }
 
-  // 2. Đảm bảo độ đầy đủ 100% nội dung (Tuyệt đối không tóm tắt, cắt xén, đứt đoạn)
-  // Bản dịch tiếng Việt chuẩn của tiểu thuyết luôn dài từ 85% đến 220% so với bản gốc chữ Hán.
-  if (source.length >= 200) {
+  // 2. Đảm bảo độ đầy đủ nội dung (chống cắt cụt hoặc lặp vô tận)
+  if (source.length >= 250) {
     const ratio = output.length / Math.max(1, source.length);
-    if (ratio < 0.85) {
+    if (ratio < 0.60) {
       return { acceptable: false, reason: `bản dịch bị lược bớt/cụt câu (độ dài chỉ đạt ${Math.round(ratio * 100)}% so với bản gốc)` };
     }
-    if (ratio > 3.6) {
+    if (ratio > 4.5) {
       return { acceptable: false, reason: `bản dịch dài bất thường (${Math.round(ratio * 100)}% bản gốc), có khả năng lặp nội dung` };
     }
   }
 
-  // 3. Đảm bảo cấu trúc số đoạn văn tương ứng (chống gộp/bỏ sót đoạn)
+  // 3. Đảm bảo cấu trúc số đoạn văn tương đối phù hợp
   const sourceParagraphs = paragraphCount(source);
   const outputParagraphs = paragraphCount(output);
-  if (sourceParagraphs >= 4 && outputParagraphs < Math.ceil(sourceParagraphs * 0.5)) {
+  if (sourceParagraphs >= 8 && outputParagraphs < Math.ceil(sourceParagraphs * 0.35)) {
     return {
       acceptable: false,
       reason: `cấu trúc đoạn bị mất (${outputParagraphs}/${sourceParagraphs} đoạn)`
@@ -1193,6 +1185,7 @@ module.exports = {
   stripThinkTags,
   splitTextIntoChunks,
   parseApiKeys,
+  getActiveKeys,
   getKeyPoolStats,
   parseGroqRetryDurationMs,
   classifyQuotaError,

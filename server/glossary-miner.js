@@ -1,7 +1,6 @@
 "use strict";
 
-const { loadBase } = require("./convert/index");
-const { isHan } = require("./convert/convert-engine");
+const { loadBase, isHan } = require("./convert/index");
 
 // Common realm suffixes and markers in Xianxia / Fantasy / Wuxia / Martial Arts
 const REALM_PATTERNS = [

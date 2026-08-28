@@ -27,7 +27,7 @@ const PLAIN = {
   R2_PUBLIC_BASE_URL: "https://cdn.tram-chu.online",
   GITHUB_REPOSITORY: "PhucPM89/AutoTranslate"
 };
-const PLAIN_FROM_ENV = ["SUPABASE_URL", "SUPABASE_ANON_KEY", "GROQ_MODEL", "GROQ_FALLBACK_MODELS"];
+const PLAIN_FROM_ENV = ["SUPABASE_URL", "SUPABASE_ANON_KEY", "GEMINI_MODEL", "GEMINI_FALLBACK_MODELS", "GEMINI_BASE_URL"];
 const SECRETS = [
   "R2_ACCOUNT_ID",
   "R2_ACCESS_KEY_ID",
@@ -36,11 +36,10 @@ const SECRETS = [
   "LIBRARY_SESSION_SECRET",
   "LIBRARY_UPLOAD_PASSWORD_HASH",
   "GITHUB_DISPATCH_TOKEN",
-  "GROQ_API_KEYS",
-  "GROQ_API_KEY"
+  "CLOUDFLARE_API_TOKEN"
 ];
 
-const NEVER_SET = ["GEMINI_API_KEY"];
+const NEVER_SET = [];
 
 // READER_CDN_ENABLED switches real readers onto the CDN, so it takes an explicit
 // flag rather than being picked up from whatever happens to be in the environment:

@@ -154,17 +154,34 @@ test("sessionFromUrlHash picks up the tokens Google OAuth redirect carries", () 
   assert.equal(session.expiresAt, 1_000 + 3_600_000);
 });
 
+test("sessionFromUrl picks up tokens from either hash or search query", () => {
+  const sessionFromSearch = core.sessionFromUrl("", "?access_token=token1&refresh_token=rt1&expires_in=1800", 2_000);
+  assert.equal(sessionFromSearch.accessToken, "token1");
+  assert.equal(sessionFromSearch.refreshToken, "rt1");
+  assert.equal(sessionFromSearch.expiresAt, 2_000 + 1_800_000);
+
+  const sessionFromHash = core.sessionFromUrl("#access_token=token2&refresh_token=rt2&expires_in=3600", "", 5_000);
+  assert.equal(sessionFromHash.accessToken, "token2");
+});
+
 test("sessionFromUrlHash leaves the app's own hash routes alone", () => {
   for (const hash of ["", "#catalog", "#support", "#book/mieu-cuong-co-su"]) {
     assert.equal(core.sessionFromUrlHash(hash), null, hash);
   }
 });
 
-test("errorFromUrlHash explains an OAuth error clearly", () => {
+test("errorFromUrl explains OAuth errors from hash or search clearly", () => {
   const hash = "#error=access_denied&error_code=access_denied&error_description=User+denied";
-  assert.match(core.errorFromUrlHash(hash), /hủy/);
-  assert.equal(core.errorFromUrlHash("#catalog"), "");
-  assert.equal(core.errorFromUrlHash(""), "");
+  assert.match(core.errorFromUrl(hash, ""), /hủy/);
+
+  const searchDisabled = "?error=disabled_client&error_description=The+OAuth+client+was+disabled.";
+  assert.match(core.errorFromUrl("", searchDisabled), /vô hiệu hóa/i);
+
+  const searchMismatch = "?error=redirect_uri_mismatch&error_description=Redirect+URI+mismatch.";
+  assert.match(core.errorFromUrl("", searchMismatch), /redirect_uri_mismatch/i);
+
+  assert.equal(core.errorFromUrl("#catalog", "?book=1"), "");
+  assert.equal(core.errorFromUrl("", ""), "");
 });
 
 test("account label and initial handle full names and emails", () => {

@@ -107,17 +107,40 @@ function createAuthClient({ url, anonKey, storage, fetchImpl = fetch, now = () =
     return refresh();
   }
 
-  // Adopts tokens handed over in the URL fragment after Google OAuth redirect.
+  // Adopts tokens handed over in the URL fragment (#) or query params (?) after Google OAuth redirect.
   function adoptFromUrl() {
     if (typeof location === "undefined") return { adopted: false, message: "" };
-    const fromHash = core.sessionFromUrlHash(location.hash, now());
-    const message = core.errorFromUrlHash(location.hash);
-    if (!fromHash && !message) return { adopted: false, message: "" };
-    if (fromHash) adopt(fromHash);
+    const fromUrl = core.sessionFromUrl(location.hash, location.search, now());
+    const message = core.errorFromUrl(location.hash, location.search);
+    if (!fromUrl && !message) return { adopted: false, message: "" };
+    if (fromUrl) adopt(fromUrl);
     if (typeof history !== "undefined" && history.replaceState) {
-      history.replaceState(null, "", `${location.pathname}${location.search}`);
+      try {
+        const urlParams = new URLSearchParams(location.search);
+        const authParamKeys = [
+          "access_token",
+          "refresh_token",
+          "expires_in",
+          "expires_at",
+          "token_type",
+          "type",
+          "error",
+          "error_code",
+          "error_description"
+        ];
+        let changed = false;
+        for (const k of authParamKeys) {
+          if (urlParams.has(k)) {
+            urlParams.delete(k);
+            changed = true;
+          }
+        }
+        const qs = changed ? (urlParams.toString() ? `?${urlParams.toString()}` : "") : location.search;
+        const hash = location.hash && (location.hash.includes("access_token=") || location.hash.includes("error=")) ? "" : location.hash;
+        history.replaceState(null, "", `${location.pathname}${qs}${hash}`);
+      } catch {}
     }
-    return { adopted: Boolean(fromHash), message };
+    return { adopted: Boolean(fromUrl), message };
   }
 
   return {

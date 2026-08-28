@@ -1,189 +1,54 @@
 "use strict";
 
-const fs = require("fs");
-const path = require("path");
-const { createConvertEngine, buildTrie, matchPhrase, isHan } = require("./convert-engine");
-const { createProperNounMatcher } = require("./proper-nouns");
-const { loadPhraseDict, loadHanvietChars } = require("./load-dictionaries");
-const { loadLexicon, readSet, titleCase } = require("./lexicon");
-const { mineNames } = require("./name-mining");
+/**
+ * Lightweight convert compatibility layer.
+ * Full neural translation is handled by HachimiMT and Gemini QA.
+ */
 
-// Bump when the convert engine or its data changes enough that already-converted
-// chapters should be re-rendered. The backfill re-converts any "convert" chapter
-// stamped with an older version, so a full re-pass resumes across runs instead of
-// restarting from the top. 1 = pre-grammar; 2 = normalization + grammar layers;
-// 3 = name mining; 4 = name-locked segmentation; 5 = natural verbs + constructions; 6 = surname-scan-first mining; 7 = adjectives; 8 = genre nouns; 9 = Example-Based MT (learned clause translations).
-const CONVERT_VERSION = 9;
+const CONVERT_VERSION = 1;
 
-const DEFAULT_HANVIET = path.join("data", "convert", "hanviet-chars.txt");
-const DEFAULT_PHRASE_DIR = path.join("data", "convert", "phrases");
-// Normalization overrides load LAST so they win over the base dictionaries.
-const OVERRIDE_CHARS = path.join("data", "convert", "overrides-chars.txt");
-const OVERRIDE_PHRASES = path.join("data", "convert", "overrides-phrases.txt");
-const PHRASE_BLOCKLIST = path.join("data", "convert", "phrase-blocklist.txt");
-const MODERN_NOUNS = path.join("data", "convert", "genre", "modern-nouns.txt");
-// Example-Based MT memory: fluent Gemini clause translations mined from the
-// completed chapters (scripts/build-tm.js). Loaded LAST so a learned formula
-// wins over VietPhrase's literal rendering. Optional — absent until built.
-const TM_PHRASES = path.join("data", "convert", "tm.txt.gz");
-
-// Genres set in a cultivation/classical world, where everyday characters keep
-// their Hán-Việt reading (门 = "môn phái", 刀 = the weapon "đao"). Everything else
-// (Đô thị, Linh dị, Trinh thám, Mạt thế, Khoa huyễn, Võng du…) is modern enough
-// that those nouns read more naturally by meaning.
-const CULTIVATION_GENRES = ["tiên hiệp", "huyền huyễn", "kiếm hiệp", "tu tiên", "tiên hiệp huyền huyễn"];
-function isCultivationGenre(genre) {
-  const g = String(genre || "").toLowerCase();
-  return CULTIVATION_GENRES.some((c) => g.includes(c));
+function isHan(char) {
+  if (!char) return false;
+  return /\p{Script=Han}/u.test(char);
 }
 
-const GENRE_DIR = path.join("data", "convert", "genres");
+function getConvertFunction(env = process.env) {
+  if (env.CONVERT_ENABLED === "false") return null;
+  return null;
+}
 
-const GENRE_KEYWORDS = {
-  xianxia: ["tiên hiệp", "huyền huyễn", "kiếm hiệp", "tu tiên", "cổ đại", "võ hiệp", "xianxia", "wuxia", "fantasy"],
-  modern: ["đô thị", "hiện đại", "tổng tài", "trọng sinh", "thương trường", "hào môn", "y thuật", "bác sĩ", "urban", "modern"],
-  romance: ["ngôn tình", "cung đấu", "trạch đấu", "nữ cường", "điền văn", "sủng", "ngược", "hầu phủ", "romance", "palace"],
-  system: ["võng du", "hệ thống", "vô hạn lưu", "xuyên nhanh", "game", "system", "rpg"],
-  scifi: ["khoa huyễn", "cơ giáp", "mạt thế", "tinh tế", "cyberpunk", "scifi", "mecha"],
-  horror: ["kinh dị", "huyền nghi", "trinh thám", "linh dị", "quỷ dị", "pháp y", "horror", "mystery", "thriller"]
-};
+const fs = require("fs");
+const path = require("path");
 
-function resolveGenreKeys(genreInput) {
-  if (!genreInput) return [];
-  const list = Array.isArray(genreInput) ? genreInput : [genreInput];
-  const keys = new Set();
-  for (const raw of list) {
-    const s = String(raw || "").toLowerCase();
-    for (const [key, patterns] of Object.entries(GENRE_KEYWORDS)) {
-      if (patterns.some((p) => s.includes(p))) {
-        keys.add(key);
+let cachedHanviet = null;
+
+function loadBase() {
+  if (cachedHanviet) return { hanvietChars: cachedHanviet, phraseDict: {} };
+  const hvMap = {};
+  const filePath = path.join(process.cwd(), "data", "convert", "hanviet-chars.txt");
+  if (fs.existsSync(filePath)) {
+    const lines = fs.readFileSync(filePath, "utf8").split("\n");
+    for (const line of lines) {
+      const idx = line.indexOf("=");
+      if (idx !== -1) {
+        const ch = line.slice(0, idx).trim();
+        const val = line.slice(idx + 1).trim();
+        if (ch) hvMap[ch] = { hv: val };
       }
     }
   }
-  return Array.from(keys);
+  cachedHanviet = hvMap;
+  return { hanvietChars: cachedHanviet, phraseDict: {} };
 }
 
-// Pronouns never sit inside a mined given name (顺他), so they seed the reject set
-// together with the function-word and verb tables.
-const PRONOUNS = ["他", "她", "它", "我", "你", "您", "咱", "俺", "们", "谁", "这", "那"];
-
-function splitList(value) {
-  return String(value || "").split(",").map((s) => s.trim()).filter(Boolean);
-}
-
-function defaultPhraseFiles() {
-  if (!fs.existsSync(DEFAULT_PHRASE_DIR)) return [];
-  return fs.readdirSync(DEFAULT_PHRASE_DIR)
-    .filter((f) => f.endsWith(".txt") || f.endsWith(".txt.gz") || f.endsWith(".json"))
-    .map((f) => path.join(DEFAULT_PHRASE_DIR, f));
-}
-
-// Cached genre packs
-const genrePacksCache = new Map();
-function loadGenrePack(genreKey) {
-  if (genrePacksCache.has(genreKey)) return genrePacksCache.get(genreKey);
-  const p = path.join(GENRE_DIR, `genre-${genreKey}.txt.gz`);
-  const dict = fs.existsSync(p) ? loadPhraseDict([p]) : {};
-  genrePacksCache.set(genreKey, dict);
-  return dict;
-}
-
-// Load the base tables once. Reused by every engine build and by name mining, so
-// the 667k-entry phrase dictionary is parsed a single time per process.
-let base;
-function loadBase(env = process.env) {
-  if (base) return base;
-  const hanvietFiles = [...splitList(env.CONVERT_HANVIET || DEFAULT_HANVIET), OVERRIDE_CHARS];
-  const hanvietChars = loadHanvietChars(hanvietFiles);
-  if (!Object.keys(hanvietChars).length) return (base = null);
-  const phraseFiles = env.CONVERT_PHRASES ? splitList(env.CONVERT_PHRASES) : defaultPhraseFiles();
-  // TM last so its learned formulas win over VietPhrase's literal versions.
-  const phraseDict = loadPhraseDict([...phraseFiles, OVERRIDE_PHRASES, TM_PHRASES]);
-  for (const zh of readSet(PHRASE_BLOCKLIST)) delete phraseDict[zh];
-  const lexicon = loadLexicon();
-  // Modern-genre single-char overrides, loaded once and applied per book.
-  const modernNouns = loadHanvietChars([MODERN_NOUNS]);
-  base = { hanvietChars, phraseDict, lexicon, modernNouns };
-  return base;
-}
-
-// Build a convert engine with Genre-Adaptive Profiles.
-// `genre` or `genres` dynamically mounts specialized vocabulary packs (xianxia,
-// modern, romance, system, scifi, horror) with highest precedence.
-function buildConvertEngineFromDisk(env = process.env, { nameGlossary = null, genre = null, genres = null, modern = false } = {}) {
-  const b = loadBase(env);
-  if (!b) return null;
-
-  const resolvedGenres = resolveGenreKeys(genres || genre);
-  const isModernGenre = modern || resolvedGenres.some((g) => g === "modern" || g === "scifi" || g === "horror" || g === "system");
-
-  // A modern-genre book reads everyday nouns by meaning (门 "cửa"); a cultivation
-  // book keeps the Hán-Việt table untouched.
-  const hanvietChars = isModernGenre ? { ...b.hanvietChars, ...b.modernNouns } : b.hanvietChars;
-
-  // Mount genre packs if matched
-  let phraseDict = b.phraseDict;
-  if (resolvedGenres.length > 0) {
-    phraseDict = { ...phraseDict };
-    for (const g of resolvedGenres) {
-      const pack = loadGenrePack(g);
-      Object.assign(phraseDict, pack);
-    }
-  }
-
-  // The engine merges the glossary into its phrase dictionary AND locks
-  // segmentation around the names, so pass it through rather than pre-merging.
-  return createConvertEngine({
-    phraseDict,
-    hanvietChars,
-    lexicon: b.lexicon,
-    nameGlossary,
-    translationEngineMode: env.TRANSLATION_ENGINE_MODE,
-    canaryPercentage: env.CANARY_PERCENTAGE
-  });
-}
-
-// Mine a per-book name glossary { zh -> "Tên Hán Việt" } from a sample of the
-// book's chapter texts. Statistical, model-free: a character recurs in varied
-// contexts, a chance collocation does not. See name-mining.js.
-function mineBookNames(texts, env = process.env, { minCount = 6 } = {}) {
-  const b = loadBase(env);
-  if (!b) return {};
-  const trie = buildTrie(b.phraseDict);
-  const { surnames, placeSuffixes, classifiers, functionWords, verbs, adjectives } = b.lexicon;
-  const matcher = createProperNounMatcher({
-    surnames, placeSuffixes, classifiers, functionWords, verbs, adjectives,
-    hanvietChars: b.hanvietChars, phraseDict: b.phraseDict, dropTokens: new Set(),
-    longestPhraseAt: (chars, at) => matchPhrase(trie, chars, at), isHan
-  });
-  const rejectGiven = new Set([...PRONOUNS, ...functionWords, ...verbs]);
-  return mineNames(texts, {
-    matcher, surnames, hanviet: b.hanvietChars, isName: matcher.isNameChar,
-    titleCase, minCount, phraseDict: b.phraseDict, rejectGiven
-  });
-}
-
-// A memoised convert(text) -> string, or null when convert is unavailable or
-// disabled. This is the plain, name-agnostic path (ingest of a single new
-// chapter); the backfill builds its own per-book engine via mineBookNames.
-let cached;
-function getConvertFunction(env = process.env) {
-  if (cached !== undefined) return cached;
-  if (env.CONVERT_ENABLED === "false") return (cached = null);
-  try {
-    const engine = buildConvertEngineFromDisk(env);
-    cached = engine
-      ? (text) => (env.TRANSLATION_ENGINE_MODE && env.TRANSLATION_ENGINE_MODE !== "LEGACY"
-          ? engine.convertWithCanary(text).text
-          : engine.convert(text))
-      : null;
-  } catch {
-    cached = null;
-  }
-  return cached;
+function buildConvertEngineFromDisk() {
+  return null;
 }
 
 module.exports = {
-  buildConvertEngineFromDisk, getConvertFunction, mineBookNames, isCultivationGenre,
-  defaultPhraseFiles, CONVERT_VERSION, loadBase
+  CONVERT_VERSION,
+  isHan,
+  getConvertFunction,
+  loadBase,
+  buildConvertEngineFromDisk
 };
