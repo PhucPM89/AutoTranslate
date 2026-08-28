@@ -134,9 +134,8 @@ hình production và deploy project Cloudflare Pages `tram-chu-web`. Có thể c
 lại thủ công từ tab **Actions → Deploy website → Run workflow**.
 
 Workflow cần các GitHub Actions secrets: `CLOUDFLARE_API_TOKEN`,
-`R2_ACCOUNT_ID`, `R2_PUBLIC_BASE_URL`, `SUPABASE_URL` và tùy chọn
-`SUPABASE_ANON_KEY` (build có publishable key mặc định nếu secret này chưa được
-đặt).
+`CLOUDFLARE_ACCOUNT_ID`, `R2_PUBLIC_BASE_URL`, `SUPABASE_URL` và
+`SUPABASE_ANON_KEY`.
 
 Toàn bộ site là một Cloudflare Worker: `worker/index.js` phục vụ file tĩnh qua
 binding `ASSETS` và xử lý các route `/api/admin/*`. Người đọc không chạm Worker —
