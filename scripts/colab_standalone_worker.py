@@ -192,6 +192,10 @@ def run_translation_loop():
         for ch in chapters:
             n = ch.get("n")
             doc = r2_get_json(f"books/{book_id}/r{rev}/ch/{n}.json")
+            if doc and (doc.get("provider") == "gemini" or doc.get("qaReviewed")):
+                ch["status"] = "completed"
+                completed_count += 1
+                continue
             content = doc.get("content", "") if doc else ""
             
             if not doc or len(content) < 50 or has_chinese(content):
