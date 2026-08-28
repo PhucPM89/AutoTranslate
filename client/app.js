@@ -1172,7 +1172,20 @@ function getFilteredCatalogBooks() {
 
   list = list
     .filter((book) => !genre || book.genre === genre)
-    .filter((book) => !status || (book.status || "Đang cập nhật") === status)
+    .filter((book) => {
+      if (!status) return true;
+      const total = Number(book.chapterCount || book.totalChapters || book.total_chapters || 0);
+      const translated = Number(book.translatedChapters || 0);
+      const isBookFull =
+        book.status === "Hoàn thành" ||
+        book.status === "Đã hoàn thành" ||
+        book.status === "Full" ||
+        book.status === "completed" ||
+        (total > 0 && translated >= total);
+      if (status === "Hoàn thành" || status === "Full") return isBookFull;
+      if (status === "Đang cập nhật" || status === "Đang ra") return !isBookFull;
+      return (book.status || "Đang cập nhật") === status;
+    })
     .filter((book) => {
       if (!length) return true;
       const count = Number(book.chapterCount || book.totalChapters || book.total_chapters || 0);

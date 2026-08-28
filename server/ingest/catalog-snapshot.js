@@ -50,13 +50,14 @@ async function buildSnapshotFromSupabase(env = process.env, storage = null, db =
         } catch {}
       }
 
+      const isFull = (totalChapters > 0 && translatedChapters >= totalChapters) || row.status === "Hoàn thành" || row.status === "Full" || row.status === "completed";
       return {
         id: row.id,
         title: row.title,
         author: row.author || "",
         description: row.description || "",
         cover: resolveCoverUrl(row.id, row.cover_url, env),
-        status: row.status || "",
+        status: isFull ? "Hoàn thành" : (row.status || "Đang cập nhật"),
         // Flattened from the embedded join; "" when a book has no category yet, which
         // the client treats as uncategorised rather than inventing a label.
         genre: row.book_categories?.[0]?.categories?.name || "",
@@ -83,17 +84,21 @@ async function buildSnapshotFromStorage(storage) {
     try {
       const index = JSON.parse(raw.toString("utf8"));
       if (!index || !index.title || hasHan(index.title) || hasHan(index.author)) continue;
+      const totalChapters = Number(index.totalChapters || index.chapters?.length || 0);
+      const translatedChapters = Number(index.translatedChapters || 0);
+      const isFull = (totalChapters > 0 && translatedChapters >= totalChapters) || index.status === "Hoàn thành" || index.status === "Full" || index.status === "completed";
       books.push({
         id: index.bookId,
         title: index.title,
         author: index.author || "",
         description: index.description || "",
         cover: resolveCoverUrl(index.bookId, index.cover, process.env),
-        status: index.status || "",
-        chapterCount: index.totalChapters || 0,
-        translatedChapters: index.translatedChapters || 0,
+        status: isFull ? "Hoàn thành" : (index.status || "Đang cập nhật"),
+        genre: index.genre || "",
+        chapterCount: totalChapters,
+        translatedChapters,
         revision: index.revision || 1,
-        featured: false,
+        featured: Boolean(index.featured),
         updatedAt: index.updatedAt || "",
         createdAt: index.createdAt || ""
       });
