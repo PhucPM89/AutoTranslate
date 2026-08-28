@@ -1363,6 +1363,15 @@ dialog:not([open]) {
   gap: 1rem;
 }
 
+.overview-actions {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+}
+
 .crawler-overview h3 {
   margin: 0.2rem 0 0;
   font-family: var(--font-display);
