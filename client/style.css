@@ -4722,15 +4722,21 @@ body.theme-forest .document-text .tts-paragraph-highlight.tts-speaking {
   }
 
   .library-intro {
-    padding: 1.6rem 0.9rem 1.25rem;
+    padding: 1.15rem 0.9rem 1rem;
   }
 
   .intro-copy h1 {
-    font-size: 2.6rem;
+    margin-bottom: 0.45rem;
+    font-size: 2.15rem;
+  }
+
+  #libraryTagline {
+    font-size: 0.85rem;
+    line-height: 1.5;
   }
 
   .featured-story {
-    margin-top: 1.25rem;
+    margin-top: 0.8rem;
   }
 
   .featured-story h2 {
@@ -4739,20 +4745,34 @@ body.theme-forest .document-text .tts-paragraph-highlight.tts-speaking {
   }
 
   .featured-story > p {
-    -webkit-line-clamp: 3;
+    -webkit-line-clamp: 2;
     font-size: 0.82rem;
   }
 
   .featured-actions {
     align-items: stretch;
-    flex-direction: column;
+    flex-direction: row;
     gap: 0.5rem;
   }
 
   .featured-read,
   .featured-browse {
-    width: 100%;
     justify-content: center;
+  }
+
+  .featured-read {
+    flex: 0 0 42%;
+    padding-inline: 0.75rem;
+    white-space: nowrap;
+  }
+
+  .featured-browse {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .library-stats {
+    margin-top: 0.8rem;
   }
 
   .catalog-section {
@@ -4765,23 +4785,19 @@ body.theme-forest .document-text .tts-paragraph-highlight.tts-speaking {
   }
 
   .book-description,
-  .book-read-button span,
-  .book-card-footer > span {
+  .book-read-button span {
     display: none;
   }
 
   .book-card-footer {
-    gap: 1.2rem 0.75rem;
+    justify-content: space-between;
+    gap: 0.35rem;
   }
 
-  .book-description,
-  .book-read-button span,
   .book-card-footer > span {
-    display: none;
-  }
-
-  .book-card-footer {
-    justify-content: flex-end;
+    display: inline-flex;
+    min-width: 0;
+    font-size: 0.66rem;
   }
 
   .book-read-button {
@@ -4796,6 +4812,17 @@ body.theme-forest .document-text .tts-paragraph-highlight.tts-speaking {
   .request-band {
     margin-bottom: 1.5rem;
     padding: 2.3rem 1rem;
+  }
+}
+
+@media (max-width: 360px) {
+  .featured-actions {
+    flex-direction: column;
+  }
+
+  .featured-read,
+  .featured-browse {
+    width: 100%;
   }
 }
 
@@ -6918,6 +6945,11 @@ body.zen-mode .document-paper {
 
   .library-actions {
     gap: 0.2rem;
+  }
+
+  .library-actions .streak-badge,
+  .library-actions .reader-rank-badge {
+    display: none;
   }
 
   .library-actions .icon-button {

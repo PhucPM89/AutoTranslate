@@ -172,7 +172,7 @@
           <header class="catalog-header">
             <div><p class="eyebrow">Khám phá kho truyện</p><h2>Truyện trong thư viện</h2><p class="catalog-subtitle">Từ tiên hiệp, huyền huyễn đến linh dị và trinh thám.</p></div>
             <div class="catalog-controls">
-              <label class="catalog-search"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><input id="librarySearch" type="search" placeholder="Tìm tên truyện, tác giả..." autocomplete="off"></label>
+              <label class="catalog-search"><span class="sr-only">Tìm truyện theo tên hoặc tác giả</span><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg><input id="librarySearch" type="search" placeholder="Tìm tên truyện, tác giả..." autocomplete="off" aria-describedby="catalogPaginationSummary"></label>
               <label class="genre-filter" aria-hidden="true"><span class="sr-only">Lọc thể loại</span><select id="libraryGenre" tabindex="-1"><option value="">Tất cả thể loại</option></select></label>
             </div>
           </header>
@@ -375,7 +375,7 @@
       </div>
 
       <div id="authGuest" class="auth-guest">
-        <p class="auth-intro">Đăng nhập bằng tài khoản Google để lưu và đồng bộ tiến độ đọc truyện trên mọi thiết bị.</p>
+        <p class="auth-intro">Bạn có thể đọc truyện không cần tài khoản. Đăng nhập Google để lưu tủ truyện, đồng bộ tiến độ và tích lũy cảnh giới trên mọi thiết bị.</p>
         <button id="authGoogleBtn" class="google-login-btn" type="button">
           <svg class="google-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -385,7 +385,7 @@
           </svg>
           <span>Đăng nhập với Google</span>
         </button>
-        <span class="auth-note">Tài khoản chỉ dùng để lưu lịch sử và tiến độ đọc.</span>
+        <span class="auth-note">Đăng nhập là tùy chọn. Tài khoản chỉ dùng cho các tính năng cá nhân và cộng đồng.</span>
       </div>
 
       <div id="authAccount" class="auth-account" hidden>

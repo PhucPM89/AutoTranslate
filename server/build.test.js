@@ -113,6 +113,18 @@ test("the reader CDN path is off unless both the flag and a base URL are set", (
   assert.match(both.app, /cdn\.example\.com/);
 });
 
+test("reading stays available to guests while account features remain optional", () => {
+  const out = runBuild({
+    READER_CDN_ENABLED: "true",
+    R2_PUBLIC_BASE_URL: "https://cdn.example.com"
+  });
+
+  assert.doesNotMatch(out.app, /Yêu cầu đăng nhập để đọc/);
+  assert.doesNotMatch(out.app, /Vui lòng đăng nhập tài khoản Google để đọc truyện/);
+  assert.match(out.html, /Bạn có thể đọc truyện không cần tài khoản/);
+  assert.match(out.html, /Đăng nhập là tùy chọn/);
+});
+
 test("build output contains everything Cloudflare Pages needs to serve", () => {
   runBuild({ R2_PUBLIC_BASE_URL: "", READER_CDN_ENABLED: "" });
   for (const file of ["index.html", "app.js", "style.css", "admin-upload.js", "_headers", "vendor/jszip.min.js", "favicon.svg"]) {
