@@ -477,20 +477,6 @@
           <p id="transStopReasonDesc" class="trans-stop-desc">Tiến trình đang quét các bộ truyện chưa đạt chuẩn để tái dịch sang văn phong lưu loát.</p>
         </div>
 
-        <div class="trans-focus-picker">
-          <label for="adminTranslateFocusBook">
-            <strong>Bộ truyện ưu tiên</strong>
-            <small>Chọn một bộ để worker chỉ dịch bộ đó đến 100%. Chọn tự động để hệ thống tự quyết định bộ tiếp theo.</small>
-          </label>
-          <div class="trans-focus-picker-controls">
-            <select id="adminTranslateFocusBook">
-              <option value="">Tự động chọn khi không có bộ ưu tiên</option>
-            </select>
-            <button id="adminTranslateFocusSave" class="primary-action" type="button">Lưu ưu tiên</button>
-          </div>
-          <p id="adminTranslateFocusHint" class="trans-focus-picker-hint">Đang tải cấu hình...</p>
-        </div>
-
         <!-- THE MAIN FOCUS HERO CARD: Single Novel Center -->
         <div id="transActiveCard" class="trans-focus-card">
           <div class="trans-focus-topbar">
@@ -506,9 +492,9 @@
               <img id="transActiveCoverImg" class="trans-focus-cover" src="/library/covers/misty-pagoda.webp" alt="Bìa truyện đang dịch">
             </div>
             <div class="trans-focus-info">
-              <span class="trans-tag">🎯 BỘ TRUYỆN ĐANG TẬP TRUNG DỊCH FULL</span>
+              <span class="trans-tag">🎯 BỘ TRUYỆN ĐANG TIẾN HÀNH DỊCH</span>
               <h3 id="transActiveBookTitle" class="trans-focus-title">Đang đồng bộ truyện...</h3>
-              <p id="translateStateMessage" class="trans-focus-desc">Hệ thống đang dồn toàn bộ 17 AI Keys để dịch hoàn tất bộ truyện này.</p>
+              <p id="translateStateMessage" class="trans-focus-desc">Hệ thống đang sử dụng cụm AI Keys Gemini để dịch tự động theo hàng đợi.</p>
               
               <div class="trans-focus-badges">
                 <span id="transActiveChapterBadge" class="trans-focus-pill highlight-purple">Chương 0 / 0</span>
