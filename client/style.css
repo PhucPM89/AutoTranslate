@@ -2886,7 +2886,6 @@ body:not(.dark) .theme-moon {
   font-weight: 650;
 }
 
-.chapter-picker select,
 .toolbar-group select {
   width: 100%;
   min-width: 0;
@@ -2896,9 +2895,77 @@ body:not(.dark) .theme-moon {
   color: var(--text);
 }
 
-.chapter-picker select {
-  min-height: 39px;
-  padding: 0 0.7rem;
+.chapter-jump-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  min-height: 42px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+}
+
+.chapter-jump-control:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-wash);
+}
+
+.chapter-jump-control input {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 0.25rem 0 0.7rem;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+/* The browser's number spinners steal scarce sidebar width and are redundant:
+   readers type a chapter number or use the previous/next controls. */
+.chapter-jump-control input::-webkit-inner-spin-button,
+.chapter-jump-control input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.chapter-jump-control input[type="number"] {
+  appearance: textfield;
+}
+
+.chapter-jump-total {
+  padding-inline: 0.45rem 0.65rem;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.chapter-jump-control button {
+  align-self: stretch;
+  min-width: 46px;
+  border-left: 1px solid var(--border-soft);
+  border-radius: 0;
+  background: var(--accent-wash);
+  color: var(--accent-strong);
+  font-size: var(--text-xs);
+  font-weight: 750;
+}
+
+.chapter-jump-control button:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.chapter-jump-control button:disabled,
+.chapter-jump-control input:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .chapter-list {

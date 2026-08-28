@@ -82,8 +82,8 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/style.css?v=bc02e1faf1ce">
-    <script src="/app.js?v=bfe21ee516b3" defer></script>
+    <link rel="stylesheet" href="/style.css?v=fc9752e9e40b">
+    <script src="/app.js?v=98a9aa715da7" defer></script>
   </head>
   <body class="dark">
     <section id="libraryView" class="library-view">
@@ -971,7 +971,14 @@
       <main class="layout">
         <aside class="sidebar" aria-label="Danh sách chương">
           <div class="library-header"><div><p class="eyebrow">Mục lục</p><h2>Chương</h2></div><span id="documentCount" class="count-badge">0</span></div>
-          <div class="chapter-picker"><label for="chapterSelect">Đi đến</label><select id="chapterSelect" disabled aria-label="Chọn chương"></select></div>
+          <div class="chapter-picker">
+            <label for="chapterJumpInput">Đi đến chương</label>
+            <div class="chapter-jump-control">
+              <input id="chapterJumpInput" type="number" min="1" step="1" inputmode="numeric" placeholder="—" disabled aria-label="Số chương muốn đọc">
+              <span id="chapterJumpTotal" class="chapter-jump-total" aria-hidden="true">/ 0</span>
+              <button id="chapterJumpButton" type="button" disabled>Đi</button>
+            </div>
+          </div>
           <nav id="chapterList" class="chapter-list" aria-label="Danh sách chương"></nav>
         </aside>
 

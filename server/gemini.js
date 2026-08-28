@@ -19,8 +19,11 @@ const QUOTA_SAFETY_MS = Math.max(10_000, Number(process.env.TRANSLATE_QUOTA_SAFE
 const defaultEngine = createTranslationEngine();
 
 function getModelsForApiKey() {
-  const primary = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-  const fallbacks = parseCsv(process.env.GEMINI_FALLBACK_MODELS || "gemini-flash-latest,gemini-2.5-pro");
+  const primary = process.env.GEMINI_MODEL || "gemini-3.6-flash";
+  // Keep a genuinely different fallback. Repeating the primary model made a
+  // quality rejection terminal even though this loop is designed to retry the
+  // same key with another model.
+  const fallbacks = parseCsv(process.env.GEMINI_FALLBACK_MODELS || "gemini-flash-latest");
   return [primary, ...fallbacks].filter((m, i, l) => m && l.indexOf(m) === i);
 }
 
@@ -634,8 +637,9 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
           });
 
       try {
+        const isGroq = apiKey.startsWith("gsk_");
         const result = await translateChunkWithModel(apiKey, model, prompt, {
-          maxTokens: outputTokenBudget(text)
+          maxTokens: isGroq ? outputTokenBudget(text) : 16384
         });
         const processedText = engine.postProcessTranslation(result.text, glossary);
         const quality = assessTranslation(text, processedText);
@@ -859,11 +863,12 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
 }
 
 async function translateWithGemini(apiKey, model, prompt, generationConfig = {}) {
-  const baseUrl = (process.env.GEMINI_BASE_URL || process.env.GOOGLE_AI_GATEWAY || "https://gateway.ai.cloudflare.com/v1/aa644d98f2377007f0fa98abcafe3d21/tram-chu/google-ai-studio").replace(/\/$/, "");
+  const baseUrl = (process.env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com").replace(/\/$/, "");
   const cfToken = process.env.CLOUDFLARE_API_TOKEN || "";
-  const url = `${baseUrl}/v1beta/models/${encodeURIComponent(
-    model
-  )}:generateContent`;
+  const isGateway = baseUrl.includes("gateway.ai.cloudflare.com");
+  const url = isGateway
+    ? `${baseUrl}/v1beta/models/${encodeURIComponent(model)}:generateContent`
+    : `${baseUrl}/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const controller = new AbortController();
@@ -875,7 +880,7 @@ async function translateWithGemini(apiKey, model, prompt, generationConfig = {})
         "x-goog-api-key": apiKey,
         "x-goog-api-client": "gl-node/gemini-translator"
       };
-      if (baseUrl.includes("gateway.ai.cloudflare.com") && cfToken) {
+      if (isGateway && cfToken) {
         headers["cf-aig-authorization"] = `Bearer ${cfToken}`;
       }
 
@@ -894,7 +899,7 @@ async function translateWithGemini(apiKey, model, prompt, generationConfig = {})
           generationConfig: {
             temperature: generationConfig.temperature ?? 0.2,
             maxOutputTokens: generationConfig.maxTokens || 16384,
-            ...(generationConfig.thinkingBudget !== undefined ? { thinkingConfig: { thinkingBudget: generationConfig.thinkingBudget } } : {}),
+            thinkingConfig: { thinkingBudget: generationConfig.thinkingBudget !== undefined ? generationConfig.thinkingBudget : 100 },
             ...(generationConfig.responseFormat === "json" ? { responseMimeType: "application/json" } : {})
           }
         })
@@ -995,7 +1000,7 @@ function assessTranslation(source, translation) {
   // 4. Kiểm tra bảo toàn số lượng và dữ liệu định lượng
   const outputNumbers = new Set(extractNumbers(output));
   const outputLower = output.toLowerCase();
-  const NUMBER_WORDS = {
+  const numberWords = {
     "0": ["không"],
     "1": ["một", "nhất", "đầu"],
     "2": ["hai", "nhị", "đôi"],
@@ -1016,9 +1021,8 @@ function assessTranslation(source, translation) {
   };
   const missingNumber = extractNumbers(source).find((number) => {
     if (!number || outputNumbers.has(number)) return false;
-    const words = NUMBER_WORDS[number];
-    if (words && words.some((w) => outputLower.includes(w))) return false;
-    return true;
+    const words = numberWords[number];
+    return !(words && words.some((word) => outputLower.includes(word)));
   });
   if (missingNumber) {
     return { acceptable: false, reason: `bản dịch làm mất số ${missingNumber}` };
@@ -1027,7 +1031,7 @@ function assessTranslation(source, translation) {
   // 5. Kiểm tra câu cụt / đứt gãy ở cuối đoạn
   const lastLine = output.split("\n").filter(Boolean).pop() || "";
   const endsWithIncompleteQuote = /["'“‘][^"'“”’]*$/.test(lastLine) && !/[.!?…~]["'”’]?$/.test(lastLine);
-  if (source.length > 500 && endsWithIncompleteQuote && !/[.!?…~]$/.test(output)) {
+  if (source.length > 500 && endsWithIncompleteQuote && !/[.!?…~]$/.test(output) && !output.endsWith('"') && !output.endsWith("'")) {
     return { acceptable: false, reason: "câu cuối bị đứt gãy / cụt dấu đóng ngoặc" };
   }
 

@@ -142,6 +142,38 @@ test("public catalog reads the configured NOVEL_STORAGE binding", async () => {
   assert.match(response.headers.get("cache-control"), /s-maxage=300/);
 });
 
+test("reader content proxy serves only public book JSON paths", async () => {
+  const storage = bucket({
+    "books/fanqie-123/index.json": JSON.stringify({ bookId: "fanqie-123", chapters: [{ n: 1 }] }),
+    "books/fanqie-123/r2/ch/1.json": JSON.stringify({ content: "Chương thử" }),
+    "private/api-keys.json": JSON.stringify({ secret: true })
+  });
+  const environment = env({ NOVEL_STORAGE: storage });
+
+  const indexResponse = await call(
+    "/api/reader/content?key=books%2Ffanqie-123%2Findex.json",
+    {},
+    environment
+  );
+  assert.equal(indexResponse.status, 200);
+  assert.equal((await indexResponse.json()).bookId, "fanqie-123");
+
+  const chapterResponse = await call(
+    "/api/reader/content?key=books%2Ffanqie-123%2Fr2%2Fch%2F1.json",
+    {},
+    environment
+  );
+  assert.equal(chapterResponse.status, 200);
+  assert.match(chapterResponse.headers.get("cache-control"), /immutable/);
+
+  const privateResponse = await call(
+    "/api/reader/content?key=private%2Fapi-keys.json",
+    {},
+    environment
+  );
+  assert.equal(privateResponse.status, 400);
+});
+
 test("login rejects a wrong password and issues a locked-down cookie for the right one", async () => {
   const wrong = await call("/api/admin/login", { method: "POST", body: { password: "sai" } });
   assert.equal(wrong.status, 401);

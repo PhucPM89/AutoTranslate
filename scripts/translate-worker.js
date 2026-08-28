@@ -394,7 +394,8 @@ async function main() {
               bookId: job.bookId,
               bookTitle: bTitle,
               glossary,
-              engine
+              engine,
+              provider: "gemini"
             });
             if (!output || !output.translation) throw new Error("Groq AI không trả bản dịch.");
             if (output.tokensUsed) {
@@ -691,6 +692,22 @@ async function listJobs(storage, onlyBook) {
     if (!state || !Array.isArray(state.chapters)) continue;
     const index = await readJson(storage, `books/${state.bookId}/index.json`);
     if (!index) continue;
+
+    // Recover work abandoned by an interrupted process. A `failed` entry is
+    // terminal (including poison chapters rejected for quality); resetting it on
+    // every cron made fully settled books re-enter the queue forever.
+    let stateModified = false;
+    for (const ch of state.chapters) {
+      if (ch.status === "processing" && (Date.now() - new Date(state.updatedAt || 0).getTime() > 15 * 60 * 1000)) {
+        ch.status = "pending";
+        ch.attempts = 0;
+        ch.nextAttemptAt = 0;
+        stateModified = true;
+      }
+    }
+    if (stateModified) {
+      await storage.put(object.key, JSON.stringify(state));
+    }
 
     const counts = summarize(state);
     if (isSettled(state)) continue;

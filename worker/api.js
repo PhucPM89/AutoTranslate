@@ -56,6 +56,7 @@ const UPLOAD_KINDS = {
 
 const ROUTES = {
   "/api/catalog": handlePublicCatalog,
+  "/api/reader/content": handlePublicReaderContent,
   "/api/reader/term-feedback": handleTermFeedback,
   "/api/admin/keys": handleAdminKeys,
   "/api/admin/session": handleSession,
@@ -124,6 +125,46 @@ async function handlePublicCatalog({ request, env }) {
   } catch {}
 
   throw fail(404, "Chưa có dữ liệu catalog.");
+}
+
+// Local development and Pages preview domains are not in the public CDN's CORS
+// allow-list. Proxy only the same JSON objects that are already public on the
+// CDN; the production reader keeps fetching the CDN directly and costs no Worker
+// invocation. A strict key allow-list prevents this endpoint becoming a generic
+// R2 object browser.
+async function handlePublicReaderContent({ request, env, url }) {
+  if (request.method !== "GET" && request.method !== "HEAD") return methodNotAllowed("GET, HEAD");
+  const key = String(url.searchParams.get("key") || "");
+  const allowed = key === "catalog/latest.json" ||
+    /^books\/[A-Za-z0-9][A-Za-z0-9._-]{0,99}\/index\.json$/.test(key) ||
+    /^books\/[A-Za-z0-9][A-Za-z0-9._-]{0,99}\/r\d{1,10}\/ch\/\d{1,10}\.json$/.test(key);
+  if (!allowed) throw fail(400, "Đường dẫn nội dung đọc không hợp lệ.");
+
+  let body = null;
+  const bucket = env.NOVEL_STORAGE || env.R2_READER;
+  if (bucket) {
+    const reader = createR2BindingStorage(bucket);
+    body = await reader.get(key).catch(() => null);
+  }
+
+  if (!body) {
+    const cdnBase = String(env.R2_PUBLIC_BASE_URL || "https://cdn.tram-chu.online").replace(/\/$/, "");
+    const upstream = await fetch(`${cdnBase}/${key}`, { signal: AbortSignal.timeout(10000) });
+    if (!upstream.ok) throw fail(upstream.status === 404 ? 404 : 502, "Không tải được nội dung đọc.");
+    body = await upstream.arrayBuffer();
+  }
+
+  const immutable = /\/r\d+\/ch\/\d+\.json$/.test(key);
+  return new Response(request.method === "HEAD" ? null : body, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": immutable
+        ? "public, max-age=31536000, immutable"
+        : "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
+      "Access-Control-Allow-Origin": "*"
+    }
+  });
 }
 
 // ---- admin session ---------------------------------------------------------

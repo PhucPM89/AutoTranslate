@@ -231,7 +231,9 @@ const els = {
   bookMeta: document.getElementById("bookMeta"),
   readerBookCover: document.getElementById("readerBookCover"),
   globalSearch: document.getElementById("globalSearch"),
-  chapterSelect: document.getElementById("chapterSelect"),
+  chapterJumpInput: document.getElementById("chapterJumpInput"),
+  chapterJumpTotal: document.getElementById("chapterJumpTotal"),
+  chapterJumpButton: document.getElementById("chapterJumpButton"),
   chapterList: document.getElementById("chapterList"),
   documentCount: document.getElementById("documentCount"),
   progressLabel: document.getElementById("progressLabel"),
@@ -539,7 +541,12 @@ function bindEvents() {
   els.nextChapter?.addEventListener("click", () => goToChapter(state.currentIndex + 1));
   els.bottomPrevChapter?.addEventListener("click", () => goToChapter(state.currentIndex - 1));
   els.bottomNextChapter?.addEventListener("click", () => goToChapter(state.currentIndex + 1));
-  els.chapterSelect?.addEventListener("change", () => goToChapter(Number(els.chapterSelect.value)));
+  els.chapterJumpButton?.addEventListener("click", goToChapterFromPicker);
+  els.chapterJumpInput?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    goToChapterFromPicker();
+  });
   els.chapterList?.addEventListener("click", (event) => {
     const item = event.target.closest(".document-item");
     if (item) goToChapter(Number(item.dataset.index));
@@ -819,8 +826,12 @@ async function loadLibraryManifest() {
 // The snapshot stores the same shape the manifest already uses, so the rest of the
 async function loadCatalogSnapshot() {
   const urls = [];
-  if (CDN_BASE) urls.push(`${cdnUrl("catalog/latest.json")}?t=${Date.now()}`);
-  urls.push(`/api/catalog?t=${Date.now()}`);
+  // The CDN intentionally allows the canonical site only. Local development and
+  // Pages previews go through the same-origin API instead of logging a CORS error
+  // and waiting for a doomed request before falling back.
+  if (shouldProxyReaderCdn()) urls.push(`/api/catalog?t=${Date.now()}`);
+  else if (CDN_BASE) urls.push(`${cdnUrl("catalog/latest.json")}?t=${Date.now()}`);
+  if (!urls.some((url) => url.startsWith("/api/catalog"))) urls.push(`/api/catalog?t=${Date.now()}`);
   urls.push("/library.json");
 
   for (const u of urls) {
@@ -1951,18 +1962,12 @@ function guessChapterTitle(html) {
 
 function renderChapterControls() {
   const query = els.globalSearch.value.trim().toLowerCase();
-  const optionFragment = document.createDocumentFragment();
   const listFragment = document.createDocumentFragment();
   let visibleCount = 0;
 
   state.chapters.forEach((chapter, index) => {
     const title = displayChapterTitle(index);
     if (query && !title.toLowerCase().includes(query)) return;
-
-    const option = document.createElement("option");
-    option.value = String(index);
-    option.textContent = title;
-    optionFragment.appendChild(option);
 
     const button = document.createElement("button");
     button.type = "button";
@@ -1979,12 +1984,25 @@ function renderChapterControls() {
 
   if (!visibleCount) appendTextElement(listFragment, "div", "empty-list", "Không tìm thấy chương phù hợp");
 
-  // One replaceChildren per render instead of two appends per chapter.
-  els.chapterSelect.replaceChildren(optionFragment);
   els.chapterList.replaceChildren(listFragment);
   els.documentCount.textContent = String(state.chapters.length);
-  els.chapterSelect.disabled = !state.chapters.length;
-  if (state.chapters.length) els.chapterSelect.value = String(state.currentIndex);
+  const hasChapters = Boolean(state.chapters.length);
+  els.chapterJumpInput.disabled = !hasChapters;
+  els.chapterJumpButton.disabled = !hasChapters;
+  els.chapterJumpInput.max = String(state.chapters.length || 1);
+  els.chapterJumpInput.value = hasChapters ? String(state.currentIndex + 1) : "";
+  els.chapterJumpTotal.textContent = `/ ${state.chapters.length}`;
+}
+
+function goToChapterFromPicker() {
+  if (!state.chapters.length) return;
+  const requestedChapter = Number.parseInt(els.chapterJumpInput.value, 10);
+  if (!Number.isFinite(requestedChapter)) {
+    els.chapterJumpInput.value = String(state.currentIndex + 1);
+    return;
+  }
+  goToChapter(requestedChapter - 1);
+  els.chapterJumpInput.select();
 }
 
 function goToChapter(index) {
@@ -2001,7 +2019,7 @@ function goToChapter(index) {
   els.progressBar.style.width = `${progress}%`;
   els.chapterCounter.textContent = chapterLabel;
   els.bottomChapterCounter.textContent = chapterLabel;
-  els.chapterSelect.value = String(state.currentIndex);
+  els.chapterJumpInput.value = String(state.currentIndex + 1);
 
   if (state.title) {
     const coverUrl = state.cover ? (state.cover.startsWith("http") ? state.cover : (state.cover.startsWith("/") ? `${window.location.origin}${state.cover}` : `${CDN_BASE}/${state.cover}`)) : null;
@@ -2024,7 +2042,19 @@ function goToChapter(index) {
   els.translateButton.disabled = false;
 
   els.chapterList.querySelector(".document-item.active")?.classList.remove("active");
-  els.chapterList.querySelector(`.document-item[data-index="${state.currentIndex}"]`)?.classList.add("active");
+  const activeChapterItem = els.chapterList.querySelector(`.document-item[data-index="${state.currentIndex}"]`);
+  activeChapterItem?.classList.add("active");
+  // Keep keyboard jumps and direct chapter links visible in the sidebar. The
+  // old native select hid this problem by opening its own full-screen menu.
+  if (activeChapterItem && getComputedStyle(els.chapterList).display !== "none") {
+    requestAnimationFrame(() => {
+      const centeredTop = activeChapterItem.offsetTop -
+        (els.chapterList.clientHeight - activeChapterItem.offsetHeight) / 2;
+      els.chapterList.scrollTop = Math.max(0, centeredTop);
+    });
+  }
+
+  scrollReaderToChapterStart();
 
   if (getAuthUser()) {
     const expResult = addReaderExp(5, "read_chapter");
@@ -2047,6 +2077,28 @@ function goToChapter(index) {
   setTimeout(() => preloadNextChapter(state.currentIndex + 1), 600);
 }
 
+function scrollReaderToChapterStart() {
+  // Chapter navigation can happen while the reader is still being revealed.
+  // Two animation frames let responsive layout settle before measuring it.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (!els.readerView || els.readerView.hidden) return;
+    const readerBar = els.readerView.querySelector(".reader-bar");
+    if (!readerBar) return;
+
+    const topbar = els.readerView.querySelector(".topbar");
+    const topbarPosition = topbar ? getComputedStyle(topbar).position : "static";
+    const stickyOffset = topbar && (topbarPosition === "sticky" || topbarPosition === "fixed")
+      ? topbar.getBoundingClientRect().height
+      : 0;
+    const targetTop = window.scrollY + readerBar.getBoundingClientRect().top - stickyOffset;
+
+    // Long chapters can be tens of screens tall. An immediate jump avoids a
+    // multi-second smooth-scroll animation and guarantees the new title is in
+    // view before its CDN body finishes loading.
+    window.scrollTo({ top: Math.max(0, Math.round(targetTop)), behavior: "auto" });
+  }));
+}
+
 function shouldPreloadNext() {
   if (typeof navigator === "undefined") return true;
   const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
@@ -2065,7 +2117,7 @@ function preloadNextChapter(nextIndex) {
   const nextChapter = state.chapters[nextIndex];
   if (state.mode === "cdn" && state.cdnTemplate && nextChapter) {
     const url = chapterUrlFor({ bookId: bookIdFromState(), revision: revisionFromState(), chapterUrlTemplate: state.cdnTemplate }, nextChapter.chapterNumber);
-    fetch(url)
+    fetch(readerContentUrl(url))
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.content && data.translationStatus === "completed") {
@@ -2113,7 +2165,6 @@ function startAutoScroll() {
     if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 30) {
       if (state.currentIndex < state.chapters.length - 1) {
         goToChapter(state.currentIndex + 1);
-        window.scrollTo({ top: 0, behavior: "smooth" });
       } else {
         stopAutoScroll();
         return;
@@ -3425,8 +3476,11 @@ function resetReader(message) {
   els.progressLabel.textContent = "0%";
   els.progressBar.style.width = "0%";
   els.documentCount.textContent = "0";
-  els.chapterSelect.innerHTML = "";
-  els.chapterSelect.disabled = true;
+  els.chapterJumpInput.value = "";
+  els.chapterJumpInput.disabled = true;
+  els.chapterJumpInput.max = "1";
+  els.chapterJumpButton.disabled = true;
+  els.chapterJumpTotal.textContent = "/ 0";
   els.chapterList.innerHTML = "";
   els.prevChapter.disabled = true;
   els.bottomPrevChapter.disabled = true;
@@ -3852,24 +3906,43 @@ function cdnUrl(pathname) {
   return `${CDN_BASE}/${String(pathname).replace(/^\//, "")}`;
 }
 
+function shouldProxyReaderCdn() {
+  if (typeof window === "undefined") return false;
+  return window.location.hostname !== "tram-chu.online";
+}
+
+function readerContentUrl(url) {
+  if (!shouldProxyReaderCdn()) return url;
+  try {
+    const parsed = new URL(url, window.location.origin);
+    const cdn = new URL(CDN_BASE);
+    if (parsed.origin !== cdn.origin) return url;
+    const key = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
+    return `/api/reader/content?key=${encodeURIComponent(key)}`;
+  } catch {
+    return url;
+  }
+}
+
 async function fetchBookIndex(bookId) {
   const clean = cleanBookId(bookId);
   if (!clean) return null;
-  const url = cdnUrl(`books/${clean}/index.json`);
+  const cdnIndexUrl = cdnUrl(`books/${clean}/index.json`);
+  const url = readerContentUrl(cdnIndexUrl);
   try {
     const response = await fetch(url);
     if (!response.ok) {
-      console.error(`fetchBookIndex failed: HTTP ${response.status} from ${url}`);
+      console.error(`fetchBookIndex failed: HTTP ${response.status} from ${cdnIndexUrl}`);
       return null;
     }
     const index = await response.json();
     if (!index || !Array.isArray(index.chapters) || !index.chapters.length) {
-      console.error(`fetchBookIndex invalid chapters payload from ${url}:`, index);
+      console.error(`fetchBookIndex invalid chapters payload from ${cdnIndexUrl}:`, index);
       return null;
     }
     return index;
   } catch (error) {
-    console.error(`fetchBookIndex error fetching ${url}:`, error);
+    console.error(`fetchBookIndex error fetching ${cdnIndexUrl}:`, error);
     return null;
   }
 }
@@ -3939,7 +4012,7 @@ async function loadCdnChapter(index, force = false) {
     const chapterUrl = chapterUrlFor({ bookId: bookIdFromState(), revision: revisionFromState(), chapterUrlTemplate: state.cdnTemplate }, chapter.chapterNumber);
     // Revisioned chapter URLs are immutable. Let the browser and Cloudflare use
     // that cache; a timestamp query here turned every navigation into a cache miss.
-    const response = await fetch(chapterUrl, force ? { cache: "reload" } : undefined);
+    const response = await fetch(readerContentUrl(chapterUrl), force ? { cache: "reload" } : undefined);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const document_ = await response.json();
     if (index !== state.currentIndex) return;
@@ -4056,8 +4129,6 @@ function syncChapterUiTitle(index) {
   const itemEl = els.chapterList?.querySelector(`.document-item[data-index="${index}"] span:not(.document-index)`);
   if (itemEl) itemEl.textContent = documentLabel;
 
-  const selectOpt = els.chapterSelect?.querySelector(`option[value="${index}"]`);
-  if (selectOpt) selectOpt.textContent = documentLabel;
 }
 
 function cleanBookId(rawId) {

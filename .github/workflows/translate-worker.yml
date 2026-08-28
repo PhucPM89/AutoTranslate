@@ -42,12 +42,10 @@ jobs:
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
-      GEMINI_MODEL: ${{ secrets.GEMINI_MODEL || 'gemini-2.5-flash' }}
-      GEMINI_FALLBACK_MODELS: ${{ secrets.GEMINI_FALLBACK_MODELS || 'gemini-flash-latest,gemini-2.5-pro' }}
+      GEMINI_MODEL: ${{ secrets.GEMINI_MODEL || 'gemini-3.6-flash' }}
+      GEMINI_FALLBACK_MODELS: ${{ secrets.GEMINI_FALLBACK_MODELS || 'gemini-flash-latest' }}
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       GROQ_API_KEYS: ${{ secrets.GROQ_API_KEYS }}
-      # Translation is a direct generation task. GPT-OSS-120B and Qwen thinking
-      # mode burn most of the free TPD on hidden reasoning before producing text.
       GROQ_MODEL: "qwen/qwen3.6-27b"
       GROQ_FALLBACK_MODELS: "qwen/qwen3.6-27b"
       R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
@@ -58,9 +56,7 @@ jobs:
       R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      # 1,800 Chinese characters frequently expand beyond Groq's 4,096 output
-      # tokens. Smaller chunks avoid publishing truncated translations.
-      GEMINI_CHUNK_SIZE: "800"
+      GEMINI_CHUNK_SIZE: "1800"
       GEMINI_TRANSLATE_CONCURRENCY: "1"
       TRANSLATE_MAX_KEYS_PER_CHUNK: "3"
       TRANSLATE_SPACING_MS: ${{ vars.TRANSLATE_SPACING_MS || '500' }}
