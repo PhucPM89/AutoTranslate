@@ -71,6 +71,8 @@ def supabase_patch_book(book_id, total, translated, rev=1):
         "revision": rev,
         "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     }
+    if total > 0 and translated >= total:
+        payload["status"] = "Hoàn thành"
     try:
         requests.patch(url, headers=headers, json=payload, timeout=10)
     except Exception as e:
@@ -248,6 +250,8 @@ def run_translation_loop():
             r2_put_json(f"books/{book_id}/r{rev}/ch/{n}.json", chapter_doc)
             
             ch["status"] = "completed"
+            ch["provider"] = "hachimi"
+            ch["model"] = MODEL_ID
             completed_count += 1
             
             print(f"  ✓ ch {n} [{trans_title[:30]}...] ({dur:.1f}s) | Tiến độ: {completed_count}/{total_ch} ({(completed_count/total_ch*100):.1f}%)")
@@ -257,6 +261,8 @@ def run_translation_loop():
                 if index_doc and "chapters" in index_doc:
                     index_doc["translatedChapters"] = completed_count
                     index_doc["updatedAt"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                    if total_ch > 0 and completed_count >= total_ch:
+                        index_doc["status"] = "Hoàn thành"
                     r2_put_json(f"books/{book_id}/index.json", index_doc)
                 supabase_patch_book(book_id, total_ch, completed_count, rev)
 

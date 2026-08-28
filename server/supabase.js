@@ -57,11 +57,16 @@ function createSupabase(env = process.env, { role = "service" } = {}) {
     // source to "admin" and source_id to null, which made the crawler lose track
     // of its own books and queue them for download all over again. A component
     // writes only the columns it owns.
-    async updateBookProgress(bookId, { totalChapters, translatedChapters, revision }) {
+    async updateBookProgress(bookId, { totalChapters, translatedChapters, revision, status }) {
       const patch = { updated_at: new Date().toISOString() };
       if (Number.isFinite(totalChapters)) patch.total_chapters = totalChapters;
       if (Number.isFinite(translatedChapters)) patch.translated_chapters = translatedChapters;
       if (Number.isFinite(revision)) patch.revision = revision;
+      if (status) {
+        patch.status = status;
+      } else if (Number.isFinite(totalChapters) && Number.isFinite(translatedChapters) && totalChapters > 0 && translatedChapters >= totalChapters) {
+        patch.status = "Hoàn thành";
+      }
       return request("books", {
         method: "PATCH",
         query: `?id=eq.${encodeURIComponent(bookId)}`,

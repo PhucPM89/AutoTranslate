@@ -752,6 +752,10 @@ async function refreshBookOutputs({ storage, db, job, state }) {
       qaReviewed: entry.qaReviewed
     };
   });
+  const completed = chapters.filter((chapter) => chapter.translationStatus === "completed").length;
+  const isFullBook = chapters.length > 0 && completed >= chapters.length;
+  const bookStatus = isFullBook ? "Hoàn thành" : (index.status || "Đang cập nhật");
+
   await publishIndex({
     storage,
     book: {
@@ -759,7 +763,7 @@ async function refreshBookOutputs({ storage, db, job, state }) {
       title: index.title,
       author: index.author,
       genre: index.genre,
-      status: index.status,
+      status: bookStatus,
       description: index.description,
       cover: index.cover
     },
@@ -772,12 +776,12 @@ async function refreshBookOutputs({ storage, db, job, state }) {
     await db
       .upsertChapters(job.bookId, job.revision, chapters)
       .catch((error) => console.warn(`  (Supabase chapters sync lỗi: ${error.message})`));
-    const completed = chapters.filter((chapter) => chapter.translationStatus === "completed").length;
     // Counts only: title, cover and provenance belong to whoever ingested the book.
     await db
       .updateBookProgress(job.bookId, {
         totalChapters: chapters.length,
         translatedChapters: completed,
+        status: bookStatus,
         revision: job.revision
       })
       .catch((error) => console.warn(`  (Supabase book update lỗi: ${error.message})`));

@@ -278,6 +278,8 @@ def run_autonomous_translation():
             # Đánh dấu chương hoàn thành trong index
             ch["translationStatus"] = "completed"
             ch["title"] = trans_res["title"]
+            ch["provider"] = "hachimi"
+            ch["model"] = MODEL_ID
             translated_count += 1
 
             pct = round((translated_count / len(chapters)) * 100)
@@ -285,13 +287,19 @@ def run_autonomous_translation():
 
             # Cập nhật Supabase và index sau mỗi 10 chương hoặc khi hoàn thành
             if translated_count % 10 == 0 or translated_count == len(chapters):
+                is_full = translated_count >= len(chapters) and len(chapters) > 0
                 index_data["translatedChapters"] = translated_count
                 index_data["updatedAt"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                if is_full:
+                    index_data["status"] = "Hoàn thành"
                 r2_put_json(s3, index_key, index_data, cache_control="no-cache")
-                supabase_request(f"books?id=eq.{book_id}", method="PATCH", body={
+                patch_body = {
                     "translated_chapters": translated_count,
                     "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-                })
+                }
+                if is_full:
+                    patch_body["status"] = "Hoàn thành"
+                supabase_request(f"books?id=eq.{book_id}", method="PATCH", body=patch_body)
 
         print(f"\n🎉 Hoàn tất dịch toàn bộ truyện {book_id}!\n")
 
