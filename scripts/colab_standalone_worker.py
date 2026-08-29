@@ -13,13 +13,14 @@ import time
 from collections import Counter
 from pathlib import Path
 
+print("[bootstrap 1/4] Python worker đã bắt đầu; đang import thư viện...", flush=True)
 import boto3
 import ctranslate2
 import requests
-import torch
 from botocore.config import Config
 from huggingface_hub import snapshot_download
 from transformers import AutoTokenizer
+print("[bootstrap 2/4] Import thư viện hoàn tất; đang kiểm tra cấu hình...", flush=True)
 
 ROOT = Path(__file__).resolve().parents[1]
 import sys
@@ -51,6 +52,7 @@ if missing:
     raise RuntimeError("Thiếu Colab Secrets: " + ", ".join(missing))
 if WORKER_INDEX < 0 or WORKER_INDEX >= TOTAL_WORKERS:
     raise RuntimeError("WORKER_INDEX phải nằm trong khoảng 0..TOTAL_WORKERS-1")
+print("[bootstrap 3/4] Cấu hình hợp lệ; đang khởi tạo kết nối R2...", flush=True)
 
 s3_client = boto3.client(
     "s3",
@@ -60,6 +62,7 @@ s3_client = boto3.client(
     region_name="auto",
     config=Config(signature_version="s3v4", retries={"max_attempts": 5, "mode": "standard"}),
 )
+print("[bootstrap 4/4] R2 client sẵn sàng; đang chuẩn bị model...", flush=True)
 
 
 def r2_get_json(key):
@@ -260,7 +263,7 @@ if not os.path.exists(ct2_dir):
             ct2_dir = candidate_root
             break
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cuda" if ctranslate2.get_cuda_device_count() > 0 else "cpu"
 compute_type = "int8_float16" if device == "cuda" else "int8"
 translator = ctranslate2.Translator(ct2_dir, device=device, compute_type=compute_type, inter_threads=2, intra_threads=4)
 print(f"Model sẵn sàng trên {device.upper()} ({compute_type}).\n")
