@@ -45,6 +45,7 @@ const STATUS_KEY = "jobs/translate-status.json";
 const CURSOR_KEY = "jobs/semantic-review-cursor.json";
 const DAILY_MAX_INPUT_TOKENS = Math.max(1, Number(process.env.QA_DAILY_MAX_INPUT_TOKENS || 250_000));
 const DAILY_MAX_REQUESTS = Math.max(1, Number(process.env.QA_DAILY_MAX_REQUESTS || 100));
+const MAX_REPAIR_PASSES = Math.max(1, Math.min(3, Number(process.env.QA_MAX_REPAIR_PASSES || 2)));
 
 async function readJson(key) {
   try {
@@ -138,37 +139,56 @@ async function processClaim(queueKey, queue, entry, keys) {
   const initialReview = parseSemanticReview(response.text, { source: original.content, draft: chapter.content });
   const repaired = initialReview.decision !== "pass";
   let content = chapter.content;
+  let review = initialReview;
+  let verifierModel = response.model;
   if (repaired) {
-    let repairedText = initialReview.correctedTranslation;
-    if (!repairedText) {
+    let repairDraft = chapter.content;
+    let repairIssues = initialReview.issues;
+    let prebuiltRepair = initialReview.correctedTranslation;
+    let lastRepairError = "";
+    let passed = false;
+    for (let repairPass = 1; repairPass <= MAX_REPAIR_PASSES; repairPass += 1) {
+      let repairedText = prebuiltRepair;
+      prebuiltRepair = "";
+      if (!repairedText) {
       const repairPrompt = buildSemanticRepairPrompt({
-        bookTitle: index?.title || bookId, chapterNumber, source: original.content, draft: chapter.content,
-        glossary, issues: initialReview.issues, storyBible, previousContext: previous?.content || ""
+          bookTitle: index?.title || bookId, chapterNumber, source: original.content, draft: repairDraft,
+          glossary, issues: repairIssues, storyBible, previousContext: previous?.content || ""
       });
       const repairResponse = await generateBudgeted(repairPrompt, keys, { temperature: 0.15, thinkingBudget: 128, responseFormat: "text" });
       repairedText = repairResponse.text;
+      }
+      content = engine.postProcessTranslation(repairedText, glossary);
+      const formalQuality = require("../server/translation-quality").evaluateTranslationQuality(original.content, content);
+      if (formalQuality.qaRequired) {
+        lastRepairError = `Bản Gemini sửa lần ${repairPass} không hợp lệ: ${formalQuality.qaIssues.join("; ")}`;
+        repairDraft = content;
+        repairIssues = formalQuality.qaIssues.map((explanation) => ({ type: "formal_quality", severity: "major", explanation }));
+        continue;
+      }
+
+      // A model correcting its own answer is not proof that the correction is
+      // faithful. Every formally-valid repair gets a fresh source-vs-output pass.
+      const verifyPrompt = buildSemanticReviewPrompt({
+        bookTitle: index?.title || bookId,
+        chapterNumber,
+        source: original.content,
+        draft: content,
+        glossary,
+        previousContext: previous?.content || ""
+      });
+      const verification = await generateBudgeted(verifyPrompt, keys, { temperature: 0.05, thinkingBudget: 256 });
+      review = parseSemanticReview(verification.text, { source: original.content, draft: content });
+      verifierModel = verification.model;
+      if (review.decision === "pass") {
+        passed = true;
+        break;
+      }
+      lastRepairError = `Bản Gemini sửa lần ${repairPass} chưa vượt qua semantic verification.`;
+      repairDraft = content;
+      repairIssues = review.issues;
     }
-    content = engine.postProcessTranslation(repairedText, glossary);
-    const formalQuality = require("../server/translation-quality").evaluateTranslationQuality(original.content, content);
-    if (formalQuality.qaRequired) throw new Error(`Bản Gemini sửa không hợp lệ: ${formalQuality.qaIssues.join("; ")}`);
-  }
-  let review = initialReview;
-  let verifierModel = response.model;
-  // A model correcting its own answer is not proof that the correction is
-  // faithful. All repaired chapters receive a second source-vs-output pass.
-  if (repaired) {
-    const verifyPrompt = buildSemanticReviewPrompt({
-      bookTitle: index?.title || bookId,
-      chapterNumber,
-      source: original.content,
-      draft: content,
-      glossary,
-      previousContext: previous?.content || ""
-    });
-    const verification = await generateBudgeted(verifyPrompt, keys, { temperature: 0.05, thinkingBudget: 256 });
-    review = parseSemanticReview(verification.text, { source: original.content, draft: content });
-    verifierModel = verification.model;
-    if (review.decision !== "pass") throw new Error("Bản Gemini sửa chưa vượt qua vòng semantic verification độc lập.");
+    if (!passed) throw new Error(lastRepairError || "Bản Gemini sửa chưa đạt chuẩn sau các vòng refinement.");
   }
   const now = new Date().toISOString();
   const averageScore = Object.values(review.scores).reduce((sum, score) => sum + score, 0) / 4;

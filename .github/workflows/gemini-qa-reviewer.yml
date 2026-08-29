@@ -46,6 +46,7 @@ jobs:
       QA_MAX_CHAPTERS_INPUT: ${{ inputs.max_chapters || '20' }}
       QA_DAILY_MAX_INPUT_TOKENS: ${{ vars.QA_DAILY_MAX_INPUT_TOKENS || '250000' }}
       QA_DAILY_MAX_REQUESTS: ${{ vars.QA_DAILY_MAX_REQUESTS || '100' }}
+      QA_MAX_REPAIR_PASSES: ${{ vars.QA_MAX_REPAIR_PASSES || '2' }}
     steps:
       - uses: actions/checkout@v4
 

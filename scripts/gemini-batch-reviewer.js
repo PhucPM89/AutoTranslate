@@ -16,6 +16,7 @@ loadEnv(path.join(process.cwd(), ".env"));
 
 const { createStorage, LAYOUT } = require("../server/storage");
 const { createTranslationEngine } = require("../server/translation-engine");
+const { isProtectedGeminiDocument } = require("../server/translation-version");
 const { buildSemanticReviewPrompt } = require("../server/semantic-review");
 const { createGeminiBatchClient, batchResponseText } = require("../server/gemini-batch");
 const { estimateTokens, canReserveBudget } = require("../server/qa-budget");
@@ -141,6 +142,7 @@ async function prepareCandidate(queue, entry) {
     readJson(LAYOUT.storyBible(bookId)), readJson(LAYOUT.storyContext(bookId))
   ]);
   const chapter = draft || published;
+  if (isProtectedGeminiDocument(published)) return null;
   if (!chapter?.content || !original?.content) return null;
   const prompt = buildSemanticReviewPrompt({
     bookTitle: index?.title || bookId, chapterNumber, source: original.content, draft: chapter.content,

@@ -3,7 +3,7 @@
 ## Trạng thái dữ liệu
 
 ```text
-original → Hachimi private draft → semantic review → repair/verify → approved publish
+original → Hachimi private draft → semantic review → bounded refinement/verify → approved publish
 ```
 
 - Bản gốc: `books/{bookId}/r{revision}/ch/{n}.original.json`
@@ -24,6 +24,8 @@ Realtime lane chạy `scripts/gemini-qa-reviewer.js`, phù hợp chương mới.
 Backlog lane chạy `scripts/gemini-batch-reviewer.js`. Batch chỉ tạo kết quả review; kết quả vẫn quay lại realtime reviewer để parse, repair, verify và publish theo cùng một chuẩn.
 
 Batch dùng `displayName` xác định và manifest `prepared` trước khi gọi provider. Khi tiến trình chết giữa lúc tạo job, lượt sau tìm lại job theo `displayName`, tránh gửi trùng một Batch không idempotent.
+
+Nếu provider từ chối lúc tạo Batch, worker tự trả toàn bộ entry từ `batch_processing` về `pending`, đánh dấu manifest `failed` và không tự gửi lại. Sau khi đã xử lý billing/tier/model, chủ động chạy lại bằng `node scripts/gemini-batch-reviewer.js --retry-failed-batch`.
 
 ## Triển khai lần đầu
 
@@ -66,5 +68,6 @@ Schedule Batch chỉ hoạt động khi repository variable `QA_BATCH_ENABLED=tr
 - `QA_BATCH_SIZE`: mặc định `20`, tối đa `100`.
 - `QA_BATCH_MAX_INPUT_TOKENS`: mặc định `200000`.
 - `QA_MAX_ATTEMPTS`: mặc định `4`; lỗi quota không tiêu hao attempt.
+- `QA_MAX_REPAIR_PASSES`: mặc định `2`, tối đa `3`; mỗi pass phải vượt quality gate và semantic verification mới được publish.
 
 Không tăng các giới hạn trước khi đo tỷ lệ pass/repair, token thực tế và kiểm tra thủ công mẫu chương đã approved.

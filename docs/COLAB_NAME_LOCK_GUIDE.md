@@ -91,7 +91,7 @@ notebook và không sử dụng lại những khóa từng xuất hiện trong c
 
 # Semantic QA sau Hachimi
 
-Từ pipeline `semantic-v1`, mỗi chương do Hachimi `hachimi-quality-v2` tạo ra được đưa vào queue riêng của bộ truyện tại:
+Từ pipeline `semantic-v2`, mỗi chương do Hachimi `hachimi-quality-v2` tạo ra được đưa vào queue riêng của bộ truyện tại:
 
 ```text
 jobs/{bookId}/semantic-review.json
