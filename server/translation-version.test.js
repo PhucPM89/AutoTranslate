@@ -9,7 +9,7 @@ const {
   isProtectedGeminiDocument
 } = require("./translation-version");
 
-test("name-lock campaign selects legacy chapters and skips completed checkpoints", () => {
+test("quality campaign selects legacy chapters and skips completed checkpoints", () => {
   const legacy = { n: 1, status: "completed" };
   const rebuilt = { n: 2, status: "completed", translationVersion: TRANSLATION_VERSION };
   assert.equal(needsTranslationVersion(legacy), true);
@@ -23,7 +23,7 @@ test("Hachimi campaigns protect every supported Gemini marker", () => {
   assert.equal(isProtectedGeminiDocument({ provider: "hachimi", model: "HachimiMT" }), false);
 });
 
-test("name-lock checkpoint survives a serialized queue restart", () => {
+test("quality checkpoint survives a serialized queue restart", () => {
   const entry = stampTranslationVersion({ n: 1, status: "completed" });
   const reloaded = JSON.parse(JSON.stringify(entry));
   assert.equal(reloaded.translationVersion, TRANSLATION_VERSION);

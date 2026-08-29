@@ -1,4 +1,4 @@
-# Tái dịch Hachimi có glossary, giữ nguyên Gemini
+# Tái dịch Hachimi chất lượng v2, giữ nguyên Gemini
 
 Worker chuẩn là `scripts/colab_standalone_worker.py`. Không dán khóa R2 hoặc
 Supabase trực tiếp vào notebook.
@@ -25,7 +25,7 @@ quyền truy cập cho năm giá trị:
 Mỗi notebook đặt `WORKER_INDEX` khác nhau từ `0` đến `TOTAL_WORKERS - 1`.
 
 ```python
-#@title Hachimi name-lock worker
+#@title Hachimi quality-v2 worker
 WORKER_INDEX = 0 #@param {type:"integer"}
 TOTAL_WORKERS = 7 #@param {type:"integer"}
 MODEL_ID = "ngocdang83/HachimiMT-60-QT" #@param ["ngocdang83/HachimiMT-60-QT", "ngocdang83/HachimiMT-60-zh-vi"]
@@ -59,9 +59,13 @@ subprocess.run(["python", "-u", str(repo / "scripts/colab_standalone_worker.py")
 
 - Chương có `provider=gemini`, model chứa `gemini`, hoặc `qaReviewed=true` luôn
   được giữ nguyên, kể cả trong chiến dịch tái dịch toàn thư viện.
-- Chỉ chương Hachimi/convert/cũ chưa có `translationVersion=name-lock-v1` được
+- Chỉ chương Hachimi/convert/cũ chưa có `translationVersion=hachimi-quality-v2` được
   tái dịch.
 - Glossary được khai thác từ toàn bộ bản gốc của từng bộ trước khi dịch.
+- Đoạn dài được tách theo câu và ghép lại đầy đủ, không còn dùng `truncation`
+  làm mất phần cuối; decoder dùng beam search và bộ lọc chống lặp.
+- Chương có dấu hiệu bị cụt, sót chữ Hán hoặc rò token khóa tên được gắn
+  `qaRequired=true` để Gemini QA xử lý chọn lọc.
 - Mỗi chương được checkpoint sau khi upload. Colab ngắt thì chạy lại cùng
   `WORKER_INDEX` và `TOTAL_WORKERS`; chương hoàn tất sẽ được bỏ qua.
 - Không thay đổi `TOTAL_WORKERS` giữa một chiến dịch vì phép chia bộ cho worker

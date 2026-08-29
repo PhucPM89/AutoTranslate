@@ -71,7 +71,10 @@ async function readJson(stor, key) {
 }
 
 function auditChapterQuality(chapterDoc, originalText = "") {
-  const issues = [];
+  const issues = Array.isArray(chapterDoc?.qaIssues) ? [...chapterDoc.qaIssues] : [];
+  if (chapterDoc?.qaRequired && issues.length === 0) {
+    issues.push("Hachimi yêu cầu Gemini hậu kiểm");
+  }
   const content = String(chapterDoc?.content || "").trim();
 
   if (!content) {
@@ -102,7 +105,7 @@ function auditChapterQuality(chapterDoc, originalText = "") {
 
   return {
     ok: issues.length === 0,
-    issues,
+    issues: [...new Set(issues)],
     score
   };
 }
@@ -265,6 +268,9 @@ async function runQaReview() {
                 qaReviewed: true,
                 qaReviewedAt: new Date().toISOString(),
                 qaIssuesFixed: audit.issues,
+                qaRequired: false,
+                qaIssues: [],
+                qualityScore: 10,
                 fluencyScore: 10,
                 characters: polishedContent.length,
                 updatedAt: new Date().toISOString()
@@ -278,6 +284,8 @@ async function runQaReview() {
                 index.chapters[idx].provider = "gemini";
                 index.chapters[idx].model = "gemini-3.6-flash";
                 index.chapters[idx].qaReviewed = true;
+                index.chapters[idx].qaRequired = false;
+                index.chapters[idx].qualityScore = 10;
                 index.chapters[idx].translationStatus = "completed";
                 index.chapters[idx].status = "completed";
               }

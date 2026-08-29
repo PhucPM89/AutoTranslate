@@ -3,7 +3,7 @@
 # - Never overwrites Gemini / Gemini-QA chapters.
 # - Builds a per-book character glossary from the complete source book.
 # - Protects glossary terms before NMT and restores them afterwards.
-# - Resumes the name-lock-v1 campaign per chapter and supports Colab sharding.
+# - Resumes the hachimi-quality-v2 campaign per chapter and supports Colab sharding.
 # ==============================================================================
 
 import json
@@ -21,8 +21,13 @@ from botocore.config import Config
 from huggingface_hub import snapshot_download
 from transformers import AutoTokenizer
 
+ROOT = Path(__file__).resolve().parents[1]
+import sys
+sys.path.insert(0, str(ROOT / "colab"))
+from hachimi_text import evaluate_translation_quality, split_text_by_token_budget
+
 MODEL_ID = os.environ.get("HACHIMI_MODEL_ID", "ngocdang83/HachimiMT-60-QT")
-TRANSLATION_VERSION = "name-lock-v1"
+TRANSLATION_VERSION = "hachimi-quality-v2"
 WORKER_INDEX = int(os.environ.get("WORKER_INDEX", "0"))
 TOTAL_WORKERS = max(1, int(os.environ.get("TOTAL_WORKERS", "1")))
 BATCH_SIZE = max(1, int(os.environ.get("HACHIMI_BATCH_SIZE", "32")))
@@ -123,7 +128,6 @@ def is_gemini_document(document):
 
 
 # Per-book character glossary (same conservative policy as the Node worker).
-ROOT = Path(__file__).resolve().parents[1]
 HAN_RE = re.compile(r"^[\u3400-\u9fff]+$")
 PUNCTUATION = set("，。！？、：；“”\"'（）\n\r\t ")
 PERSON_ACTIONS = set("说道问答喊叫笑哭看望听想点摇抬低转走来去退进出站坐跪起落冲追挡接握拿拔挥施运催皱挑瞪闭睁咬拍摸推拉抱扶杀打骂喝叹哼惊怒喜愣沉")
@@ -273,18 +277,27 @@ def translate_paragraphs(paragraphs, protector):
         if not source:
             continue
         protected, replacements = protector.protect(source)
-        prepared.append(protected)
-        metadata.append((index, replacements))
+        for piece in split_text_by_token_budget(protected, tokenizer, max_tokens=440):
+            prepared.append(piece)
+            metadata.append((index, replacements))
 
     for offset in range(0, len(prepared), BATCH_SIZE):
         texts = prepared[offset:offset + BATCH_SIZE]
-        source_tokens = [tokenizer.convert_ids_to_tokens(tokenizer.encode(text, truncation=True, max_length=480)) for text in texts]
-        results = translator.translate_batch(source_tokens, beam_size=4, max_decoding_length=512)
+        source_tokens = [tokenizer.convert_ids_to_tokens(tokenizer.encode(text, truncation=False)) for text in texts]
+        results = translator.translate_batch(
+            source_tokens,
+            beam_size=4,
+            max_input_length=512,
+            max_decoding_length=512,
+            repetition_penalty=1.2,
+            no_repeat_ngram_size=2,
+        )
         for inner_index, result in enumerate(results):
             output_index, replacements = metadata[offset + inner_index]
             token_ids = tokenizer.convert_tokens_to_ids(result.hypotheses[0])
             translated = tokenizer.decode(token_ids, skip_special_tokens=True)
-            output[output_index] = clean_text(protector.restore(translated, replacements))
+            translated = clean_text(protector.restore(translated, replacements))
+            output[output_index] = " ".join(part for part in (output[output_index], translated) if part)
     return output
 
 
@@ -413,20 +426,25 @@ def run_translation_loop():
                 "translationStatus": "completed", "provider": "hachimi", "model": MODEL_ID,
                 "translationVersion": TRANSLATION_VERSION, "characters": len(content), "updatedAt": utc_now(),
             }
+            quality = evaluate_translation_quality(original.get("content", ""), content)
+            document.update(quality)
             r2_put_json(f"books/{book_id}/r{revision}/ch/{number}.json", document)
             chapter.update({
                 "status": "completed", "translationVersion": TRANSLATION_VERSION,
                 "provider": "hachimi", "model": MODEL_ID, "attempts": 0,
                 "lastError": "", "nextAttemptAt": 0, "completedAt": utc_now(),
+                **quality,
             })
             index_entry = index_by_number.get(number)
             if index_entry is not None:
                 index_entry.update({
                     "title": title, "status": "completed", "translationStatus": "completed",
                     "translationVersion": TRANSLATION_VERSION, "provider": "hachimi", "model": MODEL_ID,
+                    **quality,
                 })
             completed_count += 1
-            print(f"  ✓ ch {number} ({time.time() - started:.1f}s) · {completed_count}/{len(chapters)}")
+            qa_label = f" · chờ Gemini QA: {', '.join(quality['qaIssues'])}" if quality["qaRequired"] else ""
+            print(f"  ✓ ch {number} ({time.time() - started:.1f}s) · {completed_count}/{len(chapters)}{qa_label}")
 
             if position % 5 == 0 or position == len(pending):
                 checkpoint()

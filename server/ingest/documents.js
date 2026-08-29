@@ -24,7 +24,10 @@ function buildChapterDocument({
   model,
   translationVersion,
   qaReviewed,
-  qaIssuesFixed
+  qaIssuesFixed,
+  qaRequired,
+  qaIssues,
+  qualityScore
 }) {
   if (!bookId) throw new Error("Chapter document cần bookId.");
   const status = translationStatus || (translation ? "completed" : "pending");
@@ -49,6 +52,9 @@ function buildChapterDocument({
   if (translationVersion) doc.translationVersion = translationVersion;
   if (qaReviewed !== undefined) doc.qaReviewed = qaReviewed;
   if (qaIssuesFixed) doc.qaIssuesFixed = qaIssuesFixed;
+  if (qaRequired !== undefined) doc.qaRequired = qaRequired;
+  if (Array.isArray(qaIssues) && qaIssues.length) doc.qaIssues = qaIssues;
+  if (qualityScore !== undefined) doc.qualityScore = qualityScore;
   // Stamp convert output with the engine version, so a later backfill can tell a
   // stale convert from a current one and re-render only what changed.
   if (status === "convert" && convertVersion != null) doc.convertVersion = convertVersion;
@@ -105,7 +111,9 @@ function buildBookIndex({ book, revision, chapters, publicUrlFor }) {
       status: chapter.translationStatus || chapter.status || "pending",
       ...(chapter.provider ? { provider: chapter.provider } : {}),
       ...(chapter.model ? { model: chapter.model } : {}),
-      ...(chapter.qaReviewed !== undefined ? { qaReviewed: chapter.qaReviewed } : {})
+      ...(chapter.qaReviewed !== undefined ? { qaReviewed: chapter.qaReviewed } : {}),
+      ...(chapter.qaRequired !== undefined ? { qaRequired: chapter.qaRequired } : {}),
+      ...(chapter.qualityScore !== undefined ? { qualityScore: chapter.qualityScore } : {})
     }))
   };
 }

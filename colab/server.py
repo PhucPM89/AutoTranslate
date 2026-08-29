@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+from hachimi_text import split_text_by_token_budget
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -118,8 +119,9 @@ class HachimiEngine:
         for i, t in enumerate(texts):
             s = str(t or "").strip()
             if s:
-                cleaned_indices.append(i)
-                cleaned_texts.append(s)
+                for piece in split_text_by_token_budget(s, self.tokenizer, max_tokens=min(440, max_length - 32)):
+                    cleaned_indices.append(i)
+                    cleaned_texts.append(piece)
         
         if not cleaned_texts:
             return [""] * len(texts)
@@ -129,25 +131,36 @@ class HachimiEngine:
         if self.translator is not None:
             # Tokenize using Transformers
             # MarianTokenizer tokenization
-            source_tokens = [self.tokenizer.convert_ids_to_tokens(self.tokenizer.encode(t, truncation=True, max_length=max_length)) for t in cleaned_texts]
+            source_tokens = [self.tokenizer.convert_ids_to_tokens(self.tokenizer.encode(t, truncation=False)) for t in cleaned_texts]
             
             # CTranslate2 translate_batch
             translations = self.translator.translate_batch(
                 source_tokens,
                 beam_size=beam_size,
-                max_decoding_length=max_length
+                max_input_length=max_length,
+                max_decoding_length=max_length,
+                repetition_penalty=1.2,
+                no_repeat_ngram_size=2
             )
             
             for idx, trans in zip(cleaned_indices, translations):
                 output_tokens = trans.hypotheses[0]
                 output_ids = self.tokenizer.convert_tokens_to_ids(output_tokens)
                 decoded = self.tokenizer.decode(output_ids, skip_special_tokens=True)
-                results[idx] = decoded.strip()
+                results[idx] = " ".join(part for part in (results[idx], decoded.strip()) if part)
         else:
             # Transformers pipeline fallback
-            pipe_outs = self.pipe(cleaned_texts, max_length=max_length, batch_size=len(cleaned_texts))
+            pipe_outs = self.pipe(
+                cleaned_texts,
+                max_length=max_length,
+                num_beams=beam_size,
+                repetition_penalty=1.2,
+                no_repeat_ngram_size=2,
+                batch_size=min(32, len(cleaned_texts))
+            )
             for idx, out in zip(cleaned_indices, pipe_outs):
-                results[idx] = out.get("translation_text", "").strip()
+                decoded = out.get("translation_text", "").strip()
+                results[idx] = " ".join(part for part in (results[idx], decoded) if part)
 
         return results
 

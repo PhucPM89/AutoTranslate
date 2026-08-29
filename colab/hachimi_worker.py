@@ -12,6 +12,7 @@ import sys
 import time
 import json
 import re
+from hachimi_text import split_text_by_token_budget
 import urllib.request
 import urllib.error
 from typing import List, Dict, Any, Optional
@@ -132,20 +133,26 @@ class ColabHachimiEngine:
         for i, t in enumerate(texts):
             s = str(t or "").strip()
             if s:
-                cleaned_indices.append(i)
-                cleaned_texts.append(s)
+                for piece in split_text_by_token_budget(s, self.tokenizer, max_tokens=min(440, max_length - 32)):
+                    cleaned_indices.append(i)
+                    cleaned_texts.append(piece)
         
         if not cleaned_texts: return [""] * len(texts)
         results = [""] * len(texts)
 
-        source_tokens = [self.tokenizer.convert_ids_to_tokens(self.tokenizer.encode(t, truncation=True, max_length=max_length)) for t in cleaned_texts]
-        translations = self.translator.translate_batch(source_tokens, beam_size=beam_size, max_decoding_length=max_length)
+        source_tokens = [self.tokenizer.convert_ids_to_tokens(self.tokenizer.encode(t, truncation=False)) for t in cleaned_texts]
+        translations = self.translator.translate_batch(
+            source_tokens, beam_size=beam_size, max_input_length=max_length,
+            max_decoding_length=max_length, repetition_penalty=1.2,
+            no_repeat_ngram_size=2
+        )
 
         for idx, trans in zip(cleaned_indices, translations):
             output_tokens = trans.hypotheses[0]
             output_ids = self.tokenizer.convert_tokens_to_ids(output_tokens)
             decoded = self.tokenizer.decode(output_ids, skip_special_tokens=True)
-            results[idx] = self.clean_output(decoded)
+            decoded = self.clean_output(decoded)
+            results[idx] = " ".join(part for part in (results[idx], decoded) if part)
 
         return results
 

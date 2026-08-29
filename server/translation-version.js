@@ -3,7 +3,7 @@
 // Increment this when a future translation invariant requires a new
 // library-wide rebuild. Existing checkpoints remain intact and the next
 // campaign will select only chapters carrying an older stamp.
-const TRANSLATION_VERSION = "name-lock-v1";
+const TRANSLATION_VERSION = "hachimi-quality-v2";
 
 function needsTranslationVersion(entry, version = TRANSLATION_VERSION) {
   return Boolean(entry && entry.translationVersion !== version);

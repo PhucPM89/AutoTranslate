@@ -107,6 +107,8 @@ test("checkHachimiHealth and translateText work against mock server", async () =
     assert.equal(chapterRes.chapterNumber, 1);
     assert.equal(chapterRes.translationStatus, "completed");
     assert.equal(chapterRes.content, "Hắn một kiếm đâm ra, kiếm khí tung hoành ba vạn dặm.");
+    assert.equal(chapterRes.qaRequired, false);
+    assert.equal(chapterRes.qualityScore, 10);
   } finally {
     server.close();
   }

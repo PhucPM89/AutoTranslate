@@ -156,7 +156,7 @@ async function auditAndResetChapters(storage, bookId, revision, chapters) {
 
         // The version stamp turns a library-wide reset into a resumable
         // campaign. A restarted worker skips chapters already rebuilt by this
-        // name-lock version instead of beginning the whole library again.
+        // current quality version instead of beginning the whole library again.
         const needsCurrentVersion = RETRANSLATE_ALL && needsTranslationVersion(ch);
         if (FORCE_RETRANSLATE || needsCurrentVersion || (n >= fromNum && n <= toNum && (FROM_CHAPTER || TO_CHAPTER))) {
           if (ch.status !== "pending" || ch.attempts || ch.nextAttemptAt || ch.completedAt) {
@@ -262,13 +262,17 @@ async function syncIndexAndDatabase(storage, db, bookId, rev, state) {
   const index = await readJson(storage, indexKeyPath);
   if (!index) return;
 
-  const statusMap = new Map((state.chapters || []).map((c) => [c.n, c.status]));
+  const stateMap = new Map((state.chapters || []).map((c) => [c.n, c]));
   let translatedCount = 0;
 
   for (const ch of index.chapters || []) {
-    const s = statusMap.get(ch.chapterNumber);
-    if (s === "completed") {
+    const stateChapter = stateMap.get(ch.chapterNumber);
+    if (stateChapter?.status === "completed") {
       ch.translationStatus = "completed";
+      if (stateChapter.provider) ch.provider = stateChapter.provider;
+      if (stateChapter.model) ch.model = stateChapter.model;
+      if (stateChapter.qaRequired !== undefined) ch.qaRequired = stateChapter.qaRequired;
+      if (stateChapter.qualityScore !== undefined) ch.qualityScore = stateChapter.qualityScore;
       translatedCount++;
     }
   }
@@ -292,7 +296,7 @@ async function syncIndexAndDatabase(storage, db, bookId, rev, state) {
       }
       if (typeof db.upsertChapters === "function") {
         const completedChapters = (index.chapters || [])
-          .filter((ch) => statusMap.get(ch.chapterNumber) === "completed")
+          .filter((ch) => stateMap.get(ch.chapterNumber)?.status === "completed")
           .map((ch) => ({
             chapterNumber: ch.chapterNumber,
             title: ch.title,
@@ -440,12 +444,22 @@ async function main() {
                 translationStatus: "completed",
                 provider: "hachimi",
                 model: result?.model || "HachimiMT-60-QT",
-                translationVersion: TRANSLATION_VERSION
+                translationVersion: TRANSLATION_VERSION,
+                qaRequired: result?.qaRequired,
+                qaIssues: result?.qaIssues,
+                qualityScore: result?.qualityScore
               })
             )
           );
           const stateEntry = job.state.chapters.find((entry) => entry.n === chapter.chapterNumber);
           stampTranslationVersion(stateEntry);
+          if (stateEntry) {
+            stateEntry.provider = "hachimi";
+            stateEntry.model = result?.model || "HachimiMT-60-QT";
+            stateEntry.qaRequired = Boolean(result?.qaRequired);
+            stateEntry.qaIssues = Array.isArray(result?.qaIssues) ? result.qaIssues : [];
+            stateEntry.qualityScore = result?.qualityScore ?? 10;
+          }
         },
         saveState: async (nextState) => {
           await storage.put(jobStateKey(job.bookId), JSON.stringify(nextState));

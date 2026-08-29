@@ -305,6 +305,8 @@ async function translateChapterWithHachimi(chapter, options = {}) {
   }
 
   const resContent = await translateTextWithHachimi(contentZh, options);
+  const quality = require("./translation-quality")
+    .evaluateTranslationQuality(contentZh, resContent.translation);
 
   return {
     chapterNumber: chapter.chapterNumber,
@@ -313,7 +315,8 @@ async function translateChapterWithHachimi(chapter, options = {}) {
     translationStatus: "completed",
     provider: "hachimi",
     model: resContent.model || "HachimiMT",
-    latencyMs: resContent.latencyMs
+    latencyMs: resContent.latencyMs,
+    ...quality
   };
 }
 

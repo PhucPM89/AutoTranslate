@@ -128,10 +128,16 @@ test("a chapter document carries the source text until a translation exists", ()
     translation: "dich moi",
     translationStatus: "completed",
     provider: "hachimi",
-    translationVersion: "name-lock-v1"
+    translationVersion: "hachimi-quality-v2",
+    qaRequired: true,
+    qaIssues: ["Bản dịch có thể bị cụt"],
+    qualityScore: 7.5
   });
   assert.equal(versioned.provider, "hachimi");
-  assert.equal(versioned.translationVersion, "name-lock-v1");
+  assert.equal(versioned.translationVersion, "hachimi-quality-v2");
+  assert.equal(versioned.qaRequired, true);
+  assert.deepEqual(versioned.qaIssues, ["Bản dịch có thể bị cụt"]);
+  assert.equal(versioned.qualityScore, 7.5);
 
   // A convert chapter shows the convert text (not the raw source) and reports
   // the convert status so the reader can label it and the LLM tier can upgrade it.
