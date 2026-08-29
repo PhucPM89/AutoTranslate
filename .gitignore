@@ -35,3 +35,6 @@ supabase/.temp/
 models/*.onnx
 models/*.bin
 *.ipynb
+
+# Local Colab launcher may intentionally contain production credentials.
+colab/hachimi_private_launcher.py

@@ -55,6 +55,16 @@ else:
 subprocess.run(["python", "-u", str(repo / "scripts/colab_standalone_worker.py")], cwd=repo, check=True)
 ```
 
+## Cách đơn giản: ghi khóa thẳng trong một cell
+
+Nếu chấp nhận lưu khóa trong notebook riêng, mở file
+`colab/hachimi_private_launcher.py`, thay sáu giá trị trong khối **CHỈ SỬA KHỐI
+NÀY**, sau đó copy toàn bộ file vào một cell Colab và chạy. Không cần tạo Colab
+Secrets và không cần chạy thêm cell nào.
+
+File này đã được `.gitignore`; tuyệt đối không dùng `git add -f`, không chia sẻ
+notebook và không sử dụng lại những khóa từng xuất hiện trong chat hoặc log.
+
 ## Quy tắc an toàn
 
 - Chương có `provider=gemini`, model chứa `gemini`, hoặc `qaReviewed=true` luôn
