@@ -370,6 +370,15 @@ def run_translation_loop():
         print(f"Giữ nguyên Gemini: {gemini_count} · Hachimi cần làm: {len(pending)} · Glossary: {len(glossary)}")
         print("=" * 70)
 
+        def checkpoint():
+            r2_put_json(job_key, state)
+            index_document["translatedChapters"] = completed_count
+            index_document["updatedAt"] = utc_now()
+            if completed_count >= len(chapters):
+                index_document["status"] = "Hoàn thành"
+            r2_put_json(f"books/{book_id}/index.json", index_document)
+            supabase_patch_book(book_id, len(chapters), completed_count, revision)
+
         for position, chapter in enumerate(pending, 1):
             number = chapter_number(chapter)
             original = originals.get(number)
@@ -377,8 +386,26 @@ def run_translation_loop():
                 print(f"  ! ch {number}: thiếu bản gốc, bỏ qua")
                 continue
 
+            latest = r2_get_json(f"books/{book_id}/r{revision}/ch/{number}.json")
+            latest_index = index_by_number.get(number)
+            if is_gemini_document(latest) or is_gemini_document(latest_index) or is_gemini_document(chapter):
+                chapter["status"] = "completed"
+                completed_count += 1
+                print(f"  ↷ ch {number}: Gemini vừa hoàn tất, giữ nguyên")
+                if position % 5 == 0 or position == len(pending):
+                    checkpoint()
+                continue
+
             started = time.time()
             title, content = translate_chapter(original.get("title", f"Chương {number}"), original.get("content", ""), protector)
+            latest = r2_get_json(f"books/{book_id}/r{revision}/ch/{number}.json")
+            if is_gemini_document(latest):
+                chapter["status"] = "completed"
+                completed_count += 1
+                print(f"  ↷ ch {number}: hủy kết quả Hachimi vì Gemini đã ghi trong lúc dịch")
+                if position % 5 == 0 or position == len(pending):
+                    checkpoint()
+                continue
             document = {
                 "schema": 1, "bookId": book_id, "revision": revision, "chapterNumber": number,
                 "title": title, "content": content,
@@ -402,13 +429,7 @@ def run_translation_loop():
             print(f"  ✓ ch {number} ({time.time() - started:.1f}s) · {completed_count}/{len(chapters)}")
 
             if position % 5 == 0 or position == len(pending):
-                r2_put_json(job_key, state)
-                index_document["translatedChapters"] = completed_count
-                index_document["updatedAt"] = utc_now()
-                if completed_count >= len(chapters):
-                    index_document["status"] = "Hoàn thành"
-                r2_put_json(f"books/{book_id}/index.json", index_document)
-                supabase_patch_book(book_id, len(chapters), completed_count, revision)
+                checkpoint()
 
     print("\nHoàn tất phần việc của worker.")
 

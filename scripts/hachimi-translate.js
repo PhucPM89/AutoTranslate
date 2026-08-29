@@ -394,6 +394,11 @@ async function main() {
         loadChapter: loadOriginal,
         translateChapter: async (chapter) => {
           const t0 = Date.now();
+          const latest = await readJson(storage, chapterKey(job.bookId, job.revision, chapter.chapterNumber));
+          if (isProtectedGeminiDocument(latest)) {
+            console.log(`  ↷ ch ${chapter.chapterNumber}: Gemini vừa hoàn tất, giữ nguyên.`);
+            return { preserveGemini: true, content: latest.content, title: latest.title };
+          }
           glossary = await engine.mineAndMergeGlossary(job.bookId, [chapter.title, chapter.content]);
           const translated = await translateChapterWithHachimi(chapter, {
             apiUrl: activeUrl,
@@ -407,6 +412,18 @@ async function main() {
           return translated;
         },
         publishChapter: async (chapter, result) => {
+          // Recheck immediately before the write. This closes the normal race
+          // where a concurrent Gemini worker finishes while Hachimi is decoding.
+          const latest = await readJson(storage, chapterKey(job.bookId, job.revision, chapter.chapterNumber));
+          if (result?.preserveGemini || isProtectedGeminiDocument(latest)) {
+            const stateEntry = job.state.chapters.find((entry) => entry.n === chapter.chapterNumber);
+            if (stateEntry) {
+              stateEntry.provider = "gemini";
+              delete stateEntry.translationVersion;
+            }
+            console.log(`  ↷ ch ${chapter.chapterNumber}: bỏ kết quả Hachimi vì đã có Gemini.`);
+            return;
+          }
           const translationText = typeof result === "string" ? result : result?.content;
           const translatedTitle = (typeof result === "object" && result?.title) ? result.title : chapter.title;
           await storage.put(
