@@ -28,6 +28,16 @@ test("semantic queue reopens when chapter content changes and reclaims expired l
   assert.equal(queue.entries[0].attempts, 0);
 });
 
+test("provider quota does not consume a chapter attempt", () => {
+  const queue = mergeReviewEntries(null, [{ revision: 1, chapterNumber: 1, translationVersion: "v2", content: "draft" }], { bookId: "book", revision: 1 });
+  const claimed = claimNextReview(queue, { owner: "worker", now: 1000 });
+  assert.equal(claimed.attempts, 1);
+  settleReview(queue, 1, { retryable: true, retryAfterMs: 60_000, error: "429 quota" }, { now: 2000, maxAttempts: 1 });
+  assert.equal(queue.entries[0].state, "retrying");
+  assert.equal(queue.entries[0].attempts, 0);
+  assert.equal(queue.entries[0].availableAt, new Date(62_000).toISOString());
+});
+
 test("semantic parser rejects a contradictory pass", () => {
   assert.throws(() => parseSemanticReview(JSON.stringify({
     decision: "pass",

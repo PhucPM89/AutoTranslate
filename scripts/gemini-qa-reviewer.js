@@ -190,10 +190,10 @@ async function runOnce() {
   if (!keys.length && !DRY_RUN) throw new Error("Không có Gemini API key hợp lệ cho semantic review.");
   const queueKeys = await listQueueKeys();
   console.log(`Semantic QA ${REVIEW_VERSION}: ${queueKeys.length} queue · tối đa ${MAX_CHAPTERS} chương/lần.`);
-  let processed = 0, approved = 0, repaired = 0, failed = 0, lastQueueKey = "";
+  let processed = 0, approved = 0, repaired = 0, failed = 0, lastQueueKey = "", providerStopped = false;
 
   for (const queueKey of queueKeys) {
-    if (processed >= MAX_CHAPTERS) break;
+    if (processed >= MAX_CHAPTERS || providerStopped) break;
     const queue = await readJson(queueKey);
     if (!queue?.bookId || !Array.isArray(queue.entries)) continue;
     const hachimiActivity = await readJson(`jobs/${queue.bookId}/hachimi-active.json`);
@@ -219,17 +219,25 @@ async function runOnce() {
         if (result.repaired) repaired += 1;
       } catch (error) {
         failed += 1;
-        settleReview(queue, entry.chapterNumber, { error: error.message }, { maxAttempts: MAX_ATTEMPTS });
+        const temporaryProviderError = [429, 500, 502, 503, 504].includes(error.status) || /quota|rate limit|resource_exhausted/i.test(error.message);
+        settleReview(queue, entry.chapterNumber, {
+          error: error.message,
+          retryable: temporaryProviderError,
+          retryAfterMs: error.retryAfterMs
+        }, { maxAttempts: MAX_ATTEMPTS });
         await putJson(queueKey, queue);
         console.error(`  ✗ ${queue.bookId} ch ${entry.chapterNumber}: ${error.message}`);
-        if ([429, 403, 401].includes(error.status)) break;
+        if (temporaryProviderError || [403, 401].includes(error.status)) {
+          providerStopped = true;
+          break;
+        }
       }
     }
   }
   if (lastQueueKey && !ONLY_BOOK && !DRY_RUN) {
     await putJson(CURSOR_KEY, { schema: 1, lastQueueKey, updatedAt: new Date().toISOString() });
   }
-  const summary = { processed, approved, repaired, failed, queueCount: queueKeys.length };
+  const summary = { processed, approved, repaired, failed, providerStopped, queueCount: queueKeys.length };
   await writeStatus({ state: "idle", activityState: "semantic_review", ...summary, message: `Semantic QA: ${approved} duyệt, ${repaired} sửa, ${failed} lỗi.` });
   console.log(`Hoàn tất: xử lý ${processed}, duyệt ${approved}, sửa ${repaired}, lỗi ${failed}.`);
   return summary;

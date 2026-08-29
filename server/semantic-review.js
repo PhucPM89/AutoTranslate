@@ -96,6 +96,13 @@ function settleReview(queue, chapterNumber, result, { now = Date.now(), maxAttem
     entry.scores = result.scores || {};
     entry.issues = Array.isArray(result.issues) ? result.issues.slice(0, 20) : [];
     entry.lastError = "";
+  } else if (result?.retryable) {
+    // Provider quota/outage is not a bad chapter and must never exhaust that
+    // chapter's retry budget.
+    entry.attempts = Math.max(0, Number(entry.attempts || 0) - 1);
+    entry.state = "retrying";
+    entry.lastError = String(result?.error || "Provider tạm thời chưa sẵn sàng").slice(0, 500);
+    entry.availableAt = new Date(now + Math.max(30_000, Number(result.retryAfterMs || 15 * 60_000))).toISOString();
   } else {
     const attempts = Number(entry.attempts || 0);
     entry.state = attempts >= maxAttempts ? "failed" : "retrying";
