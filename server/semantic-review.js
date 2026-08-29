@@ -174,10 +174,10 @@ function parseSemanticReview(value, { source = "", draft = "" } = {}) {
   }
 
   let correctedTranslation = String(parsed.correctedTranslation || "").trim();
-  if (parsed.decision !== "pass" && correctedTranslation) {
-    const quality = evaluateTranslationQuality(source, correctedTranslation);
-    if (!correctedTranslation || quality.qaRequired) {
-      throw new Error(`Bản Gemini sửa không hợp lệ: ${quality.qaIssues.join("; ") || "nội dung rỗng"}`);
+  if (parsed.decision !== "pass") {
+    if (correctedTranslation) {
+      const quality = evaluateTranslationQuality(source, correctedTranslation);
+      if (quality.qaRequired) throw new Error(`Bản Gemini sửa không hợp lệ: ${quality.qaIssues.join("; ")}`);
     }
   } else {
     correctedTranslation = String(draft || "").trim();
