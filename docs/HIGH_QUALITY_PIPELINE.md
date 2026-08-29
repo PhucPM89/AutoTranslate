@@ -27,6 +27,8 @@ Batch dùng `displayName` xác định và manifest `prepared` trước khi gọ
 
 Nếu provider từ chối lúc tạo Batch, worker tự trả toàn bộ entry từ `batch_processing` về `pending`, đánh dấu manifest `failed` và không tự gửi lại. Sau khi đã xử lý billing/tier/model, chủ động chạy lại bằng `node scripts/gemini-batch-reviewer.js --retry-failed-batch`.
 
+Kiểm tra các model mà API key hiện tại nhìn thấy cùng `supportedActions` bằng `node scripts/gemini-batch-reviewer.js --list-models`. Nếu model có `batchGenerateContent` nhưng cả probe một chương vẫn trả `FAILED_PRECONDITION`, giữ `QA_BATCH_ENABLED=false` và kiểm tra điều kiện billing/tier của Google AI project; đây không phải lỗi kích thước backlog.
+
 ## Triển khai lần đầu
 
 1. Chạy backfill ở chế độ kiểm tra:

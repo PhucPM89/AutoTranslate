@@ -13,7 +13,13 @@ function createGeminiBatchClient({ apiKey = process.env.GEMINI_API_KEY, GoogleGe
     create({ model, displayName, requests }) {
       return ai.batches.create({ model, src: requests, config: { displayName } });
     },
-    get(name) { return ai.batches.get({ name }); }
+    get(name) { return ai.batches.get({ name }); },
+    async listModels() {
+      const pager = await ai.models.list({ config: { pageSize: 100 } });
+      const models = [];
+      for await (const model of pager) models.push(model);
+      return models;
+    }
   };
 }
 

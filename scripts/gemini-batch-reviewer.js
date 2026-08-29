@@ -29,6 +29,7 @@ const MAX_BATCH_INPUT_TOKENS = Math.max(10_000, Number(process.env.QA_BATCH_MAX_
 const DRY_RUN = process.argv.includes("--dry-run");
 const ONLY_POLL = process.argv.includes("--poll-only");
 const RETRY_FAILED = process.argv.includes("--retry-failed-batch");
+const LIST_MODELS = process.argv.includes("--list-models");
 
 async function readJson(key) {
   try { const raw = await storage.get(key); return raw ? JSON.parse(raw.toString("utf8")) : null; } catch { return null; }
@@ -224,6 +225,14 @@ async function submitOne(client) {
 
 async function main() {
   const client = DRY_RUN ? null : createGeminiBatchClient({ apiKey: process.env.GEMINI_API_KEY });
+  if (LIST_MODELS) {
+    const models = await client.listModels();
+    const relevant = models
+      .filter((item) => /gemini/i.test(item.name || ""))
+      .map((item) => ({ name: item.name, supportedActions: item.supportedActions || [] }));
+    console.log(JSON.stringify(relevant, null, 2));
+    return;
+  }
   if (!DRY_RUN) await pollManifests(client);
   if (!ONLY_POLL) await submitOne(client);
 }
