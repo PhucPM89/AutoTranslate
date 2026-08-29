@@ -80,11 +80,41 @@ notebook và không sử dụng lại những khóa từng xuất hiện trong c
 - Cache tự xây lại khi có chương mới, đổi revision hoặc nâng phiên bản miner.
 - Đoạn dài được tách theo câu và ghép lại đầy đủ, không còn dùng `truncation`
   làm mất phần cuối; decoder dùng beam search và bộ lọc chống lặp.
-- Chương có dấu hiệu bị cụt, sót chữ Hán hoặc rò token khóa tên được gắn
-  `qaRequired=true` để Gemini QA xử lý chọn lọc.
+- Heuristic vẫn gắn `qaRequired=true` cho lỗi hình thức, nhưng mọi chương
+  Hachimi quality-v2 đều được đưa vào semantic QA, kể cả khi heuristic đạt.
 - Mỗi chương được checkpoint sau khi upload. Colab ngắt thì chạy lại cùng
   `WORKER_INDEX` và `TOTAL_WORKERS`; chương hoàn tất sẽ được bỏ qua.
 - Colab in `[Quét]` khi đang tải bản gốc, `→` khi bắt đầu một chương, tiến độ
   từng batch, và `✓` sau khi chương đã được upload/checkpoint.
 - Không thay đổi `TOTAL_WORKERS` giữa một chiến dịch vì phép chia bộ cho worker
   phụ thuộc vào giá trị này.
+
+# Semantic QA sau Hachimi
+
+Từ pipeline `semantic-v1`, mỗi chương do Hachimi `hachimi-quality-v2` tạo ra được đưa vào queue riêng của bộ truyện tại:
+
+```text
+jobs/{bookId}/semantic-review.json
+```
+
+Queue có lease, retry, fingerprint nội dung và checkpoint `approved`, vì vậy Colab hoặc GitHub Actions dừng giữa chừng không làm mất tiến độ. Chương có provenance Gemini vẫn được giữ nguyên.
+
+Chạy pilot 20 chương:
+
+```bash
+npm run qa:pilot
+```
+
+Chạy một bộ và giới hạn 100 chương:
+
+```bash
+node scripts/gemini-qa-reviewer.js --book BOOK_ID --max-chapters 100
+```
+
+Chạy thử chỉ để xem queue, không gọi Gemini và không ghi dữ liệu:
+
+```bash
+node scripts/gemini-qa-reviewer.js --dry-run --max-chapters 20
+```
+
+Mỗi bản Hachimi được đối chiếu trực tiếp với `.original.json`, glossary và ngữ cảnh chương trước. Nếu Gemini sửa nội dung, bản sửa phải vượt qua một lượt semantic verification thứ hai mới được ghi `qaStatus=approved`.

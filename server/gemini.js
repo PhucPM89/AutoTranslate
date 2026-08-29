@@ -736,6 +736,56 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
   throw err;
 }
 
+// Generic structured call used by semantic QA. It deliberately shares the
+// translation key pool and cooldown state, so a QA daemon cannot hammer a key
+// that the translation worker has already marked as exhausted.
+async function generateStructuredText(prompt, apiKeys, generationConfig = {}) {
+  const keyList = getActiveKeys(apiKeys);
+  if (!keyList.length) throw new Error("Không có Gemini API key cho semantic review.");
+
+  const now = Date.now();
+  const ordered = reserveKeyOrder(keyList)
+    .filter(({ key }) => !String(key).startsWith("gsk_"))
+    .sort((a, b) => getKeyHealth(a.key).cooldownUntil - getKeyHealth(b.key).cooldownUntil);
+  let lastError = null;
+  let triedKeys = 0;
+
+  for (const { key } of ordered) {
+    const health = getKeyHealth(key);
+    if (health.cooldownUntil > now) continue;
+    if (triedKeys >= MAX_KEYS_PER_CHUNK) break;
+    triedKeys += 1;
+
+    for (const model of getModelsForApiKey(key)) {
+      try {
+        const result = await translateChunkWithModel(key, model, prompt, {
+          responseFormat: "json",
+          temperature: generationConfig.temperature ?? 0.1,
+          thinkingBudget: generationConfig.thinkingBudget ?? 256,
+          maxTokens: generationConfig.maxTokens || 16384
+        });
+        markKeySuccess(key, result.usage?.total_tokens || 0);
+        return result;
+      } catch (error) {
+        lastError = error;
+        if ([401, 403, 429].includes(error.status)) {
+          const recovery = error.status === 429
+            ? computeQuotaRecovery(error, key)
+            : { durationMs: 24 * 60 * 60_000, quotaClass: "auth", policy: "disable_invalid_key" };
+          markKeyCooldown(key, recovery.durationMs, error.message, recovery);
+          break;
+        }
+        if (!shouldTryNextModel(error)) break;
+      }
+    }
+  }
+
+  const error = new Error(lastError?.message || "Không còn Gemini API key sẵn sàng cho semantic review.");
+  error.code = lastError?.code || "semantic_key_pool_exhausted";
+  error.status = lastError?.status;
+  throw error;
+}
+
 function buildResidualHanRepairPrompt(translation) {
   return [
     "Bạn là biên tập viên bản dịch Trung - Việt.",
@@ -1192,6 +1242,7 @@ module.exports = {
   translateText,
   translateBatchChapters,
   translateMetadata,
+  generateStructuredText,
   assessTranslation,
   stripMarkdown,
   stripThinkTags,

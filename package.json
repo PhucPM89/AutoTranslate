@@ -19,6 +19,7 @@
     "progress:watch": "node scripts/check-progress.js --watch",
     "qa:review": "node scripts/gemini-qa-reviewer.js",
     "qa:daemon": "node scripts/gemini-qa-reviewer.js --continuous",
+    "qa:pilot": "node scripts/gemini-qa-reviewer.js --max-chapters 20",
     "catalog:refresh": "node scripts/refresh-catalog.js",
     "convert:backfill": "node scripts/convert-backfill.js",
     "build:tm": "node scripts/build-tm.js"

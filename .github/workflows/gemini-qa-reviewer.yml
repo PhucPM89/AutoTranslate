@@ -1,24 +1,28 @@
-name: Gemini QA Quality Auditor
+name: Gemini Semantic QA
 
 on:
   schedule:
-    - cron: "0 */6 * * *" # Runs every 6 hours to scan and fix substandard chapters
+    - cron: "0 */6 * * *" # Controlled pilot; raise throughput only after measuring tokens/cost.
   workflow_dispatch:
     inputs:
       book:
         description: "Chỉ hậu kiểm một bookId (để trống = quét toàn bộ thư viện)"
         required: false
       force:
-        description: "Ép buộc dịch lại toàn bộ (true/false)"
+        description: "Tùy chọn cũ, được giữ để tương thích"
         required: false
         default: "false"
+      max_chapters:
+        description: "Số chương semantic review tối đa trong lượt này"
+        required: false
+        default: "20"
 
 permissions:
   contents: read
 
 jobs:
   qa_review:
-    name: Gemini QA Quality Reviewer
+    name: Source-vs-draft Semantic Reviewer
     runs-on: ubuntu-latest
     timeout-minutes: 30
     concurrency:
@@ -39,6 +43,7 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       QA_BOOK_INPUT: ${{ inputs.book || '' }}
       QA_FORCE_INPUT: ${{ inputs.force || 'false' }}
+      QA_MAX_CHAPTERS_INPUT: ${{ inputs.max_chapters || '20' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -51,10 +56,7 @@ jobs:
 
       - name: Run Gemini Post-Review QA
         run: |
-          ARGS=(--flagged-only)
-          if [ "$QA_FORCE_INPUT" = "true" ]; then
-            ARGS=(--force)
-          fi
+          ARGS=(--max-chapters "$QA_MAX_CHAPTERS_INPUT")
           if [ -n "$QA_BOOK_INPUT" ]; then
             ARGS+=(--book "$QA_BOOK_INPUT")
           fi

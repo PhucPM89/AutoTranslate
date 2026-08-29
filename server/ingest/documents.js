@@ -24,6 +24,7 @@ function buildChapterDocument({
   model,
   translationVersion,
   qaReviewed,
+  qaStatus,
   qaIssuesFixed,
   qaRequired,
   qaIssues,
@@ -51,6 +52,7 @@ function buildChapterDocument({
   if (model) doc.model = model;
   if (translationVersion) doc.translationVersion = translationVersion;
   if (qaReviewed !== undefined) doc.qaReviewed = qaReviewed;
+  if (qaStatus) doc.qaStatus = qaStatus;
   if (qaIssuesFixed) doc.qaIssuesFixed = qaIssuesFixed;
   if (qaRequired !== undefined) doc.qaRequired = qaRequired;
   if (Array.isArray(qaIssues) && qaIssues.length) doc.qaIssues = qaIssues;
@@ -112,6 +114,7 @@ function buildBookIndex({ book, revision, chapters, publicUrlFor }) {
       ...(chapter.provider ? { provider: chapter.provider } : {}),
       ...(chapter.model ? { model: chapter.model } : {}),
       ...(chapter.qaReviewed !== undefined ? { qaReviewed: chapter.qaReviewed } : {}),
+      ...(chapter.qaStatus ? { qaStatus: chapter.qaStatus } : {}),
       ...(chapter.qaRequired !== undefined ? { qaRequired: chapter.qaRequired } : {}),
       ...(chapter.qualityScore !== undefined ? { qualityScore: chapter.qualityScore } : {})
     }))

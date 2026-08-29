@@ -7,6 +7,7 @@
 # ==============================================================================
 
 import json
+import hashlib
 import os
 import re
 import time
@@ -39,6 +40,8 @@ WORKER_INDEX = int(os.environ.get("WORKER_INDEX", "0"))
 TOTAL_WORKERS = max(1, int(os.environ.get("TOTAL_WORKERS", "1")))
 BATCH_SIZE = max(1, int(os.environ.get("HACHIMI_BATCH_SIZE", "32")))
 RETRANSLATE_NAME_LOCK = os.environ.get("RETRANSLATE_NAME_LOCK", "true").lower() != "false"
+SEMANTIC_REVIEW_VERSION = "semantic-v1"
+HACHIMI_BOOK_LEASE_SECONDS = 3 * 60 * 60
 
 R2_ENDPOINT = os.environ.get("R2_ENDPOINT", "")
 R2_ACCESS_KEY_ID = os.environ.get("R2_ACCESS_KEY_ID", "")
@@ -91,6 +94,72 @@ def r2_put_json(key, data, cache_control="no-cache"):
 
 def utc_now():
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def review_fingerprint(revision, chapter_number_value, translation_version, content):
+    value = "\0".join([
+        str(revision),
+        str(chapter_number_value),
+        str(translation_version or ""),
+        str(content or ""),
+    ])
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:24]
+
+
+def merge_semantic_review_queue(queue, book_id, revision, candidates):
+    document = queue if isinstance(queue, dict) else {}
+    entries = document.get("entries") if isinstance(document.get("entries"), list) else []
+    by_number = {
+        chapter_number(entry): dict(entry)
+        for entry in entries
+        if chapter_number(entry) is not None
+    }
+    now = utc_now()
+    for candidate in candidates:
+        number = candidate["chapterNumber"]
+        fingerprint = review_fingerprint(
+            revision,
+            number,
+            candidate.get("translationVersion"),
+            candidate.get("content"),
+        )
+        previous = by_number.get(number)
+        if previous and previous.get("fingerprint") == fingerprint:
+            continue
+        by_number[number] = {
+            "chapterNumber": number,
+            "revision": revision,
+            "translationVersion": candidate.get("translationVersion", ""),
+            "fingerprint": fingerprint,
+            "state": "pending",
+            "attempts": 0,
+            "availableAt": now,
+            "createdAt": now,
+            "updatedAt": now,
+            "leaseOwner": "",
+            "leaseUntil": "",
+            "lastError": "",
+        }
+    return {
+        "schema": 1,
+        "reviewVersion": SEMANTIC_REVIEW_VERSION,
+        "bookId": book_id,
+        "revision": revision,
+        "updatedAt": now,
+        "entries": [by_number[key] for key in sorted(by_number)],
+    }
+
+
+def mark_hachimi_activity(book_id, active):
+    now = int(time.time())
+    r2_put_json(f"jobs/{book_id}/hachimi-active.json", {
+        "schema": 1,
+        "bookId": book_id,
+        "workerIndex": WORKER_INDEX,
+        "active": bool(active),
+        "updatedAt": utc_now(),
+        "expiresAtEpochMs": (now + HACHIMI_BOOK_LEASE_SECONDS) * 1000 if active else now * 1000,
+    })
 
 
 def supabase_patch_book(book_id, total, translated, revision=1):
@@ -354,6 +423,10 @@ def run_translation_loop():
         if not state or not index_document or not isinstance(state.get("chapters"), list):
             continue
 
+        # Semantic QA never edits a queue while Colab is still translating the
+        # same book. The lease expires automatically if a Colab runtime dies.
+        mark_hachimi_activity(book_id, True)
+
         revision = state.get("revision", 1) or 1
         chapters = state["chapters"]
         index_chapters = index_document.get("chapters", [])
@@ -430,6 +503,7 @@ def run_translation_loop():
         protector = GlossaryProtector(glossary)
 
         pending, completed_count, gemini_count = [], 0, 0
+        review_candidates = []
         for chapter in chapters:
             number = chapter_number(chapter)
             if number is None:
@@ -451,7 +525,29 @@ def run_translation_loop():
                 chapter["status"] = "completed"
                 completed_count += 1
 
+            if (
+                document
+                and str(document.get("provider") or "").lower() == "hachimi"
+                and document.get("translationVersion") == TRANSLATION_VERSION
+                and content
+            ):
+                review_candidates.append({
+                    "chapterNumber": number,
+                    "translationVersion": TRANSLATION_VERSION,
+                    "content": content,
+                })
+
+        review_queue_key = f"jobs/{book_id}/semantic-review.json"
+        review_queue = merge_semantic_review_queue(
+            r2_get_json(review_queue_key),
+            book_id,
+            revision,
+            review_candidates,
+        )
+        r2_put_json(review_queue_key, review_queue)
+
         if not pending:
+            mark_hachimi_activity(book_id, False)
             print(f"Bỏ qua {book_id}: đã xong {TRANSLATION_VERSION}; giữ nguyên Gemini: {gemini_count} chương.")
             continue
 
@@ -461,7 +557,9 @@ def run_translation_loop():
         print("=" * 70)
 
         def checkpoint():
+            mark_hachimi_activity(book_id, True)
             r2_put_json(job_key, state)
+            r2_put_json(review_queue_key, review_queue)
             index_document["translatedChapters"] = completed_count
             index_document["updatedAt"] = utc_now()
             if completed_count >= len(chapters):
@@ -515,10 +613,21 @@ def run_translation_loop():
                 "paragraphs": [part.strip() for part in content.split("\n") if part.strip()],
                 "translationStatus": "completed", "provider": "hachimi", "model": MODEL_ID,
                 "translationVersion": TRANSLATION_VERSION, "characters": len(content), "updatedAt": utc_now(),
+                "qaStatus": "review_pending", "qaReviewed": False,
             }
             quality = evaluate_translation_quality(original.get("content", ""), content)
             document.update(quality)
             r2_put_json(f"books/{book_id}/r{revision}/ch/{number}.json", document)
+            review_queue = merge_semantic_review_queue(
+                review_queue,
+                book_id,
+                revision,
+                [{
+                    "chapterNumber": number,
+                    "translationVersion": TRANSLATION_VERSION,
+                    "content": content,
+                }],
+            )
             chapter.update({
                 "status": "completed", "translationVersion": TRANSLATION_VERSION,
                 "provider": "hachimi", "model": MODEL_ID, "attempts": 0,
@@ -530,6 +639,7 @@ def run_translation_loop():
                 index_entry.update({
                     "title": title, "status": "completed", "translationStatus": "completed",
                     "translationVersion": TRANSLATION_VERSION, "provider": "hachimi", "model": MODEL_ID,
+                    "qaStatus": "review_pending", "qaReviewed": False,
                     **quality,
                 })
             completed_count += 1
@@ -538,6 +648,8 @@ def run_translation_loop():
 
             if position % 5 == 0 or position == len(pending):
                 checkpoint()
+
+        mark_hachimi_activity(book_id, False)
 
     print("\nHoàn tất phần việc của worker.")
 
