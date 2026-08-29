@@ -74,6 +74,10 @@ notebook và không sử dụng lại những khóa từng xuất hiện trong c
 - Chỉ chương Hachimi/convert/cũ chưa có `translationVersion=hachimi-quality-v2` được
   tái dịch.
 - Glossary được khai thác từ toàn bộ bản gốc của từng bộ trước khi dịch.
+- Cache `glossary-meta/<bookId>.json` lưu revision, số chương, dấu vân tay danh
+  sách chương và phiên bản miner. Cache hợp lệ thì lần chạy sau bỏ qua quét toàn
+  bộ `.original.json`; bản gốc chỉ được tải lười cho chương thực sự cần dịch.
+- Cache tự xây lại khi có chương mới, đổi revision hoặc nâng phiên bản miner.
 - Đoạn dài được tách theo câu và ghép lại đầy đủ, không còn dùng `truncation`
   làm mất phần cuối; decoder dùng beam search và bộ lọc chống lặp.
 - Chương có dấu hiệu bị cụt, sót chữ Hán hoặc rò token khóa tên được gắn

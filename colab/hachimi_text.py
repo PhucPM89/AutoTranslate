@@ -1,11 +1,59 @@
-"""Shared lossless chunking and lightweight QA helpers for Hachimi workers."""
+"""Shared chunking, glossary-cache and lightweight QA helpers for Hachimi."""
 
+import hashlib
 import re
 
 
 SENTENCE_PART_RE = re.compile(r".*?(?:[。！？!?；;]+|$)", re.DOTALL)
 HAN_RE = re.compile(r"[\u3400-\u9fff]")
 PLACEHOLDER_RE = re.compile(r"__?\s*TC[ _-]*NAME", re.IGNORECASE)
+
+
+def glossary_chapter_signature(chapters):
+    """Stable source-layout fingerprint; content changes must increment revision."""
+    numbers = []
+    for chapter in chapters or []:
+        value = chapter.get("n")
+        if value is None:
+            value = chapter.get("chapterNumber")
+        if value is not None:
+            numbers.append(str(value))
+    payload = "\n".join(sorted(numbers, key=lambda value: (len(value), value)))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def glossary_cache_is_current(meta, revision, chapters, miner_version):
+    if not isinstance(meta, dict) or not meta.get("completed"):
+        return False
+    valid_count = sum(
+        1 for chapter in (chapters or [])
+        if chapter.get("n") is not None or chapter.get("chapterNumber") is not None
+    )
+    return (
+        str(meta.get("revision")) == str(revision)
+        and meta.get("chapterCount") == valid_count
+        and meta.get("chapterSignature") == glossary_chapter_signature(chapters)
+        and meta.get("minerVersion") == miner_version
+        and meta.get("sourceChapterCount") == valid_count
+    )
+
+
+def build_glossary_cache_meta(revision, chapters, miner_version, source_count, term_count, updated_at):
+    valid_count = sum(
+        1 for chapter in (chapters or [])
+        if chapter.get("n") is not None or chapter.get("chapterNumber") is not None
+    )
+    return {
+        "schema": 1,
+        "revision": revision,
+        "chapterCount": valid_count,
+        "sourceChapterCount": source_count,
+        "chapterSignature": glossary_chapter_signature(chapters),
+        "minerVersion": miner_version,
+        "termCount": term_count,
+        "completed": source_count == valid_count,
+        "updatedAt": updated_at,
+    }
 
 
 def _token_count(tokenizer, text):

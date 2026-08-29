@@ -25,10 +25,16 @@ print("[bootstrap 2/4] Import thư viện hoàn tất; đang kiểm tra cấu h�
 ROOT = Path(__file__).resolve().parents[1]
 import sys
 sys.path.insert(0, str(ROOT / "colab"))
-from hachimi_text import evaluate_translation_quality, split_text_by_token_budget
+from hachimi_text import (
+    build_glossary_cache_meta,
+    evaluate_translation_quality,
+    glossary_cache_is_current,
+    split_text_by_token_budget,
+)
 
 MODEL_ID = os.environ.get("HACHIMI_MODEL_ID", "ngocdang83/HachimiMT-60-QT")
 TRANSLATION_VERSION = "hachimi-quality-v2"
+GLOSSARY_MINER_VERSION = "character-miner-v1"
 WORKER_INDEX = int(os.environ.get("WORKER_INDEX", "0"))
 TOTAL_WORKERS = max(1, int(os.environ.get("TOTAL_WORKERS", "1")))
 BATCH_SIZE = max(1, int(os.environ.get("HACHIMI_BATCH_SIZE", "32")))
@@ -342,7 +348,7 @@ def run_translation_loop():
 
     for job_key in job_keys:
         book_id = job_key.split("/")[1]
-        print(f"\n[Quét] {book_id}: đang đọc index và toàn bộ bản gốc...", flush=True)
+        print(f"\n[Quét] {book_id}: đang đọc index và kiểm tra cache glossary...", flush=True)
         state = r2_get_json(job_key)
         index_document = r2_get_json(f"books/{book_id}/index.json")
         if not state or not index_document or not isinstance(state.get("chapters"), list):
@@ -352,29 +358,75 @@ def run_translation_loop():
         chapters = state["chapters"]
         index_chapters = index_document.get("chapters", [])
         index_by_number = {chapter_number(ch): ch for ch in index_chapters}
-        originals, source_texts = {}, []
-        for chapter in chapters:
-            number = chapter_number(chapter)
-            if number is None:
-                continue
-            original = r2_get_json(f"books/{book_id}/r{revision}/ch/{number}.original.json")
-            if original:
-                originals[number] = original
-                source_texts.extend([original.get("title", ""), original.get("content", "")])
-
-        print(
-            f"[Quét] {book_id}: đã đọc {len(originals)}/{len(chapters)} bản gốc; "
-            "đang tạo glossary...",
-            flush=True,
+        glossary_document = r2_get_json(f"glossary/{book_id}.json")
+        existing_glossary = glossary_document if isinstance(glossary_document, dict) else {}
+        glossary_meta = r2_get_json(f"glossary-meta/{book_id}.json")
+        cache_current = (
+            isinstance(glossary_document, dict)
+            and glossary_cache_is_current(
+                glossary_meta,
+                revision,
+                chapters,
+                GLOSSARY_MINER_VERSION,
+            )
         )
 
-        existing_glossary = r2_get_json(f"glossary/{book_id}.json") or {}
-        if not isinstance(existing_glossary, dict):
-            existing_glossary = {}
-        mined_glossary = mine_character_names(source_texts)
-        glossary = {**mined_glossary, **existing_glossary}
-        if glossary != existing_glossary:
-            r2_put_json(f"glossary/{book_id}.json", glossary)
+        originals = {}
+        if cache_current:
+            glossary = existing_glossary
+            print(
+                f"[Glossary cache] {book_id}: HIT · {len(glossary)} thuật ngữ; "
+                "bỏ qua quét toàn bộ bản gốc.",
+                flush=True,
+            )
+        else:
+            print(
+                f"[Glossary cache] {book_id}: MISS · đang đọc toàn bộ bản gốc...",
+                flush=True,
+            )
+            source_texts = []
+            valid_chapters = [ch for ch in chapters if chapter_number(ch) is not None]
+            for source_position, chapter in enumerate(valid_chapters, 1):
+                number = chapter_number(chapter)
+                original = r2_get_json(f"books/{book_id}/r{revision}/ch/{number}.original.json")
+                if original:
+                    originals[number] = original
+                    source_texts.extend([original.get("title", ""), original.get("content", "")])
+                if source_position % 100 == 0 or source_position == len(valid_chapters):
+                    print(
+                        f"    Đã đọc {source_position}/{len(valid_chapters)} file nguồn...",
+                        flush=True,
+                    )
+
+            print(
+                f"[Glossary cache] {book_id}: đã đọc {len(originals)}/{len(valid_chapters)} "
+                "bản gốc; đang khai thác tên...",
+                flush=True,
+            )
+            mined_glossary = mine_character_names(source_texts)
+            glossary = {**mined_glossary, **existing_glossary}
+            if glossary != existing_glossary or not isinstance(glossary_document, dict):
+                r2_put_json(f"glossary/{book_id}.json", glossary)
+            next_meta = build_glossary_cache_meta(
+                revision,
+                chapters,
+                GLOSSARY_MINER_VERSION,
+                len(originals),
+                len(glossary),
+                utc_now(),
+            )
+            r2_put_json(f"glossary-meta/{book_id}.json", next_meta)
+            if next_meta["completed"]:
+                print(
+                    f"[Glossary cache] {book_id}: SAVED · {len(glossary)} thuật ngữ.",
+                    flush=True,
+                )
+            else:
+                print(
+                    f"[Glossary cache] {book_id}: chưa cache vì thiếu "
+                    f"{next_meta['chapterCount'] - next_meta['sourceChapterCount']} bản gốc.",
+                    flush=True,
+                )
         protector = GlossaryProtector(glossary)
 
         pending, completed_count, gemini_count = [], 0, 0
@@ -420,6 +472,8 @@ def run_translation_loop():
         for position, chapter in enumerate(pending, 1):
             number = chapter_number(chapter)
             original = originals.get(number)
+            if not original:
+                original = r2_get_json(f"books/{book_id}/r{revision}/ch/{number}.original.json")
             if not original:
                 print(f"  ! ch {number}: thiếu bản gốc, bỏ qua")
                 continue
