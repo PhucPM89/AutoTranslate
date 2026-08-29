@@ -95,7 +95,8 @@ Gemini Batch.
 
 ## Cấu hình an toàn
 
-- `QA_MODEL_ID`: mặc định `Qwen/Qwen2.5-7B-Instruct-AWQ`.
+- `QA_MODEL_ID`: mặc định `Qwen/Qwen2.5-7B-Instruct`.
+- `QA_QUANTIZATION`: mặc định `bitsandbytes` NF4 4-bit, hỗ trợ Python 3.13/T4.
 - `QA_MAX_CHAPTERS`: giới hạn số chương Qwen xử lý trong một lượt; `0` là không giới hạn.
 - `QA_RUN_ONCE`: `true` để quét một lượt rồi thoát.
 - `QA_REQUIRE_GPU`: mặc định `true`; không cho phép vô tình chạy Qwen bằng CPU.

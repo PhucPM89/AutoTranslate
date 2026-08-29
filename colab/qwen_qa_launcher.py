@@ -13,7 +13,8 @@ from importlib.util import find_spec
 # ======================= CẤU HÌNH TÙY CHỌN =======================
 WORKER_INDEX = int(os.environ.get("WORKER_INDEX", "0"))
 TOTAL_WORKERS = int(os.environ.get("TOTAL_WORKERS", "1"))
-MODEL_ID = os.environ.get("QA_MODEL_ID", "Qwen/Qwen2.5-7B-Instruct-AWQ") # hoặc Qwen/Qwen3.5-9B-GPTQ-Int4
+MODEL_ID = os.environ.get("QA_MODEL_ID", "Qwen/Qwen2.5-7B-Instruct")
+QUANTIZATION = os.environ.get("QA_QUANTIZATION", "bitsandbytes")
 if TOTAL_WORKERS < 1 or WORKER_INDEX < 0 or WORKER_INDEX >= TOTAL_WORKERS:
     raise ValueError("WORKER_INDEX phải nằm trong khoảng 0..TOTAL_WORKERS-1.")
 
@@ -46,6 +47,7 @@ CONFIG = {
     "SUPABASE_URL": SUPABASE_URL,
     "SUPABASE_SERVICE_ROLE_KEY": SUPABASE_SERVICE_ROLE_KEY,
     "QA_MODEL_ID": MODEL_ID,
+    "QA_QUANTIZATION": QUANTIZATION,
     "WORKER_INDEX": str(WORKER_INDEX),
     "TOTAL_WORKERS": str(TOTAL_WORKERS),
     "PYTHONUNBUFFERED": "1"
@@ -65,7 +67,7 @@ required_packages = {
     "boto3": "boto3",
     "requests": "requests",
     "torch": "torch",
-    "awq": "autoawq"
+    "bitsandbytes": "bitsandbytes"
 }
 
 missing_packages = [pkg for mod, pkg in required_packages.items() if find_spec(mod) is None]

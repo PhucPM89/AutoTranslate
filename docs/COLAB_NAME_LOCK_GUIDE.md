@@ -115,9 +115,10 @@ Trong Colab Qwen, clone/pull cùng repository rồi chạy launcher:
 !python -u /content/AutoTranslate/colab/qwen_qa_launcher.py
 ```
 
-Launcher mặc định dùng `Qwen/Qwen2.5-7B-Instruct-AWQ`, tự cài dependency cần
-thiết và từ chối chạy nếu notebook chưa bật GPU. Nếu repository nằm ở đường dẫn
-khác, chạy entry point trực tiếp từ thư mục repository:
+Launcher mặc định dùng `Qwen/Qwen2.5-7B-Instruct` nạp NF4 4-bit bằng
+`bitsandbytes`, tương thích runtime Python 3.13 và GPU T4. Launcher tự cài
+dependency cần thiết và từ chối chạy nếu notebook chưa bật GPU. Nếu repository
+nằm ở đường dẫn khác, chạy entry point trực tiếp từ thư mục repository:
 
 ```bash
 %cd /content/AutoTranslate

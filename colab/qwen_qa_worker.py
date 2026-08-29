@@ -19,12 +19,12 @@ from typing import Dict, Any, Optional, List
 from pathlib import Path
 
 import importlib.util
-deps_to_check = ["boto3", "torch", "transformers", "awq"]
+deps_to_check = ["boto3", "torch", "transformers", "bitsandbytes", "accelerate"]
 missing = [dep for dep in deps_to_check if importlib.util.find_spec(dep) is None]
 
 if missing:
     print(f"Đang cài đặt các thư viện cần thiết: {', '.join(missing)}...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "boto3", "torch", "transformers", "autoawq", "accelerate", "optimum", "huggingface_hub"])
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "boto3", "torch", "transformers", "bitsandbytes", "accelerate", "huggingface_hub", "sentencepiece"])
 
 import boto3
 import torch
@@ -77,7 +77,8 @@ missing_config = [name for name, value in {
 if missing_config:
     raise RuntimeError("Thiếu cấu hình môi trường: " + ", ".join(missing_config))
 
-QA_MODEL_ID = os.environ.get("QA_MODEL_ID", "Qwen/Qwen2.5-7B-Instruct-AWQ")
+QA_MODEL_ID = os.environ.get("QA_MODEL_ID", "Qwen/Qwen2.5-7B-Instruct")
+QA_QUANTIZATION = os.environ.get("QA_QUANTIZATION", "bitsandbytes").strip().lower()
 WORKER_INDEX = int(os.environ.get("WORKER_INDEX", "0"))
 TOTAL_WORKERS = max(1, int(os.environ.get("TOTAL_WORKERS", "1")))
 if WORKER_INDEX < 0 or WORKER_INDEX >= TOTAL_WORKERS:
@@ -407,7 +408,7 @@ def merge_translation_memory(current: Optional[Dict[str, Any]], updates: List[Di
 class QwenReviewEngine:
     def __init__(self, model_id: str = QA_MODEL_ID):
         import torch
-        from transformers import AutoModelForCausalLM, AutoTokenizer
+        from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
         print(f"\n⏳ [Qwen QA] Đang nạp mô hình: {model_id}...")
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -415,9 +416,21 @@ class QwenReviewEngine:
             raise RuntimeError("Qwen QA cần GPU. Hãy bật Runtime > Change runtime type > T4 GPU.")
         self.tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
 
-        load_kwargs = {"device_map": "auto", "trust_remote_code": True}
+        load_kwargs = {"device_map": "auto", "trust_remote_code": True, "low_cpu_mem_usage": True}
         if self.device == "cuda":
             load_kwargs["dtype"] = torch.float16
+            if QA_QUANTIZATION == "bitsandbytes":
+                load_kwargs["quantization_config"] = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_quant_type="nf4",
+                    bnb_4bit_compute_dtype=torch.float16,
+                    bnb_4bit_use_double_quant=True,
+                )
+        if "awq" in model_id.lower() and QA_QUANTIZATION == "bitsandbytes":
+            raise RuntimeError(
+                "Model AWQ không dùng chung với QA_QUANTIZATION=bitsandbytes. "
+                "Hãy dùng Qwen/Qwen2.5-7B-Instruct hoặc đổi runtime sang Python <= 3.12 và tự cấu hình AutoAWQ."
+            )
 
         self.model = AutoModelForCausalLM.from_pretrained(model_id, **load_kwargs)
         self.model.eval()
@@ -762,7 +775,7 @@ def process_claim(queue_key: str, queue: Dict[str, Any], entry: Dict[str, Any], 
 def run_worker_loop():
     print("=" * 70)
     print("   🚀 QWEN LOCAL AUTONOMOUS SEMANTIC QA WORKER")
-    print(f"   Model: {QA_MODEL_ID} | Worker: #{WORKER_INDEX}/{TOTAL_WORKERS}")
+    print(f"   Model: {QA_MODEL_ID} ({QA_QUANTIZATION} 4-bit) | Worker: #{WORKER_INDEX}/{TOTAL_WORKERS}")
     print("=" * 70)
 
     engine = QwenReviewEngine(QA_MODEL_ID)
