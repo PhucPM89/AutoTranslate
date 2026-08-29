@@ -17,11 +17,27 @@ async function main() {
   const objects = await storage.list("jobs/");
   const keys = objects.map((item) => item.key).filter((key) => /semantic-review\.json$/.test(key));
   const totals = {};
+  const books = [];
   for (const key of keys) {
     const queue = await readJson(key);
     for (const entry of queue?.entries || []) totals[entry.state] = (totals[entry.state] || 0) + 1;
+    if (queue?.bookId && books.length < 20) {
+      const [bible, context, tm] = await Promise.all([
+        readJson(`story-bible/${queue.bookId}.json`), readJson(`story-context/${queue.bookId}.json`), readJson(`tm/books/${queue.bookId}.json`)
+      ]);
+      books.push({
+        bookId: queue.bookId,
+        queueEntries: queue.entries.length,
+        storyCharacters: bible?.characters?.length || 0,
+        storyTerms: bible?.worldTerms?.length || 0,
+        recentContextChapters: context?.chapters?.length || 0,
+        approvedTmEntries: tm?.entries?.length || 0
+      });
+    }
   }
   const batches = objects.filter((item) => /^jobs\/gemini-batches\/.*\.json$/.test(item.key));
-  console.log(JSON.stringify({ queueCount: keys.length, chapters: totals, batchManifests: batches.length, checkedAt: new Date().toISOString() }, null, 2));
+  const date = new Date().toISOString().slice(0, 10);
+  const budget = await readJson(`jobs/qa-budget/${date}.json`);
+  console.log(JSON.stringify({ queueCount: keys.length, chapters: totals, books, todayBudget: budget || {}, batchManifests: batches.length, checkedAt: new Date().toISOString() }, null, 2));
 }
 main().catch((error) => { console.error(error.message); process.exitCode = 1; });
