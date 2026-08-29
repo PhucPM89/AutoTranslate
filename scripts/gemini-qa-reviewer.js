@@ -13,6 +13,7 @@
  *   node scripts/gemini-qa-reviewer.js --book <book_id>    # Reviews a specific book
  *   node scripts/gemini-qa-reviewer.js --dry-run           # Reports issues without modifying
  *   node scripts/gemini-qa-reviewer.js --force             # Forces re-review of all chapters
+ *   node scripts/gemini-qa-reviewer.js --flagged-only      # Repairs only chapters flagged by Hachimi
  */
 
 const fs = require("fs");
@@ -54,6 +55,7 @@ const ONLY_BOOK = getArg("--book");
 const ONLY_CHAPTER = getArg("--chapter");
 const DRY_RUN = hasFlag("--dry-run");
 const FORCE = hasFlag("--force");
+const FLAGGED_ONLY = hasFlag("--flagged-only") && !FORCE;
 const CONTINUOUS = hasFlag("--continuous") || hasFlag("-c");
 
 const MIN_SCORE = Number(getArg("--min-score", process.env.QA_MIN_SCORE || "8.5"));
@@ -230,6 +232,7 @@ async function runQaReview() {
       totalChaptersScanned += 1;
       const chKey = LAYOUT.chapter(bookId, revision, chapterNumber);
       const chDoc = await readJson(storage, chKey);
+      if (FLAGGED_ONLY && !chDoc?.qaRequired) continue;
       const origKey = LAYOUT.chapterOriginal(bookId, revision, chapterNumber);
       const origDoc = await readJson(storage, origKey);
 
