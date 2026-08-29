@@ -97,9 +97,10 @@ test("keeps paragraph breaks and decodes entities", () => {
   assert.deepEqual(text.split("\n\n"), ["Mot hai", "Ba & bon"]);
 });
 
-test("assigns immutable cache only to versioned chapter objects", () => {
-  assert.match(cacheControlFor("books/b/r1/ch/9.json"), /immutable/);
+test("keeps source immutable and translated chapters refreshable after QA publish", () => {
+  assert.doesNotMatch(cacheControlFor("books/b/r1/ch/9.json"), /immutable/);
   assert.match(cacheControlFor("books/b/r1/ch/9.original.json"), /immutable/);
+  assert.match(cacheControlFor("drafts/b/r1/ch/9.json"), /no-store/);
   assert.doesNotMatch(cacheControlFor("books/b/index.json"), /immutable/);
   assert.match(cacheControlFor("archives/b.epub"), /no-store/, "archives are never reader-facing");
   assert.match(cacheControlFor("covers/b.webp"), /max-age=604800/);
@@ -108,6 +109,7 @@ test("assigns immutable cache only to versioned chapter objects", () => {
 test("rejects a book id that would escape its prefix", () => {
   assert.throws(() => LAYOUT.chapter("../../etc", 1, 1), /bookId/);
   assert.equal(LAYOUT.chapter("fanqie-123", 2, 7), "books/fanqie-123/r2/ch/7.json");
+  assert.equal(LAYOUT.chapterDraft("fanqie-123", 2, 7), "drafts/fanqie-123/r2/ch/7.json");
   assert.throws(() => LAYOUT.chapter("ok", 1, 0), /Chapter number/);
 });
 
@@ -174,7 +176,7 @@ test("local storage put/get/head/list/remove round trip", async () => {
   await storage.put("books/b/r1/ch/1.json", JSON.stringify({ a: 1 }));
   const head = await storage.head("books/b/r1/ch/1.json");
   assert.equal(head.contentType, "application/json; charset=utf-8");
-  assert.match(head.cacheControl, /immutable/);
+  assert.doesNotMatch(head.cacheControl, /immutable/);
   assert.deepEqual(JSON.parse((await storage.get("books/b/r1/ch/1.json")).toString()), { a: 1 });
   assert.equal(storage.publicUrl("books/b/r1/ch/1.json"), "https://cdn.test/books/b/r1/ch/1.json");
 

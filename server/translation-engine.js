@@ -62,7 +62,7 @@ function sanitizeContentSafety(text) {
 function createTranslationEngine({ storage = null } = {}) {
   const glossaryCache = new Map();
   const glossaryUpdates = new Map();
-  let tmCache = null;
+  const tmCache = new Map();
 
   async function loadGlossary(bookId) {
     if (!bookId) return {};
@@ -140,7 +140,8 @@ function createTranslationEngine({ storage = null } = {}) {
   }
 
   async function loadTranslationMemory(bookId = null) {
-    if (tmCache) return tmCache;
+    const cacheKey = bookId || "__global__";
+    if (tmCache.has(cacheKey)) return tmCache.get(cacheKey);
     let list = [...DEFAULT_TM_PATTERNS];
     if (storage) {
       try {
@@ -154,9 +155,18 @@ function createTranslationEngine({ storage = null } = {}) {
       } catch {
         // use default
       }
+      if (bookId) {
+        try {
+          const raw = await storage.get(`tm/books/${bookId}.json`);
+          if (raw) {
+            const bookTm = JSON.parse(raw.toString("utf8"));
+            if (Array.isArray(bookTm?.entries)) list = [...list, ...bookTm.entries.filter((entry) => entry?.approved)];
+          }
+        } catch {}
+      }
     }
-    tmCache = list;
-    return tmCache;
+    tmCache.set(cacheKey, list);
+    return list;
   }
 
   function findMatchedGlossaryTerms(text, glossary = {}) {

@@ -1,8 +1,8 @@
 "use strict";
 
-// Deterministic object layout. Every reader-facing path here is designed to be
-// cached by a CDN forever, so a published chapter must never be overwritten in
-// place: a new revision gets a new key via `rev`.
+// Deterministic object layout. Original source objects are immutable. A
+// translated chapter is deliberately short-cached because semantic QA upgrades
+// the reader-facing object in place after approving a private draft.
 //
 //   books/{bookId}/index.json                  short cache, purged on publish
 //   books/{bookId}/r{rev}/ch/{n}.json          immutable, translated chapter
@@ -14,6 +14,11 @@ const LAYOUT = {
   chapter: (bookId, rev, chapterNumber) => `books/${slug(bookId)}/r${revision(rev)}/ch/${number(chapterNumber)}.json`,
   chapterOriginal: (bookId, rev, chapterNumber) =>
     `books/${slug(bookId)}/r${revision(rev)}/ch/${number(chapterNumber)}.original.json`,
+  chapterDraft: (bookId, rev, chapterNumber) =>
+    `drafts/${slug(bookId)}/r${revision(rev)}/ch/${number(chapterNumber)}.json`,
+  storyBible: (bookId) => `story-bible/${slug(bookId)}.json`,
+  storyContext: (bookId) => `story-context/${slug(bookId)}.json`,
+  bookTranslationMemory: (bookId) => `tm/books/${slug(bookId)}.json`,
   cover: (bookId, extension = ".webp") => `covers/${slug(bookId)}${extension}`,
   archive: (bookId) => `archives/${slug(bookId)}.epub`,
   catalogSnapshot: () => "catalog/latest.json"
@@ -26,7 +31,9 @@ const LONG = "public, max-age=604800, stale-while-revalidate=2592000";
 const PRIVATE = "private, no-store";
 
 function cacheControlFor(key) {
-  if (/\/r\d+\/ch\//.test(key)) return IMMUTABLE;
+  if (key.startsWith("drafts/") || key.startsWith("story-bible/") || key.startsWith("story-context/") || key.startsWith("tm/books/")) return PRIVATE;
+  if (/\/r\d+\/ch\/\d+\.original\.json$/.test(key)) return IMMUTABLE;
+  if (/\/r\d+\/ch\/\d+\.json$/.test(key)) return SHORT;
   if (key.endsWith("/index.json")) return SHORT;
   if (key.startsWith("covers/")) return LONG;
   if (key.startsWith("catalog/")) return SHORT;

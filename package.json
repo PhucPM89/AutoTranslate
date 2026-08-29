@@ -20,16 +20,21 @@
     "qa:review": "node scripts/gemini-qa-reviewer.js",
     "qa:daemon": "node scripts/gemini-qa-reviewer.js --continuous",
     "qa:pilot": "node scripts/gemini-qa-reviewer.js --max-chapters 20",
+    "qa:batch": "node scripts/gemini-batch-reviewer.js",
+    "qa:batch:poll": "node scripts/gemini-batch-reviewer.js --poll-only",
+    "qa:backfill": "node scripts/semantic-qa-backfill.js",
+    "qa:status": "node scripts/semantic-qa-status.js",
     "catalog:refresh": "node scripts/refresh-catalog.js",
     "convert:backfill": "node scripts/convert-backfill.js",
     "build:tm": "node scripts/build-tm.js"
   },
   "dependencies": {
+    "@google/genai": "^2.19.0",
     "jszip": "^3.10.1",
     "qrcode": "^1.5.4"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

@@ -23,6 +23,8 @@ const {
   REVIEW_VERSION, reviewQueueKey, contentFingerprint, claimNextReview,
   settleReview, buildSemanticReviewPrompt, parseSemanticReview
 } = require("../server/semantic-review");
+const { mergeStoryBible, appendStoryContext, mergeApprovedTranslationMemory } = require("../server/story-bible");
+const { estimateTokens, canReserveBudget, reserveBudget } = require("../server/qa-budget");
 
 const storage = createStorage();
 const engine = createTranslationEngine({ storage });
@@ -41,6 +43,8 @@ const MAX_ATTEMPTS = Math.max(1, Number(process.env.QA_MAX_ATTEMPTS || 4));
 const OWNER = `${process.env.GITHUB_RUN_ID || "local"}-${process.pid}`;
 const STATUS_KEY = "jobs/translate-status.json";
 const CURSOR_KEY = "jobs/semantic-review-cursor.json";
+const DAILY_MAX_INPUT_TOKENS = Math.max(1, Number(process.env.QA_DAILY_MAX_INPUT_TOKENS || 250_000));
+const DAILY_MAX_REQUESTS = Math.max(1, Number(process.env.QA_DAILY_MAX_REQUESTS || 100));
 
 async function readJson(key) {
   try {
@@ -57,6 +61,20 @@ async function putJson(key, value) {
 }
 async function writeStatus(status) {
   await putJson(STATUS_KEY, { updatedAt: new Date().toISOString(), pipeline: REVIEW_VERSION, ...status }).catch(() => {});
+}
+async function generateBudgeted(prompt, keys, config) {
+  const date = new Date().toISOString().slice(0, 10);
+  const key = `jobs/qa-budget/${date}.json`;
+  const ledger = await readJson(key);
+  const reservation = { inputTokens: estimateTokens(prompt), requests: 1 };
+  const check = canReserveBudget(ledger, reservation, { maxInputTokens: DAILY_MAX_INPUT_TOKENS, maxRequests: DAILY_MAX_REQUESTS });
+  if (!check.ok) {
+    const error = new Error(`Đã chạm ngân sách semantic QA ngày ${date}.`);
+    error.code = "qa_budget_exhausted";
+    throw error;
+  }
+  await putJson(key, reserveBudget(ledger, reservation));
+  return generateStructuredText(prompt, keys, config);
 }
 async function listQueueKeys() {
   if (ONLY_BOOK) return [reviewQueueKey(ONLY_BOOK)];
@@ -80,19 +98,24 @@ async function processClaim(queueKey, queue, entry, keys) {
   const revision = Number(entry.revision || queue.revision || 1);
   const chapterNumber = Number(entry.chapterNumber);
   const chapterKey = LAYOUT.chapter(bookId, revision, chapterNumber);
-  const [index, chapter, original, glossary, previous] = await Promise.all([
+  const draftKey = LAYOUT.chapterDraft(bookId, revision, chapterNumber);
+  const [index, published, privateDraft, original, glossary, previous, storyBible, storyContext] = await Promise.all([
     readJson(LAYOUT.bookIndex(bookId)),
     readJson(chapterKey),
+    readJson(draftKey),
     readJson(LAYOUT.chapterOriginal(bookId, revision, chapterNumber)),
     engine.loadGlossary(bookId),
-    chapterNumber > 1 ? readJson(LAYOUT.chapter(bookId, revision, chapterNumber - 1)) : null
+    chapterNumber > 1 ? readJson(LAYOUT.chapter(bookId, revision, chapterNumber - 1)) : null,
+    readJson(LAYOUT.storyBible(bookId)),
+    readJson(LAYOUT.storyContext(bookId))
   ]);
-  if (isProtectedGeminiDocument(chapter)) {
+  if (isProtectedGeminiDocument(published)) {
     markSkippedGemini(queue, entry);
     await putJson(queueKey, queue);
     console.log(`  ↷ ${bookId} ch ${chapterNumber}: đã có provenance Gemini, giữ nguyên.`);
     return { skipped: true };
   }
+  const chapter = privateDraft || published;
   if (!chapter?.content || !original?.content) throw new Error("Thiếu bản gốc hoặc bản Hachimi.");
   const fingerprint = (document) => contentFingerprint({
     revision, chapterNumber, translationVersion: document?.translationVersion, content: document?.content
@@ -105,9 +128,13 @@ async function processClaim(queueKey, queue, entry, keys) {
     source: original.content,
     draft: chapter.content,
     glossary,
-    previousContext: previous?.content || ""
+    previousContext: previous?.content || "",
+    storyBible,
+    recentContext: storyContext?.chapters || []
   });
-  const response = await generateStructuredText(prompt, keys, { temperature: 0.1, thinkingBudget: 256 });
+  const response = entry.batchResponseText
+    ? { text: entry.batchResponseText, model: entry.batchModel || "gemini-batch" }
+    : await generateBudgeted(prompt, keys, { temperature: 0.1, thinkingBudget: 256 });
   const initialReview = parseSemanticReview(response.text, { source: original.content, draft: chapter.content });
   const repaired = initialReview.decision !== "pass";
   const content = repaired ? engine.postProcessTranslation(initialReview.correctedTranslation, glossary) : chapter.content;
@@ -124,7 +151,7 @@ async function processClaim(queueKey, queue, entry, keys) {
       glossary,
       previousContext: previous?.content || ""
     });
-    const verification = await generateStructuredText(verifyPrompt, keys, { temperature: 0.05, thinkingBudget: 256 });
+    const verification = await generateBudgeted(verifyPrompt, keys, { temperature: 0.05, thinkingBudget: 256 });
     review = parseSemanticReview(verification.text, { source: original.content, draft: content });
     verifierModel = verification.model;
     if (review.decision !== "pass") throw new Error("Bản Gemini sửa chưa vượt qua vòng semantic verification độc lập.");
@@ -133,13 +160,13 @@ async function processClaim(queueKey, queue, entry, keys) {
   const averageScore = Object.values(review.scores).reduce((sum, score) => sum + score, 0) / 4;
 
   // Re-read before PUT: never overwrite a result written while Gemini was reviewing.
-  const latest = await readJson(chapterKey);
-  if (isProtectedGeminiDocument(latest) && latest.updatedAt !== chapter.updatedAt) {
+  const [latestPublished, latestDraft] = await Promise.all([readJson(chapterKey), readJson(draftKey)]);
+  if (isProtectedGeminiDocument(latestPublished) && latestPublished.updatedAt !== published?.updatedAt) {
     markSkippedGemini(queue, entry);
     await putJson(queueKey, queue);
     return { skipped: true };
   }
-  if (fingerprint(latest) !== entry.fingerprint) throw new Error("Chương đổi nội dung trong lúc Gemini đang review.");
+  if (fingerprint(latestDraft || latestPublished) !== entry.fingerprint) throw new Error("Chương đổi nội dung trong lúc Gemini đang review.");
 
   const updatedChapter = {
     ...chapter,
@@ -168,6 +195,7 @@ async function processClaim(queueKey, queue, entry, keys) {
     const indexEntry = index?.chapters?.find((item) => Number(item.n || item.chapterNumber) === chapterNumber);
     if (indexEntry) {
       Object.assign(indexEntry, {
+        title: updatedChapter.title,
         provider: updatedChapter.provider, model: updatedChapter.model,
         qaStatus: "approved", qaReviewed: true, qaRequired: false,
         qualityScore: updatedChapter.qualityScore
@@ -175,11 +203,27 @@ async function processClaim(queueKey, queue, entry, keys) {
       index.updatedAt = now;
       await putJson(LAYOUT.bookIndex(bookId), index);
     }
+    const [latestBible, latestContext, latestTm] = await Promise.all([
+      readJson(LAYOUT.storyBible(bookId)),
+      readJson(LAYOUT.storyContext(bookId)),
+      readJson(LAYOUT.bookTranslationMemory(bookId))
+    ]);
+    await Promise.all([
+      putJson(LAYOUT.storyBible(bookId), mergeStoryBible(latestBible, review.storyBibleUpdates, {
+        bookId, chapterNumber, evidenceText: `${original.content}\n${content}`, now
+      })),
+      putJson(LAYOUT.storyContext(bookId), appendStoryContext(latestContext, { chapterNumber, summary: review.chapterSummary, now })),
+      putJson(LAYOUT.bookTranslationMemory(bookId), mergeApprovedTranslationMemory(latestTm, review.translationMemoryUpdates, {
+        chapterNumber, source: original.content, translation: content, now
+      }))
+    ]);
   }
   settleReview(queue, chapterNumber, {
     approved: true, decision: repaired ? initialReview.decision : review.decision, model: verifierModel,
     scores: review.scores, issues: initialReview.issues
   }, { maxAttempts: MAX_ATTEMPTS });
+  delete entry.batchResponseText;
+  delete entry.batchModel;
   if (!DRY_RUN) await putJson(queueKey, queue);
   console.log(`  ✓ ${bookId} ch ${chapterNumber}: ${repaired ? initialReview.decision : review.decision} · ${response.model} · ${averageScore.toFixed(1)}/10`);
   return { approved: true, repaired };
@@ -220,14 +264,16 @@ async function runOnce() {
       } catch (error) {
         failed += 1;
         const temporaryProviderError = [429, 500, 502, 503, 504].includes(error.status) || /quota|rate limit|resource_exhausted/i.test(error.message);
+        const budgetStopped = error.code === "qa_budget_exhausted";
+        const nextUtcDayMs = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate() + 1) - Date.now() + 60_000;
         settleReview(queue, entry.chapterNumber, {
           error: error.message,
-          retryable: temporaryProviderError,
-          retryAfterMs: error.retryAfterMs
+          retryable: temporaryProviderError || budgetStopped,
+          retryAfterMs: budgetStopped ? nextUtcDayMs : error.retryAfterMs
         }, { maxAttempts: MAX_ATTEMPTS });
         await putJson(queueKey, queue);
         console.error(`  ✗ ${queue.bookId} ch ${entry.chapterNumber}: ${error.message}`);
-        if (temporaryProviderError || [403, 401].includes(error.status)) {
+        if (temporaryProviderError || budgetStopped || [403, 401].includes(error.status)) {
           providerStopped = true;
           break;
         }

@@ -2,7 +2,7 @@ name: Gemini Semantic QA
 
 on:
   schedule:
-    - cron: "0 */6 * * *" # Controlled pilot; raise throughput only after measuring tokens/cost.
+    - cron: "10 * * * *" # Realtime lane; daily budget is enforced by the worker.
   workflow_dispatch:
     inputs:
       book:
@@ -44,6 +44,8 @@ jobs:
       QA_BOOK_INPUT: ${{ inputs.book || '' }}
       QA_FORCE_INPUT: ${{ inputs.force || 'false' }}
       QA_MAX_CHAPTERS_INPUT: ${{ inputs.max_chapters || '20' }}
+      QA_DAILY_MAX_INPUT_TOKENS: ${{ vars.QA_DAILY_MAX_INPUT_TOKENS || '250000' }}
+      QA_DAILY_MAX_REQUESTS: ${{ vars.QA_DAILY_MAX_REQUESTS || '100' }}
     steps:
       - uses: actions/checkout@v4
 

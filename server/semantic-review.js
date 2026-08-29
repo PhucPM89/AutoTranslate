@@ -4,7 +4,7 @@ const crypto = require("node:crypto");
 const { evaluateTranslationQuality } = require("./translation-quality");
 
 const REVIEW_VERSION = "semantic-v1";
-const REVIEW_STATES = new Set(["pending", "processing", "retrying", "approved", "failed", "skipped_gemini"]);
+const REVIEW_STATES = new Set(["pending", "processing", "batch_processing", "retrying", "approved", "failed", "skipped_gemini"]);
 
 function reviewQueueKey(bookId) {
   return `jobs/${bookId}/semantic-review.json`;
@@ -113,7 +113,7 @@ function settleReview(queue, chapterNumber, result, { now = Date.now(), maxAttem
   return entry;
 }
 
-function buildSemanticReviewPrompt({ bookTitle, chapterNumber, source, draft, glossary = {}, previousContext = "" }) {
+function buildSemanticReviewPrompt({ bookTitle, chapterNumber, source, draft, glossary = {}, previousContext = "", storyBible = null, recentContext = [] }) {
   const matchedGlossary = Object.fromEntries(
     Object.entries(glossary || {})
       .filter(([zh]) => String(source || "").includes(zh))
@@ -130,11 +130,16 @@ function buildSemanticReviewPrompt({ bookTitle, chapterNumber, source, draft, gl
       decision: "pass|repair|retranslate",
       scores: { accuracy: 0, completeness: 0, fluency: 0, terminology: 0 },
       issues: [{ type: "", severity: "minor|major|critical", explanation: "" }],
-      correctedTranslation: ""
+      correctedTranslation: "",
+      chapterSummary: "Tóm tắt sự kiện/chủ thể quan trọng trong tối đa 120 từ",
+      storyBibleUpdates: { characters: [{ name: "", aliases: [], gender: "male|female|unknown", role: "", relationships: [], notes: "" }], worldTerms: [{ term: "", meaning: "" }] },
+      translationMemoryUpdates: [{ zh: "cụm từ có thật trong bản gốc", vi: "cụm tương ứng có thật trong bản dịch" }]
     }),
     "Ngưỡng pass: accuracy >= 9, completeness >= 9, terminology >= 9, không có lỗi major/critical.",
     `Truyện: ${bookTitle || "Không rõ"}; chương: ${chapterNumber}`,
     `Glossary bắt buộc: ${JSON.stringify(matchedGlossary)}`,
+    storyBible ? `Story bible đã duyệt (không được tự ý mâu thuẫn):\n${JSON.stringify({ characters: (storyBible.characters || []).slice(-120), worldTerms: (storyBible.worldTerms || []).slice(-120) })}` : "",
+    recentContext?.length ? `Tóm tắt các chương gần nhất đã duyệt:\n${JSON.stringify(recentContext.slice(-8))}` : "",
     previousContext ? `Ngữ cảnh chương trước (chỉ để phân giải nhân vật/xưng hô):\n${String(previousContext).slice(-3000)}` : "",
     `BẢN GỐC:\n${source || ""}`,
     `BẢN NHÁP HACHIMI:\n${draft || ""}`
@@ -178,7 +183,15 @@ function parseSemanticReview(value, { source = "", draft = "" } = {}) {
     correctedTranslation = String(draft || "").trim();
   }
 
-  return { decision: parsed.decision, scores, issues, correctedTranslation };
+  return {
+    decision: parsed.decision,
+    scores,
+    issues,
+    correctedTranslation,
+    chapterSummary: String(parsed.chapterSummary || "").trim().slice(0, 1200),
+    storyBibleUpdates: parsed.storyBibleUpdates && typeof parsed.storyBibleUpdates === "object" ? parsed.storyBibleUpdates : {},
+    translationMemoryUpdates: Array.isArray(parsed.translationMemoryUpdates) ? parsed.translationMemoryUpdates.slice(0, 30) : []
+  };
 }
 
 module.exports = {

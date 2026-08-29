@@ -124,7 +124,7 @@ async function translateText(text, apiKeys, options = {}) {
   if (options.bookId) {
     bookGlossary = await engine.mineAndMergeGlossary(options.bookId, [text]);
   }
-  const translationMemory = options.translationMemory || await engine.loadTranslationMemory();
+  const translationMemory = options.translationMemory || await engine.loadTranslationMemory(options.bookId || null);
   const glossary = {
     ...Object.fromEntries(
       (translationMemory || [])

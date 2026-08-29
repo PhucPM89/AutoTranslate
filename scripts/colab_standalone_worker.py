@@ -508,12 +508,27 @@ def run_translation_loop():
             number = chapter_number(chapter)
             if number is None:
                 continue
-            document = r2_get_json(f"books/{book_id}/r{revision}/ch/{number}.json")
-            if is_gemini_document(document) or is_gemini_document(index_by_number.get(number)) or is_gemini_document(chapter):
+            published_document = r2_get_json(f"books/{book_id}/r{revision}/ch/{number}.json")
+            draft_document = r2_get_json(f"drafts/{book_id}/r{revision}/ch/{number}.json")
+            if is_gemini_document(published_document) or is_gemini_document(index_by_number.get(number)) or is_gemini_document(chapter):
                 chapter["status"] = "completed"
                 completed_count += 1
                 gemini_count += 1
                 continue
+
+            # One-time compatibility migration: an existing quality-v2 Hachimi
+            # chapter becomes a private draft without changing reader output.
+            if (
+                not draft_document
+                and published_document
+                and str(published_document.get("provider") or "").lower() == "hachimi"
+                and published_document.get("translationVersion") == TRANSLATION_VERSION
+            ):
+                draft_document = dict(published_document)
+                draft_document["qaStatus"] = draft_document.get("qaStatus") or "review_pending"
+                r2_put_json(f"drafts/{book_id}/r{revision}/ch/{number}.json", draft_document, "private, no-store")
+
+            document = draft_document or published_document
 
             content = str((document or {}).get("content") or "").strip()
             corrupt = not document or len(content) < 50 or bool(re.search(r"[\u4e00-\u9fa5]", content))
@@ -617,7 +632,7 @@ def run_translation_loop():
             }
             quality = evaluate_translation_quality(original.get("content", ""), content)
             document.update(quality)
-            r2_put_json(f"books/{book_id}/r{revision}/ch/{number}.json", document)
+            r2_put_json(f"drafts/{book_id}/r{revision}/ch/{number}.json", document, "private, no-store")
             review_queue = merge_semantic_review_queue(
                 review_queue,
                 book_id,
@@ -637,8 +652,8 @@ def run_translation_loop():
             index_entry = index_by_number.get(number)
             if index_entry is not None:
                 index_entry.update({
-                    "title": title, "status": "completed", "translationStatus": "completed",
-                    "translationVersion": TRANSLATION_VERSION, "provider": "hachimi", "model": MODEL_ID,
+                    # Reader-facing provider/title remain unchanged until QA
+                    # publishes this private draft.
                     "qaStatus": "review_pending", "qaReviewed": False,
                     **quality,
                 })

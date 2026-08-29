@@ -1,0 +1,46 @@
+name: Gemini Batch Semantic QA
+
+on:
+  schedule:
+    - cron: "25 * * * *"
+  workflow_dispatch:
+    inputs:
+      poll_only:
+        description: "Chỉ nhận kết quả Batch, không gửi job mới"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  batch_review:
+    if: github.event_name == 'workflow_dispatch' || vars.QA_BATCH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: novel-pipeline-storage-writes
+      cancel-in-progress: false
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: ${{ secrets.GEMINI_MODEL || 'gemini-3.6-flash' }}
+      GEMINI_BATCH_MODEL: ${{ secrets.GEMINI_MODEL || 'gemini-3.6-flash' }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      QA_BATCH_SIZE: ${{ vars.QA_BATCH_SIZE || '20' }}
+      QA_BATCH_MAX_INPUT_TOKENS: ${{ vars.QA_BATCH_MAX_INPUT_TOKENS || '200000' }}
+      POLL_ONLY: ${{ inputs.poll_only || false }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Poll and submit Batch
+        run: |
+          ARGS=()
+          if [ "$POLL_ONLY" = "true" ]; then ARGS+=(--poll-only); fi
+          node scripts/gemini-batch-reviewer.js "${ARGS[@]}"
