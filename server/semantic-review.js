@@ -3,7 +3,7 @@
 const crypto = require("node:crypto");
 const { evaluateTranslationQuality } = require("./translation-quality");
 
-const REVIEW_VERSION = "semantic-v1";
+const REVIEW_VERSION = "semantic-v2";
 const REVIEW_STATES = new Set(["pending", "processing", "batch_processing", "retrying", "approved", "failed", "skipped_gemini"]);
 
 function reviewQueueKey(bookId) {
@@ -36,6 +36,7 @@ function createReviewEntry({ revision, chapterNumber, translationVersion, conten
 
 function mergeReviewEntries(queue, candidates, { bookId, revision, now = new Date().toISOString() } = {}) {
   const current = queue && typeof queue === "object" ? queue : {};
+  const versionChanged = current.reviewVersion && current.reviewVersion !== REVIEW_VERSION;
   const byChapter = new Map(
     (Array.isArray(current.entries) ? current.entries : [])
       .filter((entry) => Number.isInteger(Number(entry?.chapterNumber)))
@@ -47,7 +48,16 @@ function mergeReviewEntries(queue, candidates, { bookId, revision, now = new Dat
     const previous = byChapter.get(next.chapterNumber);
     // The same exact Hachimi output keeps its durable checkpoint. A changed
     // chapter gets a fresh review even when its chapter number is unchanged.
-    if (!previous || previous.fingerprint !== next.fingerprint) byChapter.set(next.chapterNumber, next);
+    if (!previous || previous.fingerprint !== next.fingerprint) {
+      byChapter.set(next.chapterNumber, next);
+      continue;
+    }
+    // A new semantic pipeline invalidates attempts and leases produced by the
+    // old reviewer. Already-approved output and protected Gemini chapters are
+    // durable checkpoints and must never be reopened only because code changed.
+    if (versionChanged && !["approved", "skipped_gemini"].includes(previous.state)) {
+      byChapter.set(next.chapterNumber, next);
+    }
   }
 
   return {

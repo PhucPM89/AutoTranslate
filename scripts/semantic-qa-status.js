@@ -36,8 +36,14 @@ async function main() {
     }
   }
   const batches = objects.filter((item) => /^jobs\/gemini-batches\/.*\.json$/.test(item.key));
+  const batchStates = {};
+  for (const item of batches) {
+    const manifest = await readJson(item.key);
+    const state = manifest?.state || "unknown";
+    batchStates[state] = (batchStates[state] || 0) + 1;
+  }
   const date = new Date().toISOString().slice(0, 10);
   const budget = await readJson(`jobs/qa-budget/${date}.json`);
-  console.log(JSON.stringify({ queueCount: keys.length, chapters: totals, books, todayBudget: budget || {}, batchManifests: batches.length, checkedAt: new Date().toISOString() }, null, 2));
+  console.log(JSON.stringify({ queueCount: keys.length, chapters: totals, books, todayBudget: budget || {}, batchManifests: batches.length, batchStates, checkedAt: new Date().toISOString() }, null, 2));
 }
 main().catch((error) => { console.error(error.message); process.exitCode = 1; });

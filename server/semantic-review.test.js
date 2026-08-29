@@ -18,6 +18,28 @@ test("semantic queue preserves approved checkpoint for identical content", () =>
   assert.equal(queue.entries[0].state, "approved");
 });
 
+test("semantic pipeline upgrade resets unfinished attempts but preserves approved chapters", () => {
+  const candidates = [
+    { revision: 1, chapterNumber: 1, translationVersion: "v2", content: "đã duyệt" },
+    { revision: 1, chapterNumber: 2, translationVersion: "v2", content: "đang lỗi" }
+  ];
+  let queue = mergeReviewEntries(null, candidates, { bookId: "book", revision: 1, now: "2026-01-01T00:00:00.000Z" });
+  queue.entries[0].state = "approved";
+  queue.entries[0].attempts = 2;
+  queue.entries[1].state = "batch_processing";
+  queue.entries[1].attempts = 3;
+  queue.entries[1].batchId = "old-batch";
+  queue.reviewVersion = "semantic-v1";
+
+  queue = mergeReviewEntries(queue, candidates, { bookId: "book", revision: 1, now: "2026-01-02T00:00:00.000Z" });
+  assert.equal(queue.reviewVersion, "semantic-v2");
+  assert.equal(queue.entries[0].state, "approved");
+  assert.equal(queue.entries[0].attempts, 2);
+  assert.equal(queue.entries[1].state, "pending");
+  assert.equal(queue.entries[1].attempts, 0);
+  assert.equal(queue.entries[1].batchId, undefined);
+});
+
 test("semantic queue reopens when chapter content changes and reclaims expired leases", () => {
   let queue = mergeReviewEntries(null, [{ revision: 1, chapterNumber: 1, translationVersion: "v2", content: "cũ" }], { bookId: "book", revision: 1 });
   claimNextReview(queue, { owner: "dead", now: 1000, leaseMs: 100 });

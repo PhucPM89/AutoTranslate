@@ -40,7 +40,7 @@ WORKER_INDEX = int(os.environ.get("WORKER_INDEX", "0"))
 TOTAL_WORKERS = max(1, int(os.environ.get("TOTAL_WORKERS", "1")))
 BATCH_SIZE = max(1, int(os.environ.get("HACHIMI_BATCH_SIZE", "32")))
 RETRANSLATE_NAME_LOCK = os.environ.get("RETRANSLATE_NAME_LOCK", "true").lower() != "false"
-SEMANTIC_REVIEW_VERSION = "semantic-v1"
+SEMANTIC_REVIEW_VERSION = "semantic-v2"
 HACHIMI_BOOK_LEASE_SECONDS = 3 * 60 * 60
 
 R2_ENDPOINT = os.environ.get("R2_ENDPOINT", "")
@@ -108,6 +108,7 @@ def review_fingerprint(revision, chapter_number_value, translation_version, cont
 
 def merge_semantic_review_queue(queue, book_id, revision, candidates):
     document = queue if isinstance(queue, dict) else {}
+    version_changed = bool(document.get("reviewVersion")) and document.get("reviewVersion") != SEMANTIC_REVIEW_VERSION
     entries = document.get("entries") if isinstance(document.get("entries"), list) else []
     by_number = {
         chapter_number(entry): dict(entry)
@@ -125,7 +126,8 @@ def merge_semantic_review_queue(queue, book_id, revision, candidates):
         )
         previous = by_number.get(number)
         if previous and previous.get("fingerprint") == fingerprint:
-            continue
+            if not version_changed or previous.get("state") in ("approved", "skipped_gemini"):
+                continue
         by_number[number] = {
             "chapterNumber": number,
             "revision": revision,

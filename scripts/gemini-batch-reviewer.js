@@ -27,11 +27,35 @@ const BATCH_SIZE = Math.max(1, Math.min(100, Number(process.env.QA_BATCH_SIZE ||
 const MAX_BATCH_INPUT_TOKENS = Math.max(10_000, Number(process.env.QA_BATCH_MAX_INPUT_TOKENS || 200_000));
 const DRY_RUN = process.argv.includes("--dry-run");
 const ONLY_POLL = process.argv.includes("--poll-only");
+const RETRY_FAILED = process.argv.includes("--retry-failed-batch");
 
 async function readJson(key) {
   try { const raw = await storage.get(key); return raw ? JSON.parse(raw.toString("utf8")) : null; } catch { return null; }
 }
 async function putJson(key, value) { await storage.put(key, JSON.stringify(value, null, 2), { cacheControl: "private, no-store" }); }
+
+async function failPreparedManifest(manifestKey, manifest, message) {
+  const queue = await readJson(manifest.queueKey);
+  const now = new Date().toISOString();
+  for (const meta of manifest.entries || []) {
+    const entry = queue?.entries?.find((item) => Number(item.chapterNumber) === Number(meta.chapterNumber) && item.fingerprint === meta.fingerprint);
+    if (entry?.state === "batch_processing" && entry.batchId === manifest.batchId) {
+      entry.state = "pending";
+      entry.batchId = "";
+      entry.lastError = `Batch create: ${String(message).slice(0, 300)}`;
+      entry.updatedAt = now;
+    }
+  }
+  if (queue) {
+    queue.updatedAt = now;
+    await putJson(manifest.queueKey, queue);
+  }
+  manifest.state = "failed";
+  manifest.error = String(message).slice(0, 500);
+  manifest.completedAt = now;
+  for (const meta of manifest.entries || []) delete meta.prompt;
+  await putJson(manifestKey, manifest);
+}
 
 async function pollManifests(client) {
   const objects = await storage.list("jobs/gemini-batches/");
@@ -47,16 +71,23 @@ async function pollManifests(client) {
         if (entry) Object.assign(entry, { state: "batch_processing", batchId: manifest.batchId, updatedAt: new Date().toISOString() });
       }
       if (queue) await putJson(manifest.queueKey, queue);
-      const existing = await client.findByDisplayName(manifest.displayName);
-      const created = existing || await client.create({
-        model: manifest.model,
-        displayName: manifest.displayName,
-        requests: manifest.entries.map((meta) => ({
-          contents: [{ role: "user", parts: [{ text: meta.prompt }] }],
-          metadata: { chapterNumber: String(meta.chapterNumber), fingerprint: meta.fingerprint },
-          config: { temperature: 0.1, maxOutputTokens: 16384, responseMimeType: "application/json" }
-        }))
-      });
+      let created;
+      try {
+        const existing = await client.findByDisplayName(manifest.displayName);
+        created = existing || await client.create({
+          model: manifest.model,
+          displayName: manifest.displayName,
+          requests: manifest.entries.map((meta) => ({
+            contents: [{ role: "user", parts: [{ text: meta.prompt }] }],
+            metadata: { chapterNumber: String(meta.chapterNumber), fingerprint: meta.fingerprint },
+            config: { temperature: 0.1, maxOutputTokens: 16384, responseMimeType: "application/json" }
+          }))
+        });
+      } catch (error) {
+        await failPreparedManifest(object.key, manifest, error.message);
+        console.warn(`Batch ${manifest.batchId} không thể tạo; đã rollback queue: ${error.message}`);
+        continue;
+      }
       manifest.jobName = created.name;
       manifest.providerState = created.state;
       manifest.state = "submitted";
@@ -144,6 +175,10 @@ async function submitOne(client) {
     const manifestKey = `jobs/gemini-batches/${batchId}.json`;
     let manifest = await readJson(manifestKey);
     if (manifest?.jobName) return null;
+    if (manifest?.state === "failed" && !RETRY_FAILED) {
+      console.log(`Batch ${batchId} từng bị provider từ chối; dùng --retry-failed-batch sau khi nâng tier/model.`);
+      return null;
+    }
     manifest = {
       schema: 1, batchId, displayName, model: MODEL, queueKey, bookId: queue.bookId,
       state: "prepared", estimatedInputTokens, createdAt: new Date().toISOString(),
@@ -159,15 +194,22 @@ async function submitOne(client) {
       Object.assign(entry, { state: "batch_processing", batchId, updatedAt: new Date().toISOString() });
     }
     await putJson(queueKey, queue);
-    const existing = await client.findByDisplayName(displayName);
-    const job = existing || await client.create({
-      model: MODEL, displayName,
-      requests: candidates.map((item) => ({
-        contents: [{ role: "user", parts: [{ text: item.prompt }] }],
-        metadata: { chapterNumber: String(item.chapterNumber), fingerprint: item.fingerprint },
-        config: { temperature: 0.1, maxOutputTokens: 16384, responseMimeType: "application/json" }
-      }))
-    });
+    let job;
+    try {
+      const existing = await client.findByDisplayName(displayName);
+      job = existing || await client.create({
+        model: MODEL, displayName,
+        requests: candidates.map((item) => ({
+          contents: [{ role: "user", parts: [{ text: item.prompt }] }],
+          metadata: { chapterNumber: String(item.chapterNumber), fingerprint: item.fingerprint },
+          config: { temperature: 0.1, maxOutputTokens: 16384, responseMimeType: "application/json" }
+        }))
+      });
+    } catch (error) {
+      await failPreparedManifest(manifestKey, manifest, error.message);
+      console.warn(`Không thể tạo Batch; đã rollback ${candidates.length} chương: ${error.message}`);
+      return null;
+    }
     manifest = { ...manifest, state: "submitted", jobName: job.name, providerState: job.state, submittedAt: new Date().toISOString() };
     for (const meta of manifest.entries) delete meta.prompt;
     await putJson(manifestKey, manifest);
