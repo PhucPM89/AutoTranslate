@@ -16,10 +16,12 @@ test("quality campaign selects legacy chapters and skips completed checkpoints",
   assert.equal(needsTranslationVersion(rebuilt), false);
 });
 
-test("Hachimi campaigns protect every supported Gemini marker", () => {
+test("Hachimi campaigns protect explicit Gemini provenance only", () => {
   assert.equal(isProtectedGeminiDocument({ provider: "gemini" }), true);
   assert.equal(isProtectedGeminiDocument({ model: "gemini-3.6-flash" }), true);
-  assert.equal(isProtectedGeminiDocument({ qaReviewed: true }), true);
+  assert.equal(isProtectedGeminiDocument({ qaReviewed: true }), false);
+  assert.equal(isProtectedGeminiDocument({ provider: "hachimi", qaReviewed: true }), false);
+  assert.equal(isProtectedGeminiDocument({ provider: "gemini", qaReviewed: false }), true);
   assert.equal(isProtectedGeminiDocument({ provider: "hachimi", model: "HachimiMT" }), false);
 });
 

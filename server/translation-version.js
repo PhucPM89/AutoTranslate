@@ -18,7 +18,10 @@ function isProtectedGeminiDocument(document) {
   if (!document) return false;
   const provider = String(document.provider || document.translationProvider || "").toLowerCase();
   const model = String(document.model || "").toLowerCase();
-  return provider === "gemini" || Boolean(document.qaReviewed) || model.includes("gemini");
+  // qaReviewed is only a quality flag, not reliable provider provenance. Some
+  // legacy Hachimi chapters were stamped true by the old broad audit and must
+  // remain eligible for the quality-v2 rebuild.
+  return provider === "gemini" || model.includes("gemini");
 }
 
 module.exports = {

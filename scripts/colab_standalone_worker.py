@@ -124,7 +124,9 @@ def is_gemini_document(document):
         return False
     provider = str(document.get("provider") or document.get("translationProvider") or "").lower()
     model = str(document.get("model") or "").lower()
-    return provider == "gemini" or bool(document.get("qaReviewed")) or "gemini" in model
+    # qaReviewed alone is not provider provenance: the old broad audit marked
+    # some Hachimi chapters as reviewed even though they still need quality-v2.
+    return provider == "gemini" or "gemini" in model
 
 
 # Per-book character glossary (same conservative policy as the Node worker).

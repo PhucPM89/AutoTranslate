@@ -235,8 +235,11 @@ def run_autonomous_translation():
             n = ch.get("chapterNumber") or ch.get("n")
             doc_key = f"books/{book_id}/r{rev}/ch/{n}.json"
             doc = r2_get_json(s3, doc_key)
-            # Không bao giờ dịch đè lên chương đã được Gemini hoàn thiện
-            if doc and (doc.get("provider") == "gemini" or doc.get("qaReviewed")):
+            # Chỉ bảo vệ khi provenance xác nhận Gemini. qaReviewed đơn lẻ có
+            # thể là dấu vết sai từ bộ đánh giá cũ và không được dùng để bỏ qua.
+            provider = str((doc or {}).get("provider") or "").lower()
+            model = str((doc or {}).get("model") or "").lower()
+            if doc and (provider == "gemini" or "gemini" in model):
                 continue
             content = (doc.get("content") or "").strip() if doc else ""
             has_chinese = bool(re.search(r'[\u4e00-\u9fa5]', content))

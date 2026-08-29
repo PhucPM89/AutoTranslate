@@ -67,8 +67,10 @@ notebook và không sử dụng lại những khóa từng xuất hiện trong c
 
 ## Quy tắc an toàn
 
-- Chương có `provider=gemini`, model chứa `gemini`, hoặc `qaReviewed=true` luôn
-  được giữ nguyên, kể cả trong chiến dịch tái dịch toàn thư viện.
+- Chương có `provider=gemini` hoặc model chứa `gemini` luôn được giữ nguyên, kể
+  cả trong chiến dịch tái dịch toàn thư viện.
+- `qaReviewed=true` đứng một mình không còn được coi là bằng chứng Gemini. Các
+  chương Hachimi bị đánh dấu nhầm bởi bộ đánh giá cũ vẫn được tái dịch.
 - Chỉ chương Hachimi/convert/cũ chưa có `translationVersion=hachimi-quality-v2` được
   tái dịch.
 - Glossary được khai thác từ toàn bộ bản gốc của từng bộ trước khi dịch.
