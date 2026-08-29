@@ -19,15 +19,20 @@ const { createStorage, LAYOUT } = require("../server/storage");
 const { createTranslationEngine } = require("../server/translation-engine");
 const { isProtectedGeminiDocument } = require("../server/translation-version");
 const { generateStructuredText, getActiveKeys } = require("../server/gemini");
+const { createSupabase } = require("../server/supabase");
+const { evaluateTranslationQuality } = require("../server/translation-quality");
+const { applyPublicationProgress } = require("../server/publication-progress");
+const { acquireReviewLock, releaseReviewLock } = require("../server/review-lock");
 const {
   REVIEW_VERSION, reviewQueueKey, contentFingerprint, claimNextReview,
-  settleReview, buildSemanticReviewPrompt, buildSemanticRepairPrompt, parseSemanticReview
+  settleReview, buildSemanticReviewPrompt, buildSemanticRepairPrompt, parseSemanticRepair, parseSemanticReview
 } = require("../server/semantic-review");
 const { mergeStoryBible, appendStoryContext, mergeApprovedTranslationMemory } = require("../server/story-bible");
 const { estimateTokens, canReserveBudget, reserveBudget } = require("../server/qa-budget");
 
 const storage = createStorage();
 const engine = createTranslationEngine({ storage });
+const db = createSupabase();
 const args = process.argv.slice(2);
 const hasFlag = (flag) => args.includes(flag);
 const getArg = (flag, fallback = "") => {
@@ -110,7 +115,7 @@ async function processClaim(queueKey, queue, entry, keys) {
     readJson(LAYOUT.storyBible(bookId)),
     readJson(LAYOUT.storyContext(bookId))
   ]);
-  if (isProtectedGeminiDocument(published)) {
+  if (isProtectedGeminiDocument(published) && !entry.forceReplacePublished) {
     markSkippedGemini(queue, entry);
     await putJson(queueKey, queue);
     console.log(`  ↷ ${bookId} ch ${chapterNumber}: đã có provenance Gemini, giữ nguyên.`);
@@ -126,6 +131,8 @@ async function processClaim(queueKey, queue, entry, keys) {
   const prompt = buildSemanticReviewPrompt({
     bookTitle: index?.title || bookId,
     chapterNumber,
+    sourceTitle: original.title,
+    draftTitle: chapter.title,
     source: original.content,
     draft: chapter.content,
     glossary,
@@ -137,33 +144,46 @@ async function processClaim(queueKey, queue, entry, keys) {
     ? { text: entry.batchResponseText, model: entry.batchModel || "gemini-batch" }
     : await generateBudgeted(prompt, keys, { temperature: 0.1, thinkingBudget: 256 });
   const initialReview = parseSemanticReview(response.text, { source: original.content, draft: chapter.content });
-  const repaired = initialReview.decision !== "pass";
+  const initialFormal = evaluateTranslationQuality(original.content, chapter.content);
+  const initialTitleQuality = evaluateTranslationQuality("", chapter.title);
+  const forcedIssues = [
+    ...initialFormal.qaIssues.map((explanation) => ({ type: "formal_quality", severity: "major", explanation })),
+    ...initialTitleQuality.qaIssues.map((explanation) => ({ type: "title_quality", severity: "major", explanation: `Tiêu đề: ${explanation}` }))
+  ];
+  const repaired = initialReview.decision !== "pass" || forcedIssues.length > 0;
+  if (forcedIssues.length) initialReview.issues = [...initialReview.issues, ...forcedIssues].slice(0, 20);
+  let title = chapter.title;
   let content = chapter.content;
   let review = initialReview;
   let verifierModel = response.model;
   if (repaired) {
     let repairDraft = chapter.content;
     let repairIssues = initialReview.issues;
-    let prebuiltRepair = initialReview.correctedTranslation;
     let lastRepairError = "";
     let passed = false;
     for (let repairPass = 1; repairPass <= MAX_REPAIR_PASSES; repairPass += 1) {
-      let repairedText = prebuiltRepair;
-      prebuiltRepair = "";
-      if (!repairedText) {
       const repairPrompt = buildSemanticRepairPrompt({
-          bookTitle: index?.title || bookId, chapterNumber, source: original.content, draft: repairDraft,
+          bookTitle: index?.title || bookId, chapterNumber,
+          sourceTitle: original.title, draftTitle: title,
+          source: original.content, draft: repairDraft,
           glossary, issues: repairIssues, storyBible, previousContext: previous?.content || ""
       });
-      const repairResponse = await generateBudgeted(repairPrompt, keys, { temperature: 0.15, thinkingBudget: 128, responseFormat: "text" });
-      repairedText = repairResponse.text;
-      }
-      content = engine.postProcessTranslation(repairedText, glossary);
-      const formalQuality = require("../server/translation-quality").evaluateTranslationQuality(original.content, content);
-      if (formalQuality.qaRequired) {
-        lastRepairError = `Bản Gemini sửa lần ${repairPass} không hợp lệ: ${formalQuality.qaIssues.join("; ")}`;
-        repairDraft = content;
-        repairIssues = formalQuality.qaIssues.map((explanation) => ({ type: "formal_quality", severity: "major", explanation }));
+      const repairResponse = await generateBudgeted(repairPrompt, keys, { temperature: 0.15, thinkingBudget: 128 });
+      let repairedDocument;
+      try {
+        repairedDocument = parseSemanticRepair(repairResponse.text, { source: original.content });
+        title = engine.postProcessTranslation(repairedDocument.title, glossary);
+        content = engine.postProcessTranslation(repairedDocument.content, glossary);
+        const postQuality = evaluateTranslationQuality(original.content, content);
+        const postTitleQuality = evaluateTranslationQuality("", title);
+        const postIssues = [
+          ...postQuality.qaIssues,
+          ...postTitleQuality.qaIssues.map((item) => `Tiêu đề: ${item}`)
+        ];
+        if (postIssues.length) throw new Error(postIssues.join("; "));
+      } catch (error) {
+        lastRepairError = `Bản Gemini sửa lần ${repairPass} không hợp lệ: ${error.message}`;
+        repairIssues = [{ type: "formal_quality", severity: "major", explanation: error.message }];
         continue;
       }
 
@@ -172,6 +192,8 @@ async function processClaim(queueKey, queue, entry, keys) {
       const verifyPrompt = buildSemanticReviewPrompt({
         bookTitle: index?.title || bookId,
         chapterNumber,
+        sourceTitle: original.title,
+        draftTitle: title,
         source: original.content,
         draft: content,
         glossary,
@@ -195,7 +217,7 @@ async function processClaim(queueKey, queue, entry, keys) {
 
   // Re-read before PUT: never overwrite a result written while Gemini was reviewing.
   const [latestPublished, latestDraft] = await Promise.all([readJson(chapterKey), readJson(draftKey)]);
-  if (isProtectedGeminiDocument(latestPublished) && latestPublished.updatedAt !== published?.updatedAt) {
+  if (isProtectedGeminiDocument(latestPublished) && !entry.forceReplacePublished && latestPublished.updatedAt !== published?.updatedAt) {
     markSkippedGemini(queue, entry);
     await putJson(queueKey, queue);
     return { skipped: true };
@@ -204,6 +226,7 @@ async function processClaim(queueKey, queue, entry, keys) {
 
   const updatedChapter = {
     ...chapter,
+    title,
     content,
     paragraphs: content.split("\n").map((part) => part.trim()).filter(Boolean),
     characters: content.length,
@@ -234,8 +257,16 @@ async function processClaim(queueKey, queue, entry, keys) {
         qaStatus: "approved", qaReviewed: true, qaRequired: false,
         qualityScore: updatedChapter.qualityScore
       });
-      index.updatedAt = now;
+      const progress = applyPublicationProgress(index, now);
       await putJson(LAYOUT.bookIndex(bookId), index);
+      if (db) {
+        await db.updateBookProgress(bookId, {
+          totalChapters: progress.total,
+          translatedChapters: progress.approved,
+          revision,
+          status: progress.complete ? "Hoàn thành" : "Đang cập nhật"
+        }).catch((error) => console.warn(`Không cập nhật được tiến độ Supabase ${bookId}: ${error.message}`));
+      }
     }
     const [latestBible, latestContext, latestTm] = await Promise.all([
       readJson(LAYOUT.storyBible(bookId)),
@@ -264,6 +295,11 @@ async function processClaim(queueKey, queue, entry, keys) {
 }
 
 async function runOnce() {
+  const reset = await readJson("jobs/reset-active.json");
+  if (reset?.active && Number(reset.expiresAtEpochMs || 0) > Date.now()) {
+    console.log("Semantic QA tạm dừng vì toàn thư viện đang reset.");
+    return { processed: 0, approved: 0, repaired: 0, failed: 0, providerStopped: false, queueCount: 0 };
+  }
   const keys = getActiveKeys().filter((key) => !key.startsWith("gsk_"));
   if (!keys.length && !DRY_RUN) throw new Error("Không có Gemini API key hợp lệ cho semantic review.");
   const queueKeys = await listQueueKeys();
@@ -272,12 +308,22 @@ async function runOnce() {
 
   for (const queueKey of queueKeys) {
     if (processed >= MAX_CHAPTERS || providerStopped) break;
+    const bookIdFromKey = queueKey.split("/")[1];
+    const bookLock = await acquireReviewLock(storage, bookIdFromKey, OWNER);
+    if (!bookLock) {
+      console.log(`  ↷ ${bookIdFromKey}: một semantic reviewer khác đang xử lý bộ này.`);
+      continue;
+    }
     const queue = await readJson(queueKey);
-    if (!queue?.bookId || !Array.isArray(queue.entries)) continue;
+    if (!queue?.bookId || !Array.isArray(queue.entries)) {
+      await releaseReviewLock(storage, bookIdFromKey, OWNER);
+      continue;
+    }
     const hachimiActivity = await readJson(`jobs/${queue.bookId}/hachimi-active.json`);
     if (hachimiActivity?.active && Number(hachimiActivity.expiresAtEpochMs || 0) > Date.now()) {
       console.log(`  ↷ ${queue.bookId}: Hachimi đang ghi bộ này, chuyển sang queue kế tiếp.`);
       lastQueueKey = queueKey;
+      await releaseReviewLock(storage, bookIdFromKey, OWNER);
       continue;
     }
     lastQueueKey = queueKey;
@@ -313,6 +359,7 @@ async function runOnce() {
         }
       }
     }
+    await releaseReviewLock(storage, bookIdFromKey, OWNER);
   }
   if (lastQueueKey && !ONLY_BOOK && !DRY_RUN) {
     await putJson(CURSOR_KEY, { schema: 1, lastQueueKey, updatedAt: new Date().toISOString() });

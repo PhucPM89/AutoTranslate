@@ -1,0 +1,55 @@
+name: Reconcile Catalog & Sync
+
+# Tự động đối soát tiến độ toàn bộ thư viện trên R2 và xuất bản snapshot catalog/latest.json lên CDN
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      book:
+        description: "Chỉ đối soát một bookId (để trống = đối soát toàn bộ thư viện)"
+        required: false
+        default: ""
+
+concurrency:
+  group: reconcile-catalog-snapshot
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile:
+    name: Reconcile Library & Publish Catalog
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_ARCHIVE_BUCKET: ${{ secrets.R2_ARCHIVE_BUCKET }}
+      R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      RECONCILE_BOOK_INPUT: ${{ inputs.book || '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - name: Check required secrets are present
+        run: node scripts/check-env.js reconcile
+
+      - name: Reconcile Books & Publish Catalog Snapshot
+        run: |
+          if [ -n "$RECONCILE_BOOK_INPUT" ]; then
+            node scripts/reconcile-translated-books.js --book "$RECONCILE_BOOK_INPUT" --concurrency 6
+          else
+            node scripts/reconcile-translated-books.js --concurrency 6 --force-snapshot
+          fi

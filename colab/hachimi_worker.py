@@ -9,10 +9,71 @@ Chạy 100% tự động trên Google Colab GPU (T4/V100/A100).
 
 import os
 import sys
+import subprocess
+import runpy
 import time
 import json
 import re
-from hachimi_text import split_text_by_token_budget
+from pathlib import Path
+
+try:
+    import boto3
+    import ctranslate2
+    import transformers
+except ImportError:
+    print("Đang cài đặt các thư viện cần thiết (boto3, ctranslate2, transformers)...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "boto3", "ctranslate2", "transformers", "huggingface_hub"])
+    import boto3
+    import ctranslate2
+    import transformers
+SENTENCE_PART_RE = re.compile(r".*?(?:[。！？!?；;]+|$)", re.DOTALL)
+
+def _token_count(tokenizer, text):
+    return len(tokenizer.encode(text, add_special_tokens=True, truncation=False))
+
+def _split_oversized_piece(text, tokenizer, max_tokens):
+    remaining = text
+    chunks = []
+    while remaining:
+        if _token_count(tokenizer, remaining) <= max_tokens:
+            chunks.append(remaining)
+            break
+        low, high, best = 1, len(remaining), 0
+        while low <= high:
+            middle = (low + high) // 2
+            if _token_count(tokenizer, remaining[:middle]) <= max_tokens:
+                best = middle
+                low = middle + 1
+            else:
+                high = middle - 1
+        if best <= 0: best = 1
+        search_floor = max(1, int(best * 0.65))
+        boundary = max(remaining.rfind(mark, search_floor, best + 1) for mark in ("，", ",", "、", "：", ":", " "))
+        cut = boundary + 1 if boundary >= search_floor else best
+        chunks.append(remaining[:cut])
+        remaining = remaining[cut:]
+    return chunks
+
+def split_text_by_token_budget(text, tokenizer, max_tokens=440):
+    source = str(text or "")
+    if not source: return []
+    if _token_count(tokenizer, source) <= max_tokens: return [source]
+    parts = [match.group(0) for match in SENTENCE_PART_RE.finditer(source) if match.group(0)]
+    chunks = []
+    current = ""
+    for part in parts:
+        candidates = ([part] if _token_count(tokenizer, part) <= max_tokens else _split_oversized_piece(part, tokenizer, max_tokens))
+        for candidate in candidates:
+            combined = current + candidate
+            if current and _token_count(tokenizer, combined) > max_tokens:
+                chunks.append(current)
+                current = candidate
+            else:
+                current = combined
+    if current: chunks.append(current)
+    if "".join(chunks) != source: raise RuntimeError("Hachimi chunker error")
+    return chunks
+
 import urllib.request
 import urllib.error
 from typing import List, Dict, Any, Optional
@@ -20,13 +81,24 @@ from typing import List, Dict, Any, Optional
 # ---------------------------------------------------------------------------
 # Cấu hình Mặc định (Tự động nạp từ Environment hoặc Preset)
 # ---------------------------------------------------------------------------
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://bckwrfucultwxirorglv.supabase.co")
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 
-R2_ENDPOINT = os.environ.get("R2_ENDPOINT", "https://aa644d98f2377007f0fa98abcafe3d21.r2.cloudflarestorage.com")
+R2_ENDPOINT = os.environ.get("R2_ENDPOINT", "")
 R2_ACCESS_KEY_ID = os.environ.get("R2_ACCESS_KEY_ID", "")
 R2_SECRET_ACCESS_KEY = os.environ.get("R2_SECRET_ACCESS_KEY", "")
-R2_BUCKET = os.environ.get("R2_BUCKET", "novel-storage")
+R2_BUCKET = os.environ.get("R2_BUCKET", "")
+
+missing_config = [name for name, value in {
+    "SUPABASE_URL": SUPABASE_URL,
+    "SUPABASE_SERVICE_ROLE_KEY": SUPABASE_SERVICE_ROLE_KEY,
+    "R2_ENDPOINT": R2_ENDPOINT,
+    "R2_ACCESS_KEY_ID": R2_ACCESS_KEY_ID,
+    "R2_SECRET_ACCESS_KEY": R2_SECRET_ACCESS_KEY,
+    "R2_BUCKET": R2_BUCKET
+}.items() if not value]
+if missing_config:
+    raise RuntimeError("Thiếu cấu hình môi trường: " + ", ".join(missing_config))
 
 MODEL_ID = os.environ.get("MODEL_ID", "ngocdang83/HachimiMT-60-QT")
 BATCH_SIZE = int(os.environ.get("BATCH_SIZE", "32"))
@@ -195,7 +267,32 @@ class ColabHachimiEngine:
 # ---------------------------------------------------------------------------
 # Vòng Lặp Dịch Tự Động Toàn Bộ Truyện (Autonomous Pipeline Loop)
 # ---------------------------------------------------------------------------
+def run_quality_v2_worker():
+    """Compatibility bridge to the only writer allowed to create Hachimi drafts."""
+    canonical_worker = Path(__file__).resolve().parents[1] / "scripts" / "colab_standalone_worker.py"
+    if not canonical_worker.exists():
+        raise RuntimeError(
+            "Thiếu scripts/colab_standalone_worker.py. Hãy clone/pull toàn bộ repository thay vì chạy riêng file legacy."
+        )
+    for name, value in {
+        "R2_ENDPOINT": R2_ENDPOINT,
+        "R2_ACCESS_KEY_ID": R2_ACCESS_KEY_ID,
+        "R2_SECRET_ACCESS_KEY": R2_SECRET_ACCESS_KEY,
+        "R2_BUCKET": R2_BUCKET,
+        "SUPABASE_URL": SUPABASE_URL,
+        "SUPABASE_SERVICE_ROLE_KEY": SUPABASE_SERVICE_ROLE_KEY,
+        "HACHIMI_MODEL_ID": MODEL_ID,
+    }.items():
+        os.environ.setdefault(name, str(value or ""))
+    return runpy.run_path(str(canonical_worker), run_name="__main__")
+
+
 def run_autonomous_translation():
+    # Public API cũ cũng bị chuyển hướng; không thể vô tình gọi writer publish
+    # trực tiếp ở phần implementation legacy bên dưới.
+    return run_quality_v2_worker()
+
+    # Legacy implementation retained temporarily for notebook source history.
     print("=" * 70)
     print("   🚀 HACHIMI-MT AUTONOMOUS COLAB TRANSLATOR (TỰ ĐỘNG 100%)")
     print("=" * 70)
@@ -243,7 +340,7 @@ def run_autonomous_translation():
                 continue
             content = (doc.get("content") or "").strip() if doc else ""
             has_chinese = bool(re.search(r'[\u4e00-\u9fa5]', content))
-            
+
             if not doc or len(content) < 50 or has_chinese:
                 pending_list.append(ch)
 
@@ -257,8 +354,10 @@ def run_autonomous_translation():
 
         translated_count = len(chapters) - len(pending_list)
 
+        new_qa_entries = []
+
         for ch in pending_list:
-            n = ch.get("chapterNumber")
+            n = ch.get("chapterNumber") or ch.get("n")
             orig_key = f"books/{book_id}/r{rev}/ch/{n}.original.json"
             orig_doc = r2_get_json(s3, orig_key)
             if not orig_doc or "content" not in orig_doc:
@@ -279,6 +378,7 @@ def run_autonomous_translation():
                 "content": trans_res["content"],
                 "paragraphs": [p.strip() for p in trans_res["content"].split("\n") if p.strip()],
                 "translationStatus": "completed",
+                "translationVersion": "hachimi-quality-v2",
                 "provider": "hachimi",
                 "model": MODEL_ID,
                 "translatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -292,10 +392,16 @@ def run_autonomous_translation():
             ch["model"] = MODEL_ID
             translated_count += 1
 
+            new_qa_entries.append({
+                "revision": rev,
+                "chapterNumber": n,
+                "translationVersion": "hachimi-quality-v2"
+            })
+
             pct = round((translated_count / len(chapters)) * 100)
             print(f"  ✓ ch {n:4d} [{trans_res['title'][:25]:25s}] ({elapsed:.1f}s) | Tiến độ: {translated_count}/{len(chapters)} ({pct}%)")
 
-            # Cập nhật Supabase và index sau mỗi 10 chương hoặc khi hoàn thành
+            # Cập nhật Supabase, index và ném việc sang cho Qwen sau mỗi 10 chương hoặc khi hoàn thành
             if translated_count % 10 == 0 or translated_count == len(chapters):
                 is_full = translated_count >= len(chapters) and len(chapters) > 0
                 index_data["translatedChapters"] = translated_count
@@ -303,6 +409,14 @@ def run_autonomous_translation():
                 if is_full:
                     index_data["status"] = "Hoàn thành"
                 r2_put_json(s3, index_key, index_data, cache_control="no-cache")
+
+                # Tự động ném vào Hàng đợi Qwen
+                qa_queue_key = f"jobs/{book_id}/semantic-review.json"
+                qa_queue = r2_get_json(s3, qa_queue_key) or {"bookId": book_id, "revision": rev, "entries": []}
+                qa_queue["entries"].extend(new_qa_entries)
+                r2_put_json(s3, qa_queue_key, qa_queue, cache_control="no-cache")
+                new_qa_entries.clear()
+
                 patch_body = {
                     "translated_chapters": translated_count,
                     "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -314,4 +428,7 @@ def run_autonomous_translation():
         print(f"\n🎉 Hoàn tất dịch toàn bộ truyện {book_id}!\n")
 
 if __name__ == "__main__":
-    run_autonomous_translation()
+    # Giữ entry point cũ để các notebook hiện có không gãy, nhưng mọi lượt chạy
+    # đều đi qua worker quality-v2 chuẩn (private draft + fingerprint + semantic
+    # queue). Hàm legacy phía trên không còn được phép publish thẳng ra reader.
+    run_quality_v2_worker()

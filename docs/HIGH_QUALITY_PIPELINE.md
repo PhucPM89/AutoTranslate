@@ -3,7 +3,7 @@
 ## Trạng thái dữ liệu
 
 ```text
-original → Hachimi private draft → semantic review → bounded refinement/verify → approved publish
+original → Hachimi private draft → Qwen full rewrite → Qwen verify → approved publish
 ```
 
 - Bản gốc: `books/{bookId}/r{revision}/ch/{n}.original.json`
@@ -15,13 +15,29 @@ original → Hachimi private draft → semantic review → bounded refinement/ve
 - TM đã duyệt: `tm/books/{bookId}.json`
 - Batch manifests: `jobs/gemini-batches/{batchId}.json`
 
-Hachimi không còn ghi trực tiếp vào bản reader. Chỉ semantic reviewer được publish draft sau khi đối chiếu với bản gốc. Bản bị sửa phải qua vòng xác minh thứ hai.
+Hachimi không còn ghi trực tiếp vào bản reader. Qwen bắt buộc biên dịch lại toàn
+bộ tiêu đề và nội dung từ bản gốc, chỉ dùng Hachimi làm bản tham khảo. Không có
+nhánh publish nguyên draft Hachimi. Bản Qwen mới phải qua vòng xác minh độc lập
+trước khi ghi ra reader.
 
-## Hai lane vận hành
+Qwen local là semantic reviewer mặc định. Gemini chỉ được giữ làm audit thủ công.
+Hai reviewer dùng cùng một khóa theo từng bộ để tránh claim trùng và tránh
+read-modify-write đè queue. Reviewer phải kiểm tra cả tiêu đề lẫn nội dung, chạy
+deterministic quality gate trước publish và chỉ cập nhật tiến độ thư viện sau khi
+chương được `approved`.
 
-Realtime lane chạy `scripts/gemini-qa-reviewer.js`, phù hợp chương mới. Worker có giới hạn `QA_DAILY_MAX_INPUT_TOKENS` và `QA_DAILY_MAX_REQUESTS`.
+## Các lane vận hành
 
-Backlog lane chạy `scripts/gemini-batch-reviewer.js`. Batch chỉ tạo kết quả review; kết quả vẫn quay lại realtime reviewer để parse, repair, verify và publish theo cùng một chuẩn.
+Lane chính chạy `scripts/qwen_qa_worker.py` trên Colab GPU. Worker đọc queue liên
+tục, hỗ trợ chia bộ theo `WORKER_INDEX/TOTAL_WORKERS`, luôn biên dịch lại toàn
+chương rồi verify trước khi publish. Bốn điểm accuracy, completeness, fluency và
+terminology đều phải đạt ít nhất 9, đồng thời không được có lỗi major/critical.
+Worker không cắt âm thầm chương vượt context và sẽ dừng rõ ràng nếu không có GPU.
+
+Gemini realtime chạy `scripts/gemini-qa-reviewer.js` và Gemini Batch chạy
+`scripts/gemini-batch-reviewer.js`; cả hai chỉ dùng khi chủ động audit. Batch chỉ
+tạo kết quả review; kết quả vẫn quay lại Gemini realtime reviewer để parse,
+repair, verify và publish theo cùng một chuẩn.
 
 Batch dùng `displayName` xác định và manifest `prepared` trước khi gọi provider. Khi tiến trình chết giữa lúc tạo job, lượt sau tìm lại job theo `displayName`, tránh gửi trùng một Batch không idempotent.
 
@@ -49,22 +65,41 @@ Kiểm tra các model mà API key hiện tại nhìn thấy cùng `supportedActi
    npm run qa:status
    ```
 
-4. Chạy realtime pilot:
+4. Chạy Qwen pilot trên máy/Colab có NVIDIA GPU:
 
    ```bash
    npm run qa:pilot
    ```
 
-5. Chạy Batch thủ công:
+5. Sau khi pilot đạt, chạy Qwen liên tục:
+
+   ```bash
+   npm run qa:daemon
+   ```
+
+6. Khi cần, audit thủ công một mẫu bằng Gemini:
+
+   ```bash
+   npm run qa:gemini:audit
+   ```
+
+7. Chạy Gemini Batch thủ công khi thực sự cần:
 
    ```bash
    npm run qa:batch
    ```
 
-Schedule Batch chỉ hoạt động khi repository variable `QA_BATCH_ENABLED=true`. Giá trị mặc định giữ Batch tắt để không tự phát sinh chi phí trước khi pilot được kiểm tra.
+Hai workflow Gemini không còn schedule tự động; chỉ chạy bằng
+`workflow_dispatch`. `QA_BATCH_ENABLED` vẫn phải là `true` khi chủ động chạy
+Gemini Batch.
 
 ## Cấu hình an toàn
 
+- `QA_MODEL_ID`: mặc định `Qwen/Qwen2.5-7B-Instruct-AWQ`.
+- `QA_MAX_CHAPTERS`: giới hạn số chương Qwen xử lý trong một lượt; `0` là không giới hạn.
+- `QA_RUN_ONCE`: `true` để quét một lượt rồi thoát.
+- `QA_REQUIRE_GPU`: mặc định `true`; không cho phép vô tình chạy Qwen bằng CPU.
+- `WORKER_INDEX/TOTAL_WORKERS`: chia bộ cho nhiều Qwen Colab; không đổi tổng worker giữa chiến dịch.
 - `QA_DAILY_MAX_INPUT_TOKENS`: mặc định `250000`.
 - `QA_DAILY_MAX_REQUESTS`: mặc định `100`.
 - `QA_BATCH_SIZE`: mặc định `20`, tối đa `100`.
@@ -72,4 +107,6 @@ Schedule Batch chỉ hoạt động khi repository variable `QA_BATCH_ENABLED=tr
 - `QA_MAX_ATTEMPTS`: mặc định `4`; lỗi quota không tiêu hao attempt.
 - `QA_MAX_REPAIR_PASSES`: mặc định `2`, tối đa `3`; mỗi pass phải vượt quality gate và semantic verification mới được publish.
 
-Không tăng các giới hạn trước khi đo tỷ lệ pass/repair, token thực tế và kiểm tra thủ công mẫu chương đã approved.
+Hai giới hạn daily chỉ áp dụng cho Gemini audit, không áp dụng cho Qwen local.
+Không tăng các giới hạn trước khi đo tỷ lệ pass/repair, token thực tế và kiểm tra
+thủ công mẫu chương đã approved.

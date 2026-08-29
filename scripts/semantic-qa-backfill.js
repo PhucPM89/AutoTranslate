@@ -36,13 +36,13 @@ async function mapConcurrent(items, concurrency, mapper) {
 }
 
 async function main() {
-  const jobKeys = ONLY_BOOK ? [`jobs/${ONLY_BOOK}/translation.json`] : (await storage.list("jobs/"))
-    .map((item) => item.key).filter((key) => /^jobs\/[^/]+\/translation\.json$/.test(key)).slice(0, MAX_BOOKS);
+  const indexKeys = ONLY_BOOK ? [`books/${ONLY_BOOK}/index.json`] : (await storage.list("books/"))
+    .map((item) => item.key).filter((key) => /^books\/[^/]+\/index\.json$/.test(key)).slice(0, MAX_BOOKS);
   let books = 0, drafts = 0, queued = 0;
-  for (const jobKey of jobKeys) {
-    const state = await readJson(jobKey);
+  for (const indexKey of indexKeys) {
+    const state = await readJson(indexKey);
     if (!state || !Array.isArray(state.chapters)) continue;
-    const bookId = state.bookId || jobKey.split("/")[1];
+    const bookId = state.id || state.bookId || indexKey.split("/")[1];
     const revision = Number(state.revision || 1);
     let queue = await readJson(reviewQueueKey(bookId));
     let scanned = 0;

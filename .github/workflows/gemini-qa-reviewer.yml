@@ -1,8 +1,9 @@
-name: Gemini Semantic QA
+name: Gemini Manual QA Audit
 
 on:
-  schedule:
-    - cron: "10 * * * *" # Realtime lane; daily budget is enforced by the worker.
+  # Qwen Colab is the primary semantic reviewer. Gemini is deliberately manual
+  # and is used only for audits/escalations so it cannot consume the main queue
+  # every hour.
   workflow_dispatch:
     inputs:
       book:
@@ -22,7 +23,7 @@ permissions:
 
 jobs:
   qa_review:
-    name: Source-vs-draft Semantic Reviewer
+    name: Manual Gemini Source-vs-draft Audit
     runs-on: ubuntu-latest
     timeout-minutes: 30
     concurrency:

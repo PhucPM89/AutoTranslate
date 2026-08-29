@@ -5,7 +5,7 @@
 // the reader-facing object in place after approving a private draft.
 //
 //   books/{bookId}/index.json                  short cache, purged on publish
-//   books/{bookId}/r{rev}/ch/{n}.json          immutable, translated chapter
+//   books/{bookId}/r{rev}/ch/{n}.json          short-cache, QA-upgradable chapter
 //   books/{bookId}/r{rev}/ch/{n}.original.json immutable, source chapter
 //   covers/{bookId}.webp                       long cache
 //   archives/{bookId}.epub                     never served to readers

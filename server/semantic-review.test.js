@@ -7,6 +7,8 @@ const {
   claimNextReview,
   settleReview,
   buildSemanticReviewPrompt,
+  buildSemanticRepairPrompt,
+  parseSemanticRepair,
   parseSemanticReview
 } = require("./semantic-review");
 
@@ -48,6 +50,17 @@ test("semantic queue reopens when chapter content changes and reclaims expired l
   queue = mergeReviewEntries(queue, [{ revision: 1, chapterNumber: 1, translationVersion: "v2", content: "mới" }], { bookId: "book", revision: 1 });
   assert.equal(queue.entries[0].state, "pending");
   assert.equal(queue.entries[0].attempts, 0);
+});
+
+test("full-library reset carries explicit authority to replace legacy published output", () => {
+  const queue = mergeReviewEntries(null, [{
+    revision: 1,
+    chapterNumber: 1,
+    translationVersion: "hachimi-quality-v2",
+    content: "bản dịch mới",
+    forceReplacePublished: true
+  }], { bookId: "book", revision: 1 });
+  assert.equal(queue.entries[0].forceReplacePublished, true);
 });
 
 test("provider quota does not consume a chapter attempt", () => {
@@ -92,4 +105,20 @@ test("semantic parser accepts a short repair verdict without embedding the chapt
   }), { source: "原文", draft: "Sai" });
   assert.equal(result.decision, "repair");
   assert.equal(result.correctedTranslation, "");
+});
+
+test("semantic prompts review the title and a repair must return valid title/content JSON", () => {
+  const prompt = buildSemanticReviewPrompt({
+    sourceTitle: "第一章 相遇", draftTitle: "Chương 1: Gặp gỡ", source: "原文", draft: "Bản nháp"
+  });
+  assert.match(prompt, /TIÊU ĐỀ GỐC: 第一章 相遇/);
+  assert.match(buildSemanticRepairPrompt({ sourceTitle: "第一章", draftTitle: "Chương 1", source: "原文", draft: "Sai" }), /"content"/);
+
+  const source = "这是完整原文。".repeat(60);
+  const content = "Đây là bản dịch đầy đủ và tự nhiên. ".repeat(30);
+  assert.deepEqual(
+    parseSemanticRepair(JSON.stringify({ title: "Chương 1: Gặp gỡ", content }), { source }),
+    { title: "Chương 1: Gặp gỡ", content: content.trim() }
+  );
+  assert.throws(() => parseSemanticRepair(JSON.stringify({ title: "第一章", content }), { source }), /Tiêu đề/);
 });

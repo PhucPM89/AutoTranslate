@@ -63,10 +63,16 @@ function createR2Storage(env = process.env) {
         body: buffer,
         headers: {
           "content-type": options.contentType || contentTypeFor(key),
-          "cache-control": options.cacheControl || cacheControlFor(key)
+          "cache-control": options.cacheControl || cacheControlFor(key),
+          ...(options.ifNoneMatch ? { "if-none-match": options.ifNoneMatch } : {}),
+          ...(options.ifMatch ? { "if-match": options.ifMatch } : {})
         }
       });
-      if (!response.ok) throw new Error(`R2 PUT ${key} lỗi HTTP ${response.status}: ${await safeText(response)}`);
+      if (!response.ok) {
+        const error = new Error(`R2 PUT ${key} lỗi HTTP ${response.status}: ${await safeText(response)}`);
+        error.status = response.status;
+        throw error;
+      }
       // Uploading must not depend on a public domain being configured yet: the
       // migration writes objects long before the CDN hostname exists.
       return { key, size: buffer.length, url: publicBase ? this.publicUrl(key) : "" };
@@ -87,7 +93,8 @@ function createR2Storage(env = process.env) {
         key,
         size: Number(response.headers.get("content-length")) || 0,
         contentType: response.headers.get("content-type") || "",
-        cacheControl: response.headers.get("cache-control") || ""
+        cacheControl: response.headers.get("cache-control") || "",
+        etag: response.headers.get("etag") || ""
       };
     },
 
@@ -111,9 +118,15 @@ function createR2Storage(env = process.env) {
       return out;
     },
 
-    async remove(key) {
-      const response = await send("DELETE", key);
-      if (!response.ok && response.status !== 404) throw new Error(`R2 DELETE ${key} lỗi HTTP ${response.status}`);
+    async remove(key, options = {}) {
+      const response = await send("DELETE", key, {
+        headers: options.ifMatch ? { "if-match": options.ifMatch } : {}
+      });
+      if (!response.ok && response.status !== 404) {
+        const error = new Error(`R2 DELETE ${key} lỗi HTTP ${response.status}`);
+        error.status = response.status;
+        throw error;
+      }
       return true;
     },
 

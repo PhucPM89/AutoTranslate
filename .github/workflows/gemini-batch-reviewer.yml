@@ -1,8 +1,6 @@
-name: Gemini Batch Semantic QA
+name: Gemini Batch Manual Audit
 
 on:
-  schedule:
-    - cron: "25 * * * *"
   workflow_dispatch:
     inputs:
       poll_only:
@@ -15,7 +13,7 @@ permissions:
 
 jobs:
   batch_review:
-    if: github.event_name == 'workflow_dispatch' || vars.QA_BATCH_ENABLED == 'true'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     concurrency:

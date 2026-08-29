@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { cacheControlFor, contentTypeFor } = require("./keys");
 
 // Filesystem stand-in for R2. Metadata that R2 would hold as object headers is
@@ -24,6 +25,11 @@ function createLocalStorage(env = process.env) {
 
     async put(key, body, options = {}) {
       const target = full(key);
+      if (options.ifNoneMatch === "*" && fs.existsSync(target)) {
+        const error = new Error(`Local PUT ${key} lỗi HTTP 412: object đã tồn tại.`);
+        error.status = 412;
+        throw error;
+      }
       fs.mkdirSync(path.dirname(target), { recursive: true });
       const buffer = Buffer.isBuffer(body) ? body : Buffer.from(String(body), "utf8");
       fs.writeFileSync(target, buffer);
@@ -53,7 +59,8 @@ function createLocalStorage(env = process.env) {
         const stat = fs.statSync(full(key));
         let meta = {};
         try { meta = JSON.parse(fs.readFileSync(metaPath(key), "utf8")); } catch {}
-        return { key, size: stat.size, ...meta };
+        const etag = `"${crypto.createHash("sha256").update(fs.readFileSync(full(key))).digest("hex")}"`;
+        return { key, size: stat.size, etag, ...meta };
       } catch (error) {
         if (error.code === "ENOENT") return null;
         throw error;
@@ -79,7 +86,15 @@ function createLocalStorage(env = process.env) {
       return out.sort((a, b) => a.key.localeCompare(b.key));
     },
 
-    async remove(key) {
+    async remove(key, options = {}) {
+      if (options.ifMatch) {
+        const current = await this.head(key);
+        if (current && current.etag !== options.ifMatch) {
+          const error = new Error(`Local DELETE ${key} lỗi HTTP 412: ETag không khớp.`);
+          error.status = 412;
+          throw error;
+        }
+      }
       for (const p of [full(key), metaPath(key)]) {
         try { fs.unlinkSync(p); } catch (error) { if (error.code !== "ENOENT") throw error; }
       }

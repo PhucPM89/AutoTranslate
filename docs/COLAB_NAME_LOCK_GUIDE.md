@@ -82,6 +82,9 @@ notebook và không sử dụng lại những khóa từng xuất hiện trong c
   làm mất phần cuối; decoder dùng beam search và bộ lọc chống lặp.
 - Heuristic vẫn gắn `qaRequired=true` cho lỗi hình thức, nhưng mọi chương
   Hachimi quality-v2 đều được đưa vào semantic QA, kể cả khi heuristic đạt.
+- `translatedChapters` và trạng thái `Hoàn thành` chỉ tính chương đã semantic
+  QA `approved` (hoặc chương Gemini có provenance rõ ràng). Draft Hachimi được
+  theo dõi riêng bằng `draftedChapters` và không còn làm sách hoàn thành sớm.
 - Mỗi chương được checkpoint sau khi upload. Colab ngắt thì chạy lại cùng
   `WORKER_INDEX` và `TOTAL_WORKERS`; chương hoàn tất sẽ được bỏ qua.
 - Colab in `[Quét]` khi đang tải bản gốc, `→` khi bắt đầu một chương, tiến độ
@@ -89,7 +92,7 @@ notebook và không sử dụng lại những khóa từng xuất hiện trong c
 - Không thay đổi `TOTAL_WORKERS` giữa một chiến dịch vì phép chia bộ cho worker
   phụ thuộc vào giá trị này.
 
-# Semantic QA sau Hachimi
+# Qwen Semantic QA sau Hachimi (mặc định)
 
 Từ pipeline `semantic-v2`, mỗi chương do Hachimi `hachimi-quality-v2` tạo ra được đưa vào queue riêng của bộ truyện tại:
 
@@ -97,24 +100,68 @@ Từ pipeline `semantic-v2`, mỗi chương do Hachimi `hachimi-quality-v2` tạ
 jobs/{bookId}/semantic-review.json
 ```
 
-Queue có lease, retry, fingerprint nội dung và checkpoint `approved`, vì vậy Colab hoặc GitHub Actions dừng giữa chừng không làm mất tiến độ. Chương có provenance Gemini vẫn được giữ nguyên.
+Queue có lease, retry, fingerprint nội dung và checkpoint `approved`, vì vậy Colab dừng giữa chừng không làm mất tiến độ. Chương có provenance Gemini đã duyệt vẫn được giữ nguyên.
 
-Chạy pilot 20 chương:
+Qwen là tầng biên dịch lại kiêm reviewer chính. Mọi chương đều được Qwen viết
+lại toàn bộ từ bản gốc; bản Hachimi chỉ được dùng làm tài liệu tham khảo để tránh
+bỏ sót cách hiểu. Không có nhánh publish thẳng bản Hachimi dù review ban đầu có
+thể đạt. Nên chạy Hachimi và Qwen ở hai Colab GPU riêng vì cả hai đều cần VRAM.
+Qwen chưa thấy việc cho đến khi Hachimi hoàn thành draft của ít nhất một bộ; có
+thể mở worker Qwen trước và để nó chờ queue.
+
+Trong Colab Qwen, clone/pull cùng repository rồi chạy launcher:
+
+```bash
+!python -u /content/AutoTranslate/colab/qwen_qa_launcher.py
+```
+
+Launcher mặc định dùng `Qwen/Qwen2.5-7B-Instruct-AWQ`, tự cài dependency cần
+thiết và từ chối chạy nếu notebook chưa bật GPU. Nếu repository nằm ở đường dẫn
+khác, chạy entry point trực tiếp từ thư mục repository:
+
+```bash
+%cd /content/AutoTranslate
+!python -u scripts/qwen_qa_worker.py
+```
+
+Pilot một lượt, tối đa 20 chương (máy chạy lệnh này phải có NVIDIA GPU):
 
 ```bash
 npm run qa:pilot
 ```
 
-Chạy một bộ và giới hạn 100 chương:
+Chạy liên tục:
 
 ```bash
-node scripts/gemini-qa-reviewer.js --book BOOK_ID --max-chapters 100
+npm run qa:daemon
 ```
 
-Chạy thử chỉ để xem queue, không gọi Gemini và không ghi dữ liệu:
+Qwen dịch lại từ `.original.json` với glossary, story bible và ngữ cảnh chương
+trước; sau đó một lượt Qwen riêng đối chiếu toàn bộ bản mới với bản gốc. Chỉ bản
+đạt ít nhất 9 ở accuracy, completeness, fluency và terminology, không có lỗi
+major/critical và vượt quality gate hình thức mới được ghi `qaStatus=approved`.
+
+Reviewer kiểm tra cả tiêu đề và nội dung. Quality gate hình thức luôn chạy ngay
+trước publish, kể cả khi model đánh `pass`; bản còn chữ Hán, token name-lock hoặc
+có dấu hiệu bị cụt không thể đi thẳng ra reader.
+
+Qwen đọc draft tại `drafts/{bookId}/r{revision}/ch/{n}.json`, glossary tại
+`glossary/{bookId}.json` và chỉ publish sau lượt verification đạt `pass`. Bản
+publish mang `provider=qwen-rewrite`, `translationVersion=qwen-full-rewrite-v1`
+và `semanticReview.rewriteMode=full` để phân biệt rõ với draft Hachimi.
+Có thể chạy nhiều Qwen Colab bằng `WORKER_INDEX/TOTAL_WORKERS`; mỗi notebook phải
+có `WORKER_INDEX` khác nhau và phải giữ nguyên `TOTAL_WORKERS` trong suốt chiến
+dịch.
+
+Gemini chỉ còn là audit thủ công, không có lịch GitHub Actions tự động. Khi cần
+đối chiếu một mẫu 20 chương bằng Gemini:
 
 ```bash
-node scripts/gemini-qa-reviewer.js --dry-run --max-chapters 20
+npm run qa:gemini:audit
 ```
 
-Mỗi bản Hachimi được đối chiếu trực tiếp với `.original.json`, glossary và ngữ cảnh chương trước. Nếu Gemini sửa nội dung, bản sửa phải vượt qua một lượt semantic verification thứ hai mới được ghi `qaStatus=approved`.
+Gemini và Qwen vẫn dùng chung semantic-review lock theo từng bộ, nên không chạy
+audit Gemini trên đúng bộ mà Qwen đang xử lý.
+
+`colab/hachimi_worker.py` chỉ còn là entry point tương thích và tự chuyển sang
+`scripts/colab_standalone_worker.py`; nó không còn publish trực tiếp bản Hachimi.

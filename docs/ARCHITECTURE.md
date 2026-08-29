@@ -53,7 +53,7 @@ có test chạy build thật với secret trong env rồi grep output để ch�
 ```
 User → Cloudflare CDN → R2
    books/{bookId}/index.json           cache 60s, purge khi publish
-   books/{bookId}/r{rev}/ch/{n}.json   immutable 1 năm
+   books/{bookId}/r{rev}/ch/{n}.json   cache ngắn, được semantic QA nâng cấp tại chỗ
    covers/{bookId}.webp                cache 7 ngày
 ```
 
@@ -61,9 +61,10 @@ User → Cloudflare CDN → R2
 
 ## Vì sao có revision trong path
 
-Chapter đã publish là immutable và CDN cache 1 năm. Sửa bản dịch thì **không ghi
-đè**: ingest lại với `revision` mới → key mới; `index.json` (cache ngắn) trỏ sang
-revision mới. Không cần purge từng chapter, và client đang cache bản cũ vẫn đọc được.
+Bản gốc `.original.json` là immutable và cache một năm. Chapter reader dùng cache
+ngắn vì semantic QA nâng private draft lên cùng chapter key sau khi duyệt. Một
+lần ingest nguồn mới vẫn phải tăng `revision`, tạo key mới và để `index.json`
+trỏ sang revision mới.
 
 ## Chapter JSON
 

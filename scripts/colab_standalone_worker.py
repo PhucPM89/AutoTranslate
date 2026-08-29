@@ -141,6 +141,7 @@ def merge_semantic_review_queue(queue, book_id, revision, candidates):
             "leaseOwner": "",
             "leaseUntil": "",
             "lastError": "",
+            "forceReplacePublished": bool(candidate.get("forceReplacePublished")),
         }
     return {
         "schema": 1,
@@ -169,10 +170,9 @@ def supabase_patch_book(book_id, total, translated, revision=1):
         "total_chapters": total,
         "translated_chapters": translated,
         "revision": revision,
+        "status": "Hoàn thành" if total > 0 and translated >= total else "Đang cập nhật",
         "updated_at": utc_now(),
     }
-    if total > 0 and translated >= total:
-        payload["status"] = "Hoàn thành"
     try:
         requests.patch(
             f"{SUPABASE_URL.rstrip('/')}/rest/v1/books?id=eq.{book_id}",
@@ -414,10 +414,16 @@ def load_job_keys():
 
 
 def run_translation_loop():
+    reset_state = r2_get_json("jobs/reset-active.json")
+    if reset_state and reset_state.get("active") and int(reset_state.get("expiresAtEpochMs") or 0) > int(time.time() * 1000):
+        raise RuntimeError("Toàn thư viện đang reset; dừng Hachimi worker và chạy lại sau.")
     job_keys = load_job_keys()
     print(f"Worker được giao {len(job_keys)} bộ truyện.\n")
 
     for job_key in job_keys:
+        reset_state = r2_get_json("jobs/reset-active.json")
+        if reset_state and reset_state.get("active") and int(reset_state.get("expiresAtEpochMs") or 0) > int(time.time() * 1000):
+            raise RuntimeError("Toàn thư viện bắt đầu reset; dừng trước khi ghi bộ tiếp theo.")
         book_id = job_key.split("/")[1]
         print(f"\n[Quét] {book_id}: đang đọc index và kiểm tra cache glossary...", flush=True)
         state = r2_get_json(job_key)
@@ -430,6 +436,7 @@ def run_translation_loop():
         mark_hachimi_activity(book_id, True)
 
         revision = state.get("revision", 1) or 1
+        force_retranslate_all = bool(state.get("forceRetranslateAll"))
         chapters = state["chapters"]
         index_chapters = index_document.get("chapters", [])
         index_by_number = {chapter_number(ch): ch for ch in index_chapters}
@@ -504,7 +511,7 @@ def run_translation_loop():
                 )
         protector = GlossaryProtector(glossary)
 
-        pending, completed_count, gemini_count = [], 0, 0
+        pending, completed_count, approved_count, gemini_count = [], 0, 0, 0
         review_candidates = []
         for chapter in chapters:
             number = chapter_number(chapter)
@@ -512,11 +519,15 @@ def run_translation_loop():
                 continue
             published_document = r2_get_json(f"books/{book_id}/r{revision}/ch/{number}.json")
             draft_document = r2_get_json(f"drafts/{book_id}/r{revision}/ch/{number}.json")
-            if is_gemini_document(published_document) or is_gemini_document(index_by_number.get(number)) or is_gemini_document(chapter):
+            if not force_retranslate_all and (is_gemini_document(published_document) or is_gemini_document(index_by_number.get(number)) or is_gemini_document(chapter)):
                 chapter["status"] = "completed"
                 completed_count += 1
+                approved_count += 1
                 gemini_count += 1
                 continue
+
+            if published_document and published_document.get("qaStatus") == "approved":
+                approved_count += 1
 
             # One-time compatibility migration: an existing quality-v2 Hachimi
             # chapter becomes a private draft without changing reader output.
@@ -552,6 +563,7 @@ def run_translation_loop():
                     "chapterNumber": number,
                     "translationVersion": TRANSLATION_VERSION,
                     "content": content,
+                    "forceReplacePublished": force_retranslate_all,
                 })
 
         review_queue_key = f"jobs/{book_id}/semantic-review.json"
@@ -563,7 +575,17 @@ def run_translation_loop():
         )
         r2_put_json(review_queue_key, review_queue)
 
+        def publish_progress():
+            index_document["draftedChapters"] = completed_count
+            index_document["approvedChapters"] = approved_count
+            index_document["translatedChapters"] = approved_count
+            index_document["updatedAt"] = utc_now()
+            index_document["status"] = "Hoàn thành" if approved_count >= len(chapters) and chapters else "Đang cập nhật"
+            r2_put_json(f"books/{book_id}/index.json", index_document)
+            supabase_patch_book(book_id, len(chapters), approved_count, revision)
+
         if not pending:
+            publish_progress()
             mark_hachimi_activity(book_id, False)
             print(f"Bỏ qua {book_id}: đã xong {TRANSLATION_VERSION}; giữ nguyên Gemini: {gemini_count} chương.")
             continue
@@ -577,12 +599,7 @@ def run_translation_loop():
             mark_hachimi_activity(book_id, True)
             r2_put_json(job_key, state)
             r2_put_json(review_queue_key, review_queue)
-            index_document["translatedChapters"] = completed_count
-            index_document["updatedAt"] = utc_now()
-            if completed_count >= len(chapters):
-                index_document["status"] = "Hoàn thành"
-            r2_put_json(f"books/{book_id}/index.json", index_document)
-            supabase_patch_book(book_id, len(chapters), completed_count, revision)
+            publish_progress()
 
         for position, chapter in enumerate(pending, 1):
             number = chapter_number(chapter)
@@ -595,9 +612,10 @@ def run_translation_loop():
 
             latest = r2_get_json(f"books/{book_id}/r{revision}/ch/{number}.json")
             latest_index = index_by_number.get(number)
-            if is_gemini_document(latest) or is_gemini_document(latest_index) or is_gemini_document(chapter):
+            if not force_retranslate_all and (is_gemini_document(latest) or is_gemini_document(latest_index) or is_gemini_document(chapter)):
                 chapter["status"] = "completed"
                 completed_count += 1
+                approved_count += 1
                 print(f"  ↷ ch {number}: Gemini vừa hoàn tất, giữ nguyên")
                 if position % 5 == 0 or position == len(pending):
                     checkpoint()
@@ -617,9 +635,10 @@ def run_translation_loop():
                 chapter_number=number,
             )
             latest = r2_get_json(f"books/{book_id}/r{revision}/ch/{number}.json")
-            if is_gemini_document(latest):
+            if not force_retranslate_all and is_gemini_document(latest):
                 chapter["status"] = "completed"
                 completed_count += 1
+                approved_count += 1
                 print(f"  ↷ ch {number}: hủy kết quả Hachimi vì Gemini đã ghi trong lúc dịch")
                 if position % 5 == 0 or position == len(pending):
                     checkpoint()
@@ -643,6 +662,7 @@ def run_translation_loop():
                     "chapterNumber": number,
                     "translationVersion": TRANSLATION_VERSION,
                     "content": content,
+                    "forceReplacePublished": force_retranslate_all,
                 }],
             )
             chapter.update({

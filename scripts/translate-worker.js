@@ -168,6 +168,11 @@ function sanitizeStatusError(value) {
 
 async function main() {
   const storage = createStorage();
+  const reset = await readJson(storage, "jobs/reset-active.json");
+  if (reset?.active && Number(reset.expiresAtEpochMs || 0) > Date.now()) {
+    console.log("Translation worker tạm dừng vì toàn thư viện đang reset.");
+    return;
+  }
   // Credentials and provider-health diagnostics are operational secrets, so
   // they live only in the private archive bucket, never the CDN reader bucket.
   const privateStorage = createArchiveStorage();

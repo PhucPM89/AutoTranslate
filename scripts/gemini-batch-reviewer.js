@@ -146,7 +146,9 @@ async function prepareCandidate(queue, entry) {
   if (isProtectedGeminiDocument(published)) return null;
   if (!chapter?.content || !original?.content) return null;
   const prompt = buildSemanticReviewPrompt({
-    bookTitle: index?.title || bookId, chapterNumber, source: original.content, draft: chapter.content,
+    bookTitle: index?.title || bookId, chapterNumber,
+    sourceTitle: original.title, draftTitle: chapter.title,
+    source: original.content, draft: chapter.content,
     glossary, previousContext: previous?.content || "", storyBible, recentContext: storyContext?.chapters || []
   });
   return { chapterNumber, fingerprint: entry.fingerprint, prompt, estimatedInputTokens: estimateTokens(prompt) };
@@ -224,6 +226,11 @@ async function submitOne(client) {
 }
 
 async function main() {
+  const reset = await readJson("jobs/reset-active.json");
+  if (reset?.active && Number(reset.expiresAtEpochMs || 0) > Date.now()) {
+    console.log("Gemini Batch tạm dừng vì toàn thư viện đang reset.");
+    return;
+  }
   const client = DRY_RUN ? null : createGeminiBatchClient({ apiKey: process.env.GEMINI_API_KEY });
   if (LIST_MODELS) {
     const models = await client.listModels();
