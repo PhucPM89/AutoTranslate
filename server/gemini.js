@@ -759,7 +759,7 @@ async function generateStructuredText(prompt, apiKeys, generationConfig = {}) {
     for (const model of getModelsForApiKey(key)) {
       try {
         const result = await translateChunkWithModel(key, model, prompt, {
-          responseFormat: "json",
+          responseFormat: generationConfig.responseFormat || "json",
           temperature: generationConfig.temperature ?? 0.1,
           thinkingBudget: generationConfig.thinkingBudget ?? 256,
           maxTokens: generationConfig.maxTokens || 16384

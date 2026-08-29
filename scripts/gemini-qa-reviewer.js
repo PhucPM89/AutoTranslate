@@ -21,7 +21,7 @@ const { isProtectedGeminiDocument } = require("../server/translation-version");
 const { generateStructuredText, getActiveKeys } = require("../server/gemini");
 const {
   REVIEW_VERSION, reviewQueueKey, contentFingerprint, claimNextReview,
-  settleReview, buildSemanticReviewPrompt, parseSemanticReview
+  settleReview, buildSemanticReviewPrompt, buildSemanticRepairPrompt, parseSemanticReview
 } = require("../server/semantic-review");
 const { mergeStoryBible, appendStoryContext, mergeApprovedTranslationMemory } = require("../server/story-bible");
 const { estimateTokens, canReserveBudget, reserveBudget } = require("../server/qa-budget");
@@ -137,7 +137,21 @@ async function processClaim(queueKey, queue, entry, keys) {
     : await generateBudgeted(prompt, keys, { temperature: 0.1, thinkingBudget: 256 });
   const initialReview = parseSemanticReview(response.text, { source: original.content, draft: chapter.content });
   const repaired = initialReview.decision !== "pass";
-  const content = repaired ? engine.postProcessTranslation(initialReview.correctedTranslation, glossary) : chapter.content;
+  let content = chapter.content;
+  if (repaired) {
+    let repairedText = initialReview.correctedTranslation;
+    if (!repairedText) {
+      const repairPrompt = buildSemanticRepairPrompt({
+        bookTitle: index?.title || bookId, chapterNumber, source: original.content, draft: chapter.content,
+        glossary, issues: initialReview.issues, storyBible, previousContext: previous?.content || ""
+      });
+      const repairResponse = await generateBudgeted(repairPrompt, keys, { temperature: 0.15, thinkingBudget: 128, responseFormat: "text" });
+      repairedText = repairResponse.text;
+    }
+    content = engine.postProcessTranslation(repairedText, glossary);
+    const formalQuality = require("../server/translation-quality").evaluateTranslationQuality(original.content, content);
+    if (formalQuality.qaRequired) throw new Error(`Bản Gemini sửa không hợp lệ: ${formalQuality.qaIssues.join("; ")}`);
+  }
   let review = initialReview;
   let verifierModel = response.model;
   // A model correcting its own answer is not proof that the correction is

@@ -60,3 +60,14 @@ test("semantic parser accepts a complete repair and prompt includes glossary", (
   assert.match(result.correctedTranslation, /Lý Minh/);
   assert.match(buildSemanticReviewPrompt({ source, draft: "Sai", glossary: { "李明": "Lý Minh" } }), /Lý Minh/);
 });
+
+test("semantic parser accepts a short repair verdict without embedding the chapter in JSON", () => {
+  const result = parseSemanticReview(JSON.stringify({
+    decision: "repair",
+    scores: { accuracy: 7, completeness: 9, fluency: 9, terminology: 9 },
+    issues: [{ severity: "major", explanation: "Nhầm chủ thể" }],
+    correctedTranslation: ""
+  }), { source: "原文", draft: "Sai" });
+  assert.equal(result.decision, "repair");
+  assert.equal(result.correctedTranslation, "");
+});

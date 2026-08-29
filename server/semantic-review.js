@@ -124,7 +124,7 @@ function buildSemanticReviewPrompt({ bookTitle, chapterNumber, source, draft, gl
     "Hãy đối chiếu BẢN GỐC với BẢN NHÁP theo nghĩa từng câu, không chỉ kiểm tra văn phong.",
     "Kiểm tra: đủ ý, đúng chủ thể/hành động/phủ định/số lượng, xưng hô, giới tính, tên riêng và thuật ngữ.",
     "Không được đánh pass nếu bản nháp đảo nhân vật, gán nhầm lời thoại, lược ý hoặc thêm ý.",
-    "Nếu decision là repair hoặc retranslate, correctedTranslation phải là TOÀN BỘ chương đã sửa, không phải ghi chú hay patch.",
+    "Đây chỉ là lượt đánh giá. Luôn để correctedTranslation rỗng; hệ thống sẽ gọi lượt sửa văn bản riêng nếu cần.",
     "Chỉ trả về JSON thuần theo schema:",
     JSON.stringify({
       decision: "pass|repair|retranslate",
@@ -174,7 +174,7 @@ function parseSemanticReview(value, { source = "", draft = "" } = {}) {
   }
 
   let correctedTranslation = String(parsed.correctedTranslation || "").trim();
-  if (parsed.decision !== "pass") {
+  if (parsed.decision !== "pass" && correctedTranslation) {
     const quality = evaluateTranslationQuality(source, correctedTranslation);
     if (!correctedTranslation || quality.qaRequired) {
       throw new Error(`Bản Gemini sửa không hợp lệ: ${quality.qaIssues.join("; ") || "nội dung rỗng"}`);
@@ -194,6 +194,22 @@ function parseSemanticReview(value, { source = "", draft = "" } = {}) {
   };
 }
 
+function buildSemanticRepairPrompt({ bookTitle, chapterNumber, source, draft, glossary = {}, issues = [], storyBible = null, previousContext = "" }) {
+  const matchedGlossary = Object.fromEntries(Object.entries(glossary || {}).filter(([zh]) => String(source || "").includes(zh)).slice(0, 150));
+  return [
+    "Bạn là dịch giả kiêm biên tập viên Trung - Việt. Hãy tạo TOÀN BỘ bản dịch hoàn chỉnh cho chương dưới đây.",
+    "Sửa mọi lỗi semantic đã nêu; giữ đủ ý từng câu, đúng chủ thể, lời thoại, phủ định, số lượng và xưng hô.",
+    "Chỉ trả về văn bản tiếng Việt hoàn chỉnh, không JSON, không Markdown, không giải thích.",
+    `Truyện: ${bookTitle || "Không rõ"}; chương: ${chapterNumber}`,
+    `Lỗi cần sửa: ${JSON.stringify(issues)}`,
+    `Glossary bắt buộc: ${JSON.stringify(matchedGlossary)}`,
+    storyBible ? `Story bible: ${JSON.stringify({ characters: (storyBible.characters || []).slice(-120), worldTerms: (storyBible.worldTerms || []).slice(-120) })}` : "",
+    previousContext ? `Ngữ cảnh trước: ${String(previousContext).slice(-3000)}` : "",
+    `BẢN GỐC:\n${source || ""}`,
+    `BẢN NHÁP CẦN SỬA:\n${draft || ""}`
+  ].filter(Boolean).join("\n\n");
+}
+
 module.exports = {
   REVIEW_VERSION,
   reviewQueueKey,
@@ -203,5 +219,6 @@ module.exports = {
   claimNextReview,
   settleReview,
   buildSemanticReviewPrompt,
+  buildSemanticRepairPrompt,
   parseSemanticReview
 };
