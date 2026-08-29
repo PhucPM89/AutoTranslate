@@ -26,6 +26,105 @@ const STOP_PREFIXES = [
   "于", "中", "内", "外", "上", "下", "前", "后", "左", "右", "又", "也", "就", "便", "都", "只"
 ];
 
+const PERSON_ACTIONS = new Set(
+  "说道问答喊叫笑哭看望听想点摇抬低转走来去退进出站坐跪起落冲追挡接握拿拔挥施运催皱挑瞪闭睁咬拍摸推拉抱扶杀打骂喝叹哼惊怒喜愣沉".split("")
+);
+const PERSON_SPEECH_ACTIONS = new Set("说道问答喊叫笑哭骂喝叹哼".split(""));
+const INVALID_GIVEN_NAME_CHARS = new Set(
+  "的了着过在就都也还又才便却将把被给和与或而很更最太直连忙已没可要会能让向对跟同从到为以于上下里外回出进看听说问答想觉走坐站伸点抬骂掏准备".split("")
+);
+const INVALID_GIVEN_NAMES = /^(?:兄弟|兄|弟|叔|父|母|大师|先生|小姐|老板|局长|警官|师父|师兄|师弟|师叔|爸爸|妈妈|爸|妈|哥|姐|胖子|老头|夫人|公子|姑娘)/u;
+
+let cachedSurnames = null;
+
+function loadSurnames() {
+  if (cachedSurnames) return cachedSurnames;
+  const result = [];
+  const filename = require("path").join(process.cwd(), "data", "convert", "names", "surnames.txt");
+  try {
+    for (const line of require("fs").readFileSync(filename, "utf8").split(/\r?\n/)) {
+      const match = line.match(/^([^#=\s]+)\s*=/);
+      if (match && isAllHan(match[1])) result.push(match[1]);
+    }
+  } catch {
+    return [];
+  }
+  // Compound surnames must be considered before their one-character prefixes.
+  cachedSurnames = [...new Set(result)].sort((a, b) => b.length - a.length);
+  return cachedSurnames;
+}
+
+function isLikelyNameBoundary(text, start, end) {
+  const before = text[start - 1] || "";
+  const after = text[end] || "";
+  const leftBoundary = !before || /[，。！？、：；“”"'（）\s]/u.test(before) || /[叫称让向对同跟见找救杀问答]/u.test(before);
+  const rightBoundary = !after || PERSON_ACTIONS.has(after) || /[，。！？、：；“”"'（）\s]/u.test(after);
+  return leftBoundary && rightBoundary;
+}
+
+/**
+ * Mines Chinese personal names conservatively. A candidate must start with a
+ * known surname and occur at a grammatical boundary/action position. This is
+ * deliberately stricter than generic proper-noun mining: a missed name can be
+ * learned in a later chapter, while a false name corrupts ordinary prose.
+ */
+function mineCharacterNames(chapterTexts, env = process.env) {
+  const texts = Array.isArray(chapterTexts) ? chapterTexts : [chapterTexts];
+  const combined = texts.filter(Boolean).join("\n");
+  if (!combined) return {};
+
+  const base = loadBase(env);
+  const candidates = new Map();
+  const surnames = loadSurnames();
+  const singleSurnames = new Set(surnames.filter((surname) => surname.length === 1));
+  const compoundSurnames = new Set(surnames.filter((surname) => surname.length === 2));
+  for (let from = 0; from < combined.length; from += 1) {
+    const compound = combined.slice(from, from + 2);
+    const surname = compoundSurnames.has(compound)
+      ? compound
+      : singleSurnames.has(combined[from]) ? combined[from] : "";
+    if (!surname) continue;
+
+    for (const givenLength of [2, 1]) {
+      const end = from + surname.length + givenLength;
+      const candidate = combined.slice(from, end);
+      const givenName = candidate.slice(surname.length);
+      if (
+        !isAllHan(candidate) ||
+        INVALID_GIVEN_NAMES.test(givenName) ||
+        [...givenName].some((ch) => INVALID_GIVEN_NAME_CHARS.has(ch) || PERSON_ACTIONS.has(ch)) ||
+        !isLikelyNameBoundary(combined, from, end)
+      ) continue;
+
+      // Prefer the longest candidate whose final character is followed by an
+      // action/boundary. This avoids truncating 李子夜 to 李子.
+      candidates.set(candidate, (candidates.get(candidate) || 0) + 1);
+      break;
+    }
+  }
+
+  const glossary = {};
+  for (const [zh, count] of candidates) {
+    // One strong subject/action occurrence is enough; punctuation-only guesses
+    // need repetition in the sampled text.
+    let strong = false;
+    let pos = combined.indexOf(zh);
+    while (pos !== -1) {
+      const before = combined[pos - 1] || "";
+      const after = combined[pos + zh.length] || "";
+      if (PERSON_SPEECH_ACTIONS.has(after) || /[叫称谓名]/u.test(before)) {
+        strong = true;
+        break;
+      }
+      pos = combined.indexOf(zh, pos + zh.length);
+    }
+    if (count < 2 || (!strong && count < 4)) continue;
+    const vi = convertEntityToVietnamese(zh, base);
+    if (vi && vi !== zh) glossary[zh] = vi;
+  }
+  return glossary;
+}
+
 function cleanEntity(term) {
   if (!term || typeof term !== "string") return "";
   let s = term.trim();
@@ -140,7 +239,7 @@ function mineNovelGlossary(chapterTexts, env = process.env) {
   }
 
   // Build the glossary mapping
-  const glossary = {};
+  const glossary = mineCharacterNames(texts, env);
   for (const zh of entities) {
     const vi = convertEntityToVietnamese(zh, base);
     if (vi && vi !== zh) {
@@ -153,6 +252,7 @@ function mineNovelGlossary(chapterTexts, env = process.env) {
 
 module.exports = {
   mineNovelGlossary,
+  mineCharacterNames,
   convertEntityToVietnamese,
   toTitleCase
 };

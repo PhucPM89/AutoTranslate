@@ -23,8 +23,8 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://bckwrfucultwxirorglv.supa
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 
 R2_ENDPOINT = os.environ.get("R2_ENDPOINT", "https://aa644d98f2377007f0fa98abcafe3d21.r2.cloudflarestorage.com")
-R2_ACCESS_KEY_ID = os.environ.get("R2_ACCESS_KEY_ID", "e41b13620224d90c9e14e4277a5495b3")
-R2_SECRET_ACCESS_KEY = os.environ.get("R2_SECRET_ACCESS_KEY", "11644c6ee18adb791a2d62d7501da26ab0995ffa3fcd85460026328a662b113c")
+R2_ACCESS_KEY_ID = os.environ.get("R2_ACCESS_KEY_ID", "")
+R2_SECRET_ACCESS_KEY = os.environ.get("R2_SECRET_ACCESS_KEY", "")
 R2_BUCKET = os.environ.get("R2_BUCKET", "novel-storage")
 
 MODEL_ID = os.environ.get("MODEL_ID", "ngocdang83/HachimiMT-60-QT")

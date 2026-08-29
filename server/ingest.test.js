@@ -121,6 +121,18 @@ test("a chapter document carries the source text until a translation exists", ()
   assert.equal(done.content, "dich");
   assert.equal(done.characters, 4);
 
+  const versioned = buildChapterDocument({
+    bookId: "b",
+    revision: 1,
+    chapter,
+    translation: "dich moi",
+    translationStatus: "completed",
+    provider: "hachimi",
+    translationVersion: "name-lock-v1"
+  });
+  assert.equal(versioned.provider, "hachimi");
+  assert.equal(versioned.translationVersion, "name-lock-v1");
+
   // A convert chapter shows the convert text (not the raw source) and reports
   // the convert status so the reader can label it and the LLM tier can upgrade it.
   const convert = buildChapterDocument({ bookId: "b", revision: 1, chapter, translation: "chuyen ngu", translationStatus: "convert" });

@@ -22,6 +22,7 @@ function buildChapterDocument({
   convertVersion,
   provider,
   model,
+  translationVersion,
   qaReviewed,
   qaIssuesFixed
 }) {
@@ -45,6 +46,7 @@ function buildChapterDocument({
   };
   if (provider) doc.provider = provider;
   if (model) doc.model = model;
+  if (translationVersion) doc.translationVersion = translationVersion;
   if (qaReviewed !== undefined) doc.qaReviewed = qaReviewed;
   if (qaIssuesFixed) doc.qaIssuesFixed = qaIssuesFixed;
   // Stamp convert output with the engine version, so a later backfill can tell a

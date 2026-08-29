@@ -7,7 +7,7 @@
  * Features:
  *   - Automatic Skipped/Corrupt Chapter Detection (Audits Chinese remnants and re-queues them).
  *   - Selective Range Translation (--from <n> --to <n>).
- *   - Full Re-translation Mode (--retranslate-all).
+ *   - Resumable library-wide re-translation campaign (--retranslate-all).
  * 
  * Usage:
  *   node scripts/hachimi-translate.js                             # Auto-detects and translates all pending & skipped chapters
@@ -52,6 +52,12 @@ const {
   translateChapterWithHachimi
 } = require("../server/hachimi");
 const { createTranslationEngine } = require("../server/translation-engine");
+const {
+  TRANSLATION_VERSION,
+  needsTranslationVersion,
+  stampTranslationVersion,
+  isProtectedGeminiDocument
+} = require("../server/translation-version");
 
 const args = process.argv.slice(2);
 
@@ -69,7 +75,9 @@ Options:
   --book <bookId>        Translate only a specific book ID
   --chapter <n>          Translate only a specific chapter number
   --from <n> --to <n>    Translate a range of chapters (e.g. --from 1 --to 100)
-  --retranslate-all      Force re-translation of all chapters in the book/queue
+  --retranslate-all      Re-translate every book once with the current name-lock version (resumable)
+  --all-books            Alias of --retranslate-all
+  --force                Force reset even if the current version was already completed (single run only)
   --reset-failed         Retry failed chapters
   --continuous / --loop  Run continuously as a background daemon
   --batch-size <n>       Number of chapters to process in parallel (default: 4)
@@ -96,8 +104,14 @@ const API_URL = flag("--url", process.env.HACHIMI_API_URL || "");
 const BATCH_SIZE = Math.max(1, Number(flag("--batch-size", process.env.HACHIMI_BATCH_SIZE || 4)));
 const CONTINUOUS = args.includes("--continuous") || args.includes("--loop");
 const RESET_FAILED = args.includes("--reset-failed") || args.includes("--retry-all");
-const RETRANSLATE_ALL = args.includes("--retranslate-all") || args.includes("--force");
+const RETRANSLATE_ALL = args.includes("--retranslate-all") || args.includes("--all-books");
+const FORCE_RETRANSLATE = args.includes("--force");
 const AUDIT_MODE = !args.includes("--no-audit");
+
+if (FORCE_RETRANSLATE && CONTINUOUS) {
+  console.error("Không dùng đồng thời --force và --continuous: mỗi vòng sẽ reset lại toàn bộ chương.");
+  process.exit(1);
+}
 
 async function readJson(storage, key) {
   try {
@@ -114,6 +128,10 @@ async function readJson(storage, key) {
  */
 async function auditAndResetChapters(storage, bookId, revision, chapters) {
   let resetCount = 0;
+  const bookIndex = await readJson(storage, `books/${bookId}/index.json`);
+  const indexByNumber = new Map(
+    (bookIndex?.chapters || []).map((entry) => [Number(entry.chapterNumber ?? entry.n), entry])
+  );
   const fromNum = FROM_CHAPTER ? Number(FROM_CHAPTER) : -Infinity;
   const toNum = TO_CHAPTER ? Number(TO_CHAPTER) : Infinity;
 
@@ -124,13 +142,29 @@ async function auditAndResetChapters(storage, bookId, revision, chapters) {
     await Promise.all(
       chunk.map(async (ch) => {
         const n = Number(ch.n);
+        const docKey = LAYOUT.chapter(bookId, revision, n);
+        const doc = await readJson(storage, docKey);
 
-        // If explicit range or retranslate-all is given
-        if (RETRANSLATE_ALL || (n >= fromNum && n <= toNum && (FROM_CHAPTER || TO_CHAPTER))) {
-          if (ch.status !== "pending") {
+        // Gemini and Gemini-QA are the highest quality tier. No Hachimi mode,
+        // including a library-wide rebuild or --force, may overwrite them.
+        const indexEntry = indexByNumber.get(n);
+        if (isProtectedGeminiDocument(doc) || isProtectedGeminiDocument(indexEntry) || isProtectedGeminiDocument(ch)) {
+          ch.status = "completed";
+          ch.provider = "gemini";
+          return;
+        }
+
+        // The version stamp turns a library-wide reset into a resumable
+        // campaign. A restarted worker skips chapters already rebuilt by this
+        // name-lock version instead of beginning the whole library again.
+        const needsCurrentVersion = RETRANSLATE_ALL && needsTranslationVersion(ch);
+        if (FORCE_RETRANSLATE || needsCurrentVersion || (n >= fromNum && n <= toNum && (FROM_CHAPTER || TO_CHAPTER))) {
+          if (ch.status !== "pending" || ch.attempts || ch.nextAttemptAt || ch.completedAt) {
             ch.status = "pending";
             ch.attempts = 0;
             ch.lastError = "";
+            ch.nextAttemptAt = 0;
+            ch.completedAt = "";
             resetCount++;
           }
           return;
@@ -146,8 +180,6 @@ async function auditAndResetChapters(storage, bookId, revision, chapters) {
 
         // Deep Audit: check if storage document really has valid Vietnamese
         if (AUDIT_MODE && ch.status === "completed") {
-          const docKey = LAYOUT.chapter(bookId, revision, n);
-          const doc = await readJson(storage, docKey);
           const content = String(doc?.content || "").trim();
 
           // If document is missing, empty, or has raw Chinese characters
@@ -333,15 +365,36 @@ async function main() {
       console.log(`    - Tổng số chương:                ${summary.total} chương`);
       console.log(`===============================================================`);
 
-      const glossary = await engine.loadGlossary(job.bookId);
+      // Scan the complete source book before translating its first chapter.
+      // A cast member introduced in chapter 200 and returning in chapter 500
+      // must already be locked at the first occurrence, not learned afterwards.
+      const originalCache = new Map();
+      const loadOriginal = (n) => {
+        if (!originalCache.has(n)) {
+          originalCache.set(n, readJson(storage, originalKey(job.bookId, job.revision, n)));
+        }
+        return originalCache.get(n);
+      };
+      const glossarySeedTexts = [];
+      const chapterNumbers = job.state.chapters.map((entry) => Number(entry.n)).filter(Number.isFinite);
+      for (let i = 0; i < chapterNumbers.length; i += 40) {
+        const samples = await Promise.all(chapterNumbers.slice(i, i + 40).map(loadOriginal));
+        for (const sample of samples) {
+          if (sample) glossarySeedTexts.push(sample.title, sample.content);
+        }
+      }
+      let glossary = glossarySeedTexts.length
+        ? await engine.mineAndMergeGlossary(job.bookId, glossarySeedTexts)
+        : await engine.loadGlossary(job.bookId);
 
       await runTranslationJobs({
         state: job.state,
         requestBudget: Infinity,
         batchSize: BATCH_SIZE,
-        loadChapter: (n) => readJson(storage, originalKey(job.bookId, job.revision, n)),
+        loadChapter: loadOriginal,
         translateChapter: async (chapter) => {
           const t0 = Date.now();
+          glossary = await engine.mineAndMergeGlossary(job.bookId, [chapter.title, chapter.content]);
           const translated = await translateChapterWithHachimi(chapter, {
             apiUrl: activeUrl,
             glossary
@@ -367,10 +420,15 @@ async function main() {
                   title: translatedTitle
                 },
                 translation: translationText,
-                translationStatus: "completed"
+                translationStatus: "completed",
+                provider: "hachimi",
+                model: result?.model || "HachimiMT-60-QT",
+                translationVersion: TRANSLATION_VERSION
               })
             )
           );
+          const stateEntry = job.state.chapters.find((entry) => entry.n === chapter.chapterNumber);
+          stampTranslationVersion(stateEntry);
         },
         saveState: async (nextState) => {
           await storage.put(jobStateKey(job.bookId), JSON.stringify(nextState));

@@ -182,10 +182,13 @@ async function translateTextWithHachimi(text, {
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
+      const locked = glossary && typeof glossary === "object"
+        ? require("./translation-engine").createTranslationEngine().protectGlossaryTerms(text, glossary)
+        : { text, replacements: [] };
       const response = await makeJsonRequest(`${cleanUrl}/translate`, {
         method: "POST",
         body: {
-          text,
+          text: locked.text,
           max_length: maxLength,
           beam_size: beamSize
         },
@@ -193,6 +196,10 @@ async function translateTextWithHachimi(text, {
       });
 
       let translation = cleanHachimiOutput(response.translation || "");
+      if (locked.replacements.length) {
+        translation = require("./translation-engine").createTranslationEngine()
+          .restoreGlossaryTerms(translation, locked.replacements);
+      }
 
       // Apply glossary substitutions if supplied
       if (glossary && typeof glossary === "object") {

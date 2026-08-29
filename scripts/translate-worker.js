@@ -373,6 +373,25 @@ async function main() {
       console.log(`>>> [KHÓA CHẶT DỊCH 100%] Bộ truyện: "${bTitle}" (${job.bookId})`);
       console.log(`===============================================================`);
 
+      const originalCache = new Map();
+      const loadOriginal = (n) => {
+        if (!originalCache.has(n)) {
+          originalCache.set(n, readJson(storage, originalKey(job.bookId, job.revision, n)));
+        }
+        return originalCache.get(n);
+      };
+      const glossarySeedTexts = [];
+      const chapterNumbers = job.state.chapters.map((entry) => Number(entry.n)).filter(Number.isFinite);
+      for (let i = 0; i < chapterNumbers.length; i += 40) {
+        const samples = await Promise.all(chapterNumbers.slice(i, i + 40).map(loadOriginal));
+        for (const sample of samples) {
+          if (sample) glossarySeedTexts.push(sample.title, sample.content);
+        }
+      }
+      let bookGlossary = glossarySeedTexts.length
+        ? await engine.mineAndMergeGlossary(job.bookId, glossarySeedTexts)
+        : await engine.loadGlossary(job.bookId);
+
       while (!isSettled(job.state) && spentTotal < REQUEST_BUDGET && Date.now() < deadlineAt) {
         const remainingBudget = REQUEST_BUDGET === Infinity ? Infinity : REQUEST_BUDGET - spentTotal;
         const result = await runTranslationJobs({
@@ -382,18 +401,18 @@ async function main() {
           spacingMs: () => computeAdaptiveSpacing(allUniqueKeys),
           batchSize: BATCH_SIZE,
           strictSequential: Boolean(configuredFocus),
-          loadChapter: (n) => readJson(storage, originalKey(job.bookId, job.revision, n)),
+          loadChapter: loadOriginal,
           translateChapter: async (chapter) => {
             const existing = await readJson(storage, chapterKey(job.bookId, job.revision, chapter.chapterNumber));
             if (existing && existing.translationStatus === "completed" && existing.content) {
               console.log(`  ch ${chapter.chapterNumber}: đã có bản dịch trên R2, bỏ qua Groq AI`);
               return existing.content;
             }
-            const glossary = await engine.loadGlossary(job.bookId);
+            bookGlossary = await engine.mineAndMergeGlossary(job.bookId, [chapter.title, chapter.content]);
             const output = await translateText(chapter.content, apiKey, {
               bookId: job.bookId,
               bookTitle: bTitle,
-              glossary,
+              glossary: bookGlossary,
               engine,
               provider: "gemini"
             });

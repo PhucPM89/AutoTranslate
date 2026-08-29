@@ -125,3 +125,34 @@ test("translation-engine: mineAndMergeGlossary extracts and saves book entities"
   assert.ok(merged["诛仙剑"]);
   assert.ok(mockStorage.store.has(glossaryKey(bookId)));
 });
+
+test("translation-engine: mines character names and keeps manual decisions", async () => {
+  const mockStorage = {
+    store: new Map(),
+    async get(key) { return this.store.has(key) ? Buffer.from(this.store.get(key)) : null; },
+    async put(key, body) { this.store.set(key, body); }
+  };
+  const engine = createTranslationEngine({ storage: mockStorage });
+  await engine.saveGlossary("cast", { "李子夜": "Lý Tử Dạ (đã duyệt)" });
+  const glossary = await engine.mineAndMergeGlossary("cast", [
+    "李子夜说道：王天明走了过来。王天明笑着看向李子夜。"
+  ]);
+  assert.equal(glossary["李子夜"], "Lý Tử Dạ (đã duyệt)");
+  assert.equal(glossary["王天明"], "Vương Thiên Minh");
+});
+
+test("translation-engine: locks names before translation and restores altered sentinels", () => {
+  const engine = createTranslationEngine();
+  const locked = engine.protectGlossaryTerms("李子夜看向王天明。", {
+    "李子夜": "Lý Tử Dạ",
+    "王天明": "Vương Thiên Minh"
+  });
+  assert.doesNotMatch(locked.text, /李子夜|王天明/);
+  const simulatedModelOutput = locked.text
+    .replace("__TC_NAME_0000__", "__TC NAME 0000__")
+    .replace("看向", "nhìn về phía");
+  assert.equal(
+    engine.restoreGlossaryTerms(simulatedModelOutput, locked.replacements),
+    "Lý Tử Dạ nhìn về phía Vương Thiên Minh。"
+  );
+});

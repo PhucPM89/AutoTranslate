@@ -118,9 +118,12 @@ async function translateText(text, apiKeys, options = {}) {
   const keyList = getActiveKeys(apiKeys);
   if (!keyList.length) throw new Error("Thiếu GROQ_API_KEY / GEMINI_API_KEY (hoặc HACHIMI_API_URL).");
 
-  const bookGlossary = options.glossary || {};
+  let bookGlossary = options.glossary || {};
   const bookTitle = options.bookTitle || "";
   const engine = options.engine || defaultEngine;
+  if (options.bookId) {
+    bookGlossary = await engine.mineAndMergeGlossary(options.bookId, [text]);
+  }
   const translationMemory = options.translationMemory || await engine.loadTranslationMemory();
   const glossary = {
     ...Object.fromEntries(
@@ -592,6 +595,7 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
   const now = Date.now();
   let lastError = null;
   let residualHanCandidate = "";
+  const locked = engine.protectGlossaryTerms(text, glossary);
 
   // Build candidate order starting from globalKeyIndex in strict round-robin fashion
   // Reserve the starting key synchronously. Concurrent chunks used to read the
@@ -626,11 +630,12 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
       const prompt = residualHanCandidate
         ? buildResidualHanRepairPrompt(residualHanCandidate)
         : engine.buildContextualPrompt({
-            text,
+            text: locked.text,
             index,
             total,
             bookTitle,
             glossary,
+            glossaryMatchText: text,
             // A pool with one model per key still needs the corrective retry prompt
             // after another key returned incomplete or untranslated text.
             isRetry: Boolean(lastError) || modelIndex > 0
@@ -641,7 +646,10 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
         const result = await translateChunkWithModel(apiKey, model, prompt, {
           maxTokens: isGroq ? outputTokenBudget(text) : 16384
         });
-        const processedText = engine.postProcessTranslation(result.text, glossary);
+        const processedText = engine.restoreGlossaryTerms(
+          engine.postProcessTranslation(result.text, glossary),
+          locked.replacements
+        );
         const quality = assessTranslation(text, processedText);
         if (quality.acceptable) {
           markKeySuccess(apiKey, result.usage?.total_tokens || 0);

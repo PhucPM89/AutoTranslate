@@ -278,8 +278,8 @@ def sync_url_to_r2(url: str):
         import json
         
         r2_endpoint = os.environ.get("R2_ENDPOINT", "https://aa644d98f2377007f0fa98abcafe3d21.r2.cloudflarestorage.com")
-        r2_access_key = os.environ.get("R2_ACCESS_KEY_ID", "e41b13620224d90c9e14e4277a5495b3")
-        r2_secret_key = os.environ.get("R2_SECRET_ACCESS_KEY", "11644c6ee18adb791a2d62d7501da26ab0995ffa3fcd85460026328a662b113c")
+        r2_access_key = os.environ.get("R2_ACCESS_KEY_ID", "")
+        r2_secret_key = os.environ.get("R2_SECRET_ACCESS_KEY", "")
         r2_bucket = os.environ.get("R2_BUCKET", "novel-storage")
 
         s3 = boto3.client(

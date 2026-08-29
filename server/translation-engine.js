@@ -61,6 +61,7 @@ function sanitizeContentSafety(text) {
 
 function createTranslationEngine({ storage = null } = {}) {
   const glossaryCache = new Map();
+  const glossaryUpdates = new Map();
   let tmCache = null;
 
   async function loadGlossary(bookId) {
@@ -95,11 +96,47 @@ function createTranslationEngine({ storage = null } = {}) {
 
   async function mineAndMergeGlossary(bookId, chapterTexts) {
     if (!bookId) return {};
-    const existing = await loadGlossary(bookId);
-    const mined = mineNovelGlossary(chapterTexts);
-    const merged = { ...mined, ...existing };
-    await saveGlossary(bookId, merged);
-    return merged;
+    const previous = glossaryUpdates.get(bookId) || Promise.resolve();
+    const update = previous.then(async () => {
+      const existing = await loadGlossary(bookId);
+      const mined = mineNovelGlossary(chapterTexts);
+      const additions = Object.entries(mined).filter(([zh]) => !existing[zh]);
+      if (!additions.length) return existing;
+      // Existing/manual decisions always win over automatically mined entries.
+      const merged = { ...mined, ...existing };
+      await saveGlossary(bookId, merged);
+      return merged;
+    });
+    glossaryUpdates.set(bookId, update.catch(() => {}));
+    return update;
+  }
+
+  function protectGlossaryTerms(text, glossary = {}) {
+    let protectedText = String(text || "");
+    const replacements = [];
+    const terms = findMatchedGlossaryTerms(protectedText, glossary)
+      .filter(({ zh, vi }) => zh && vi)
+      .sort((a, b) => b.zh.length - a.zh.length);
+
+    for (const { zh, vi } of terms) {
+      if (!protectedText.includes(zh)) continue;
+      const token = `__TC_NAME_${String(replacements.length).padStart(4, "0")}__`;
+      // Spaces keep the sentinel separate from adjacent Han characters so NMT
+      // tokenizers do not fuse the restored name with the following verb.
+      protectedText = protectedText.split(zh).join(` ${token} `);
+      replacements.push({ token, vi });
+    }
+    return { text: protectedText, replacements };
+  }
+
+  function restoreGlossaryTerms(text, replacements = []) {
+    let restored = String(text || "");
+    for (const { token, vi } of replacements) {
+      const number = token.match(/(\d+)/)?.[1] || "";
+      const flexibleToken = new RegExp(`__?\\s*TC[ _-]*NAME[ _-]*${number}\\s*__?`, "gi");
+      restored = restored.replace(flexibleToken, vi).split(token).join(vi);
+    }
+    return restored.replace(/\s+([，。！？；：、])/g, "$1").trim();
   }
 
   async function loadTranslationMemory(bookId = null) {
@@ -143,9 +180,10 @@ function createTranslationEngine({ storage = null } = {}) {
     total = 1,
     bookTitle = "",
     glossary = {},
-    isRetry = false
+    isRetry = false,
+    glossaryMatchText = text
   }) {
-    const matchedTerms = findMatchedGlossaryTerms(text, glossary);
+    const matchedTerms = findMatchedGlossaryTerms(glossaryMatchText, glossary);
     let glossarySection = "";
     if (matchedTerms.length > 0) {
       glossarySection = [
@@ -223,6 +261,8 @@ function createTranslationEngine({ storage = null } = {}) {
     loadGlossary,
     saveGlossary,
     mineAndMergeGlossary,
+    protectGlossaryTerms,
+    restoreGlossaryTerms,
     loadTranslationMemory,
     findMatchedGlossaryTerms,
     sanitizeContentSafety,
