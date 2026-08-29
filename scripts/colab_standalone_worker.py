@@ -271,7 +271,7 @@ def clean_text(text):
     return re.sub(r"[^\S\r\n]+", " ", result).strip()
 
 
-def translate_paragraphs(paragraphs, protector):
+def translate_paragraphs(paragraphs, protector, progress_label=""):
     output = [""] * len(paragraphs)
     prepared, metadata = [], []
     for index, paragraph in enumerate(paragraphs):
@@ -283,8 +283,16 @@ def translate_paragraphs(paragraphs, protector):
             prepared.append(piece)
             metadata.append((index, replacements))
 
+    total_batches = (len(prepared) + BATCH_SIZE - 1) // BATCH_SIZE
     for offset in range(0, len(prepared), BATCH_SIZE):
+        batch_number = offset // BATCH_SIZE + 1
         texts = prepared[offset:offset + BATCH_SIZE]
+        if progress_label:
+            print(
+                f"    {progress_label}: batch {batch_number}/{total_batches} "
+                f"({len(texts)} đoạn)...",
+                flush=True,
+            )
         source_tokens = [tokenizer.convert_ids_to_tokens(tokenizer.encode(text, truncation=False)) for text in texts]
         results = translator.translate_batch(
             source_tokens,
@@ -303,9 +311,14 @@ def translate_paragraphs(paragraphs, protector):
     return output
 
 
-def translate_chapter(title, content, protector):
+def translate_chapter(title, content, protector, chapter_number=None):
     translated_title = translate_paragraphs([title], protector)[0] if title else title
-    translated_lines = translate_paragraphs(str(content or "").split("\n"), protector)
+    label = f"ch {chapter_number}" if chapter_number is not None else "nội dung"
+    translated_lines = translate_paragraphs(
+        str(content or "").split("\n"),
+        protector,
+        progress_label=label,
+    )
     return translated_title, "\n\n".join(line for line in translated_lines if line)
 
 
@@ -326,6 +339,7 @@ def run_translation_loop():
 
     for job_key in job_keys:
         book_id = job_key.split("/")[1]
+        print(f"\n[Quét] {book_id}: đang đọc index và toàn bộ bản gốc...", flush=True)
         state = r2_get_json(job_key)
         index_document = r2_get_json(f"books/{book_id}/index.json")
         if not state or not index_document or not isinstance(state.get("chapters"), list):
@@ -344,6 +358,12 @@ def run_translation_loop():
             if original:
                 originals[number] = original
                 source_texts.extend([original.get("title", ""), original.get("content", "")])
+
+        print(
+            f"[Quét] {book_id}: đã đọc {len(originals)}/{len(chapters)} bản gốc; "
+            "đang tạo glossary...",
+            flush=True,
+        )
 
         existing_glossary = r2_get_json(f"glossary/{book_id}.json") or {}
         if not isinstance(existing_glossary, dict):
@@ -412,7 +432,18 @@ def run_translation_loop():
                 continue
 
             started = time.time()
-            title, content = translate_chapter(original.get("title", f"Chương {number}"), original.get("content", ""), protector)
+            source_content = original.get("content", "")
+            print(
+                f"  → [{position}/{len(pending)}] ch {number}: bắt đầu dịch "
+                f"{len(str(source_content)):,} ký tự...",
+                flush=True,
+            )
+            title, content = translate_chapter(
+                original.get("title", f"Chương {number}"),
+                source_content,
+                protector,
+                chapter_number=number,
+            )
             latest = r2_get_json(f"books/{book_id}/r{revision}/ch/{number}.json")
             if is_gemini_document(latest):
                 chapter["status"] = "completed"

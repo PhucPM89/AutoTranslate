@@ -80,5 +80,7 @@ notebook và không sử dụng lại những khóa từng xuất hiện trong c
   `qaRequired=true` để Gemini QA xử lý chọn lọc.
 - Mỗi chương được checkpoint sau khi upload. Colab ngắt thì chạy lại cùng
   `WORKER_INDEX` và `TOTAL_WORKERS`; chương hoàn tất sẽ được bỏ qua.
+- Colab in `[Quét]` khi đang tải bản gốc, `→` khi bắt đầu một chương, tiến độ
+  từng batch, và `✓` sau khi chương đã được upload/checkpoint.
 - Không thay đổi `TOTAL_WORKERS` giữa một chiến dịch vì phép chia bộ cho worker
   phụ thuộc vào giá trị này.
