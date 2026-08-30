@@ -66,6 +66,14 @@ test("rejects a translation that drops Arabic quantities", () => {
   assert.match(result.reason, /làm mất số 1200/);
 });
 
+test("rejects literal Han-Viet transliteration of everyday narration", () => {
+  const source = `${"这是中文内容。".repeat(40)}爷爷教了我一身术数命理，却在我帮他算了三次命后，离开了我。`;
+  const output = "Tên truyện: Ma Y Thần Toán Tử. Gia Gia Giáo cho ta một thân thuật số mệnh lý, sau khi Khước Tại Ngã Bang đã xem mệnh cho ông ba lần thì rời khỏi ta. ".repeat(6);
+  const result = assessTranslation(source, output);
+  assert.equal(result.acceptable, false);
+  assert.match(result.reason, /chuyển âm máy móc/);
+});
+
 test("accepts a translation that expresses numbers in natural Vietnamese words", () => {
   const source = `${"这是中文内容。".repeat(40)}他等了10天，遇到了2个人。`;
   const output = "Đây là bản dịch tiếng Việt đầy đủ. Hắn đã chờ mười ngày và gặp được hai người. ".repeat(6);

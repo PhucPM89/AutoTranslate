@@ -212,7 +212,8 @@ async function translateBatchChapters(chapters, apiKeys, options = {}) {
   parts.push("Bạn là một dịch giả tiểu thuyết Trung Quốc sang tiếng Việt chuyên nghiệp.");
   parts.push("Hãy dịch trọn vẹn các chương truyện sau đây sang tiếng Việt tự nhiên, đúng chất tiên hiệp/huyền huyễn.");
   parts.push("Yêu cầu bắt buộc:");
-  parts.push("- Chuyển toàn bộ tên người, địa danh, môn phái, cảnh giới sang âm Hán-Việt phù hợp.");
+  parts.push("- Chỉ chuyển âm Hán-Việt cho tên người, địa danh, môn phái, cảnh giới, công pháp và thuật ngữ thực sự.");
+  parts.push("- Đại từ, động từ, liên từ và lời kể đời thường phải dịch nghĩa thuần Việt; không chuyển âm kiểu Gia Gia, Ngã, Nhĩ, Khước, Giáo.");
   parts.push("- Tuyệt đối không dùng Pinyin hoặc chữ Hán.");
   parts.push("- Giữ nguyên cấu trúc các phân tách chương dạng: === CHAPTER_START_{n} === và === CHAPTER_END_{n} ===");
   parts.push("");
@@ -881,7 +882,7 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
         messages: [
           {
             role: "system",
-            content: "Bạn là dịch giả văn học tiểu thuyết mạng Trung - Việt xuất sắc nhất (Tiên hiệp, Huyền huyễn, Đô thị, Mạt thế). Dịch nguyên văn 1:1, đầy đủ 100% từng câu từng chữ, thuần Việt và chuẩn Hán-Việt 100% cho tên riêng/thuật ngữ. Xưng hô chuẩn mực (ta-ngươi, huynh-đệ, sư phụ-đồ nhi). TUYỆT ĐỐI KHÔNG tóm tắt, KHÔNG lược bớt, giữ nguyên cấu trúc phân đoạn. Chỉ trả về duy nhất nội dung đã dịch, không kèm lời giải thích hay ghi chú."
+            content: "Bạn là dịch giả văn học tiểu thuyết mạng Trung - Việt xuất sắc nhất (Tiên hiệp, Huyền huyễn, Đô thị, Mạt thế). Dịch nguyên văn 1:1, đầy đủ 100% từng câu từng chữ, tiếng Việt tự nhiên. Chỉ dùng âm Hán-Việt cho tên riêng, địa danh, môn phái, cảnh giới, công pháp và thuật ngữ; tuyệt đối không chuyển âm các từ thường ngày/đại từ/động từ/liên từ như ông nội, tôi, bạn, giúp, dạy, lại, đang. Xưng hô chuẩn mực theo ngữ cảnh. TUYỆT ĐỐI KHÔNG tóm tắt, KHÔNG lược bớt, giữ nguyên cấu trúc phân đoạn. Chỉ trả về duy nhất nội dung đã dịch, không kèm lời giải thích hay ghi chú."
           },
           {
             role: "user",
@@ -1065,6 +1066,11 @@ function assessTranslation(source, translation) {
     return { acceptable: false, reason: `vẫn còn sót ${outputStats.han} chữ Hán chưa được chuyển ngữ` };
   }
 
+  const literalIssue = detectLiteralEverydayHanViet(source, output);
+  if (literalIssue) {
+    return { acceptable: false, reason: literalIssue };
+  }
+
   // 2. Đảm bảo độ đầy đủ nội dung (chống cắt cụt hoặc lặp vô tận)
   if (source.length >= 250) {
     const ratio = output.length / Math.max(1, source.length);
@@ -1134,6 +1140,22 @@ function assessTranslation(source, translation) {
   }
 
   return { acceptable: true };
+}
+
+function detectLiteralEverydayHanViet(source, translation) {
+  const sourceText = String(source || "");
+  const output = String(translation || "");
+  const rules = [
+    { zh: "爷爷", vi: /\bGia Gia\b/iu, meaning: "ông nội" },
+    { zh: "我", vi: /\bNgã\b/iu, meaning: "tôi/ta" },
+    { zh: "你", vi: /\bNhĩ\b/iu, meaning: "bạn/ngươi" },
+    { zh: "却", vi: /\bKhước\b/iu, meaning: "lại/vậy mà" },
+    { zh: "爷爷教", vi: /\bGiáo\b/iu, meaning: "dạy" },
+    { zh: "帮我", vi: /\bBang\b/iu, meaning: "giúp tôi" }
+  ];
+  const hit = rules.find((rule) => sourceText.includes(rule.zh) && rule.vi.test(output));
+  if (!hit) return "";
+  return `bản dịch chuyển âm máy móc từ thường ngày; cần dịch nghĩa "${hit.meaning}" thay vì Hán-Việt hóa`;
 }
 
 function paragraphCount(value) {
