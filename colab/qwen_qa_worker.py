@@ -12,6 +12,7 @@ import os
 import sys
 import time
 import json
+import math
 import re
 import hashlib
 import subprocess
@@ -107,6 +108,7 @@ LEASE_MS = int(os.environ.get("QA_LEASE_MS", str(15 * 60 * 1000)))
 MAX_ATTEMPTS = int(os.environ.get("QA_MAX_ATTEMPTS", "4"))
 MAX_REWRITE_PASSES = max(1, int(os.environ.get("QA_MAX_REWRITE_PASSES", "3")))
 REVIEW_VERSION = "semantic-v3"
+EXPECTED_DRAFT_VERSION = os.environ.get("HACHIMI_DRAFT_VERSION", "hachimi-quality-v3")
 CURSOR_KEY = "jobs/semantic-review-cursor.json"
 STATUS_KEY = "jobs/translate-status.json"
 OWNER_ID = f"qwen-colab-w{WORKER_INDEX}-{os.getpid()}"
@@ -419,6 +421,21 @@ def merge_translation_memory(current: Optional[Dict[str, Any]], updates: List[Di
         "updatedAt": utc_now()
     }
 
+
+def story_bible_for_prompt(story_bible: Optional[Dict[str, Any]], max_chars: int = 8000) -> Dict[str, Any]:
+    """Keep recent approved context without letting a mature book overflow Qwen context."""
+    if not isinstance(story_bible, dict):
+        return {}
+    characters = list(story_bible.get("characters") or [])[-40:]
+    world_terms = list(story_bible.get("worldTerms") or [])[-60:]
+    compact = {"characters": characters, "worldTerms": world_terms}
+    while len(json.dumps(compact, ensure_ascii=False)) > max_chars and (characters or world_terms):
+        if len(characters) >= len(world_terms) and characters:
+            characters.pop(0)
+        elif world_terms:
+            world_terms.pop(0)
+    return compact
+
 # ---------------------------------------------------------------------------
 # Qwen Local QA Review Engine
 # ---------------------------------------------------------------------------
@@ -518,7 +535,7 @@ class QwenReviewEngine:
             f"Glossary bắt buộc: {json.dumps(matched_glossary, ensure_ascii=False)}"
         ]
         if story_bible and (story_bible.get("characters") or story_bible.get("worldTerms")):
-            user_content_parts.append(f"Story Bible đã duyệt: {json.dumps({'characters': (story_bible.get('characters') or [])[-60:], 'worldTerms': (story_bible.get('worldTerms') or [])[-60:]}, ensure_ascii=False)}")
+            user_content_parts.append(f"Story Bible đã duyệt: {json.dumps(story_bible_for_prompt(story_bible), ensure_ascii=False)}")
         if recent_context:
             user_content_parts.append(f"Tóm tắt các chương gần nhất: {json.dumps(recent_context[-4:], ensure_ascii=False)}")
 
@@ -542,15 +559,20 @@ class QwenReviewEngine:
         if not parsed or not isinstance(parsed, dict) or parsed.get("decision") not in ("pass", "repair"):
             raise RuntimeError("Qwen trả semantic review không đúng schema JSON.")
 
-        scores = parsed.get("scores") or {}
+        raw_scores = parsed.get("scores") if isinstance(parsed.get("scores"), dict) else {}
+        scores = {}
         for k in ["accuracy", "completeness", "fluency", "terminology"]:
             try:
-                scores[k] = float(scores.get(k, 8))
+                value = float(raw_scores.get(k, 8))
+                scores[k] = max(0.0, min(10.0, value)) if math.isfinite(value) else 8.0
             except Exception:
                 scores[k] = 8.0
 
         issues = parsed.get("issues") if isinstance(parsed.get("issues"), list) else []
-        has_serious = any(i.get("severity") in ("major", "critical") for i in issues if isinstance(i, dict))
+        has_serious = any(
+            str(i.get("severity") or "").lower() in ("major", "critical")
+            for i in issues if isinstance(i, dict)
+        )
         can_pass = all(s >= 9 for s in scores.values()) and not has_serious
 
         if parsed.get("decision") == "pass" and not can_pass:
@@ -593,7 +615,7 @@ class QwenReviewEngine:
             f"TIÊU ĐỀ HACHIMI THAM KHẢO: {draft_title}"
         ]
         if story_bible and (story_bible.get("characters") or story_bible.get("worldTerms")):
-            user_parts.append(f"Story Bible đã duyệt: {json.dumps({'characters': (story_bible.get('characters') or [])[-60:], 'worldTerms': (story_bible.get('worldTerms') or [])[-60:]}, ensure_ascii=False)}")
+            user_parts.append(f"Story Bible đã duyệt: {json.dumps(story_bible_for_prompt(story_bible), ensure_ascii=False)}")
         if recent_context:
             user_parts.append(f"Tóm tắt các chương gần nhất: {json.dumps(recent_context[-4:], ensure_ascii=False)}")
         if repair_instructions:
@@ -631,6 +653,23 @@ def process_claim(queue_key: str, queue: Dict[str, Any], entry: Dict[str, Any], 
     book_id = queue["bookId"]
     rev = int(entry.get("revision") or queue.get("revision") or 1)
     ch_num = int(entry["chapterNumber"])
+
+    if entry.get("translationVersion") != EXPECTED_DRAFT_VERSION:
+        entry.update({
+            "state": "superseded",
+            "leaseOwner": "",
+            "leaseUntil": "",
+            "lastError": f"Draft cũ {entry.get('translationVersion') or 'không rõ'}; chờ {EXPECTED_DRAFT_VERSION}",
+            "updatedAt": utc_now(),
+        })
+        queue["updatedAt"] = utc_now()
+        r2_put_json(queue_key, queue, cache_control="private, no-store")
+        print(
+            f"  ↷ [{book_id}] ch {ch_num}: bỏ entry {entry.get('translationVersion') or 'legacy'}; "
+            f"chờ draft {EXPECTED_DRAFT_VERSION}.",
+            flush=True,
+        )
+        return {"skipped": True, "superseded": True}
 
     chapter_key = f"books/{book_id}/r{rev}/ch/{ch_num}.json"
     draft_key = f"drafts/{book_id}/r{rev}/ch/{ch_num}.json"
@@ -711,17 +750,35 @@ def process_claim(queue_key: str, queue: Dict[str, Any], entry: Dict[str, Any], 
         content = rewritten_doc["content"]
 
         verify_started = time.time()
-        final_review = engine.review_chapter(
-            book_title=book_title,
-            chapter_num=ch_num,
-            source=original["content"],
-            draft=content,
-            glossary=glossary,
-            story_bible=story_bible,
-            recent_context=(story_context or {}).get("chapters"),
-            source_title=original.get("title", ""),
-            draft_title=title,
-        )
+        try:
+            final_review = engine.review_chapter(
+                book_title=book_title,
+                chapter_num=ch_num,
+                source=original["content"],
+                draft=content,
+                glossary=glossary,
+                story_bible=story_bible,
+                recent_context=(story_context or {}).get("chapters"),
+                source_title=original.get("title", ""),
+                draft_title=title,
+            )
+        except Exception as error:
+            t_verify += time.time() - verify_started
+            last_error = error
+            if rewrite_pass >= MAX_REWRITE_PASSES:
+                raise
+            candidate_draft = content
+            candidate_title = title
+            repair_instructions = [
+                "Tự đối chiếu lại toàn bộ bản gốc và bản dịch trước khi trả lời.",
+                "Bản sửa phải giúp lượt semantic verification trả JSON hợp lệ và đạt đủ bốn tiêu chí.",
+            ]
+            print(
+                f"    ↻ Verify lượt {rewrite_pass}/{MAX_REWRITE_PASSES} lỗi ({error}); "
+                "Qwen tự refinement...",
+                flush=True,
+            )
+            continue
         t_verify += time.time() - verify_started
         if final_review.get("decision") == "pass":
             break
@@ -920,6 +977,8 @@ def run_worker_loop():
                     process_claim(queue_key, queue, entry, engine)
                 except Exception as error:
                     print(f"  ✗ Lỗi xử lý [{book_id}] ch {entry.get('chapterNumber')}: {error}")
+                    if "out of memory" in str(error).lower() and torch.cuda.is_available():
+                        torch.cuda.empty_cache()
                     transient = bool(re.search(r"quota|rate limit|timeout|temporar|503|502|504", str(error), re.IGNORECASE))
                     settle_review(queue, int(entry.get("chapterNumber", 0)), {"error": str(error), "retryable": transient})
                     r2_put_json(queue_key, queue)

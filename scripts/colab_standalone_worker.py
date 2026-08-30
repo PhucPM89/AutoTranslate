@@ -43,11 +43,14 @@ WORKER_INDEX = int(os.environ.get("WORKER_INDEX", "0"))
 TOTAL_WORKERS = max(1, int(os.environ.get("TOTAL_WORKERS", "1")))
 BATCH_SIZE = max(1, int(os.environ.get("HACHIMI_BATCH_SIZE", "32")))
 RETRANSLATE_NAME_LOCK = os.environ.get("RETRANSLATE_NAME_LOCK", "true").lower() != "false"
+CHAPTER_RETRIES = max(1, int(os.environ.get("HACHIMI_CHAPTER_RETRIES", "3")))
+CHAPTER_RETRY_DELAY_SECONDS = max(1, int(os.environ.get("HACHIMI_RETRY_DELAY_SECONDS", "5")))
 SEMANTIC_REVIEW_VERSION = "semantic-v3"
-HACHIMI_BOOK_LEASE_SECONDS = 3 * 60 * 60
+HACHIMI_BOOK_LEASE_SECONDS = max(5 * 60, int(os.environ.get("HACHIMI_BOOK_LEASE_SECONDS", str(15 * 60))))
 REVIEW_WRITE_LEASE_SECONDS = 2 * 60
 REVIEW_WRITE_WAIT_SECONDS = 30 * 60
 REVIEW_WRITE_OWNER = f"hachimi-w{WORKER_INDEX}-{os.getpid()}"
+HACHIMI_BOOK_OWNER = f"hachimi-book-w{WORKER_INDEX}-{os.getpid()}"
 
 R2_ENDPOINT = os.environ.get("R2_ENDPOINT", "")
 R2_ACCESS_KEY_ID = os.environ.get("R2_ACCESS_KEY_ID", "")
@@ -185,16 +188,63 @@ def merge_semantic_review_queue(queue, book_id, revision, candidates):
     }
 
 
-def mark_hachimi_activity(book_id, active):
-    now = int(time.time())
-    r2_put_json(f"jobs/{book_id}/hachimi-active.json", {
+def hachimi_activity_key(book_id):
+    return f"jobs/{book_id}/hachimi-active.json"
+
+
+def acquire_hachimi_book_lease(book_id):
+    key = hachimi_activity_key(book_id)
+    now_ms = int(time.time() * 1000)
+    existing = r2_get_json(key)
+    if existing and existing.get("active") and int(existing.get("expiresAtEpochMs") or 0) > now_ms:
+        return existing.get("owner") == HACHIMI_BOOK_OWNER
+    if existing:
+        try:
+            head = r2_head(key) or {}
+            r2_delete(key, str(head.get("ETag") or ""))
+        except Exception:
+            return False
+    lease = {
         "schema": 1,
         "bookId": book_id,
         "workerIndex": WORKER_INDEX,
-        "active": bool(active),
+        "owner": HACHIMI_BOOK_OWNER,
+        "active": True,
+        "acquiredAt": utc_now(),
         "updatedAt": utc_now(),
-        "expiresAtEpochMs": (now + HACHIMI_BOOK_LEASE_SECONDS) * 1000 if active else now * 1000,
+        "expiresAtEpochMs": now_ms + HACHIMI_BOOK_LEASE_SECONDS * 1000,
+    }
+    try:
+        r2_put_json(key, lease, "private, no-store", if_none_match="*")
+        return True
+    except Exception:
+        return False
+
+
+def refresh_hachimi_book_lease(book_id):
+    key = hachimi_activity_key(book_id)
+    existing = r2_get_json(key)
+    if not existing or existing.get("owner") != HACHIMI_BOOK_OWNER:
+        return False
+    existing.update({
+        "active": True,
+        "updatedAt": utc_now(),
+        "expiresAtEpochMs": int(time.time() * 1000) + HACHIMI_BOOK_LEASE_SECONDS * 1000,
     })
+    r2_put_json(key, existing, "private, no-store")
+    return True
+
+
+def release_hachimi_book_lease(book_id):
+    key = hachimi_activity_key(book_id)
+    existing = r2_get_json(key)
+    if not existing or existing.get("owner") != HACHIMI_BOOK_OWNER:
+        return
+    try:
+        head = r2_head(key) or {}
+        r2_delete(key, str(head.get("ETag") or ""))
+    except Exception:
+        pass
 
 
 def review_lock_key(book_id):
@@ -242,7 +292,12 @@ def release_review_write_lock(book_id):
 def wait_for_review_write_lock(book_id):
     deadline = time.time() + REVIEW_WRITE_WAIT_SECONDS
     announced = False
+    last_lease_refresh = 0.0
     while time.time() < deadline:
+        if time.time() - last_lease_refresh >= 60:
+            if not refresh_hachimi_book_lease(book_id):
+                raise RuntimeError(f"Mất Hachimi book lease khi chờ Qwen checkpoint {book_id}.")
+            last_lease_refresh = time.time()
         if acquire_review_write_lock(book_id):
             return
         if not announced:
@@ -476,9 +531,11 @@ def run_translation_loop():
         if not state or not index_document or not isinstance(state.get("chapters"), list):
             continue
 
-        # Semantic QA never edits a queue while Colab is still translating the
-        # same book. The lease expires automatically if a Colab runtime dies.
-        mark_hachimi_activity(book_id, True)
+        # Only one Hachimi process may own a book. This prevents an old Colab
+        # runtime from overwriting a newly rebuilt glossary or draft checkpoint.
+        if not acquire_hachimi_book_lease(book_id):
+            print(f"Bỏ qua {book_id}: một Hachimi worker khác đang giữ lease.", flush=True)
+            continue
 
         revision = state.get("revision", 1) or 1
         force_retranslate_all = bool(state.get("forceRetranslateAll"))
@@ -493,6 +550,7 @@ def run_translation_loop():
         cache_current = (
             isinstance(glossary_document, dict)
             and len(existing_glossary) <= 2500 + len(manual_glossary)
+            and int((glossary_meta or {}).get("termCount") or -1) == len(existing_glossary)
             and glossary_cache_is_current(
                 glossary_meta,
                 revision,
@@ -523,6 +581,8 @@ def run_translation_loop():
                     originals[number] = original
                     source_texts.extend([original.get("title", ""), original.get("content", "")])
                 if source_position % 100 == 0 or source_position == len(valid_chapters):
+                    if not refresh_hachimi_book_lease(book_id):
+                        raise RuntimeError(f"Mất Hachimi book lease khi quét glossary {book_id}.")
                     print(
                         f"    Đã đọc {source_position}/{len(valid_chapters)} file nguồn...",
                         flush=True,
@@ -691,7 +751,7 @@ def run_translation_loop():
         sync_shared_state()
 
         if not pending:
-            mark_hachimi_activity(book_id, False)
+            release_hachimi_book_lease(book_id)
             print(f"Bỏ qua {book_id}: đã xong {TRANSLATION_VERSION}; giữ nguyên Gemini: {gemini_count} chương.")
             continue
 
@@ -701,7 +761,8 @@ def run_translation_loop():
         print("=" * 70)
 
         def checkpoint():
-            mark_hachimi_activity(book_id, True)
+            if not refresh_hachimi_book_lease(book_id):
+                raise RuntimeError(f"Mất Hachimi book lease trước checkpoint {book_id}.")
             r2_put_json(job_key, state)
             sync_shared_state()
 
@@ -732,12 +793,41 @@ def run_translation_loop():
                 f"{len(str(source_content)):,} ký tự...",
                 flush=True,
             )
-            title, content = translate_chapter(
-                original.get("title", f"Chương {number}"),
-                source_content,
-                protector,
-                chapter_number=number,
-            )
+            translation_error = None
+            title, content = "", ""
+            for translate_attempt in range(1, CHAPTER_RETRIES + 1):
+                try:
+                    title, content = translate_chapter(
+                        original.get("title", f"Chương {number}"),
+                        source_content,
+                        protector,
+                        chapter_number=number,
+                    )
+                    translation_error = None
+                    break
+                except Exception as error:
+                    translation_error = error
+                    print(
+                        f"    ⚠ ch {number}: lượt dịch {translate_attempt}/{CHAPTER_RETRIES} lỗi: {error}",
+                        flush=True,
+                    )
+                    if translate_attempt < CHAPTER_RETRIES:
+                        time.sleep(CHAPTER_RETRY_DELAY_SECONDS * translate_attempt)
+            if translation_error is not None:
+                attempts = int(chapter.get("attempts") or 0) + 1
+                chapter.update({
+                    "status": "pending",
+                    "attempts": attempts,
+                    "lastError": str(translation_error)[:500],
+                    "nextAttemptAt": int(time.time()) + min(6 * 3600, 60 * (2 ** min(attempts, 8))),
+                })
+                print(
+                    f"  ✗ ch {number}: giữ pending sau {CHAPTER_RETRIES} lượt; worker tiếp tục chương kế tiếp.",
+                    flush=True,
+                )
+                if position % 5 == 0 or position == len(pending):
+                    checkpoint()
+                continue
             latest = r2_get_json(f"books/{book_id}/r{revision}/ch/{number}.json")
             if not force_retranslate_all and is_gemini_document(latest):
                 chapter["status"] = "completed"
@@ -786,7 +876,7 @@ def run_translation_loop():
             if position % 5 == 0 or position == len(pending):
                 checkpoint()
 
-        mark_hachimi_activity(book_id, False)
+        release_hachimi_book_lease(book_id)
 
     print("\nHoàn tất phần việc của worker.")
 

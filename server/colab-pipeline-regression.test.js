@@ -61,9 +61,17 @@ test("Colab workers invalidate bad v2 drafts and perform guided Qwen refinement"
   assert.match(hachimi, /broken_name_lock/);
   assert.match(hachimi, /chờ Qwen QA/);
   assert.match(hachimi, /entry\.get\("translationVersion"\) == TRANSLATION_VERSION/);
+  assert.match(hachimi, /HACHIMI_CHAPTER_RETRIES/);
+  assert.match(hachimi, /worker tiếp tục chương kế tiếp/);
+  assert.match(hachimi, /acquire_hachimi_book_lease/);
+  assert.match(hachimi, /một Hachimi worker khác đang giữ lease/);
+  assert.match(hachimi, /termCount.*len\(existing_glossary\)/s);
   assert.match(qwen, /REVIEW_VERSION = "semantic-v3"/);
   assert.match(qwen, /QA_MAX_REWRITE_PASSES/);
   assert.match(qwen, /Semantic repair/);
+  assert.match(qwen, /EXPECTED_DRAFT_VERSION/);
+  assert.match(qwen, /"state": "superseded"/);
+  assert.match(qwen, /story_bible_for_prompt/);
   assert.match(qwen, /tuyệt đối không bắt đổi thành 'Grandpa'/);
   assert.match(qwen, /parse_model_json\(raw\)/);
 });
