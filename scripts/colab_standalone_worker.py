@@ -573,8 +573,23 @@ def run_translation_loop():
         # Only one Hachimi process may own a book. This prevents an old Colab
         # runtime from overwriting a newly rebuilt glossary or draft checkpoint.
         if not acquire_hachimi_book_lease(book_id):
-            print(f"Bỏ qua {book_id}: một Hachimi worker khác đang giữ lease.", flush=True)
-            continue
+            if not TARGET_BOOK_ID:
+                print(f"Bỏ qua {book_id}: một Hachimi worker khác đang giữ lease.", flush=True)
+                continue
+            print(
+                f"↻ {book_id}: worker cũ đang giữ lease; chế độ một bộ sẽ chờ, không quét bộ khác...",
+                flush=True,
+            )
+            wait_started = time.time()
+            while not acquire_hachimi_book_lease(book_id):
+                waited = int(time.time() - wait_started)
+                print(
+                    f"  [LEASE HEARTBEAT] đã chờ {waited // 60}m{waited % 60:02d}s; "
+                    "tự thử lại sau 30s...",
+                    flush=True,
+                )
+                time.sleep(30)
+            print(f"✓ {book_id}: đã nhận lease; bắt đầu xử lý.", flush=True)
 
         revision = state.get("revision", 1) or 1
         force_retranslate_all = bool(state.get("forceRetranslateAll"))

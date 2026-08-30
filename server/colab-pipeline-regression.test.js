@@ -71,6 +71,8 @@ test("Colab workers invalidate bad v2 drafts and perform guided Qwen refinement"
   assert.match(hachimi, /Job đã được reset trong lúc worker đang chạy/);
   assert.match(hachimi, /TARGET_BOOK_ID/);
   assert.match(hachimi, /chỉ xử lý/);
+  assert.match(hachimi, /LEASE HEARTBEAT/);
+  assert.match(hachimi, /đã nhận lease; bắt đầu xử lý/);
   assert.match(qwen, /REVIEW_VERSION = "semantic-v3"/);
   assert.match(qwen, /QA_MAX_REWRITE_PASSES/);
   assert.match(qwen, /Semantic repair/);
