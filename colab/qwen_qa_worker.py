@@ -33,7 +33,7 @@ import transformers
 # (Đã loại bỏ tham chiếu __file__ để chạy trên Colab)
 
 try:
-    from hachimi_text import evaluate_translation_quality
+    from hachimi_text import classify_source_document, evaluate_translation_quality, parse_model_json
 except ImportError:
     def evaluate_translation_quality(source: str, translation: str) -> Dict[str, Any]:
         original = str(source or "").strip()
@@ -54,6 +54,22 @@ except ImportError:
                 issues.append(f"Bản dịch dài bất thường ({round(ratio * 100)}% bản gốc)")
         score = max(0, 10 - min(10, len(issues) * 2.5))
         return {"qaRequired": bool(issues), "qaIssues": issues, "qualityScore": score}
+
+    def classify_source_document(source_title: str, source: str) -> str:
+        title = str(source_title or "").strip()
+        content = str(source or "").strip()
+        markers = ("书名：", "作者：", "标签：", "已完结", "作品简介", "内容简介")
+        if title in {"简介", "目录", "作品正文", "内容简介", "书籍简介", "前言", "序言"}:
+            return "front_matter"
+        return "front_matter" if len(content) <= 600 and sum(m in content for m in markers) >= 2 else "chapter"
+
+    def parse_model_json(raw: str) -> Dict[str, Any]:
+        clean = re.sub(r"^```(?:json)?\s*", "", str(raw or "").strip(), flags=re.IGNORECASE)
+        clean = re.sub(r"\s*```$", "", clean).strip()
+        match = re.search(r"\{[\s\S]*\}", clean)
+        if not match:
+            raise ValueError("Không tìm thấy JSON object trong phản hồi model")
+        return json.loads(match.group(0), strict=False)
 
 # ---------------------------------------------------------------------------
 # Cấu hình Môi trường & Secret
@@ -89,7 +105,8 @@ RUN_ONCE = os.environ.get("QA_RUN_ONCE", "false").lower() == "true"
 REQUIRE_GPU = os.environ.get("QA_REQUIRE_GPU", "true").lower() != "false"
 LEASE_MS = int(os.environ.get("QA_LEASE_MS", str(15 * 60 * 1000)))
 MAX_ATTEMPTS = int(os.environ.get("QA_MAX_ATTEMPTS", "4"))
-REVIEW_VERSION = "semantic-v2"
+MAX_REWRITE_PASSES = max(1, int(os.environ.get("QA_MAX_REWRITE_PASSES", "3")))
+REVIEW_VERSION = "semantic-v3"
 CURSOR_KEY = "jobs/semantic-review-cursor.json"
 STATUS_KEY = "jobs/translate-status.json"
 OWNER_ID = f"qwen-colab-w{WORKER_INDEX}-{os.getpid()}"
@@ -465,8 +482,20 @@ class QwenReviewEngine:
 
     def review_chapter(self, book_title: str, chapter_num: int, source: str, draft: str, glossary: Dict[str, str], story_bible: Optional[Dict[str, Any]] = None, recent_context: Optional[List[Dict[str, Any]]] = None, source_title: str = "", draft_title: str = "") -> Dict[str, Any]:
         matched_glossary = {k: v for k, v in (glossary or {}).items() if k in source}
+        document_kind = classify_source_document(source_title, source)
+        document_rule = (
+            "Đây là TRANG ĐẦU SÁCH/METADATA, không phải chương truyện. Hãy kiểm tra bản dịch đúng từng nhãn và từng giá trị. "
+            "Cách dịch tự nhiên ưu tiên: 书名=Tên sách, 作者=Tác giả, 标签=Thể loại, 已完结=Đã hoàn thành.\n"
+            if document_kind == "front_matter"
+            else "Đây là CHƯƠNG TRUYỆN; đánh giá theo văn phong tiểu thuyết tiếng Việt.\n"
+        )
         system_msg = (
             "Bạn là tổng biên tập bản dịch tiểu thuyết Trung - Việt cao cấp.\n"
+            "Ngôn ngữ đích duy nhất là TIẾNG VIỆT. Không yêu cầu đổi từ tiếng Việt sang tiếng Anh; "
+            "ví dụ 爷爷 dịch là 'ông nội/ông', tuyệt đối không bắt đổi thành 'Grandpa'.\n"
+            "Chỉ đối chiếu TIÊU ĐỀ BẢN DỊCH với TIÊU ĐỀ GỐC của tài liệu. "
+            "Không yêu cầu nhét tên sách vào tiêu đề chương khi bản gốc không có.\n"
+            + document_rule +
             "Hãy đối chiếu cả TIÊU ĐỀ và BẢN GỐC với BẢN NHÁP theo nghĩa từng câu, không chỉ kiểm tra văn phong.\n"
             "Kiểm tra: đủ ý, đúng chủ thể/hành động/phủ định/số lượng, xưng hô, giới tính, tên riêng và thuật ngữ.\n"
             "Không được đánh pass nếu bản nháp đảo nhân vật, gán nhầm lời thoại, lược ý hoặc thêm ý.\n"
@@ -494,25 +523,21 @@ class QwenReviewEngine:
             user_content_parts.append(f"Tóm tắt các chương gần nhất: {json.dumps(recent_context[-4:], ensure_ascii=False)}")
 
         user_content_parts.append(f"BẢN GỐC:\n{source}")
-        user_content_parts.append(f"BẢN NHÁP HACHIMI:\n{draft}")
+        user_content_parts.append(f"BẢN DỊCH TIẾNG VIỆT CẦN KIỂM TRA:\n{draft}")
 
         messages = [
             {"role": "system", "content": system_msg},
             {"role": "user", "content": "\n\n".join(user_content_parts)}
         ]
 
-        raw = self._generate(messages, max_new_tokens=800, temperature=0.08)
+        raw = self._generate(messages, max_new_tokens=800, temperature=0.01)
 
         # Parse JSON
-        parsed = None
         try:
-            clean = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.IGNORECASE)
-            clean = re.sub(r"\s*```$", "", clean).strip()
-            match = re.search(r"\{[\s\S]*\}", clean)
-            if match:
-                parsed = json.loads(match.group(0))
+            parsed = parse_model_json(raw)
         except Exception as e:
             print(f"    ⚠️ [JSON Parse Exception] {e}")
+            parsed = None
 
         if not parsed or not isinstance(parsed, dict) or parsed.get("decision") not in ("pass", "repair"):
             raise RuntimeError("Qwen trả semantic review không đúng schema JSON.")
@@ -540,14 +565,25 @@ class QwenReviewEngine:
             "translationMemoryUpdates": parsed.get("translationMemoryUpdates") if isinstance(parsed.get("translationMemoryUpdates"), list) else []
         }
 
-    def rewrite_chapter(self, book_title: str, chapter_num: int, source: str, draft: str, glossary: Dict[str, str], story_bible: Optional[Dict[str, Any]] = None, recent_context: Optional[List[Dict[str, Any]]] = None, source_title: str = "", draft_title: str = "") -> Dict[str, str]:
+    def rewrite_chapter(self, book_title: str, chapter_num: int, source: str, draft: str, glossary: Dict[str, str], story_bible: Optional[Dict[str, Any]] = None, recent_context: Optional[List[Dict[str, Any]]] = None, source_title: str = "", draft_title: str = "", repair_instructions: Optional[List[str]] = None) -> Dict[str, str]:
         matched_glossary = {k: v for k, v in (glossary or {}).items() if k in source}
+        document_kind = classify_source_document(source_title, source)
+        document_rule = (
+            "Đây là trang đầu sách/metadata. Dịch nguyên vẹn từng nhãn và giá trị sang tiếng Việt; "
+            "ưu tiên 书名=Tên sách, 作者=Tác giả, 标签=Thể loại, 已完结=Đã hoàn thành. Không viết thêm nội dung.\n"
+            if document_kind == "front_matter"
+            else "Đây là chương truyện; dùng văn phong tiểu thuyết Việt tự nhiên.\n"
+        )
         system_msg = (
             "Bạn là dịch giả văn học Trung - Việt cao cấp. Hãy BIÊN DỊCH LẠI TOÀN BỘ tiêu đề và chương trực tiếp từ BẢN GỐC.\n"
+            "Bản dịch đầu ra bắt buộc hoàn toàn bằng TIẾNG VIỆT; không chuyển từ tiếng Việt sang tiếng Anh.\n"
+            "Tiêu đề đầu ra chỉ dịch TIÊU ĐỀ GỐC, không tự chèn tên sách vào tiêu đề.\n"
+            + document_rule +
             "Bản Hachimi chỉ là tài liệu tham khảo để phát hiện cách hiểu hoặc chi tiết có thể bị bỏ sót; không sao chép máy móc câu chữ của nó.\n"
             "Bản xuất phải tự nhiên như tiểu thuyết Việt được biên tập chuyên nghiệp nhưng tuyệt đối trung thành: không tóm tắt, không lược ý, không thêm ý.\n"
             "Giữ đúng thứ tự đoạn, lời thoại, chủ thể, hành động, phủ định, số lượng, giới tính, xưng hô, tên riêng và thuật ngữ bắt buộc.\n"
             "Tự rà lại toàn bộ bản dịch trước khi trả lời; không để sót chữ Hán hoặc token kỹ thuật.\n"
+            "Trong chuỗi JSON phải escape xuống dòng thành \\n; không đặt ký tự điều khiển thô trong chuỗi.\n"
             'Chỉ trả về JSON thuần: {"title":"tiêu đề tiếng Việt","content":"toàn bộ nội dung tiếng Việt"}.'
         )
         user_parts = [
@@ -560,20 +596,21 @@ class QwenReviewEngine:
             user_parts.append(f"Story Bible đã duyệt: {json.dumps({'characters': (story_bible.get('characters') or [])[-60:], 'worldTerms': (story_bible.get('worldTerms') or [])[-60:]}, ensure_ascii=False)}")
         if recent_context:
             user_parts.append(f"Tóm tắt các chương gần nhất: {json.dumps(recent_context[-4:], ensure_ascii=False)}")
+        if repair_instructions:
+            user_parts.append(
+                "CÁC LỖI CỦA BẢN TRƯỚC BẮT BUỘC SỬA:\n- "
+                + "\n- ".join(str(item) for item in repair_instructions if item)
+            )
         user_parts.append(f"BẢN GỐC PHẢI DỊCH:\n{source}")
-        user_parts.append(f"BẢN HACHIMI CHỈ ĐỂ THAM KHẢO:\n{draft}")
+        draft_label = "BẢN QWEN TRƯỚC CẦN SỬA" if repair_instructions else "BẢN HACHIMI CHỈ ĐỂ THAM KHẢO"
+        user_parts.append(f"{draft_label}:\n{draft}")
         messages = [
             {"role": "system", "content": system_msg},
             {"role": "user", "content": "\n\n".join(user_parts)}
         ]
         raw = self._generate(messages, max_new_tokens=8192, temperature=0.18)
-        clean = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.IGNORECASE)
-        clean = re.sub(r"\s*```$", "", clean).strip()
-        match = re.search(r"\{[\s\S]*\}", clean)
-        if not match:
-            raise RuntimeError("Qwen trả bản biên dịch lại không đúng schema title/content.")
         try:
-            parsed = json.loads(match.group(0))
+            parsed = parse_model_json(raw)
         except Exception as error:
             raise RuntimeError(f"Qwen trả JSON bản biên dịch lại không hợp lệ: {error}") from error
         title = str(parsed.get("title") or "").strip()
@@ -625,49 +662,97 @@ def process_claim(queue_key: str, queue: Dict[str, Any], entry: Dict[str, Any], 
 
     book_title = (index or {}).get("title") or book_id
 
-    # Pass 1: Qwen luôn biên dịch lại toàn bộ từ bản gốc. Hachimi chỉ là bản tham khảo.
+    # Qwen luôn biên dịch lại từ bản gốc. Nếu formal gate/verifier phát hiện lỗi,
+    # dùng chính phản hồi đó cho lượt refinement thay vì retry mù ở vòng queue sau.
     print(f"  → [{book_id}] ch {ch_num}: Qwen đang biên dịch lại toàn chương từ bản gốc...")
-    t_rewrite0 = time.time()
-    rewritten_doc = engine.rewrite_chapter(
-        book_title=book_title,
-        chapter_num=ch_num,
-        source=original["content"],
-        draft=chapter["content"],
-        glossary=glossary,
-        story_bible=story_bible,
-        recent_context=(story_context or {}).get("chapters"),
-        source_title=original.get("title", ""),
-        draft_title=chapter.get("title", "")
-    )
-    title = rewritten_doc["title"]
-    content = rewritten_doc["content"]
-    t_rewrite = time.time() - t_rewrite0
+    candidate_draft = chapter["content"]
+    candidate_title = chapter.get("title", "")
+    repair_instructions = []
+    final_review = None
+    title = ""
+    content = ""
+    t_rewrite = 0.0
+    t_verify = 0.0
+    last_error = None
 
-    quality = evaluate_translation_quality(original["content"], content)
-    title_quality = evaluate_translation_quality("", title)
-    formal_issues = [f"Tiêu đề: {item}" for item in title_quality.get("qaIssues", [])] + quality.get("qaIssues", [])
-    if formal_issues:
-        raise RuntimeError(f"Bản Qwen biên dịch lại sót lỗi quy chuẩn: {'; '.join(formal_issues)}")
+    for rewrite_pass in range(1, MAX_REWRITE_PASSES + 1):
+        rewrite_started = time.time()
+        try:
+            rewritten_doc = engine.rewrite_chapter(
+                book_title=book_title,
+                chapter_num=ch_num,
+                source=original["content"],
+                draft=candidate_draft,
+                glossary=glossary,
+                story_bible=story_bible,
+                recent_context=(story_context or {}).get("chapters"),
+                source_title=original.get("title", ""),
+                draft_title=candidate_title,
+                repair_instructions=repair_instructions,
+            )
+        except Exception as error:
+            t_rewrite += time.time() - rewrite_started
+            last_error = error
+            if rewrite_pass >= MAX_REWRITE_PASSES:
+                raise
+            repair_instructions = [
+                str(error),
+                "Trả đúng một JSON object title/content; escape mọi xuống dòng trong chuỗi JSON.",
+            ]
+            print(
+                f"    ↻ Lượt viết {rewrite_pass}/{MAX_REWRITE_PASSES} chưa hợp lệ; "
+                "Qwen tự viết lại có hướng dẫn...",
+                flush=True,
+            )
+            continue
 
-    # Pass 2: lượt Qwen độc lập đối chiếu lại bản đã viết với bản gốc.
-    t_verify0 = time.time()
-    final_review = engine.review_chapter(
-        book_title=book_title,
-        chapter_num=ch_num,
-        source=original["content"],
-        draft=content,
-        glossary=glossary,
-        story_bible=story_bible,
-        recent_context=(story_context or {}).get("chapters"),
-        source_title=original.get("title", ""),
-        draft_title=title
-    )
-    t_verify = time.time() - t_verify0
-    if final_review.get("decision") != "pass":
-        explanations = [str(i.get("explanation") or i.get("type") or "lỗi semantic") for i in final_review.get("issues", []) if isinstance(i, dict)]
+        t_rewrite += time.time() - rewrite_started
+        title = rewritten_doc["title"]
+        content = rewritten_doc["content"]
+
+        verify_started = time.time()
+        final_review = engine.review_chapter(
+            book_title=book_title,
+            chapter_num=ch_num,
+            source=original["content"],
+            draft=content,
+            glossary=glossary,
+            story_bible=story_bible,
+            recent_context=(story_context or {}).get("chapters"),
+            source_title=original.get("title", ""),
+            draft_title=title,
+        )
+        t_verify += time.time() - verify_started
+        if final_review.get("decision") == "pass":
+            break
+
+        explanations = [
+            str(item.get("explanation") or item.get("type") or "lỗi semantic")
+            for item in final_review.get("issues", [])
+            if isinstance(item, dict)
+        ]
         detail = "; ".join(explanations[:5])
-        raise RuntimeError(f"Bản Qwen biên dịch lại chưa vượt semantic verification{': ' + detail if detail else '.'}")
-    print(f"    ✓ Biên dịch lại {t_rewrite:.1f}s | Verify {t_verify:.1f}s: pass")
+        last_error = RuntimeError(
+            f"Bản Qwen biên dịch lại chưa vượt semantic verification{': ' + detail if detail else '.'}"
+        )
+        if rewrite_pass >= MAX_REWRITE_PASSES:
+            raise last_error
+        candidate_draft = content
+        candidate_title = title
+        repair_instructions = explanations[:8] or ["Tự đối chiếu lại từng câu và sửa toàn bộ lỗi semantic."]
+        print(
+            f"    ↻ Semantic repair {rewrite_pass}/{MAX_REWRITE_PASSES}: "
+            f"{detail or 'cần đối chiếu lại'}",
+            flush=True,
+        )
+
+    if final_review is None or final_review.get("decision") != "pass":
+        raise last_error or RuntimeError("Qwen chưa tạo được bản dịch vượt semantic verification.")
+    print(
+        f"    ✓ Biên dịch lại {t_rewrite:.1f}s | Verify {t_verify:.1f}s: pass "
+        f"({rewrite_pass} lượt viết)",
+        flush=True,
+    )
 
     now = utc_now()
     scores = final_review.get("scores", {})

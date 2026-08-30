@@ -3,7 +3,7 @@
 # - Never overwrites Gemini / Gemini-QA chapters.
 # - Builds a per-book character glossary from the complete source book.
 # - Protects glossary terms before NMT and restores them afterwards.
-# - Resumes the hachimi-quality-v2 campaign per chapter and supports Colab sharding.
+# - Resumes the hachimi-quality-v3 campaign per chapter and supports Colab sharding.
 # ==============================================================================
 
 import json
@@ -29,19 +29,21 @@ sys.path.insert(0, str(ROOT / "colab"))
 from hachimi_text import (
     build_glossary_cache_meta,
     evaluate_translation_quality,
+    expected_placeholder_targets,
     glossary_cache_is_current,
     mine_character_names_conservative,
+    restore_glossary_placeholders,
     split_text_by_token_budget,
 )
 
 MODEL_ID = os.environ.get("HACHIMI_MODEL_ID", "ngocdang83/HachimiMT-60-QT")
-TRANSLATION_VERSION = "hachimi-quality-v2"
+TRANSLATION_VERSION = "hachimi-quality-v3"
 GLOSSARY_MINER_VERSION = "character-miner-v2"
 WORKER_INDEX = int(os.environ.get("WORKER_INDEX", "0"))
 TOTAL_WORKERS = max(1, int(os.environ.get("TOTAL_WORKERS", "1")))
 BATCH_SIZE = max(1, int(os.environ.get("HACHIMI_BATCH_SIZE", "32")))
 RETRANSLATE_NAME_LOCK = os.environ.get("RETRANSLATE_NAME_LOCK", "true").lower() != "false"
-SEMANTIC_REVIEW_VERSION = "semantic-v2"
+SEMANTIC_REVIEW_VERSION = "semantic-v3"
 HACHIMI_BOOK_LEASE_SECONDS = 3 * 60 * 60
 REVIEW_WRITE_LEASE_SECONDS = 2 * 60
 REVIEW_WRITE_WAIT_SECONDS = 30 * 60
@@ -356,14 +358,8 @@ class GlossaryProtector:
         return self.pattern.sub(replace, str(text)), replacements
 
     @staticmethod
-    def restore(text, replacements):
-        result = str(text or "")
-        for token, target in replacements:
-            number = re.search(r"\d+", token).group(0)
-            flexible = re.compile(rf"__?\s*TC[ _-]*NAME[ _-]*{number}\s*__?", re.IGNORECASE)
-            result = flexible.sub(target, result).replace(token, target)
-        result = re.sub(r"\s+([，。！？；：、])", r"\1", result)
-        return result.strip()
+    def restore(text, replacements, expected_targets=None):
+        return restore_glossary_placeholders(text, replacements, expected_targets)
 
 
 print("\n" + "=" * 70)
@@ -401,7 +397,7 @@ def translate_paragraphs(paragraphs, protector, progress_label=""):
         protected, replacements = protector.protect(source)
         for piece in split_text_by_token_budget(protected, tokenizer, max_tokens=440):
             prepared.append(piece)
-            metadata.append((index, replacements))
+            metadata.append((index, replacements, expected_placeholder_targets(piece, replacements)))
 
     total_batches = (len(prepared) + BATCH_SIZE - 1) // BATCH_SIZE
     for offset in range(0, len(prepared), BATCH_SIZE):
@@ -423,10 +419,10 @@ def translate_paragraphs(paragraphs, protector, progress_label=""):
             no_repeat_ngram_size=2,
         )
         for inner_index, result in enumerate(results):
-            output_index, replacements = metadata[offset + inner_index]
+            output_index, replacements, expected_targets = metadata[offset + inner_index]
             token_ids = tokenizer.convert_tokens_to_ids(result.hypotheses[0])
             translated = tokenizer.decode(token_ids, skip_special_tokens=True)
-            translated = clean_text(protector.restore(translated, replacements))
+            translated = clean_text(protector.restore(translated, replacements, expected_targets))
             output[output_index] = " ".join(part for part in (output[output_index], translated) if part)
     return output
 
@@ -600,7 +596,18 @@ def run_translation_loop():
             document = draft_document or published_document
 
             content = str((document or {}).get("content") or "").strip()
-            corrupt = not document or len(content) < 50 or bool(re.search(r"[\u4e00-\u9fa5]", content))
+            original = originals.get(number) or {}
+            source_content = str(original.get("content") or "").strip()
+            quality = evaluate_translation_quality(source_content, content) if document else {"qaIssues": []}
+            broken_name_lock = "Còn token khóa tên chưa được khôi phục" in quality.get("qaIssues", [])
+            suspiciously_short = len(source_content) >= 50 and len(content) < 50
+            corrupt = (
+                not document
+                or not content
+                or suspiciously_short
+                or bool(re.search(r"[\u4e00-\u9fa5]", content))
+                or broken_name_lock
+            )
             stale_name_lock = (document or {}).get("translationVersion") != TRANSLATION_VERSION
             if corrupt or (RETRANSLATE_NAME_LOCK and stale_name_lock):
                 chapter.update({"status": "pending", "attempts": 0, "lastError": "", "nextAttemptAt": 0})
@@ -764,7 +771,7 @@ def run_translation_loop():
                 })
             draft_index_updates[number] = quality
             completed_count += 1
-            qa_label = f" · chờ Gemini QA: {', '.join(quality['qaIssues'])}" if quality["qaRequired"] else ""
+            qa_label = f" · chờ Qwen QA: {', '.join(quality['qaIssues'])}" if quality["qaRequired"] else ""
             print(f"  ✓ ch {number} ({time.time() - started:.1f}s) · {completed_count}/{len(chapters)}{qa_label}")
 
             if position % 5 == 0 or position == len(pending):
