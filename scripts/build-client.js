@@ -41,6 +41,7 @@ const cdnBase = (process.env.R2_PUBLIC_BASE_URL !== undefined ? process.env.R2_P
 const readerCdnEnabled = process.env.READER_CDN_ENABLED === "true";
 const supabaseUrl = (process.env.SUPABASE_URL || "https://bckwrfucultwxirorglv.supabase.co").replace(/\/$/, "");
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || "sb_publishable_S2l6AfkJg1ehDzY0GmnZxg_7jGI0vCq";
+const buildVersion = Date.now().toString(36) + "-" + crypto.randomBytes(3).toString("hex");
 
 // module that app.js imports on demand rather than sitting in every reader's
 // download.
@@ -65,7 +66,8 @@ const appUrl = bundle({
     __CDN_BASE__: JSON.stringify(cdnBase),
     __READER_CDN_ENABLED__: JSON.stringify(readerCdnEnabled),
     __SUPABASE_URL__: JSON.stringify(supabaseUrl),
-    __SUPABASE_ANON_KEY__: JSON.stringify(supabaseAnonKey)
+    __SUPABASE_ANON_KEY__: JSON.stringify(supabaseAnonKey),
+    __BUILD_VERSION__: JSON.stringify(buildVersion)
   }
 });
 

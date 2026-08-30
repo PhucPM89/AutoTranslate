@@ -3,7 +3,7 @@
 // Force clear old service workers and stale caches from previous builds
 (function forcePwaUpdate() {
   if (typeof window === "undefined") return;
-  const BUILD_VERSION = "20260823-v1";
+  const BUILD_VERSION = typeof __BUILD_VERSION__ !== "undefined" ? String(__BUILD_VERSION__) : "dev";
   const stored = localStorage.getItem("app_build_epoch");
   if (stored !== BUILD_VERSION) {
     localStorage.setItem("app_build_epoch", BUILD_VERSION);
@@ -72,6 +72,7 @@ const state = {
   // migration so a CDN miss can fall back instead of breaking the reader.
   mode: "epub",
   cdnTemplate: "",
+  cdnCacheBust: "",
   bookId: "",
   fileName: "",
   title: "",
@@ -4101,6 +4102,12 @@ function chapterUrlFor(index, chapterNumber) {
   return /^https?:\/\//i.test(resolved) ? resolved : cdnUrl(resolved);
 }
 
+function withQueryParam(url, key, value) {
+  if (!value) return url;
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+}
+
 // Returns true when the book was opened from the CDN.
 async function openBookFromCdn(book, cover, { startAtFirstChapter = false } = {}) {
   const cleanId = cleanBookId(typeof book === "object" ? book.id : book);
@@ -4110,6 +4117,7 @@ async function openBookFromCdn(book, cover, { startAtFirstChapter = false } = {}
 
   state.mode = "cdn";
   state.cdnTemplate = index.chapterUrlTemplate || "";
+  state.cdnCacheBust = String(Date.now());
   state.bookId = `cdn:${cleanId}:r${index.revision || 1}`;
   state.fileName = "";
   state.title = (typeof book === "object" ? book.title : "") || index.title || "Truyện";
@@ -4137,8 +4145,8 @@ async function openBookFromCdn(book, cover, { startAtFirstChapter = false } = {}
   return true;
 }
 
-// Fetches and renders one chapter. Immutable URL, so the CDN and the browser
-// cache do the work on every revisit.
+// Fetches and renders one chapter. R2 chapter objects can be manually corrected
+// after publish, so each page load gets a stable cache-bust token.
 async function loadCdnChapter(index, force = false) {
   const chapter = state.chapters[index];
   if (!chapter) return;
@@ -4154,9 +4162,8 @@ async function loadCdnChapter(index, force = false) {
   els.outputStatus.textContent = "Đang tải";
 
   try {
-    const chapterUrl = chapterUrlFor({ bookId: bookIdFromState(), revision: revisionFromState(), chapterUrlTemplate: state.cdnTemplate }, chapter.chapterNumber);
-    // Revisioned chapter URLs are immutable. Let the browser and Cloudflare use
-    // that cache; a timestamp query here turned every navigation into a cache miss.
+    const rawChapterUrl = chapterUrlFor({ bookId: bookIdFromState(), revision: revisionFromState(), chapterUrlTemplate: state.cdnTemplate }, chapter.chapterNumber);
+    const chapterUrl = withQueryParam(rawChapterUrl, "_v", force ? Date.now() : state.cdnCacheBust);
     const response = await fetchCdnOrProxy(chapterUrl, force ? { cache: "reload" } : undefined);
     const document_ = await response.json();
     if (index !== state.currentIndex) return;
