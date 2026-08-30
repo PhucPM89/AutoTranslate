@@ -13,12 +13,24 @@ const CHINESE_NUMS = {
 const COMMON_SECTIONS = [
   { pattern: /^(简介|作品简介|内容简介)$/i, title: "Giới thiệu" },
   { pattern: /^(目录|章节目录)$/i, title: "Mục lục" },
+  { pattern: /^(正文|作品正文|正文开始|开始阅读)$/i, title: "Nội dung chính" },
   { pattern: /^(序|序言|序章|楔子|引子)$/i, title: "Lời mở đầu" },
   { pattern: /^(尾声|终章|大结局)$/i, title: "Đoạn kết" },
   { pattern: /^(后记|完本感言|结语)$/i, title: "Hậu ký" },
   { pattern: /^(番外|番外篇)(.*)$/i, title: "Ngoại truyện" },
   { pattern: /^(作品相关|相关设定)$/i, title: "Thông tin tác phẩm" },
   { pattern: /^(上架感言|作者的话)$/i, title: "Lời tác giả" }
+];
+
+const VI_SECTION_PATTERNS = [
+  { pattern: /^giới thiệu(?:\s+(?:truyện|tác phẩm|nội dung))?$/i, title: "Giới thiệu", badge: "GT" },
+  { pattern: /^mục lục$/i, title: "Mục lục", badge: "ML" },
+  { pattern: /^(?:tác phẩm chính văn|nội dung chính(?: của tác phẩm)?|chính văn)$/i, title: "Nội dung chính", badge: "ND" },
+  { pattern: /^(?:lời mở đầu|mở đầu|lời tựa|tựa|dẫn nhập)$/i, title: "Lời mở đầu", badge: "MĐ" },
+  { pattern: /^lời tác giả$/i, title: "Lời tác giả", badge: "TG" },
+  { pattern: /^thông tin tác phẩm$/i, title: "Thông tin tác phẩm", badge: "TT" },
+  { pattern: /^hậu ký$/i, title: "Hậu ký", badge: "HK" },
+  { pattern: /^đoạn kết$/i, title: "Đoạn kết", badge: "K" }
 ];
 
 function parseChineseNumber(str) {
@@ -66,16 +78,56 @@ function extractTitleFromContent(content) {
   return "";
 }
 
+function normalizeDisplayTitle(title) {
+  const clean = String(title || "").replace(/\s+/g, " ").trim();
+  if (!clean) return "";
+  for (const section of VI_SECTION_PATTERNS) {
+    if (section.pattern.test(clean)) return section.title;
+  }
+  return clean;
+}
+
+function getSectionInfo(rawTitle, content = "") {
+  const candidates = [
+    String(rawTitle || "").trim(),
+    extractTitleFromContent(content),
+    String(content || "").trim().split(/\n+/)[0] || ""
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    const clean = normalizeDisplayTitle(candidate);
+    for (const section of VI_SECTION_PATTERNS) {
+      if (section.pattern.test(clean)) return { title: section.title, badge: section.badge, isStoryChapter: false };
+    }
+    for (const section of COMMON_SECTIONS) {
+      if (section.pattern.test(candidate)) return { title: section.title, badge: badgeForSection(section.title), isStoryChapter: false };
+    }
+  }
+  return null;
+}
+
+function badgeForSection(title) {
+  const section = VI_SECTION_PATTERNS.find((item) => item.title === title);
+  return section?.badge || "•";
+}
+
+function displayIndexLabel({ rawTitle = "", content = "", fallbackNumber = 1 } = {}) {
+  const section = getSectionInfo(rawTitle, content);
+  return section ? section.badge : String(fallbackNumber);
+}
+
 /**
  * Translates and formats raw chapter titles into clean Vietnamese.
  */
-function formatVietnameseChapterTitle(rawTitle, fallbackNumber = 1) {
+function formatVietnameseChapterTitle(rawTitle, fallbackNumber = 1, content = "") {
   const clean = String(rawTitle || "").trim();
+  const sectionInfo = getSectionInfo(clean, content);
+  if (sectionInfo) return sectionInfo.title;
   if (!clean) return `Chương ${fallbackNumber}`;
 
   // If already in Vietnamese format, return directly
   if (/^(chương|hồi|tiết|quyển|ngoại truyện|giới thiệu|mục lục|lời mở đầu|đoạn kết|hậu ký)\b/i.test(clean)) {
-    return clean;
+    return normalizeDisplayTitle(clean);
   }
 
   // Check common fixed sections
@@ -104,5 +156,8 @@ function formatVietnameseChapterTitle(rawTitle, fallbackNumber = 1) {
 module.exports = {
   parseChineseNumber,
   extractTitleFromContent,
-  formatVietnameseChapterTitle
+  formatVietnameseChapterTitle,
+  displayIndexLabel,
+  getSectionInfo,
+  normalizeDisplayTitle
 };

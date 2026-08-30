@@ -6,7 +6,9 @@ const assert = require("node:assert/strict");
 const {
   parseChineseNumber,
   extractTitleFromContent,
-  formatVietnameseChapterTitle
+  formatVietnameseChapterTitle,
+  displayIndexLabel,
+  getSectionInfo
 } = require("./chapter-title.js");
 
 test("parseChineseNumber parses arabic and chinese numerals accurately", () => {
@@ -28,6 +30,15 @@ test("formatVietnameseChapterTitle formats sections and chapter numbers correctl
   assert.equal(formatVietnameseChapterTitle("第二千五百四十四章 大结局", 2544), "Chương 2544");
   assert.equal(formatVietnameseChapterTitle("第10回 激战", 10), "Hồi 10");
   assert.equal(formatVietnameseChapterTitle("番外 现代篇", 100), "Ngoại truyện");
+});
+
+test("front matter keeps semantic labels instead of chapter numbers", () => {
+  assert.equal(formatVietnameseChapterTitle("Giới Thiệu", 1, "Tên truyện: Ma Y Thần Toán Tử"), "Giới thiệu");
+  assert.equal(formatVietnameseChapterTitle("Mục Lục", 2, "Mục lục"), "Mục lục");
+  assert.equal(formatVietnameseChapterTitle("Tác Phẩm Chính Văn", 3, "Nội dung chính của tác phẩm"), "Nội dung chính");
+  assert.deepEqual(getSectionInfo("Tác Phẩm Chính Văn", ""), { title: "Nội dung chính", badge: "ND", isStoryChapter: false });
+  assert.equal(displayIndexLabel({ rawTitle: "Giới Thiệu", fallbackNumber: 1 }), "GT");
+  assert.equal(displayIndexLabel({ rawTitle: "第1章 落地岛国", fallbackNumber: 4 }), "4");
 });
 
 test("extractTitleFromContent extracts translated title from first line of translation", () => {

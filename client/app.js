@@ -27,7 +27,8 @@ const { initAuth } = require("./auth.js");
 const { createUserSync } = require("./user-sync.js");
 const { renderQuoteCard } = require("./quote-card.js");
 const { applyInvisibleWatermark, initSecurityGuards } = require("./security.js");
-const { extractTitleFromContent, formatVietnameseChapterTitle } = require("./chapter-title.js");
+const { extractTitleFromContent, formatVietnameseChapterTitle, displayIndexLabel } = require("./chapter-title.js");
+const { normalizeReaderText, splitReaderParagraphs } = require("./reader-text.js");
 const { updatePageMeta, shareContent, getBookSlugParam } = require("./seo.js");
 const { createTTS } = require("./tts.js");
 const { drawQRCodeToCanvas } = require("./qr-generator.js");
@@ -1994,11 +1995,17 @@ function createChapterListItem(index, position, total) {
   button.setAttribute("aria-posinset", String(position + 1));
   button.setAttribute("aria-setsize", String(total));
   if (index === state.currentIndex) button.classList.add("active");
-  const chapterIndex = appendTextElement(button, "span", "document-index", String(index + 1));
+  const chapterIndex = appendTextElement(button, "span", "document-index", chapterIndexLabel(index));
   chapterIndex.setAttribute("aria-hidden", "true");
   appendTextElement(button, "span", "", displayChapterTitle(index));
   appendTextElement(button, "small", "", formatWordCount(chapter));
   return button;
+}
+
+function chapterIndexLabel(index) {
+  const chapter = state.chapters[index] || {};
+  const content = state.translations[index] || (typeof chapter.text === "string" ? chapter.text : "");
+  return displayIndexLabel({ rawTitle: chapter.translatedTitle || chapter.title, content, fallbackNumber: index + 1 });
 }
 
 function renderChapterWindow(force = false) {
@@ -2553,13 +2560,13 @@ function initTTSController() {
 
   function startTTSFromCurrent() {
     const chapter = state.chapters[state.currentIndex];
-    const text = state.translations[state.currentIndex] || (chapter && chapter.text ? chapter.text : "");
+    const text = normalizeReaderText(state.translations[state.currentIndex] || (chapter && chapter.text ? chapter.text : ""));
     if (!text || isChineseText(text) || els.translationText.classList.contains("empty") || text.includes("Chưa có bản dịch") || text.includes("Đang tải")) {
       showToast("Chương này chưa có bản dịch tiếng Việt để đọc");
       return;
     }
 
-    const rawParagraphs = text.split(/\n+/).map((p) => p.trim()).filter(Boolean);
+    const rawParagraphs = splitReaderParagraphs(text);
     els.translationText.innerHTML = "";
     rawParagraphs.forEach((pText, i) => {
       const pEl = document.createElement("p");
@@ -3461,21 +3468,7 @@ function renderTranslation(cached, index) {
   }
 
   if (cached) {
-    const watermarked = applyInvisibleWatermark(cached);
-    const rawParagraphs = watermarked.split(/\n+/).map((p) => p.trim()).filter(Boolean);
-    els.translationText.innerHTML = "";
-    rawParagraphs.forEach((pText, i) => {
-      const pEl = document.createElement("p");
-      pEl.className = "tts-paragraph-highlight";
-      pEl.dataset.parIndex = String(i);
-      pEl.textContent = pText;
-      pEl.addEventListener("click", () => {
-        if (ttsEngine && ttsEngine.isPlaying) {
-          ttsEngine.speakParagraph(i);
-        }
-      });
-      els.translationText.appendChild(pEl);
-    });
+    const displayText = renderReaderText(cached);
 
     els.translationText.classList.remove("empty", "status-error", "is-loading");
     els.outputStatus.textContent = "Đã lưu";
@@ -3483,11 +3476,11 @@ function renderTranslation(cached, index) {
     els.retranslateButton.hidden = false;
 
     if (ttsEngine && ttsEngine.isPlaying && !ttsEngine.isPaused) {
-      ttsEngine.loadText(cached);
+      ttsEngine.loadText(displayText);
       ttsEngine.play(0);
     }
 
-    const extracted = extractTitleFromContent(cached);
+    const extracted = extractTitleFromContent(displayText);
     if (extracted && chapter && chapter.translatedTitle !== extracted) {
       chapter.translatedTitle = extracted;
       syncChapterUiTitle(index);
@@ -3501,6 +3494,26 @@ function renderTranslation(cached, index) {
     els.translateButton.hidden = false;
     els.retranslateButton.hidden = true;
   }
+}
+
+function renderReaderText(text) {
+  const normalized = normalizeReaderText(text);
+  const watermarked = applyInvisibleWatermark(normalized);
+  const paragraphs = splitReaderParagraphs(watermarked);
+  els.translationText.innerHTML = "";
+  paragraphs.forEach((pText, i) => {
+    const pEl = document.createElement("p");
+    pEl.className = "tts-paragraph-highlight";
+    pEl.dataset.parIndex = String(i);
+    pEl.textContent = pText;
+    pEl.addEventListener("click", () => {
+      if (ttsEngine && ttsEngine.isPlaying) {
+        ttsEngine.speakParagraph(i);
+      }
+    });
+    els.translationText.appendChild(pEl);
+  });
+  return normalized;
 }
 
 async function translateCurrentChapter(force) {
@@ -3910,18 +3923,18 @@ function displayChapterTitle(index) {
   const chapter = state.chapters[index];
   if (!chapter) return `Chương ${index + 1}`;
 
-  if (chapter.translatedTitle) return chapter.translatedTitle;
-
   const content = state.translations[index] || (typeof chapter.text === "string" ? chapter.text : "");
+  if (chapter.translatedTitle) return formatVietnameseChapterTitle(chapter.translatedTitle, index + 1, content);
+
   if (content) {
     const extracted = extractTitleFromContent(content);
     if (extracted) {
       chapter.translatedTitle = extracted;
-      return extracted;
+      return formatVietnameseChapterTitle(extracted, index + 1, content);
     }
   }
 
-  return formatVietnameseChapterTitle(chapter.title, index + 1);
+  return formatVietnameseChapterTitle(chapter.title, index + 1, content);
 }
 
 function formatWordCount(chapter) {
@@ -4169,26 +4182,12 @@ function renderCdnChapter(chapter, index) {
   const isTranslated = chapter.status === "completed" || !isChineseText(chapter.text);
 
   if (isTranslated && chapter.text) {
-    const watermarked = applyInvisibleWatermark(chapter.text);
-    const rawParagraphs = watermarked.split(/\n+/).map((p) => p.trim()).filter(Boolean);
-    els.translationText.innerHTML = "";
-    rawParagraphs.forEach((pText, i) => {
-      const pEl = document.createElement("p");
-      pEl.className = "tts-paragraph-highlight";
-      pEl.dataset.parIndex = String(i);
-      pEl.textContent = pText;
-      pEl.addEventListener("click", () => {
-        if (ttsEngine && ttsEngine.isPlaying) {
-          ttsEngine.speakParagraph(i);
-        }
-      });
-      els.translationText.appendChild(pEl);
-    });
+    const displayText = renderReaderText(chapter.text);
     els.translationText.classList.remove("empty", "is-loading", "status-error");
     els.outputStatus.textContent = "Đã dịch";
 
     if (ttsEngine && ttsEngine.isPlaying && !ttsEngine.isPaused) {
-      ttsEngine.loadText(chapter.text);
+      ttsEngine.loadText(displayText);
       ttsEngine.play(0);
     }
     attachCommentBubblesToChapter(bookIdFromState(), index);
@@ -4206,7 +4205,7 @@ function renderCdnChapter(chapter, index) {
     els.outputStatus.textContent = "Chưa dịch";
   }
 
-  const extracted = extractTitleFromContent(chapter.text);
+  const extracted = extractTitleFromContent(normalizeReaderText(chapter.text));
   if (extracted && chapter.translatedTitle !== extracted) {
     chapter.translatedTitle = extracted;
     syncChapterUiTitle(index);
