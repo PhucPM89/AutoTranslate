@@ -164,7 +164,7 @@ function reflectAndPolish(translation, { sourceText = "", glossary = {}, scene =
   // Clear any isolated residual Han glyphs if present in mostly Vietnamese text
   if (/[\u4e00-\u9fa5]/.test(polished)) {
     const hanMatches = polished.match(/[\u4e00-\u9fa5]/g) || [];
-    if (hanMatches.length > 0 && hanMatches.length <= 5) {
+    if (hanMatches.length > 0 && (hanMatches.length <= 25 || hanMatches.length / polished.length < 0.05)) {
       try {
         const { loadBase } = require("./convert/index");
         const { hanvietChars } = loadBase();
