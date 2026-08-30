@@ -27,7 +27,7 @@ const { initAuth } = require("./auth.js");
 const { createUserSync } = require("./user-sync.js");
 const { renderQuoteCard } = require("./quote-card.js");
 const { applyInvisibleWatermark, initSecurityGuards } = require("./security.js");
-const { extractTitleFromContent, formatVietnameseChapterTitle, displayIndexLabel } = require("./chapter-title.js");
+const { extractTitleFromContent, formatVietnameseChapterTitle, displayIndexLabel, isFrontmatterSection, extractStoryChapterNumber } = require("./chapter-title.js");
 const { normalizeReaderText, splitReaderParagraphs } = require("./reader-text.js");
 const { updatePageMeta, shareContent, getBookSlugParam } = require("./seo.js");
 const { createTTS } = require("./tts.js");
@@ -2003,10 +2003,49 @@ function createChapterListItem(index, position, total) {
   return button;
 }
 
+function getFrontmatterOffset() {
+  let offset = 0;
+  for (let i = 0; i < Math.min(10, state.chapters.length); i++) {
+    const chapter = state.chapters[i] || {};
+    const content = state.translations[i] || (typeof chapter.text === "string" ? chapter.text : "");
+    if (isFrontmatterSection(chapter.translatedTitle || chapter.title, content)) {
+      offset++;
+    } else {
+      break;
+    }
+  }
+  return offset;
+}
+
+function getStoryChapterNumber(index) {
+  if (index < 0 || index >= state.chapters.length) return null;
+  const chapter = state.chapters[index] || {};
+  const content = state.translations[index] || (typeof chapter.text === "string" ? chapter.text : "");
+  if (isFrontmatterSection(chapter.translatedTitle || chapter.title, content)) {
+    return null;
+  }
+  const extractedNum = extractStoryChapterNumber(chapter.translatedTitle || chapter.title);
+  if (Number.isInteger(extractedNum) && extractedNum > 0) {
+    return extractedNum;
+  }
+  const offset = getFrontmatterOffset();
+  return Math.max(1, index - offset + 1);
+}
+
+function getTotalStoryChapters() {
+  const offset = getFrontmatterOffset();
+  return Math.max(1, state.chapters.length - offset);
+}
+
 function chapterIndexLabel(index) {
   const chapter = state.chapters[index] || {};
   const content = state.translations[index] || (typeof chapter.text === "string" ? chapter.text : "");
-  return displayIndexLabel({ rawTitle: chapter.translatedTitle || chapter.title, content, fallbackNumber: index + 1 });
+  const storyNum = getStoryChapterNumber(index);
+  return displayIndexLabel({
+    rawTitle: chapter.translatedTitle || chapter.title,
+    content,
+    fallbackNumber: storyNum !== null ? storyNum : (index + 1)
+  });
 }
 
 function renderChapterWindow(force = false) {
@@ -2092,13 +2131,15 @@ function renderChapterControls({ resetScroll = false, ensureCurrent = false } = 
     chapterListView.raf = 0;
   }
   if (resetScroll && els.chapterList) els.chapterList.scrollTop = 0;
-  els.documentCount.textContent = String(state.chapters.length);
+  const totalStory = getTotalStoryChapters();
+  const currentStoryNum = getStoryChapterNumber(state.currentIndex);
+  els.documentCount.textContent = String(totalStory);
   const hasChapters = Boolean(state.chapters.length);
   els.chapterJumpInput.disabled = !hasChapters;
   els.chapterJumpButton.disabled = !hasChapters;
-  els.chapterJumpInput.max = String(state.chapters.length || 1);
-  els.chapterJumpInput.value = hasChapters ? String(state.currentIndex + 1) : "";
-  els.chapterJumpTotal.textContent = `/ ${state.chapters.length}`;
+  els.chapterJumpInput.max = String(totalStory);
+  els.chapterJumpInput.value = hasChapters ? (currentStoryNum !== null ? String(currentStoryNum) : "1") : "";
+  els.chapterJumpTotal.textContent = `/ ${totalStory}`;
   if (
     ensureCurrent &&
     isChapterListVisible() &&
@@ -2112,12 +2153,24 @@ function renderChapterControls({ resetScroll = false, ensureCurrent = false } = 
 
 function goToChapterFromPicker() {
   if (!state.chapters.length) return;
-  const requestedChapter = Number.parseInt(els.chapterJumpInput.value, 10);
-  if (!Number.isFinite(requestedChapter)) {
-    els.chapterJumpInput.value = String(state.currentIndex + 1);
+  const requestedStory = Number.parseInt(els.chapterJumpInput.value, 10);
+  if (!Number.isFinite(requestedStory)) {
+    const currentStoryNum = getStoryChapterNumber(state.currentIndex);
+    els.chapterJumpInput.value = currentStoryNum !== null ? String(currentStoryNum) : "1";
     return;
   }
-  goToChapter(requestedChapter - 1);
+  const offset = getFrontmatterOffset();
+  let targetIndex = -1;
+  for (let i = 0; i < state.chapters.length; i++) {
+    if (getStoryChapterNumber(i) === requestedStory) {
+      targetIndex = i;
+      break;
+    }
+  }
+  if (targetIndex === -1) {
+    targetIndex = Math.min(Math.max(offset + requestedStory - 1, 0), state.chapters.length - 1);
+  }
+  goToChapter(targetIndex);
   els.chapterJumpInput.select();
 }
 
@@ -2128,14 +2181,21 @@ function goToChapter(index) {
   const chapter = state.chapters[state.currentIndex];
   els.sourceText.textContent = chapter.text || "";
   const documentLabel = displayChapterTitle(state.currentIndex);
-  const chapterLabel = `${documentLabel} · ${state.currentIndex + 1} / ${state.chapters.length}`;
-  const progress = Math.ceil(((state.currentIndex + 1) / state.chapters.length) * 100);
+  const storyNum = getStoryChapterNumber(state.currentIndex);
+  const totalStory = getTotalStoryChapters();
+  const chapterLabel = storyNum !== null
+    ? `${documentLabel} · ${storyNum} / ${totalStory}`
+    : `${documentLabel} · Phần mở đầu`;
+  const progress = storyNum !== null
+    ? Math.ceil((storyNum / totalStory) * 100)
+    : Math.ceil(((state.currentIndex + 1) / state.chapters.length) * 100);
   els.paperTitle.textContent = documentLabel;
   els.progressLabel.textContent = `${progress}%`;
   els.progressBar.style.width = `${progress}%`;
   els.chapterCounter.textContent = chapterLabel;
   els.bottomChapterCounter.textContent = chapterLabel;
-  els.chapterJumpInput.value = String(state.currentIndex + 1);
+  els.chapterJumpInput.value = storyNum !== null ? String(storyNum) : "1";
+  els.chapterJumpTotal.textContent = `/ ${totalStory}`;
 
   if (state.title) {
     const coverUrl = state.cover ? (state.cover.startsWith("http") ? state.cover : (state.cover.startsWith("/") ? `${window.location.origin}${state.cover}` : `${CDN_BASE}/${state.cover}`)) : null;
@@ -3925,17 +3985,19 @@ function displayChapterTitle(index) {
   if (!chapter) return `Chương ${index + 1}`;
 
   const content = state.translations[index] || (typeof chapter.text === "string" ? chapter.text : "");
-  if (chapter.translatedTitle) return formatVietnameseChapterTitle(chapter.translatedTitle, index + 1, content);
+  const storyNum = getStoryChapterNumber(index) || (index + 1);
+
+  if (chapter.translatedTitle) return formatVietnameseChapterTitle(chapter.translatedTitle, storyNum, content);
 
   if (content) {
     const extracted = extractTitleFromContent(content);
     if (extracted) {
       chapter.translatedTitle = extracted;
-      return formatVietnameseChapterTitle(extracted, index + 1, content);
+      return formatVietnameseChapterTitle(extracted, storyNum, content);
     }
   }
 
-  return formatVietnameseChapterTitle(chapter.title, index + 1, content);
+  return formatVietnameseChapterTitle(chapter.title, storyNum, content);
 }
 
 function formatWordCount(chapter) {

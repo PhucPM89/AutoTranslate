@@ -1083,7 +1083,7 @@ function assessTranslation(source, translation) {
   // 3. Đảm bảo cấu trúc số đoạn văn tương đối phù hợp
   const sourceParagraphs = paragraphCount(source);
   const outputParagraphs = paragraphCount(output);
-  if (sourceParagraphs >= 12 && outputParagraphs < Math.max(2, Math.ceil(sourceParagraphs * 0.20))) {
+  if (sourceParagraphs >= 8 && outputParagraphs < Math.max(2, Math.ceil(sourceParagraphs * 0.20))) {
     return {
       acceptable: false,
       reason: `cấu trúc đoạn bị mất (${outputParagraphs}/${sourceParagraphs} đoạn)`

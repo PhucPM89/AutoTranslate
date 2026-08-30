@@ -153,11 +153,28 @@ function formatVietnameseChapterTitle(rawTitle, fallbackNumber = 1, content = ""
   return `Chương ${fallbackNumber}`;
 }
 
+function isFrontmatterSection(rawTitle, content = "") {
+  const section = getSectionInfo(rawTitle, content);
+  return Boolean(section && section.isStoryChapter === false);
+}
+
+function extractStoryChapterNumber(title) {
+  if (!title) return null;
+  const str = String(title).trim();
+  const matchVi = str.match(/(?:chương|hồi|tiết|quyển)\s*(\d+)/i);
+  if (matchVi) return parseInt(matchVi[1], 10);
+  const matchZh = str.match(/^第\s*([0-9]+|[一二两三四五六七八九十百千万]+)\s*(章|回|节|卷)/);
+  if (matchZh) return parseChineseNumber(matchZh[1]);
+  return null;
+}
+
 module.exports = {
   parseChineseNumber,
   extractTitleFromContent,
   formatVietnameseChapterTitle,
   displayIndexLabel,
   getSectionInfo,
-  normalizeDisplayTitle
+  normalizeDisplayTitle,
+  isFrontmatterSection,
+  extractStoryChapterNumber
 };
