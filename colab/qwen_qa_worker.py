@@ -821,19 +821,12 @@ def run_worker_loop():
             if not queue or not isinstance(queue.get("entries"), list):
                 release_review_lock(book_id, OWNER_ID)
                 continue
-            hachimi_active = r2_get_json(f"jobs/{book_id}/hachimi-active.json")
-            if hachimi_active and hachimi_active.get("active") and float(hachimi_active.get("expiresAtEpochMs", 0)) > (time.time() * 1000):
-                print(f"  ↷ [{book_id}]: Hachimi đang dịch dở, chuyển sang queue tiếp theo.")
-                release_review_lock(book_id, OWNER_ID)
-                continue
-
-            while processed_total < MAX_CHAPTERS_PER_RUN:
-                if not refresh_review_lock(book_id, OWNER_ID):
-                    print(f"  ↷ [{book_id}]: đã mất semantic review lock, dừng xử lý bộ này.")
-                    break
+            try:
+                # Chỉ giữ lock cho một chương. Hachimi có thể chen vào giữa hai
+                # chương để merge draft mới mà không ghi đè checkpoint Qwen.
                 entry = claim_next_review(queue, owner=OWNER_ID, lease_ms=LEASE_MS)
                 if not entry:
-                    break
+                    continue
 
                 r2_put_json(queue_key, queue)  # Lưu lease trước khi xử lý
                 processed_total += 1
@@ -845,7 +838,8 @@ def run_worker_loop():
                     transient = bool(re.search(r"quota|rate limit|timeout|temporar|503|502|504", str(error), re.IGNORECASE))
                     settle_review(queue, int(entry.get("chapterNumber", 0)), {"error": str(error), "retryable": transient})
                     r2_put_json(queue_key, queue)
-            release_review_lock(book_id, OWNER_ID)
+            finally:
+                release_review_lock(book_id, OWNER_ID)
 
         print(f"\n✨ Đã hoàn thành phiên làm việc ({processed_total} chương). Nghỉ 15s trước vòng lặp kế tiếp...\n")
         if RUN_ONCE:

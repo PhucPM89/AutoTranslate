@@ -78,6 +78,10 @@ notebook và không sử dụng lại những khóa từng xuất hiện trong c
   sách chương và phiên bản miner. Cache hợp lệ thì lần chạy sau bỏ qua quét toàn
   bộ `.original.json`; bản gốc chỉ được tải lười cho chương thực sự cần dịch.
 - Cache tự xây lại khi có chương mới, đổi revision hoặc nâng phiên bản miner.
+- Miner `character-miner-v2` chỉ nhận tên có bằng chứng giới thiệu trực tiếp hoặc
+  nhiều lần đứng trước động từ lời thoại. Tần suất thuần túy không còn đủ để khóa
+  một cụm; glossary legacy/không tin cậy bị loại. Thuật ngữ sửa tay đặt riêng tại
+  `glossary-manual/<bookId>.json` và luôn được ưu tiên.
 - Đoạn dài được tách theo câu và ghép lại đầy đủ, không còn dùng `truncation`
   làm mất phần cuối; decoder dùng beam search và bộ lọc chống lặp.
 - Heuristic vẫn gắn `qaRequired=true` cho lỗi hình thức, nhưng mọi chương
@@ -106,8 +110,10 @@ Qwen là tầng biên dịch lại kiêm reviewer chính. Mọi chương đều 
 lại toàn bộ từ bản gốc; bản Hachimi chỉ được dùng làm tài liệu tham khảo để tránh
 bỏ sót cách hiểu. Không có nhánh publish thẳng bản Hachimi dù review ban đầu có
 thể đạt. Nên chạy Hachimi và Qwen ở hai Colab GPU riêng vì cả hai đều cần VRAM.
-Qwen chưa thấy việc cho đến khi Hachimi hoàn thành draft của ít nhất một bộ; có
-thể mở worker Qwen trước và để nó chờ queue.
+Qwen có thể nhận từng chương ngay sau checkpoint Hachimi, không cần chờ Hachimi
+dịch xong cả bộ. Hai worker dùng chung khóa ghi ngắn theo bộ; Qwen giữ khóa đúng
+một chương, Hachimi đọc lại queue/index mới nhất trước mỗi lần merge nên không ghi
+đè checkpoint của nhau.
 
 Trong Colab Qwen, clone/pull cùng repository rồi chạy launcher:
 

@@ -34,6 +34,11 @@ chương rồi verify trước khi publish. Bốn điểm accuracy, completeness
 terminology đều phải đạt ít nhất 9, đồng thời không được có lỗi major/critical.
 Worker không cắt âm thầm chương vượt context và sẽ dừng rõ ràng nếu không có GPU.
 
+Hachimi và Qwen có thể chạy đồng thời trên cùng một bộ. Hachimi checkpoint các
+draft mới bằng semantic-review lock ngắn; Qwen chỉ giữ lock trong một chương rồi
+nhường lại. Cả hai luôn đọc lại queue và index trước khi merge, nên Qwen không cần
+chờ toàn bộ sách hoàn thành và checkpoint `approved` không bị Hachimi ghi đè.
+
 Gemini realtime chạy `scripts/gemini-qa-reviewer.js` và Gemini Batch chạy
 `scripts/gemini-batch-reviewer.js`; cả hai chỉ dùng khi chủ động audit. Batch chỉ
 tạo kết quả review; kết quả vẫn quay lại Gemini realtime reviewer để parse,

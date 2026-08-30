@@ -2,11 +2,108 @@
 
 import hashlib
 import re
+from collections import Counter
 
 
 SENTENCE_PART_RE = re.compile(r".*?(?:[。！？!?；;]+|$)", re.DOTALL)
 HAN_RE = re.compile(r"[\u3400-\u9fff]")
 PLACEHOLDER_RE = re.compile(r"__?\s*TC[ _-]*NAME", re.IGNORECASE)
+
+COMMON_FALSE_NAMES = {
+    "简单", "东西", "厉害", "周围", "毕竟", "利用", "安排", "包括", "谢谢",
+    "曾经", "左右", "麻烦", "能够", "不能", "办法", "已经", "情况", "时候",
+    "开始", "继续", "如果", "忽然", "然后", "自己", "我们", "他们", "这个",
+    "那个", "一个", "一些", "什么", "怎么", "因为", "所以", "不过", "而且",
+    "能不能", "简直是", "胡说八", "师父", "阴阳手",
+}
+NAME_SPEECH_ACTIONS = set("说道问答喊叫笑哭骂喝叹哼")
+NAME_EXPLICIT_PREFIXES = ("名叫", "全名", "名字叫", "叫做", "名为", "叫", "姓")
+NAME_PUNCTUATION = set("，。！？、：；“”\"'（）《》【】\n\r\t ")
+NAME_FORBIDDEN_FINAL_CHARS = set("的了着过在就都也还又才便却将把被给和与或而很更最太说笑问喊叫是能不没")
+NAME_TITLE_SUFFIXES = (
+    "先生", "小姐", "道长", "师父", "大师", "老板", "局长", "警官",
+    "公子", "姑娘", "夫人", "老怪", "老祖", "二爷", "神相",
+)
+
+
+def mine_character_names_conservative(texts, surnames, hanviet, limit=2000):
+    """Mine person names only when the complete book provides strong evidence.
+
+    False negatives are deliberately preferred over locking ordinary prose. Qwen
+    can recover an unmined name, while a false positive corrupts every matching
+    source sentence before NMT sees it.
+    """
+    combined = "\n".join(str(text or "") for text in texts if text)
+    single_surnames = {name for name in surnames if len(name) == 1}
+    compound_surnames = {name for name in surnames if len(name) == 2}
+    candidate_counts = Counter()
+    explicit_counts = Counter()
+    speech_counts = Counter()
+
+    for start in range(len(combined)):
+        compound = combined[start:start + 2]
+        surname = compound if compound in compound_surnames else combined[start:start + 1]
+        if surname not in compound_surnames and surname not in single_surnames:
+            continue
+        before = combined[start - 1] if start > 0 else ""
+        if before and before not in NAME_PUNCTUATION and not any(
+            combined[max(0, start - len(prefix)):start] == prefix
+            for prefix in NAME_EXPLICIT_PREFIXES
+        ):
+            continue
+
+        for given_length in (2, 1):
+            end = start + len(surname) + given_length
+            candidate = combined[start:end]
+            if len(candidate) < 2 or not re.fullmatch(r"[\u3400-\u9fff]+", candidate):
+                continue
+            if candidate in COMMON_FALSE_NAMES:
+                continue
+            if candidate[-1] in NAME_FORBIDDEN_FINAL_CHARS or candidate.endswith(NAME_TITLE_SUFFIXES):
+                continue
+            after = combined[end] if end < len(combined) else ""
+            explicit = any(
+                combined[max(0, start - len(prefix)):start] == prefix
+                for prefix in NAME_EXPLICIT_PREFIXES
+            )
+            speech = after in NAME_SPEECH_ACTIONS
+            if not explicit and not speech and after not in NAME_PUNCTUATION:
+                continue
+            candidate_counts[candidate] += 1
+            explicit_counts[candidate] += int(explicit)
+            speech_counts[candidate] += int(speech)
+            break
+
+    ranked = []
+    for candidate, evidence_count in candidate_counts.items():
+        explicit = explicit_counts[candidate]
+        speech = speech_counts[candidate]
+        # One explicit introduction is enough. Otherwise require repeated uses
+        # as a speaking subject, never raw frequency in ordinary prose.
+        if not explicit and not (speech >= 2 or (speech >= 1 and evidence_count >= 4)):
+            continue
+        if any(char not in hanviet for char in candidate):
+            continue
+        target = " ".join(
+            str(hanviet.get(char, char))[:1].upper() + str(hanviet.get(char, char))[1:].lower()
+            for char in candidate
+            if hanviet.get(char, char)
+        )
+        if not target or target == candidate:
+            continue
+        score = explicit * 20 + speech * 5 + evidence_count
+        ranked.append((score, candidate, target))
+
+    ranked.sort(key=lambda item: (-item[0], -len(item[1]), item[1]))
+    candidate_set = {candidate for _, candidate, _ in ranked}
+    filtered = [
+        item for item in ranked
+        if not any(
+            longer.startswith(item[1]) and len(longer) > len(item[1])
+            for longer in candidate_set
+        )
+    ]
+    return {candidate: target for _, candidate, target in filtered[:max(1, int(limit))]}
 
 
 def glossary_chapter_signature(chapters):

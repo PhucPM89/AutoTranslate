@@ -30,18 +30,22 @@ from hachimi_text import (
     build_glossary_cache_meta,
     evaluate_translation_quality,
     glossary_cache_is_current,
+    mine_character_names_conservative,
     split_text_by_token_budget,
 )
 
 MODEL_ID = os.environ.get("HACHIMI_MODEL_ID", "ngocdang83/HachimiMT-60-QT")
 TRANSLATION_VERSION = "hachimi-quality-v2"
-GLOSSARY_MINER_VERSION = "character-miner-v1"
+GLOSSARY_MINER_VERSION = "character-miner-v2"
 WORKER_INDEX = int(os.environ.get("WORKER_INDEX", "0"))
 TOTAL_WORKERS = max(1, int(os.environ.get("TOTAL_WORKERS", "1")))
 BATCH_SIZE = max(1, int(os.environ.get("HACHIMI_BATCH_SIZE", "32")))
 RETRANSLATE_NAME_LOCK = os.environ.get("RETRANSLATE_NAME_LOCK", "true").lower() != "false"
 SEMANTIC_REVIEW_VERSION = "semantic-v2"
 HACHIMI_BOOK_LEASE_SECONDS = 3 * 60 * 60
+REVIEW_WRITE_LEASE_SECONDS = 2 * 60
+REVIEW_WRITE_WAIT_SECONDS = 30 * 60
+REVIEW_WRITE_OWNER = f"hachimi-w{WORKER_INDEX}-{os.getpid()}"
 
 R2_ENDPOINT = os.environ.get("R2_ENDPOINT", "")
 R2_ACCESS_KEY_ID = os.environ.get("R2_ACCESS_KEY_ID", "")
@@ -82,14 +86,31 @@ def r2_get_json(key):
         return None
 
 
-def r2_put_json(key, data, cache_control="no-cache"):
-    s3_client.put_object(
+def r2_put_json(key, data, cache_control="no-cache", if_none_match=""):
+    options = dict(
         Bucket=R2_BUCKET,
         Key=key,
         Body=json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"),
         ContentType="application/json; charset=utf-8",
         CacheControl=cache_control,
     )
+    if if_none_match:
+        options["IfNoneMatch"] = if_none_match
+    s3_client.put_object(**options)
+
+
+def r2_head(key):
+    try:
+        return s3_client.head_object(Bucket=R2_BUCKET, Key=key)
+    except Exception:
+        return None
+
+
+def r2_delete(key, if_match=""):
+    options = {"Bucket": R2_BUCKET, "Key": key}
+    if if_match:
+        options["IfMatch"] = if_match
+    s3_client.delete_object(**options)
 
 
 def utc_now():
@@ -163,6 +184,61 @@ def mark_hachimi_activity(book_id, active):
         "updatedAt": utc_now(),
         "expiresAtEpochMs": (now + HACHIMI_BOOK_LEASE_SECONDS) * 1000 if active else now * 1000,
     })
+
+
+def review_lock_key(book_id):
+    return f"jobs/{book_id}/semantic-review.lock.json"
+
+
+def acquire_review_write_lock(book_id):
+    key = review_lock_key(book_id)
+    now_ms = int(time.time() * 1000)
+    existing = r2_get_json(key)
+    if existing and int(existing.get("expiresAtEpochMs") or 0) > now_ms:
+        return existing.get("owner") == REVIEW_WRITE_OWNER
+    if existing:
+        try:
+            head = r2_head(key) or {}
+            r2_delete(key, str(head.get("ETag") or ""))
+        except Exception:
+            return False
+    lock = {
+        "schema": 1,
+        "bookId": book_id,
+        "owner": REVIEW_WRITE_OWNER,
+        "acquiredAt": utc_now(),
+        "expiresAtEpochMs": now_ms + REVIEW_WRITE_LEASE_SECONDS * 1000,
+    }
+    try:
+        r2_put_json(key, lock, "private, no-store", if_none_match="*")
+        return True
+    except Exception:
+        return False
+
+
+def release_review_write_lock(book_id):
+    key = review_lock_key(book_id)
+    existing = r2_get_json(key)
+    if not existing or existing.get("owner") != REVIEW_WRITE_OWNER:
+        return
+    try:
+        head = r2_head(key) or {}
+        r2_delete(key, str(head.get("ETag") or ""))
+    except Exception:
+        pass
+
+
+def wait_for_review_write_lock(book_id):
+    deadline = time.time() + REVIEW_WRITE_WAIT_SECONDS
+    announced = False
+    while time.time() < deadline:
+        if acquire_review_write_lock(book_id):
+            return
+        if not announced:
+            print(f"  ↻ [{book_id}] Qwen đang publish; Hachimi chờ khóa checkpoint...", flush=True)
+            announced = True
+        time.sleep(1)
+    raise RuntimeError(f"Chờ semantic-review lock quá lâu cho {book_id}.")
 
 
 def supabase_patch_book(book_id, total, translated, revision=1):
@@ -253,43 +329,7 @@ def likely_name_boundary(text, start, end):
 
 
 def mine_character_names(texts):
-    combined = "\n".join(str(text or "") for text in texts if text)
-    candidates = Counter()
-    for start in range(len(combined)):
-        compound = combined[start:start + 2]
-        surname = compound if compound in COMPOUND_SURNAMES else combined[start:start + 1]
-        if surname not in COMPOUND_SURNAMES and surname not in SINGLE_SURNAMES:
-            continue
-        for given_length in (2, 1):
-            end = start + len(surname) + given_length
-            candidate = combined[start:end]
-            given = candidate[len(surname):]
-            if not HAN_RE.match(candidate) or INVALID_GIVEN_RE.match(given):
-                continue
-            if any(char in INVALID_GIVEN_CHARS or char in PERSON_ACTIONS for char in given):
-                continue
-            if not likely_name_boundary(combined, start, end):
-                continue
-            candidates[candidate] += 1
-            break
-
-    glossary = {}
-    for source, count in candidates.items():
-        strong = False
-        position = combined.find(source)
-        while position >= 0:
-            before = combined[position - 1] if position > 0 else ""
-            end = position + len(source)
-            after = combined[end] if end < len(combined) else ""
-            if after in SPEECH_ACTIONS or before in NAME_MARKERS:
-                strong = True
-                break
-            position = combined.find(source, position + len(source))
-        if count >= 2 and (strong or count >= 4):
-            target = hanviet_name(source)
-            if target and target != source:
-                glossary[source] = target
-    return glossary
+    return mine_character_names_conservative(texts, SURNAMES, HANVIET, limit=2000)
 
 
 class GlossaryProtector:
@@ -442,9 +482,12 @@ def run_translation_loop():
         index_by_number = {chapter_number(ch): ch for ch in index_chapters}
         glossary_document = r2_get_json(f"glossary/{book_id}.json")
         existing_glossary = glossary_document if isinstance(glossary_document, dict) else {}
+        manual_glossary_document = r2_get_json(f"glossary-manual/{book_id}.json")
+        manual_glossary = manual_glossary_document if isinstance(manual_glossary_document, dict) else {}
         glossary_meta = r2_get_json(f"glossary-meta/{book_id}.json")
         cache_current = (
             isinstance(glossary_document, dict)
+            and len(existing_glossary) <= 2500 + len(manual_glossary)
             and glossary_cache_is_current(
                 glossary_meta,
                 revision,
@@ -486,7 +529,20 @@ def run_translation_loop():
                 flush=True,
             )
             mined_glossary = mine_character_names(source_texts)
-            glossary = {**mined_glossary, **existing_glossary}
+            trusted_existing = (
+                existing_glossary
+                if isinstance(glossary_meta, dict)
+                and glossary_meta.get("minerVersion") == GLOSSARY_MINER_VERSION
+                and len(existing_glossary) <= 2500 + len(manual_glossary)
+                else {}
+            )
+            if existing_glossary and not trusted_existing:
+                print(
+                    f"[Glossary cache] loại {len(existing_glossary)} mục legacy/không tin cậy; "
+                    "chỉ giữ glossary-manual.",
+                    flush=True,
+                )
+            glossary = {**mined_glossary, **trusted_existing, **manual_glossary}
             if glossary != existing_glossary or not isinstance(glossary_document, dict):
                 r2_put_json(f"glossary/{book_id}.json", glossary)
             next_meta = build_glossary_cache_meta(
@@ -567,25 +623,58 @@ def run_translation_loop():
                 })
 
         review_queue_key = f"jobs/{book_id}/semantic-review.json"
-        review_queue = merge_semantic_review_queue(
-            r2_get_json(review_queue_key),
-            book_id,
-            revision,
-            review_candidates,
-        )
-        r2_put_json(review_queue_key, review_queue)
+        draft_index_updates = {}
 
-        def publish_progress():
-            index_document["draftedChapters"] = completed_count
-            index_document["approvedChapters"] = approved_count
-            index_document["translatedChapters"] = approved_count
-            index_document["updatedAt"] = utc_now()
-            index_document["status"] = "Hoàn thành" if approved_count >= len(chapters) and chapters else "Đang cập nhật"
-            r2_put_json(f"books/{book_id}/index.json", index_document)
-            supabase_patch_book(book_id, len(chapters), approved_count, revision)
+        def sync_shared_state():
+            """Merge queue/index while holding the same short lock as Qwen."""
+            nonlocal index_document, index_by_number, approved_count
+            wait_for_review_write_lock(book_id)
+            try:
+                latest_queue = r2_get_json(review_queue_key)
+                merged_queue = merge_semantic_review_queue(
+                    latest_queue,
+                    book_id,
+                    revision,
+                    review_candidates,
+                )
+                r2_put_json(review_queue_key, merged_queue, "private, no-store")
+
+                index_key = f"books/{book_id}/index.json"
+                latest_index = r2_get_json(index_key)
+                if not isinstance(latest_index, dict):
+                    latest_index = dict(index_document)
+                latest_chapters = latest_index.get("chapters") if isinstance(latest_index.get("chapters"), list) else []
+                latest_by_number = {chapter_number(item): item for item in latest_chapters}
+                for draft_number, quality_update in draft_index_updates.items():
+                    item = latest_by_number.get(draft_number)
+                    if not item or item.get("qaStatus") == "approved" or is_gemini_document(item):
+                        continue
+                    item.update({"qaStatus": "review_pending", "qaReviewed": False, **quality_update})
+
+                approved_count = sum(
+                    1 for item in latest_chapters
+                    if item.get("qaStatus") == "approved" or is_gemini_document(item)
+                )
+                drafted_count = len({candidate["chapterNumber"] for candidate in review_candidates})
+                latest_index["draftedChapters"] = drafted_count
+                latest_index["approvedChapters"] = approved_count
+                latest_index["translatedChapters"] = approved_count
+                latest_index["updatedAt"] = utc_now()
+                latest_index["status"] = (
+                    "Hoàn thành"
+                    if approved_count >= len(chapters) and chapters
+                    else "Đang cập nhật"
+                )
+                r2_put_json(index_key, latest_index)
+                supabase_patch_book(book_id, len(chapters), approved_count, revision)
+                index_document = latest_index
+                index_by_number = latest_by_number
+            finally:
+                release_review_write_lock(book_id)
+
+        sync_shared_state()
 
         if not pending:
-            publish_progress()
             mark_hachimi_activity(book_id, False)
             print(f"Bỏ qua {book_id}: đã xong {TRANSLATION_VERSION}; giữ nguyên Gemini: {gemini_count} chương.")
             continue
@@ -598,8 +687,7 @@ def run_translation_loop():
         def checkpoint():
             mark_hachimi_activity(book_id, True)
             r2_put_json(job_key, state)
-            r2_put_json(review_queue_key, review_queue)
-            publish_progress()
+            sync_shared_state()
 
         for position, chapter in enumerate(pending, 1):
             number = chapter_number(chapter)
@@ -654,17 +742,12 @@ def run_translation_loop():
             quality = evaluate_translation_quality(original.get("content", ""), content)
             document.update(quality)
             r2_put_json(f"drafts/{book_id}/r{revision}/ch/{number}.json", document, "private, no-store")
-            review_queue = merge_semantic_review_queue(
-                review_queue,
-                book_id,
-                revision,
-                [{
-                    "chapterNumber": number,
-                    "translationVersion": TRANSLATION_VERSION,
-                    "content": content,
-                    "forceReplacePublished": force_retranslate_all,
-                }],
-            )
+            review_candidates.append({
+                "chapterNumber": number,
+                "translationVersion": TRANSLATION_VERSION,
+                "content": content,
+                "forceReplacePublished": force_retranslate_all,
+            })
             chapter.update({
                 "status": "completed", "translationVersion": TRANSLATION_VERSION,
                 "provider": "hachimi", "model": MODEL_ID, "attempts": 0,
@@ -679,6 +762,7 @@ def run_translation_loop():
                     "qaStatus": "review_pending", "qaReviewed": False,
                     **quality,
                 })
+            draft_index_updates[number] = quality
             completed_count += 1
             qa_label = f" · chờ Gemini QA: {', '.join(quality['qaIssues'])}" if quality["qaRequired"] else ""
             print(f"  ✓ ch {number} ({time.time() - started:.1f}s) · {completed_count}/{len(chapters)}{qa_label}")
