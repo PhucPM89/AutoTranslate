@@ -513,7 +513,39 @@ def load_job_keys():
     return [key for index, key in enumerate(keys) if index % TOTAL_WORKERS == WORKER_INDEX]
 
 
+def job_generation(state):
+    """Return the reset generation carried by a translation job.
+
+    Older jobs may not have a generation yet.  That is safe: the first reset
+    adds ``resetAt``, so a worker which loaded the pre-reset job will still see
+    a mismatch before it can checkpoint stale in-memory state.
+    """
+    if not isinstance(state, dict):
+        return ""
+    return str(state.get("runGeneration") or state.get("resetAt") or "")
+
+
+def assert_write_generation(job_key, expected_generation):
+    """Refuse every durable write after maintenance starts or a job is reset."""
+    reset_state = r2_get_json("jobs/reset-active.json")
+    if (
+        isinstance(reset_state, dict)
+        and reset_state.get("active")
+        and int(reset_state.get("expiresAtEpochMs") or 0) > int(time.time() * 1000)
+    ):
+        raise RuntimeError("Toàn thư viện đang reset; hủy checkpoint để không ghi đè dữ liệu mới.")
+
+    latest_state = r2_get_json(job_key)
+    latest_generation = job_generation(latest_state)
+    if not isinstance(latest_state, dict) or latest_generation != expected_generation:
+        raise RuntimeError(
+            "Job đã được reset trong lúc worker đang chạy "
+            f"(generation {expected_generation!r} -> {latest_generation!r}); hủy dữ liệu cũ."
+        )
+
+
 def run_translation_loop():
+    failed_chapters = []
     reset_state = r2_get_json("jobs/reset-active.json")
     if reset_state and reset_state.get("active") and int(reset_state.get("expiresAtEpochMs") or 0) > int(time.time() * 1000):
         raise RuntimeError("Toàn thư viện đang reset; dừng Hachimi worker và chạy lại sau.")
@@ -530,6 +562,7 @@ def run_translation_loop():
         index_document = r2_get_json(f"books/{book_id}/index.json")
         if not state or not index_document or not isinstance(state.get("chapters"), list):
             continue
+        expected_generation = job_generation(state)
 
         # Only one Hachimi process may own a book. This prevents an old Colab
         # runtime from overwriting a newly rebuilt glossary or draft checkpoint.
@@ -608,6 +641,7 @@ def run_translation_loop():
                     flush=True,
                 )
             glossary = {**mined_glossary, **trusted_existing, **manual_glossary}
+            assert_write_generation(job_key, expected_generation)
             if glossary != existing_glossary or not isinstance(glossary_document, dict):
                 r2_put_json(f"glossary/{book_id}.json", glossary)
             next_meta = build_glossary_cache_meta(
@@ -660,6 +694,7 @@ def run_translation_loop():
             ):
                 draft_document = dict(published_document)
                 draft_document["qaStatus"] = draft_document.get("qaStatus") or "review_pending"
+                assert_write_generation(job_key, expected_generation)
                 r2_put_json(f"drafts/{book_id}/r{revision}/ch/{number}.json", draft_document, "private, no-store")
 
             document = draft_document or published_document
@@ -704,8 +739,11 @@ def run_translation_loop():
         def sync_shared_state():
             """Merge queue/index while holding the same short lock as Qwen."""
             nonlocal index_document, index_by_number, approved_count
+            assert_write_generation(job_key, expected_generation)
             wait_for_review_write_lock(book_id)
             try:
+                # Maintenance/reset may begin while we were waiting for Qwen.
+                assert_write_generation(job_key, expected_generation)
                 latest_queue = r2_get_json(review_queue_key)
                 merged_queue = merge_semantic_review_queue(
                     latest_queue,
@@ -761,8 +799,10 @@ def run_translation_loop():
         print("=" * 70)
 
         def checkpoint():
+            assert_write_generation(job_key, expected_generation)
             if not refresh_hachimi_book_lease(book_id):
                 raise RuntimeError(f"Mất Hachimi book lease trước checkpoint {book_id}.")
+            assert_write_generation(job_key, expected_generation)
             r2_put_json(job_key, state)
             sync_shared_state()
 
@@ -825,6 +865,7 @@ def run_translation_loop():
                     f"  ✗ ch {number}: giữ pending sau {CHAPTER_RETRIES} lượt; worker tiếp tục chương kế tiếp.",
                     flush=True,
                 )
+                failed_chapters.append((book_id, number))
                 if position % 5 == 0 or position == len(pending):
                     checkpoint()
                 continue
@@ -847,6 +888,7 @@ def run_translation_loop():
             }
             quality = evaluate_translation_quality(original.get("content", ""), content)
             document.update(quality)
+            assert_write_generation(job_key, expected_generation)
             r2_put_json(f"drafts/{book_id}/r{revision}/ch/{number}.json", document, "private, no-store")
             review_candidates.append({
                 "chapterNumber": number,
@@ -878,8 +920,20 @@ def run_translation_loop():
 
         release_hachimi_book_lease(book_id)
 
-    print("\nHoàn tất phần việc của worker.")
+    if failed_chapters:
+        preview = ", ".join(f"{book_id}:ch{number}" for book_id, number in failed_chapters[:10])
+        print(
+            f"\n↻ Còn {len(failed_chapters)} chương lỗi ({preview}). "
+            "Nghỉ 60s rồi tự quét lại để xử lý các chương còn pending...",
+            flush=True,
+        )
+    else:
+        print("\nHoàn tất phần việc của worker.")
+    return len(failed_chapters)
 
 
 if __name__ == "__main__":
-    run_translation_loop()
+    while True:
+        if run_translation_loop() <= 0:
+            break
+        time.sleep(60)

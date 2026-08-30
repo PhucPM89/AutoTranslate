@@ -63,9 +63,12 @@ test("Colab workers invalidate bad v2 drafts and perform guided Qwen refinement"
   assert.match(hachimi, /entry\.get\("translationVersion"\) == TRANSLATION_VERSION/);
   assert.match(hachimi, /HACHIMI_CHAPTER_RETRIES/);
   assert.match(hachimi, /worker tiếp tục chương kế tiếp/);
+  assert.match(hachimi, /Nghỉ 60s rồi tự quét lại để xử lý các chương còn pending/);
   assert.match(hachimi, /acquire_hachimi_book_lease/);
   assert.match(hachimi, /một Hachimi worker khác đang giữ lease/);
   assert.match(hachimi, /termCount.*len\(existing_glossary\)/s);
+  assert.match(hachimi, /assert_write_generation\(job_key, expected_generation\)/);
+  assert.match(hachimi, /Job đã được reset trong lúc worker đang chạy/);
   assert.match(qwen, /REVIEW_VERSION = "semantic-v3"/);
   assert.match(qwen, /QA_MAX_REWRITE_PASSES/);
   assert.match(qwen, /Semantic repair/);
@@ -74,4 +77,7 @@ test("Colab workers invalidate bad v2 drafts and perform guided Qwen refinement"
   assert.match(qwen, /story_bible_for_prompt/);
   assert.match(qwen, /tuyệt đối không bắt đổi thành 'Grandpa'/);
   assert.match(qwen, /parse_model_json\(raw\)/);
+  assert.match(qwen, /StaleJobGenerationError/);
+  assert.match(qwen, /assert_write_generation\(book_id, expected_generation\)/);
+  assert.match(qwen, /RETRY_FAILED/);
 });

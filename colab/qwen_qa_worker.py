@@ -107,6 +107,7 @@ REQUIRE_GPU = os.environ.get("QA_REQUIRE_GPU", "true").lower() != "false"
 LEASE_MS = int(os.environ.get("QA_LEASE_MS", str(15 * 60 * 1000)))
 MAX_ATTEMPTS = int(os.environ.get("QA_MAX_ATTEMPTS", "4"))
 MAX_REWRITE_PASSES = max(1, int(os.environ.get("QA_MAX_REWRITE_PASSES", "3")))
+RETRY_FAILED = os.environ.get("QA_RETRY_FAILED", "true").lower() != "false"
 REVIEW_VERSION = "semantic-v3"
 EXPECTED_DRAFT_VERSION = os.environ.get("HACHIMI_DRAFT_VERSION", "hachimi-quality-v3")
 CURSOR_KEY = "jobs/semantic-review-cursor.json"
@@ -275,6 +276,11 @@ def claim_next_review(queue: Dict[str, Any], owner: str, lease_ms: int = LEASE_M
     now_ms = int(time.time() * 1000)
     now_iso = utc_now()
     valid_states = {"pending", "retrying", "processing"}
+    if RETRY_FAILED:
+        # A hard chapter must not be forgotten forever.  Once MAX_ATTEMPTS is
+        # reached it sleeps on the existing bounded backoff, then receives a
+        # fresh stochastic rewrite while the worker continues serving others.
+        valid_states.add("failed")
 
     for entry in queue["entries"]:
         state = entry.get("state")
@@ -282,7 +288,7 @@ def claim_next_review(queue: Dict[str, Any], owner: str, lease_ms: int = LEASE_M
             continue
         if state == "pending":
             pass
-        elif state == "retrying":
+        elif state in {"retrying", "failed"}:
             avail = entry.get("availableAt")
             if avail:
                 try:
@@ -340,7 +346,7 @@ def settle_review(queue: Dict[str, Any], chapter_num: int, result: Dict[str, Any
         attempts = int(entry.get("attempts") or 0)
         entry["state"] = "failed" if attempts >= max_attempts else "retrying"
         entry["lastError"] = str(result.get("error") or "QA thất bại")[:500]
-        retry_delay = min(6 * 3600, 30 * (2 ** max(0, attempts - 1)))
+        retry_delay = min(6 * 3600, 30 * (2 ** min(10, max(0, attempts - 1))))
         entry["availableAt"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + retry_delay))
     queue["updatedAt"] = now_iso
 
@@ -649,12 +655,50 @@ class QwenReviewEngine:
 # ---------------------------------------------------------------------------
 # Vòng Lặp Worker Tự Động Xử Lý Toàn Bộ Hàng Đợi (Autonomous Main Loop)
 # ---------------------------------------------------------------------------
-def process_claim(queue_key: str, queue: Dict[str, Any], entry: Dict[str, Any], engine: QwenReviewEngine) -> Dict[str, Any]:
+class StaleJobGenerationError(RuntimeError):
+    """Raised when a reset invalidates work already loaded in memory."""
+
+
+def job_generation(state: Any) -> str:
+    if not isinstance(state, dict):
+        return ""
+    return str(state.get("runGeneration") or state.get("resetAt") or "")
+
+
+def assert_write_generation(book_id: str, expected_generation: str) -> None:
+    reset_state = r2_get_json("jobs/reset-active.json")
+    if (
+        isinstance(reset_state, dict)
+        and reset_state.get("active")
+        and int(reset_state.get("expiresAtEpochMs") or 0) > int(time.time() * 1000)
+    ):
+        raise StaleJobGenerationError(
+            "Toàn thư viện đang reset; Qwen hủy publish/checkpoint đang giữ trong RAM."
+        )
+    latest_job = r2_get_json(f"jobs/{book_id}/translation.json")
+    latest_generation = job_generation(latest_job)
+    if not isinstance(latest_job, dict) or latest_generation != expected_generation:
+        raise StaleJobGenerationError(
+            "Job đã đổi thế hệ trong lúc Qwen xử lý "
+            f"({expected_generation!r} -> {latest_generation!r}); hủy kết quả cũ."
+        )
+
+
+def process_claim(
+    queue_key: str,
+    queue: Dict[str, Any],
+    entry: Dict[str, Any],
+    engine: QwenReviewEngine,
+    expected_generation: Optional[str] = None,
+) -> Dict[str, Any]:
     book_id = queue["bookId"]
+    if expected_generation is None:
+        expected_generation = job_generation(r2_get_json(f"jobs/{book_id}/translation.json"))
     rev = int(entry.get("revision") or queue.get("revision") or 1)
     ch_num = int(entry["chapterNumber"])
 
     if entry.get("translationVersion") != EXPECTED_DRAFT_VERSION:
+        assert_write_generation(book_id, expected_generation)
         entry.update({
             "state": "superseded",
             "leaseOwner": "",
@@ -685,6 +729,7 @@ def process_claim(queue_key: str, queue: Dict[str, Any], entry: Dict[str, Any], 
     story_context = r2_get_json(f"story-context/{book_id}.json")
 
     if is_protected_gemini(published) and not entry.get("forceReplacePublished"):
+        assert_write_generation(book_id, expected_generation)
         entry["state"] = "skipped_gemini"
         entry["updatedAt"] = utc_now()
         r2_put_json(queue_key, queue)
@@ -848,6 +893,7 @@ def process_claim(queue_key: str, queue: Dict[str, Any], entry: Dict[str, Any], 
     latest_published = r2_get_json(chapter_key)
     latest_draft = r2_get_json(draft_key)
     if is_protected_gemini(latest_published) and not entry.get("forceReplacePublished"):
+        assert_write_generation(book_id, expected_generation)
         entry["state"] = "skipped_gemini"
         entry["updatedAt"] = utc_now()
         r2_put_json(queue_key, queue, cache_control="private, no-store")
@@ -858,6 +904,7 @@ def process_claim(queue_key: str, queue: Dict[str, Any], entry: Dict[str, Any], 
         raise RuntimeError("Chương đổi nội dung trong lúc Qwen đang review.")
 
     # Chapter dịch được QA nâng cấp tại chỗ nên phải dùng cache ngắn.
+    assert_write_generation(book_id, expected_generation)
     r2_put_json(chapter_key, updated_chapter, cache_control="public, max-age=60, stale-while-revalidate=600")
 
     # Cập nhật index chương
@@ -882,6 +929,7 @@ def process_claim(queue_key: str, queue: Dict[str, Any], entry: Dict[str, Any], 
             index["approvedChapters"] = approved
             index["translatedChapters"] = approved
             index["status"] = "Hoàn thành" if total > 0 and approved >= total else "Đang cập nhật"
+            assert_write_generation(book_id, expected_generation)
             r2_put_json(index_key, index)
             supabase_patch(f"books?id=eq.{book_id}", {
                 "total_chapters": total,
@@ -897,6 +945,7 @@ def process_claim(queue_key: str, queue: Dict[str, Any], entry: Dict[str, Any], 
     latest_context = r2_get_json(f"story-context/{book_id}.json")
     latest_tm = r2_get_json(f"tm/books/{book_id}.json")
 
+    assert_write_generation(book_id, expected_generation)
     r2_put_json(f"story-bible/{book_id}.json", merge_story_bible(latest_bible, final_review.get("storyBibleUpdates", {}), book_id, ch_num, evidence), cache_control="private, no-store")
     r2_put_json(f"story-context/{book_id}.json", append_story_context(latest_context, ch_num, final_review.get("chapterSummary", "")), cache_control="private, no-store")
     r2_put_json(f"tm/books/{book_id}.json", merge_translation_memory(latest_tm, final_review.get("translationMemoryUpdates", []), ch_num, original["content"], content), cache_control="private, no-store")
@@ -909,6 +958,7 @@ def process_claim(queue_key: str, queue: Dict[str, Any], entry: Dict[str, Any], 
         "scores": scores,
         "issues": final_review.get("issues", [])
     })
+    assert_write_generation(book_id, expected_generation)
     r2_put_json(queue_key, queue)
 
     print(f"  ✓ [{book_id}] ch {ch_num:4d} biên dịch + duyệt xong · Điểm: {avg_score:.1f}/10 · Qwen: {QA_MODEL_ID}")
@@ -955,6 +1005,7 @@ def run_worker_loop():
                 continue
 
             book_id = queue["bookId"]
+            expected_generation = job_generation(r2_get_json(f"jobs/{book_id}/translation.json"))
             if not acquire_review_lock(book_id, OWNER_ID):
                 print(f"  ↷ [{book_id}]: một semantic reviewer khác đang xử lý bộ này.")
                 continue
@@ -970,16 +1021,21 @@ def run_worker_loop():
                 if not entry:
                     continue
 
+                assert_write_generation(book_id, expected_generation)
                 r2_put_json(queue_key, queue)  # Lưu lease trước khi xử lý
                 processed_total += 1
 
                 try:
-                    process_claim(queue_key, queue, entry, engine)
+                    process_claim(queue_key, queue, entry, engine, expected_generation)
                 except Exception as error:
                     print(f"  ✗ Lỗi xử lý [{book_id}] ch {entry.get('chapterNumber')}: {error}")
+                    if isinstance(error, StaleJobGenerationError):
+                        print("  ↷ Bỏ checkpoint lỗi vì job đã reset; worker sẽ nạp lại trạng thái mới.", flush=True)
+                        continue
                     if "out of memory" in str(error).lower() and torch.cuda.is_available():
                         torch.cuda.empty_cache()
                     transient = bool(re.search(r"quota|rate limit|timeout|temporar|503|502|504", str(error), re.IGNORECASE))
+                    assert_write_generation(book_id, expected_generation)
                     settle_review(queue, int(entry.get("chapterNumber", 0)), {"error": str(error), "retryable": transient})
                     r2_put_json(queue_key, queue)
             finally:
