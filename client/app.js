@@ -4078,7 +4078,7 @@ async function fetchCdnOrProxy(url, options) {
 async function fetchBookIndex(bookId) {
   const clean = cleanBookId(bookId);
   if (!clean) return null;
-  const cdnIndexUrl = cdnUrl(`books/${clean}/index.json`);
+  const cdnIndexUrl = `${cdnUrl(`books/${clean}/index.json`)}?_v=${Date.now()}`;
   try {
     const response = await fetchCdnOrProxy(cdnIndexUrl);
     const index = await response.json();
