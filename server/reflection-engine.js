@@ -154,6 +154,22 @@ function reflectAndPolish(translation, { sourceText = "", glossary = {}, scene =
   // Apply prose stylistics & spacing normalization
   polished = polishLiteraryProse(polished);
 
+  // Clear any isolated residual Han glyphs if present in mostly Vietnamese text
+  if (/[\u4e00-\u9fa5]/.test(polished)) {
+    const hanMatches = polished.match(/[\u4e00-\u9fa5]/g) || [];
+    if (hanMatches.length > 0 && hanMatches.length <= 5) {
+      try {
+        const { loadBase } = require("./convert/index");
+        const { hanvietChars } = loadBase();
+        polished = polished.replace(/[\u4e00-\u9fa5]+/g, (match) => {
+          const converted = [...match].map((ch) => (hanvietChars[ch]?.hv ? hanvietChars[ch].hv.toLowerCase() : "")).filter(Boolean).join(" ");
+          return converted ? ` ${converted} ` : "";
+        });
+        polished = polishLiteraryProse(polished);
+      } catch {}
+    }
+  }
+
   const finalScore = calculateFluencyScore(polished).score;
 
   return {
