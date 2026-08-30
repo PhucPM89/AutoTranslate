@@ -13,7 +13,9 @@ const {
   getModelsForApiKey,
   classifyQuotaError,
   computeQuotaRecovery,
-  nextPacificMidnightMs
+  nextPacificMidnightMs,
+  providerPriority,
+  prioritizeProviderFallback
 } = require("./gemini");
 
 const chineseSource = "这是一个需要翻译成越南语的中文段落。".repeat(20);
@@ -257,36 +259,36 @@ test("selects the current Qwen model for Groq keys and Gemini models for Gemini 
   }
 });
 
-test("falls through to Gemini after one Groq quota failure instead of spending the whole key slice on Groq", async () => {
+test("falls through to Groq when Gemini keys have quota failure", async () => {
   const originalFetch = global.fetch;
   const vietnamese = "Đây là bản dịch tiếng Việt hoàn chỉnh, tự nhiên, đầy đủ và không còn bất kỳ chữ Hán nào. ".repeat(14);
   const urls = [];
   global.fetch = async (url) => {
     urls.push(String(url));
-    if (String(url).includes("api.groq.com")) {
+    if (String(url).includes("googleapis.com")) {
       return {
         ok: false,
         status: 429,
         headers: new Headers(),
-        json: async () => ({ error: { message: "tokens per minute; retry in 12s" } })
+        json: async () => ({ error: { message: "RESOURCE_EXHAUSTED: quota exceeded" } })
       };
     }
     return {
       ok: true,
       status: 200,
       headers: new Headers(),
-      json: async () => ({ candidates: [{ content: { parts: [{ text: vietnamese }] } }] })
+      json: async () => ({ choices: [{ message: { content: vietnamese } }] })
     };
   };
   try {
     const result = await translateText(chineseSource, [
-      "gsk_provider-fallback-a-1234567890",
-      "gsk_provider-fallback-b-1234567890",
-      "AQ.provider-fallback-gemini"
+      "AQ.provider-fallback-gemini-a",
+      "AQ.provider-fallback-gemini-b",
+      "gsk_provider-fallback-groq"
     ], { provider: "cloud" });
-    assert.deepEqual(result.providersUsed, ["gemini"]);
+    assert.deepEqual(result.providersUsed, ["groq"]);
+    assert.equal(urls.filter((url) => url.includes("googleapis.com")).length, 2);
     assert.equal(urls.filter((url) => url.includes("api.groq.com")).length, 1);
-    assert.equal(urls.filter((url) => url.includes("googleapis.com")).length, 1);
   } finally {
     global.fetch = originalFetch;
   }
@@ -418,3 +420,22 @@ test("keyPoolState produces non-colliding fingerprints for keys with identical p
   assert.match(state.keys[0].id, /^k_[a-f0-9]{16}$/);
 });
 
+test("providerPriority orders Gemini keys as Primary (0) and Groq as Fallback (1)", () => {
+  assert.equal(providerPriority("AIzaSyD-gemini-key"), 0);
+  assert.equal(providerPriority("AQ.gemini-key"), 0);
+  assert.equal(providerPriority("gsk_groq-api-key"), 1);
+});
+
+test("prioritizeProviderFallback places all Gemini keys before Groq fallback keys", () => {
+  const entries = [
+    { key: "gsk_groq_1", index: 0 },
+    { key: "AIza_gemini_1", index: 1 },
+    { key: "gsk_groq_2", index: 2 },
+    { key: "AQ_gemini_2", index: 3 }
+  ];
+  const ordered = prioritizeProviderFallback(entries);
+  assert.deepEqual(
+    ordered.map((e) => e.key),
+    ["AIza_gemini_1", "AQ_gemini_2", "gsk_groq_1", "gsk_groq_2"]
+  );
+});

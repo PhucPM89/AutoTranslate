@@ -702,10 +702,10 @@ async function main() {
 
 function translationKeyPriority(key) {
   const value = String(key || "");
-  // Qwen on Groq is the primary translator. Gemini stays available as an
-  // automatic fallback when Groq is cooling down or rejects a hard chapter.
-  if (value.startsWith("gsk_")) return 0;
-  return 1;
+  // Gemini is the primary translator for natural literary Vietnamese prose.
+  // Groq stays available as an automatic 24/7 fallback.
+  if (value.startsWith("gsk_")) return 1;
+  return 0;
 }
 
 async function listJobs(storage, onlyBook) {

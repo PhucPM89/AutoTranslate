@@ -87,8 +87,8 @@ function hasHan(value) {
 
 function providerPriority(apiKey) {
   const value = String(apiKey || "");
-  if (value.startsWith("gsk_")) return 0;
-  return 1;
+  if (value.startsWith("gsk_")) return 1;
+  return 0;
 }
 
 function prioritizeProviderFallback(entries) {
@@ -99,10 +99,7 @@ function prioritizeProviderFallback(entries) {
     groups.get(priority).push(entry);
   }
   const priorities = [...groups.keys()].sort((a, b) => a - b);
-  return [
-    ...priorities.flatMap((priority) => groups.get(priority).slice(0, 1)),
-    ...priorities.flatMap((priority) => groups.get(priority).slice(1))
-  ];
+  return priorities.flatMap((priority) => groups.get(priority));
 }
 
 function getActiveKeys(apiKeys) {
@@ -209,11 +206,12 @@ async function translateBatchChapters(chapters, apiKeys, options = {}) {
   const engine = options.engine || defaultEngine;
 
   const parts = [];
-  parts.push("Bạn là một dịch giả tiểu thuyết Trung Quốc sang tiếng Việt chuyên nghiệp.");
-  parts.push("Hãy dịch trọn vẹn các chương truyện sau đây sang tiếng Việt tự nhiên, đúng chất tiên hiệp/huyền huyễn.");
+  parts.push("Bạn là một tiểu thuyết gia kiêm biên dịch viên Trung - Việt xuất sắc.");
+  parts.push("Hãy chuyển ngữ trọn vẹn các chương truyện sau sang tiếng Việt thuần thục, mượt mà, đúng chất văn học mạng.");
   parts.push("Yêu cầu bắt buộc:");
+  parts.push("- Diễn đạt thuần Việt 100%, tự nhiên, không dịch bám từ hay giữ nguyên cấu trúc ngữ pháp tiếng Trung.");
   parts.push("- Chỉ chuyển âm Hán-Việt cho tên người, địa danh, môn phái, cảnh giới, công pháp và thuật ngữ thực sự.");
-  parts.push("- Đại từ, động từ, liên từ và lời kể đời thường phải dịch nghĩa thuần Việt; không chuyển âm kiểu Gia Gia, Ngã, Nhĩ, Khước, Giáo.");
+  parts.push("- Đại từ, động từ, liên từ và lời kể đời thường phải dịch nghĩa thuần Việt (ví dụ: 'trán của mình' thay vì 'tự kỷ đích ấn đường', 'sải bước' thay vì 'mai bộ', 'mở cửa' thay vì 'đả khai môn', 'ngón tay' thay vì 'thủ chỉ').");
   parts.push("- Tuyệt đối không dùng Pinyin hoặc chữ Hán.");
   parts.push("- Giữ nguyên cấu trúc các phân tách chương dạng: === CHAPTER_START_{n} === và === CHAPTER_END_{n} ===");
   parts.push("");
@@ -1323,5 +1321,7 @@ module.exports = {
   importKeyPoolState,
   keyFingerprint,
   cleanTranslatedTitle,
-  getModelsForApiKey
+  getModelsForApiKey,
+  providerPriority,
+  prioritizeProviderFallback
 };

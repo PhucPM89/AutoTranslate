@@ -53,6 +53,9 @@ test("translation-engine: prompt carries book context and fiction literature fra
   });
   assert.match(prompt, /Tác phẩm: Kiếm Đạo Trường Sinh/);
   assert.match(prompt, /FICTION LITERATURE TRANSLATION/);
+  assert.match(prompt, /VÍ DỤ ĐỐI CHIẾU PHONG CÁCH/);
+  assert.match(prompt, /tự kỷ đích ấn đường/);
+  assert.match(prompt, /trán của mình/);
 });
 
 test("translation-engine: postProcessTranslation cleans markdown & enforces glossary", () => {

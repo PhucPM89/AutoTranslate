@@ -624,9 +624,9 @@ test("translation status errors keep the diagnosis but remove provider identifie
   assert.doesNotMatch(clean, /org_01secret|https?:\/\//);
 });
 
-test("translation worker prioritizes Groq keys before Gemini fallback keys", () => {
+test("translation worker prioritizes Gemini keys before Groq fallback keys", () => {
   const { translationKeyPriority } = require("../scripts/translate-worker");
-  assert.ok(translationKeyPriority("gsk_primary") < translationKeyPriority("AIza-fallback"));
+  assert.ok(translationKeyPriority("AIza-primary") < translationKeyPriority("gsk_fallback"));
 });
 
 test("translation progress reports real batch activity, attempts and errors", async () => {
