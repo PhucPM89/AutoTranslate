@@ -41,6 +41,7 @@ TRANSLATION_VERSION = "hachimi-quality-v3"
 GLOSSARY_MINER_VERSION = "character-miner-v2"
 WORKER_INDEX = int(os.environ.get("WORKER_INDEX", "0"))
 TOTAL_WORKERS = max(1, int(os.environ.get("TOTAL_WORKERS", "1")))
+TARGET_BOOK_ID = os.environ.get("TARGET_BOOK_ID", "").strip()
 BATCH_SIZE = max(1, int(os.environ.get("HACHIMI_BATCH_SIZE", "32")))
 RETRANSLATE_NAME_LOCK = os.environ.get("RETRANSLATE_NAME_LOCK", "true").lower() != "false"
 CHAPTER_RETRIES = max(1, int(os.environ.get("HACHIMI_CHAPTER_RETRIES", "3")))
@@ -70,6 +71,8 @@ if missing:
     raise RuntimeError("Thiếu Colab Secrets: " + ", ".join(missing))
 if WORKER_INDEX < 0 or WORKER_INDEX >= TOTAL_WORKERS:
     raise RuntimeError("WORKER_INDEX phải nằm trong khoảng 0..TOTAL_WORKERS-1")
+if TARGET_BOOK_ID and not re.fullmatch(r"[A-Za-z0-9_-]+", TARGET_BOOK_ID):
+    raise RuntimeError("TARGET_BOOK_ID không hợp lệ")
 print("[bootstrap 3/4] Cấu hình hợp lệ; đang khởi tạo kết nối R2...", flush=True)
 
 s3_client = boto3.client(
@@ -503,6 +506,8 @@ def translate_chapter(title, content, protector, chapter_number=None):
 
 
 def load_job_keys():
+    if TARGET_BOOK_ID:
+        return [f"jobs/{TARGET_BOOK_ID}/translation.json"]
     keys = []
     paginator = s3_client.get_paginator("list_objects_v2")
     for page in paginator.paginate(Bucket=R2_BUCKET, Prefix="jobs/"):
@@ -550,7 +555,8 @@ def run_translation_loop():
     if reset_state and reset_state.get("active") and int(reset_state.get("expiresAtEpochMs") or 0) > int(time.time() * 1000):
         raise RuntimeError("Toàn thư viện đang reset; dừng Hachimi worker và chạy lại sau.")
     job_keys = load_job_keys()
-    print(f"Worker được giao {len(job_keys)} bộ truyện.\n")
+    focus_label = f" · chỉ xử lý {TARGET_BOOK_ID}" if TARGET_BOOK_ID else ""
+    print(f"Worker được giao {len(job_keys)} bộ truyện{focus_label}.\n")
 
     for job_key in job_keys:
         reset_state = r2_get_json("jobs/reset-active.json")

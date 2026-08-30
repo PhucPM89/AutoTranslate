@@ -69,6 +69,8 @@ test("Colab workers invalidate bad v2 drafts and perform guided Qwen refinement"
   assert.match(hachimi, /termCount.*len\(existing_glossary\)/s);
   assert.match(hachimi, /assert_write_generation\(job_key, expected_generation\)/);
   assert.match(hachimi, /Job đã được reset trong lúc worker đang chạy/);
+  assert.match(hachimi, /TARGET_BOOK_ID/);
+  assert.match(hachimi, /chỉ xử lý/);
   assert.match(qwen, /REVIEW_VERSION = "semantic-v3"/);
   assert.match(qwen, /QA_MAX_REWRITE_PASSES/);
   assert.match(qwen, /Semantic repair/);
@@ -80,4 +82,5 @@ test("Colab workers invalidate bad v2 drafts and perform guided Qwen refinement"
   assert.match(qwen, /StaleJobGenerationError/);
   assert.match(qwen, /assert_write_generation\(book_id, expected_generation\)/);
   assert.match(qwen, /RETRY_FAILED/);
+  assert.match(qwen, /focused_queue_key/);
 });

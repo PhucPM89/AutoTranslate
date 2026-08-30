@@ -98,8 +98,11 @@ QA_MODEL_ID = os.environ.get("QA_MODEL_ID", "Qwen/Qwen2.5-7B-Instruct")
 QA_QUANTIZATION = os.environ.get("QA_QUANTIZATION", "bitsandbytes").strip().lower()
 WORKER_INDEX = int(os.environ.get("WORKER_INDEX", "0"))
 TOTAL_WORKERS = max(1, int(os.environ.get("TOTAL_WORKERS", "1")))
+TARGET_BOOK_ID = os.environ.get("TARGET_BOOK_ID", "").strip()
 if WORKER_INDEX < 0 or WORKER_INDEX >= TOTAL_WORKERS:
     raise ValueError("WORKER_INDEX phải nằm trong khoảng 0..TOTAL_WORKERS-1.")
+if TARGET_BOOK_ID and not re.fullmatch(r"[A-Za-z0-9_-]+", TARGET_BOOK_ID):
+    raise ValueError("TARGET_BOOK_ID không hợp lệ.")
 configured_max_chapters = int(os.environ.get("QA_MAX_CHAPTERS", "50"))
 MAX_CHAPTERS_PER_RUN = configured_max_chapters if configured_max_chapters > 0 else sys.maxsize
 RUN_ONCE = os.environ.get("QA_RUN_ONCE", "false").lower() == "true"
@@ -981,8 +984,12 @@ def run_worker_loop():
             print("💤 Toàn thư viện đang reset. Qwen QA nghỉ 60s...", flush=True)
             time.sleep(60)
             continue
-        all_queue_keys = r2_list_keys("jobs/")
-        queue_keys = [k for k in all_queue_keys if re.match(r"^jobs/[^/]+/semantic-review\.json$", k)]
+        if TARGET_BOOK_ID:
+            focused_queue_key = f"jobs/{TARGET_BOOK_ID}/semantic-review.json"
+            queue_keys = [focused_queue_key] if r2_get_json(focused_queue_key) else []
+        else:
+            all_queue_keys = r2_list_keys("jobs/")
+            queue_keys = [k for k in all_queue_keys if re.match(r"^jobs/[^/]+/semantic-review\.json$", k)]
 
         if not queue_keys:
             if RUN_ONCE:
