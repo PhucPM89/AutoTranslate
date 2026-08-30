@@ -392,17 +392,12 @@ async function main() {
         }
         return originalCache.get(n);
       };
-      const glossarySeedTexts = [];
-      const chapterNumbers = job.state.chapters.map((entry) => Number(entry.n)).filter(Number.isFinite);
-      for (let i = 0; i < chapterNumbers.length; i += 40) {
-        const samples = await Promise.all(chapterNumbers.slice(i, i + 40).map(loadOriginal));
-        for (const sample of samples) {
-          if (sample) glossarySeedTexts.push(sample.title, sample.content);
-        }
-      }
-      let bookGlossary = glossarySeedTexts.length
-        ? await engine.mineAndMergeGlossary(job.bookId, glossarySeedTexts)
-        : await engine.loadGlossary(job.bookId);
+      // The glossary is durable in R2 and each chapter mines incremental terms
+      // immediately before translation. Re-reading every source chapter here
+      // cost thousands of R2 GETs and several idle minutes on every 15-minute
+      // Actions run without adding information after the first campaign scan.
+      let bookGlossary = await engine.loadGlossary(job.bookId);
+      console.log(`  [Glossary] đã nạp ${Object.keys(bookGlossary).length} thuật ngữ; chỉ khai thác bổ sung theo chương.`);
 
       while (!isSettled(job.state) && spentTotal < REQUEST_BUDGET && Date.now() < deadlineAt) {
         const remainingBudget = REQUEST_BUDGET === Infinity ? Infinity : REQUEST_BUDGET - spentTotal;
