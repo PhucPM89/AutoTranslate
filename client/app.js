@@ -2024,10 +2024,6 @@ function getStoryChapterNumber(index) {
   if (isFrontmatterSection(chapter.translatedTitle || chapter.title, content)) {
     return null;
   }
-  const extractedNum = extractStoryChapterNumber(chapter.translatedTitle || chapter.title);
-  if (Number.isInteger(extractedNum) && extractedNum > 0) {
-    return extractedNum;
-  }
   const offset = getFrontmatterOffset();
   return Math.max(1, index - offset + 1);
 }
@@ -4321,13 +4317,16 @@ function escapeHtml(str) {
 function syncChapterUiTitle(index) {
   const documentLabel = displayChapterTitle(index);
   els.paperTitle.textContent = documentLabel;
-  const chapterLabel = `${documentLabel} · ${index + 1} / ${state.chapters.length}`;
+  const storyNum = getStoryChapterNumber(index);
+  const totalStory = getTotalStoryChapters();
+  const chapterLabel = storyNum !== null
+    ? `${documentLabel} · ${storyNum} / ${totalStory}`
+    : `${documentLabel} · Phần mở đầu`;
   els.chapterCounter.textContent = chapterLabel;
   els.bottomChapterCounter.textContent = chapterLabel;
 
   const itemEl = els.chapterList?.querySelector(`.document-item[data-index="${index}"] span:not(.document-index)`);
   if (itemEl) itemEl.textContent = documentLabel;
-
 }
 
 function cleanBookId(rawId) {
