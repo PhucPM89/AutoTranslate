@@ -3529,7 +3529,8 @@ body:not(.dark) .theme-moon {
   font-family: var(--font-read, "Literata", "Lora", "Be Vietnam Pro", sans-serif);
   font-size: var(--content-font-size, 20px);
   line-height: var(--reader-line-height, 1.95);
-  letter-spacing: var(--reader-letter-spacing, 0.012em);
+  letter-spacing: 0;
+  word-spacing: normal;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   font-feature-settings: "kern" 1, "liga" 1;
@@ -3542,11 +3543,14 @@ body:not(.dark) .theme-moon {
   margin-top: 0;
   margin-bottom: var(--reader-par-spacing, 1.75em);
   line-height: var(--reader-line-height, 1.95);
-  letter-spacing: var(--reader-letter-spacing, 0.012em);
-  text-align: justify;
-  text-justify: inter-word;
-  word-break: break-word;
-  padding: 4px 8px;
+  letter-spacing: 0;
+  word-spacing: normal;
+  text-align: left;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+  word-break: normal;
+  hyphens: none;
+  padding: 4px 0;
   border-radius: 6px;
   transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -10830,8 +10834,9 @@ body.zen-mode .document-paper {
 
 .document-text p {
   margin: 0 0 1.05em;
-  /* Slightly looser tracking helps Vietnamese diacritics breathe. */
-  letter-spacing: 0.003em;
+  letter-spacing: 0;
+  word-spacing: normal;
+  text-align: left;
 }
 
 /* First paragraph of a chapter gets a quiet lead-in, no jarring drop cap. */

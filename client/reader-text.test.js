@@ -13,6 +13,14 @@ test("normalizeReaderText adds professional spacing after punctuation and quotes
   );
 });
 
+test("normalizeReaderText trims spaces inside quotes without breaking Vietnamese words", () => {
+  const input = 'Anh nói: "  Đừng sợ ! "Tôi gật đầu."Đi thôi!"nàng đáp.Tiếng gió rít lên!Lạnh quá?Đúng vậy.';
+  assert.equal(
+    normalizeReaderText(input),
+    'Anh nói: "Đừng sợ!" Tôi gật đầu. "Đi thôi!" nàng đáp. Tiếng gió rít lên! Lạnh quá? Đúng vậy.'
+  );
+});
+
 test("splitReaderParagraphs preserves explicit breaks and splits very long stuck paragraphs", () => {
   const input = [
     "Đoạn một.Rất ngắn.",
