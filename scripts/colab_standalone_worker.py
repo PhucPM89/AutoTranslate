@@ -689,9 +689,24 @@ def run_translation_loop():
 
         pending, completed_count, approved_count, gemini_count = [], 0, 0, 0
         review_candidates = []
-        for chapter in chapters:
+        for audit_position, chapter in enumerate(chapters, 1):
             number = chapter_number(chapter)
             if number is None:
+                continue
+            # A clean force-retranslation campaign already declares pending
+            # chapters authoritative.  Reading both published + draft for all
+            # 2,681 chapters adds over 5,000 sequential R2 requests before ch 1
+            # can start.  Completed checkpoints still take the full audit path
+            # below so resume and semantic queue recovery remain correct.
+            if force_retranslate_all and chapter.get("status") != "completed":
+                chapter.update({"status": "pending", "attempts": 0, "lastError": "", "nextAttemptAt": 0})
+                pending.append(chapter)
+                if audit_position % 500 == 0 or audit_position == len(chapters):
+                    print(
+                        f"[Fast audit] {book_id}: {audit_position}/{len(chapters)} chương pending; "
+                        "bỏ qua GET bản dịch cũ.",
+                        flush=True,
+                    )
                 continue
             published_document = r2_get_json(f"books/{book_id}/r{revision}/ch/{number}.json")
             draft_document = r2_get_json(f"drafts/{book_id}/r{revision}/ch/{number}.json")
