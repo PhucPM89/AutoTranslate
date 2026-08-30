@@ -4,7 +4,7 @@ name: Translation worker
 # Focuses 100% capacity on completing one novel at a time before advancing.
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "*/30 * * * *"
   push:
     branches:
       - main
@@ -20,7 +20,7 @@ on:
       budget:
         description: "Số lượt gọi AI tối đa lượt này"
         required: false
-        default: "5000"
+        default: "10000"
       replace_current:
         description: "Hủy lượt đang chạy để áp dụng ngay lựa chọn ưu tiên mới"
         required: false
@@ -28,12 +28,13 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 jobs:
   translate:
     name: Focused Sequential Novel Translator
     runs-on: ubuntu-latest
-    timeout-minutes: 18
+    timeout-minutes: 130
     concurrency:
       group: novel-pipeline-storage-writes
       # Scheduled/crawler runs wait normally. Only an explicit focus change from
@@ -62,7 +63,7 @@ jobs:
       TRANSLATE_MINUTE_QUOTA_RECOVERY_MS: "15000"
       TRANSLATE_SPACING_MS: ${{ vars.TRANSLATE_SPACING_MS || '500' }}
       TRANSLATE_BOOK_INPUT: ${{ inputs.book || '' }}
-      TRANSLATE_BUDGET_INPUT: ${{ inputs.budget || '5000' }}
+      TRANSLATE_BUDGET_INPUT: ${{ inputs.budget || '10000' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -81,7 +82,15 @@ jobs:
         # quoted environment variables keeps shell metacharacters as data.
         run: |
           node scripts/translate-worker.js \
-            --minutes 14 \
+            --minutes 115 \
             --budget "$TRANSLATE_BUDGET_INPUT" \
             --batch-size 1 \
             --book "$TRANSLATE_BOOK_INPUT"
+
+      - name: Auto-relay next translation session
+        if: always() && !cancelled()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Triggering next relay session to eliminate idle gap..."
+          gh workflow run "Translation worker" --repo "${{ github.repository }}" --ref main || echo "Relay dispatch skipped."
