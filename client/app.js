@@ -2215,7 +2215,7 @@ function preloadNextChapter(nextIndex) {
   const nextChapter = state.chapters[nextIndex];
   if (state.mode === "cdn" && state.cdnTemplate && nextChapter) {
     const url = chapterUrlFor({ bookId: bookIdFromState(), revision: revisionFromState(), chapterUrlTemplate: state.cdnTemplate }, nextChapter.chapterNumber);
-    fetch(readerContentUrl(url))
+    fetchCdnOrProxy(url)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.content && data.translationStatus === "completed") {
@@ -4022,17 +4022,51 @@ function readerContentUrl(url) {
   }
 }
 
+function readerContentProxyUrl(url) {
+  try {
+    const parsed = new URL(url, typeof window !== "undefined" ? window.location.origin : "https://tram-chu.online");
+    const cdn = new URL(CDN_BASE);
+    if (parsed.origin === cdn.origin || parsed.pathname.startsWith("/books/") || parsed.pathname.startsWith("/catalog/")) {
+      const key = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
+      return `/api/reader/content?key=${encodeURIComponent(key)}`;
+    }
+  } catch {}
+  return "";
+}
+
+async function fetchCdnOrProxy(url, options) {
+  const primaryUrl = readerContentUrl(url);
+  try {
+    const response = await fetch(primaryUrl, options);
+    if (response.ok) return response;
+  } catch {}
+
+  // Fallback 1: Direct Cloudflare Worker R2 proxy (reads directly from R2 binding, bypasses stale edge 404s)
+  const proxy = readerContentProxyUrl(url);
+  if (proxy && proxy !== primaryUrl) {
+    try {
+      const response = await fetch(proxy, options);
+      if (response.ok) return response;
+    } catch {}
+  }
+
+  // Fallback 2: Cache-bust query against CDN
+  try {
+    const separator = url.includes("?") ? "&" : "?";
+    const bustUrl = `${url}${separator}_t=${Date.now()}`;
+    const response = await fetch(readerContentUrl(bustUrl), options);
+    if (response.ok) return response;
+  } catch {}
+
+  throw new Error("Không tải được nội dung từ CDN.");
+}
+
 async function fetchBookIndex(bookId) {
   const clean = cleanBookId(bookId);
   if (!clean) return null;
   const cdnIndexUrl = cdnUrl(`books/${clean}/index.json`);
-  const url = readerContentUrl(cdnIndexUrl);
   try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      console.error(`fetchBookIndex failed: HTTP ${response.status} from ${cdnIndexUrl}`);
-      return null;
-    }
+    const response = await fetchCdnOrProxy(cdnIndexUrl);
     const index = await response.json();
     if (!index || !Array.isArray(index.chapters) || !index.chapters.length) {
       console.error(`fetchBookIndex invalid chapters payload from ${cdnIndexUrl}:`, index);
@@ -4110,8 +4144,7 @@ async function loadCdnChapter(index, force = false) {
     const chapterUrl = chapterUrlFor({ bookId: bookIdFromState(), revision: revisionFromState(), chapterUrlTemplate: state.cdnTemplate }, chapter.chapterNumber);
     // Revisioned chapter URLs are immutable. Let the browser and Cloudflare use
     // that cache; a timestamp query here turned every navigation into a cache miss.
-    const response = await fetch(readerContentUrl(chapterUrl), force ? { cache: "reload" } : undefined);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const response = await fetchCdnOrProxy(chapterUrl, force ? { cache: "reload" } : undefined);
     const document_ = await response.json();
     if (index !== state.currentIndex) return;
     chapter.text = String(document_.content || "");
