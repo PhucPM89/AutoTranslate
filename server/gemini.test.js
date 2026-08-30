@@ -204,9 +204,9 @@ test("concurrent work reserves different starting keys before awaiting a respons
 
 test("translation output budget follows source size instead of repeated prompt size", () => {
   assert.equal(outputTokenBudget("中".repeat(100)), 1200);
-  assert.equal(outputTokenBudget("中".repeat(800)), 2400);
-  assert.equal(outputTokenBudget("中".repeat(2000)), 6000);
-  assert.equal(outputTokenBudget("中".repeat(10000)), 16384);
+  assert.equal(outputTokenBudget("中".repeat(800)), 1600);
+  assert.equal(outputTokenBudget("中".repeat(2000)), 4000);
+  assert.equal(outputTokenBudget("中".repeat(10000)), 4096);
 });
 
 test("explicit cloud provider ignores a stale Hachimi environment setting", async () => {

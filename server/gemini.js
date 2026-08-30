@@ -832,7 +832,12 @@ function outputTokenBudget(sourceText) {
   // Vietnamese output is usually longer than Chinese source, but basing the
   // budget on the full prompt also charges the repeated instruction block as if
   // it were output. That inflated every reservation and exhausted shared TPD.
-  return Math.min(16384, Math.max(1200, Math.ceil(String(sourceText || "").length * 3)));
+  // Groq Free counts the requested completion budget toward its 8K TPM gate.
+  // A 16K model limit is therefore not a usable per-request budget: a normal
+  // 1,800-character chunk plus a 5,400-token reservation is rejected before
+  // generation starts. 4,096 remains comfortably above real Vietnamese output
+  // for one chunk while keeping prompt + completion below the free-tier gate.
+  return Math.min(4096, Math.max(1200, Math.ceil(String(sourceText || "").length * 2)));
 }
 
 function reserveKeyOrder(keyList) {
@@ -923,7 +928,7 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
-      const dynamicMaxTokens = Math.min(16384, Math.max(1200, Math.ceil(prompt.length * 1.4)));
+      const dynamicMaxTokens = Math.min(4096, Math.max(1200, Math.ceil(prompt.length * 1.1)));
       const maxTokens = generationConfig.maxTokens || dynamicMaxTokens;
 
       const bodyPayload = {
