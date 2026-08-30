@@ -60,6 +60,7 @@ test("Colab workers invalidate bad v2 drafts and perform guided Qwen refinement"
   assert.match(hachimi, /TRANSLATION_VERSION = "hachimi-quality-v3"/);
   assert.match(hachimi, /broken_name_lock/);
   assert.match(hachimi, /chờ Qwen QA/);
+  assert.match(hachimi, /entry\.get\("translationVersion"\) == TRANSLATION_VERSION/);
   assert.match(qwen, /REVIEW_VERSION = "semantic-v3"/);
   assert.match(qwen, /QA_MAX_REWRITE_PASSES/);
   assert.match(qwen, /Semantic repair/);

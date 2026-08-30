@@ -133,6 +133,15 @@ def merge_semantic_review_queue(queue, book_id, revision, candidates):
     document = queue if isinstance(queue, dict) else {}
     version_changed = bool(document.get("reviewVersion")) and document.get("reviewVersion") != SEMANTIC_REVIEW_VERSION
     entries = document.get("entries") if isinstance(document.get("entries"), list) else []
+    if version_changed:
+        # Do not let Qwen race ahead on corrupt drafts from the retired
+        # campaign. Published approvals remain durable until their new v3
+        # draft arrives with a different fingerprint.
+        entries = [
+            entry for entry in entries
+            if entry.get("state") in ("approved", "skipped_gemini")
+            or entry.get("translationVersion") == TRANSLATION_VERSION
+        ]
     by_number = {
         chapter_number(entry): dict(entry)
         for entry in entries
