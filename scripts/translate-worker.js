@@ -39,6 +39,7 @@ const {
 } = require("../server/ingest/translation-queue");
 const {
   translateText,
+  translateMetadata,
   translateBatchChapters,
   parseApiKeys,
   getKeyPoolStats,
@@ -194,12 +195,17 @@ async function main() {
     process.env.GEMINI_API_KEY,
     process.env.GROQ_API_KEYS,
     process.env.GROQ_API_KEY,
+    process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN
+      ? `cfai:${process.env.CLOUDFLARE_ACCOUNT_ID}:${process.env.CLOUDFLARE_API_TOKEN}`
+      : "",
   ].filter(Boolean).flatMap(k => parseApiKeys(k));
 
   const isHachimi = process.env.TRANSLATION_PROVIDER === "hachimi" || Boolean(process.env.HACHIMI_API_URL);
 
-  const selectedKeys = keyList.length > 0 ? keyList : envKeys;
-  const allUniqueKeys = Array.from(new Set(selectedKeys))
+  // R2 is the shared key registry, while environment keys are the deployment
+  // bootstrap/fallback. Merge both: choosing one source made a newly-added
+  // GROQ_API_KEY invisible whenever R2 already contained Gemini keys.
+  const allUniqueKeys = Array.from(new Set([...keyList, ...envKeys]))
     .filter(Boolean)
     .sort((a, b) => translationKeyPriority(a) - translationKeyPriority(b));
   if (!allUniqueKeys.length && !isHachimi) {
@@ -379,6 +385,7 @@ async function main() {
       console.log(`===============================================================`);
 
       const originalCache = new Map();
+      const chapterTranslationMeta = new Map();
       const loadOriginal = (n) => {
         if (!originalCache.has(n)) {
           originalCache.set(n, readJson(storage, originalKey(job.bookId, job.revision, n)));
@@ -409,8 +416,14 @@ async function main() {
           loadChapter: loadOriginal,
           translateChapter: async (chapter) => {
             const existing = await readJson(storage, chapterKey(job.bookId, job.revision, chapter.chapterNumber));
-            if (existing && existing.translationStatus === "completed" && existing.content) {
+            if (!job.state.forceRetranslateAll && existing && existing.translationStatus === "completed" && existing.content) {
               console.log(`  ch ${chapter.chapterNumber}: đã có bản dịch trên R2, bỏ qua Groq AI`);
+              chapterTranslationMeta.set(chapter.chapterNumber, {
+                title: existing.title || chapter.title,
+                provider: existing.provider || "existing",
+                model: existing.model || "existing",
+                translationVersion: existing.translationVersion || "existing"
+              });
               return existing.content;
             }
             bookGlossary = await engine.mineAndMergeGlossary(job.bookId, [chapter.title, chapter.content]);
@@ -419,26 +432,45 @@ async function main() {
               bookTitle: bTitle,
               glossary: bookGlossary,
               engine,
-              provider: "gemini"
+              provider: "cloud"
             });
             if (!output || !output.translation) throw new Error("Groq AI không trả bản dịch.");
+            let translatedTitle = chapter.title;
+            if (/\p{Script=Han}/u.test(String(chapter.title || ""))) {
+              const titleResult = await translateMetadata({
+                title: chapter.title,
+                author: "",
+                description: ""
+              }, apiKey);
+              translatedTitle = titleResult.title || chapter.title;
+            }
+            const provider = output.providersUsed?.[0] || "cloud";
+            const model = output.modelsUsed?.[0] || "unknown";
+            chapterTranslationMeta.set(chapter.chapterNumber, {
+              title: translatedTitle,
+              provider,
+              model,
+              translationVersion: provider === "groq" ? "groq-qwen-direct-v1" : `${provider}-direct-v1`
+            });
             if (output.tokensUsed) {
               lastChapterTokens = output.tokensUsed;
             }
             return output.translation;
           },
           publishChapter: async (chapter, translation) => {
+            const meta = chapterTranslationMeta.get(chapter.chapterNumber) || {};
             await storage.put(
               chapterKey(job.bookId, job.revision, chapter.chapterNumber),
               JSON.stringify(
                 buildChapterDocument({
                   bookId: job.bookId,
                   revision: job.revision,
-                  chapter,
+                  chapter: { ...chapter, title: meta.title || chapter.title },
                   translation,
                   translationStatus: "completed",
-                  provider: "gemini",
-                  model: "gemini-3.6-flash"
+                  provider: meta.provider || "cloud",
+                  model: meta.model || "unknown",
+                  translationVersion: meta.translationVersion || "cloud-direct-v1"
                 })
               )
             );
@@ -678,12 +710,11 @@ async function main() {
 
 function translationKeyPriority(key) {
   const value = String(key || "");
-  // Gemini first: it produces the fluent sample translations and its free tier
-  // is far less rate-limited per request than Groq, whose aggressive free limits
-  // on a full-chapter chunk tripped the quota circuit and stalled every run.
-  // Groq (gsk_) is the fallback.
-  if (value.startsWith("gsk_")) return 2;
-  return 0; // Gemini (AIza / AQ.)
+  // Qwen on Groq is the primary translator. Gemini stays available as an
+  // automatic fallback when Groq is cooling down or rejects a hard chapter.
+  if (value.startsWith("gsk_")) return 0;
+  if (value.startsWith("cfai:")) return 1;
+  return 2;
 }
 
 async function listJobs(storage, onlyBook) {
@@ -862,7 +893,8 @@ module.exports = {
   ensureBookRow,
   bookOutputsNeedRefresh,
   summarizeKeyStats,
-  sanitizeStatusError
+  sanitizeStatusError,
+  translationKeyPriority
 };
 
 if (require.main === module) {

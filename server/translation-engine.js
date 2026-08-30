@@ -16,6 +16,11 @@ const TM_GLOBAL_KEY = "tm/global.json";
 
 // Default common web novel sentence patterns & terms for Translation Memory
 const DEFAULT_TM_PATTERNS = [
+  { zh: "书名", vi: "Tên truyện" },
+  { zh: "作者", vi: "Tác giả" },
+  { zh: "标签", vi: "Thể loại" },
+  { zh: "已完结", vi: "Đã hoàn thành" },
+  { zh: "简介", vi: "Giới thiệu" },
   { zh: "倒吸一口凉气", vi: "hít sâu một hơi khí lạnh" },
   { zh: "倒吸了一口凉气", vi: "hít sâu một hơi khí lạnh" },
   { zh: "冷哼一声", vi: "hừ lạnh một tiếng" },

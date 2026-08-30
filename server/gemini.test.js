@@ -10,6 +10,7 @@ const {
   exportKeyPoolState,
   importKeyPoolState,
   keyFingerprint,
+  getModelsForApiKey,
   classifyQuotaError,
   computeQuotaRecovery,
   nextPacificMidnightMs
@@ -204,7 +205,71 @@ test("concurrent work reserves different starting keys before awaiting a respons
 test("translation output budget follows source size instead of repeated prompt size", () => {
   assert.equal(outputTokenBudget("中".repeat(100)), 1200);
   assert.equal(outputTokenBudget("中".repeat(800)), 2400);
-  assert.equal(outputTokenBudget("中".repeat(2000)), 4096);
+  assert.equal(outputTokenBudget("中".repeat(2000)), 6000);
+  assert.equal(outputTokenBudget("中".repeat(10000)), 16384);
+});
+
+test("explicit cloud provider ignores a stale Hachimi environment setting", async () => {
+  const originalFetch = global.fetch;
+  const oldProvider = process.env.TRANSLATION_PROVIDER;
+  const oldUrl = process.env.HACHIMI_API_URL;
+  const vietnamese = "Đây là nội dung tiểu thuyết đã được dịch đầy đủ sang tiếng Việt, rõ ràng và tự nhiên. ".repeat(14);
+  let calledUrl = "";
+  global.fetch = async (url) => {
+    calledUrl = String(url);
+    return {
+      ok: true,
+      json: async () => ({ candidates: [{ content: { parts: [{ text: vietnamese }] } }] })
+    };
+  };
+  process.env.TRANSLATION_PROVIDER = "hachimi";
+  process.env.HACHIMI_API_URL = "https://dead-tunnel.invalid";
+  try {
+    const result = await translateText(chineseSource, "AQ.cloud-key", { provider: "cloud" });
+    assert.equal(result.translation, vietnamese.trim());
+    assert.match(calledUrl, /generativelanguage\.googleapis\.com/);
+  } finally {
+    global.fetch = originalFetch;
+    if (oldProvider === undefined) delete process.env.TRANSLATION_PROVIDER; else process.env.TRANSLATION_PROVIDER = oldProvider;
+    if (oldUrl === undefined) delete process.env.HACHIMI_API_URL; else process.env.HACHIMI_API_URL = oldUrl;
+  }
+});
+
+test("selects the current Qwen model for Groq keys and Gemini models for Gemini keys", () => {
+  const oldGroq = process.env.GROQ_MODEL;
+  const oldGemini = process.env.GEMINI_MODEL;
+  try {
+    process.env.GROQ_MODEL = "qwen/qwen3.8-27b";
+    process.env.GEMINI_MODEL = "gemini-test-model";
+    assert.deepEqual(getModelsForApiKey("gsk_test"), ["qwen/qwen3.8-27b"]);
+    assert.equal(getModelsForApiKey("AIza-test")[0], "gemini-test-model");
+  } finally {
+    if (oldGroq === undefined) delete process.env.GROQ_MODEL; else process.env.GROQ_MODEL = oldGroq;
+    if (oldGemini === undefined) delete process.env.GEMINI_MODEL; else process.env.GEMINI_MODEL = oldGemini;
+  }
+});
+
+test("uses Cloudflare Workers AI as a provider when given a cfai credential", async () => {
+  const originalFetch = global.fetch;
+  const vietnamese = "Đây là bản dịch tiếng Việt đầy đủ, tự nhiên và giữ nguyên toàn bộ nội dung của chương truyện. ".repeat(13);
+  let requestUrl = "";
+  global.fetch = async (url) => {
+    requestUrl = String(url);
+    return {
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({ success: true, result: { response: vietnamese } })
+    };
+  };
+  try {
+    const result = await translateText(chineseSource, "cfai:account-id:token-value");
+    assert.equal(result.translation, vietnamese.trim());
+    assert.deepEqual(result.providersUsed, ["cloudflare-workers-ai"]);
+    assert.match(requestUrl, /accounts\/account-id\/ai\/run\/@cf\/zai-org\/glm-4\.7-flash/);
+  } finally {
+    global.fetch = originalFetch;
+  }
 });
 
 test("one chunk tries only a bounded slice of the key pool", async () => {

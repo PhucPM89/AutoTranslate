@@ -18,12 +18,22 @@ const QUOTA_SAFETY_MS = Math.max(10_000, Number(process.env.TRANSLATE_QUOTA_SAFE
 
 const defaultEngine = createTranslationEngine();
 
-function getModelsForApiKey() {
-  const primary = process.env.GEMINI_MODEL || "gemini-3.6-flash";
+function getModelsForApiKey(apiKey) {
+  const isGroq = String(apiKey || "").startsWith("gsk_");
+  const isCloudflare = String(apiKey || "").startsWith("cfai:");
+  const primary = isGroq
+    ? (process.env.GROQ_MODEL || "qwen/qwen3.8-27b")
+    : isCloudflare
+      ? (process.env.CLOUDFLARE_AI_MODEL || "@cf/zai-org/glm-4.7-flash")
+    : (process.env.GEMINI_MODEL || "gemini-3.6-flash");
   // Keep a genuinely different fallback. Repeating the primary model made a
   // quality rejection terminal even though this loop is designed to retry the
   // same key with another model.
-  const fallbacks = parseCsv(process.env.GEMINI_FALLBACK_MODELS || "gemini-flash-latest");
+  const fallbacks = parseCsv(isGroq
+    ? (process.env.GROQ_FALLBACK_MODELS || "")
+    : isCloudflare
+      ? (process.env.CLOUDFLARE_AI_FALLBACK_MODELS || "")
+    : (process.env.GEMINI_FALLBACK_MODELS || "gemini-flash-latest"));
   return [primary, ...fallbacks].filter((m, i, l) => m && l.indexOf(m) === i);
 }
 
@@ -80,11 +90,23 @@ function hasHan(value) {
   return /\p{Script=Han}/u.test(String(value || ""));
 }
 
+function providerPriority(apiKey) {
+  const value = String(apiKey || "");
+  if (value.startsWith("gsk_")) return 0;
+  if (value.startsWith("cfai:")) return 1;
+  return 2;
+}
+
 function getActiveKeys(apiKeys) {
   const parsed = parseApiKeys(apiKeys);
   if (parsed.length) return parsed;
 
   const fromEnv = [
+    process.env.GROQ_API_KEYS,
+    process.env.GROQ_API_KEY,
+    process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN
+      ? `cfai:${process.env.CLOUDFLARE_ACCOUNT_ID}:${process.env.CLOUDFLARE_API_TOKEN}`
+      : "",
     process.env.GEMINI_API_KEYS,
     process.env.GEMINI_API_KEY
   ].filter(Boolean).join(",");
@@ -94,8 +116,9 @@ function getActiveKeys(apiKeys) {
 const { translateTextWithHachimi } = require("./hachimi");
 
 async function translateText(text, apiKeys, options = {}) {
+  const forceCloud = options.provider === "cloud" || options.forceCloud || options.forceGemini;
   const isHachimi =
-    options.provider !== "gemini" &&
+    !forceCloud && options.provider !== "gemini" &&
     (options.provider === "hachimi" ||
       (process.env.TRANSLATION_PROVIDER === "hachimi" && !options.forceGemini && options.provider !== "gemini") ||
       (Boolean(process.env.HACHIMI_API_URL) && !apiKeys && !process.env.GEMINI_API_KEY));
@@ -153,12 +176,14 @@ async function translateText(text, apiKeys, options = {}) {
   const rawTranslation = translatedChunks.join("\n\n").trim();
   const translation = engine.postProcessTranslation(rawTranslation, glossary);
   const modelsUsed = Array.from(new Set(chunkResults.map((result) => result.model)));
+  const providersUsed = Array.from(new Set(chunkResults.map((result) => result.provider).filter(Boolean)));
   const totalTokens = chunkResults.reduce((sum, result) => sum + (result.usage?.total_tokens || 0), 0);
 
   return {
     translation,
     chunkCount: chunks.length,
     modelsUsed,
+    providersUsed,
     tokensUsed: totalTokens,
     elapsedMs: Date.now() - startedAt
   };
@@ -295,7 +320,7 @@ async function translateMetadata(metadata, apiKey) {
   for (const key of keyList) {
     const models = getModelsForApiKey(key);
     for (const model of models) {
-      const formats = key.startsWith("gsk_") ? ["text"] : ["json", "text"];
+      const formats = ["json", "text"];
       for (const format of formats) {
         try {
           const result = await translateChunkWithModel(key, model, prompt, { responseFormat: format, temperature: 0.2 });
@@ -305,7 +330,8 @@ async function translateMetadata(metadata, apiKey) {
             title: cleanTranslatedTitle(cleanMetadataField(translated.title, 120)),
             author: cleanMetadataField(translated.author, 100),
             description: cleanMetadataField(translated.description, 3000),
-            model: result.model
+            model: result.model,
+            provider: result.provider
           };
         } catch (error) {
           lastError = error;
@@ -604,7 +630,9 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
   const keyOrder = reserveKeyOrder(keyList);
 
   // Separate keys into: ready (not on cooldown) vs on cooldown
-  const readyKeys = keyOrder.filter(({ key }) => getKeyHealth(key).cooldownUntil <= now);
+  const readyKeys = keyOrder
+    .filter(({ key }) => getKeyHealth(key).cooldownUntil <= now)
+    .sort((a, b) => providerPriority(a.key) - providerPriority(b.key));
   const cooldownKeys = keyOrder.filter(({ key }) => getKeyHealth(key).cooldownUntil > now);
 
   // Chain ready keys first, followed by cooldown keys in order of earliest cooldown
@@ -653,7 +681,7 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
         const quality = assessTranslation(text, processedText);
         if (quality.acceptable) {
           markKeySuccess(apiKey, result.usage?.total_tokens || 0);
-          return { text: processedText, model: result.model, usage: result.usage };
+          return { text: processedText, model: result.model, provider: result.provider, usage: result.usage };
         }
 
         const error = new Error(`Bản dịch chưa đạt yêu cầu (${quality.reason}).`);
@@ -741,12 +769,14 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
 // that the translation worker has already marked as exhausted.
 async function generateStructuredText(prompt, apiKeys, generationConfig = {}) {
   const keyList = getActiveKeys(apiKeys);
-  if (!keyList.length) throw new Error("Không có Gemini API key cho semantic review.");
+  if (!keyList.length) throw new Error("Không có API key cloud cho semantic review.");
 
   const now = Date.now();
   const ordered = reserveKeyOrder(keyList)
-    .filter(({ key }) => !String(key).startsWith("gsk_"))
-    .sort((a, b) => getKeyHealth(a.key).cooldownUntil - getKeyHealth(b.key).cooldownUntil);
+    .sort((a, b) => {
+      const readiness = getKeyHealth(a.key).cooldownUntil - getKeyHealth(b.key).cooldownUntil;
+      return readiness || providerPriority(a.key) - providerPriority(b.key);
+    });
   let lastError = null;
   let triedKeys = 0;
 
@@ -780,7 +810,7 @@ async function generateStructuredText(prompt, apiKeys, generationConfig = {}) {
     }
   }
 
-  const error = new Error(lastError?.message || "Không còn Gemini API key sẵn sàng cho semantic review.");
+  const error = new Error(lastError?.message || "Không còn API key cloud sẵn sàng cho semantic review.");
   error.code = lastError?.code || "semantic_key_pool_exhausted";
   error.status = lastError?.status;
   throw error;
@@ -802,7 +832,7 @@ function outputTokenBudget(sourceText) {
   // Vietnamese output is usually longer than Chinese source, but basing the
   // budget on the full prompt also charges the repeated instruction block as if
   // it were output. That inflated every reservation and exhausted shared TPD.
-  return Math.min(4096, Math.max(1200, Math.ceil(String(sourceText || "").length * 3)));
+  return Math.min(16384, Math.max(1200, Math.ceil(String(sourceText || "").length * 3)));
 }
 
 function reserveKeyOrder(keyList) {
@@ -818,11 +848,70 @@ function reserveKeyOrder(keyList) {
 
 async function translateChunkWithModel(apiKey, model, prompt, generationConfig = {}) {
   const isGroq = apiKey.startsWith("gsk_");
+  const isCloudflare = apiKey.startsWith("cfai:");
 
   if (isGroq) {
     return translateWithGroq(apiKey, model, prompt, generationConfig);
+  } else if (isCloudflare) {
+    return translateWithCloudflare(apiKey, model, prompt, generationConfig);
   } else {
     return translateWithGemini(apiKey, model, prompt, generationConfig);
+  }
+}
+
+async function translateWithCloudflare(apiKey, model, prompt, generationConfig = {}) {
+  const match = String(apiKey || "").match(/^cfai:([^:]+):(.+)$/);
+  if (!match) {
+    const error = new Error("Cloudflare Workers AI credential không hợp lệ.");
+    error.status = 401;
+    throw error;
+  }
+  const [, accountId, token] = match;
+  const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/run/${model}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        messages: [
+          { role: "system", content: "Bạn là dịch giả văn học Trung - Việt. Dịch đầy đủ, tự nhiên, chuẩn Hán-Việt; không tóm tắt và không giải thích." },
+          { role: "user", content: prompt }
+        ],
+        temperature: generationConfig.temperature ?? 0.2,
+        max_tokens: generationConfig.maxTokens || 16384
+      })
+    });
+    const data = await response.json();
+    if (!response.ok || data?.success === false) {
+      const message = data?.errors?.[0]?.message || data?.error?.message || "Cloudflare Workers AI trả về lỗi.";
+      const error = new Error(`${message} (Status: ${response.status})`);
+      error.status = response.status;
+      error.model = model;
+      Object.assign(error, parseRateLimitHeaders(response.headers));
+      throw error;
+    }
+    const raw = data?.result?.response ?? data?.result?.choices?.[0]?.message?.content ?? "";
+    const text = stripMarkdown(stripThinkTags(String(raw)));
+    if (!text) {
+      const error = new Error("Cloudflare Workers AI trả về nội dung rỗng.");
+      error.status = 502;
+      error.model = model;
+      throw error;
+    }
+    return {
+      text: text.trim(),
+      model,
+      provider: "cloudflare-workers-ai",
+      usage: data?.result?.usage || null
+    };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -834,7 +923,7 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
-      const dynamicMaxTokens = Math.min(4096, Math.max(1200, Math.ceil(prompt.length * 1.4)));
+      const dynamicMaxTokens = Math.min(16384, Math.max(1200, Math.ceil(prompt.length * 1.4)));
       const maxTokens = generationConfig.maxTokens || dynamicMaxTokens;
 
       const bodyPayload = {
@@ -908,6 +997,7 @@ async function translateWithGroq(apiKey, model, prompt, generationConfig = {}) {
       return {
         text: text.trim(),
         model,
+        provider: "groq",
         usage: data?.usage || null
       };
     } finally {
@@ -994,7 +1084,7 @@ async function translateWithGemini(apiKey, model, prompt, generationConfig = {})
 
       let text = data?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim() || "";
       text = stripMarkdown(text);
-      return { text, model, usage: data?.usageMetadata || null };
+      return { text, model, provider: "gemini", usage: data?.usageMetadata || null };
     } finally {
       clearTimeout(timeout);
     }
@@ -1260,5 +1350,6 @@ module.exports = {
   exportKeyPoolState,
   importKeyPoolState,
   keyFingerprint,
-  cleanTranslatedTitle
+  cleanTranslatedTitle,
+  getModelsForApiKey
 };

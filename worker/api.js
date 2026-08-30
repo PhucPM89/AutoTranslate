@@ -1175,7 +1175,7 @@ async function handleAdminKeys({ request, env }) {
   const defaultModel = isGeminiOnly
     ? (env.GEMINI_MODEL || "gemini-3.6-flash")
     : isGroqOnly
-      ? (env.GROQ_MODEL || "qwen/qwen3.6-27b")
+      ? (env.GROQ_MODEL || "qwen/qwen3.8-27b")
       : (env.GEMINI_MODEL || env.GROQ_MODEL || env.OPENROUTER_MODEL || "gemini-3.6-flash");
   const model = defaultModel;
   const fallbackModels = env.GEMINI_FALLBACK_MODELS || env.GROQ_FALLBACK_MODELS || env.OPENROUTER_FALLBACK_MODELS || "gemini-3.6-flash";
@@ -1265,7 +1265,7 @@ async function handleAdminKeys({ request, env }) {
               Authorization: `Bearer ${key}`
             },
             body: JSON.stringify({
-              model: env.GROQ_MODEL || "qwen/qwen3.6-27b",
+              model: env.GROQ_MODEL || "qwen/qwen3.8-27b",
               messages: [{ role: "user", content: "hi" }],
               max_tokens: 1
             }),
