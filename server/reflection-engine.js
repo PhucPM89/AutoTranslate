@@ -29,7 +29,14 @@ const STIFF_REFLECTION_RULES = [
   { pattern: /nghĩ không ra/gi, replacement: "không hiểu nổi" },
   { pattern: /nhìn không thấu/gi, replacement: "nhìn không thấu" },
   { pattern: /bị sợ nhảy dựng/gi, replacement: "giật nảy mình" },
-  { pattern: /bị sợ hết hồn/gi, replacement: "hồn vía lên mây" }
+  { pattern: /canh của (?:ta|tôi) (?:đã )?(?:bị )?sợ (?:mất|hết)(?: rồi)?/gi, replacement: "lá gan của tôi đã bị dọa cho bay sạch rồi" },
+  { pattern: /canh của (?:ta|tôi)/gi, replacement: "lá gan của tôi" },
+  { pattern: /bị sợ chết(?:\s+không được)?/gi, replacement: "sợ chết khiếp" },
+  { pattern: /bị sợ mất/gi, replacement: "bị dọa cho bay mất" },
+  { pattern: /bị sợ hết hồn/gi, replacement: "hồn vía lên mây" },
+  { pattern: /hách phá đảm/gi, replacement: "sợ vỡ mật" },
+  { pattern: /tát thối tựu bào/gi, replacement: "co giò bỏ chạy" },
+  { pattern: /thử thử thân thủ/gi, replacement: "thử trổ tài" }
 ];
 
 /**

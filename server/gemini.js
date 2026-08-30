@@ -211,7 +211,7 @@ async function translateBatchChapters(chapters, apiKeys, options = {}) {
   parts.push("Yêu cầu bắt buộc:");
   parts.push("- Diễn đạt thuần Việt 100%, tự nhiên, không dịch bám từ hay giữ nguyên cấu trúc ngữ pháp tiếng Trung.");
   parts.push("- Chỉ chuyển âm Hán-Việt cho tên người, địa danh, môn phái, cảnh giới, công pháp và thuật ngữ thực sự.");
-  parts.push("- Đại từ, động từ, liên từ và lời kể đời thường phải dịch nghĩa thuần Việt (ví dụ: 'trán của mình' thay vì 'tự kỷ đích ấn đường', 'sải bước' thay vì 'mai bộ', 'mở cửa' thay vì 'đả khai môn', 'ngón tay' thay vì 'thủ chỉ').");
+  parts.push("- Đại từ, động từ, liên từ và khẩu ngữ đời thường phải dịch nghĩa thuần Việt (ví dụ: 'trán của mình' thay vì 'tự kỷ đích ấn đường', 'sải bước' thay vì 'mai bộ', 'mở cửa' thay vì 'đả khai môn', 'ngón tay' thay vì 'thủ chỉ', 'lá gan của tôi đã bị dọa cho bay sạch rồi' thay vì 'đảm tử bị hách một liễu / canh của ta...').");
   parts.push("- Tuyệt đối không dùng Pinyin hoặc chữ Hán.");
   parts.push("- Giữ nguyên cấu trúc các phân tách chương dạng: === CHAPTER_START_{n} === và === CHAPTER_END_{n} ===");
   parts.push("");
