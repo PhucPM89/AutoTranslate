@@ -10,6 +10,9 @@
     if ("caches" in window) {
       caches.keys().then((names) => Promise.all(names.map((n) => caches.delete(n)))).catch(() => {});
     }
+    if ("indexedDB" in window) {
+      try { indexedDB.deleteDatabase("epubTranslator.cache"); } catch (_) {}
+    }
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.getRegistrations().then((registrations) => {
         for (const reg of registrations) {
