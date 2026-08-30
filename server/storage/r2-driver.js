@@ -130,6 +130,32 @@ function createR2Storage(env = process.env) {
       return true;
     },
 
+    async removeMany(keys) {
+      const unique = [...new Set((keys || []).filter(Boolean))];
+      let removed = 0;
+      for (let offset = 0; offset < unique.length; offset += 1000) {
+        const batch = unique.slice(offset, offset + 1000);
+        const xml = `<?xml version="1.0" encoding="UTF-8"?><Delete>${batch
+          .map((key) => `<Object><Key>${escapeXml(key)}</Key></Object>`)
+          .join("")}<Quiet>true</Quiet></Delete>`;
+        const body = Buffer.from(xml, "utf8");
+        const response = await send("POST", "", {
+          query: "?delete",
+          body,
+          headers: {
+            "content-type": "application/xml",
+            "content-md5": crypto.createHash("md5").update(body).digest("base64")
+          }
+        });
+        const responseText = await response.text();
+        if (!response.ok || /<Error>/i.test(responseText)) {
+          throw new Error(`R2 DELETE batch lỗi HTTP ${response.status}: ${responseText.slice(0, 300)}`);
+        }
+        removed += batch.length;
+      }
+      return removed;
+    },
+
     publicUrl(key) {
       if (!publicBase) throw new Error("R2_PUBLIC_BASE_URL chưa được cấu hình.");
       return `${publicBase}/${key}`;
@@ -204,6 +230,15 @@ function lowerKeys(object) {
 
 function decodeXml(value) {
   return String(value).replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"');
+}
+
+function escapeXml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 }
 
 async function safeText(response) {

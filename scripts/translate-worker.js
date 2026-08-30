@@ -195,9 +195,6 @@ async function main() {
     process.env.GEMINI_API_KEY,
     process.env.GROQ_API_KEYS,
     process.env.GROQ_API_KEY,
-    process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN
-      ? `cfai:${process.env.CLOUDFLARE_ACCOUNT_ID}:${process.env.CLOUDFLARE_API_TOKEN}`
-      : "",
   ].filter(Boolean).flatMap(k => parseApiKeys(k));
 
   const isHachimi = process.env.TRANSLATION_PROVIDER === "hachimi" || Boolean(process.env.HACHIMI_API_URL);
@@ -708,8 +705,7 @@ function translationKeyPriority(key) {
   // Qwen on Groq is the primary translator. Gemini stays available as an
   // automatic fallback when Groq is cooling down or rejects a hard chapter.
   if (value.startsWith("gsk_")) return 0;
-  if (value.startsWith("cfai:")) return 1;
-  return 2;
+  return 1;
 }
 
 async function listJobs(storage, onlyBook) {

@@ -20,19 +20,14 @@ const defaultEngine = createTranslationEngine();
 
 function getModelsForApiKey(apiKey) {
   const isGroq = String(apiKey || "").startsWith("gsk_");
-  const isCloudflare = String(apiKey || "").startsWith("cfai:");
   const primary = isGroq
     ? (process.env.GROQ_MODEL || "qwen/qwen3.8-27b")
-    : isCloudflare
-      ? (process.env.CLOUDFLARE_AI_MODEL || "@cf/zai-org/glm-4.7-flash")
     : (process.env.GEMINI_MODEL || "gemini-3.6-flash");
   // Keep a genuinely different fallback. Repeating the primary model made a
   // quality rejection terminal even though this loop is designed to retry the
   // same key with another model.
   const fallbacks = parseCsv(isGroq
     ? (process.env.GROQ_FALLBACK_MODELS || "")
-    : isCloudflare
-      ? (process.env.CLOUDFLARE_AI_FALLBACK_MODELS || "")
     : (process.env.GEMINI_FALLBACK_MODELS || "gemini-flash-latest"));
   return [primary, ...fallbacks].filter((m, i, l) => m && l.indexOf(m) === i);
 }
@@ -93,8 +88,7 @@ function hasHan(value) {
 function providerPriority(apiKey) {
   const value = String(apiKey || "");
   if (value.startsWith("gsk_")) return 0;
-  if (value.startsWith("cfai:")) return 1;
-  return 2;
+  return 1;
 }
 
 function prioritizeProviderFallback(entries) {
@@ -118,9 +112,6 @@ function getActiveKeys(apiKeys) {
   const fromEnv = [
     process.env.GROQ_API_KEYS,
     process.env.GROQ_API_KEY,
-    process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN
-      ? `cfai:${process.env.CLOUDFLARE_ACCOUNT_ID}:${process.env.CLOUDFLARE_API_TOKEN}`
-      : "",
     process.env.GEMINI_API_KEYS,
     process.env.GEMINI_API_KEY
   ].filter(Boolean).join(",");
@@ -866,70 +857,11 @@ function reserveKeyOrder(keyList) {
 
 async function translateChunkWithModel(apiKey, model, prompt, generationConfig = {}) {
   const isGroq = apiKey.startsWith("gsk_");
-  const isCloudflare = apiKey.startsWith("cfai:");
 
   if (isGroq) {
     return translateWithGroq(apiKey, model, prompt, generationConfig);
-  } else if (isCloudflare) {
-    return translateWithCloudflare(apiKey, model, prompt, generationConfig);
   } else {
     return translateWithGemini(apiKey, model, prompt, generationConfig);
-  }
-}
-
-async function translateWithCloudflare(apiKey, model, prompt, generationConfig = {}) {
-  const match = String(apiKey || "").match(/^cfai:([^:]+):(.+)$/);
-  if (!match) {
-    const error = new Error("Cloudflare Workers AI credential không hợp lệ.");
-    error.status = 401;
-    throw error;
-  }
-  const [, accountId, token] = match;
-  const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/run/${model}`;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      signal: controller.signal,
-      body: JSON.stringify({
-        messages: [
-          { role: "system", content: "Bạn là dịch giả văn học Trung - Việt. Dịch đầy đủ, tự nhiên, chuẩn Hán-Việt; không tóm tắt và không giải thích." },
-          { role: "user", content: prompt }
-        ],
-        temperature: generationConfig.temperature ?? 0.2,
-        max_tokens: generationConfig.maxTokens || 16384
-      })
-    });
-    const data = await response.json();
-    if (!response.ok || data?.success === false) {
-      const message = data?.errors?.[0]?.message || data?.error?.message || "Cloudflare Workers AI trả về lỗi.";
-      const error = new Error(`${message} (Status: ${response.status})`);
-      error.status = response.status;
-      error.model = model;
-      Object.assign(error, parseRateLimitHeaders(response.headers));
-      throw error;
-    }
-    const raw = data?.result?.response ?? data?.result?.choices?.[0]?.message?.content ?? "";
-    const text = stripMarkdown(stripThinkTags(String(raw)));
-    if (!text) {
-      const error = new Error("Cloudflare Workers AI trả về nội dung rỗng.");
-      error.status = 502;
-      error.model = model;
-      throw error;
-    }
-    return {
-      text: text.trim(),
-      model,
-      provider: "cloudflare-workers-ai",
-      usage: data?.result?.usage || null
-    };
-  } finally {
-    clearTimeout(timeout);
   }
 }
 

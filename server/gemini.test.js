@@ -249,29 +249,6 @@ test("selects the current Qwen model for Groq keys and Gemini models for Gemini 
   }
 });
 
-test("uses Cloudflare Workers AI as a provider when given a cfai credential", async () => {
-  const originalFetch = global.fetch;
-  const vietnamese = "Đây là bản dịch tiếng Việt đầy đủ, tự nhiên và giữ nguyên toàn bộ nội dung của chương truyện. ".repeat(13);
-  let requestUrl = "";
-  global.fetch = async (url) => {
-    requestUrl = String(url);
-    return {
-      ok: true,
-      status: 200,
-      headers: new Headers(),
-      json: async () => ({ success: true, result: { response: vietnamese } })
-    };
-  };
-  try {
-    const result = await translateText(chineseSource, "cfai:account-id:token-value");
-    assert.equal(result.translation, vietnamese.trim());
-    assert.deepEqual(result.providersUsed, ["cloudflare-workers-ai"]);
-    assert.match(requestUrl, /accounts\/account-id\/ai\/run\/@cf\/zai-org\/glm-4\.7-flash/);
-  } finally {
-    global.fetch = originalFetch;
-  }
-});
-
 test("falls through to Gemini after one Groq quota failure instead of spending the whole key slice on Groq", async () => {
   const originalFetch = global.fetch;
   const vietnamese = "Đây là bản dịch tiếng Việt hoàn chỉnh, tự nhiên, đầy đủ và không còn bất kỳ chữ Hán nào. ".repeat(14);

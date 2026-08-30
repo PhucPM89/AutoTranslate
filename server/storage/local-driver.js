@@ -101,6 +101,15 @@ function createLocalStorage(env = process.env) {
       return true;
     },
 
+    async removeMany(keys) {
+      let removed = 0;
+      for (const key of [...new Set((keys || []).filter(Boolean))]) {
+        await this.remove(key);
+        removed += 1;
+      }
+      return removed;
+    },
+
     publicUrl(key) {
       return `${publicBase}/${key}`;
     }

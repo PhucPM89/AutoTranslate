@@ -184,6 +184,11 @@ test("local storage put/get/head/list/remove round trip", async () => {
   assert.equal(listed.length, 1);
   await storage.remove("books/b/r1/ch/1.json");
   assert.equal(await storage.head("books/b/r1/ch/1.json"), null);
+  await storage.put("books/b/r1/ch/2.json", "two");
+  await storage.put("books/b/r1/ch/3.json", "three");
+  assert.equal(await storage.removeMany(["books/b/r1/ch/2.json", "books/b/r1/ch/3.json"]), 2);
+  assert.equal(await storage.head("books/b/r1/ch/2.json"), null);
+  assert.equal(await storage.head("books/b/r1/ch/3.json"), null);
 });
 
 test("R2 driver is selected only when every credential is present", () => {
@@ -622,8 +627,6 @@ test("translation status errors keep the diagnosis but remove provider identifie
 test("translation worker prioritizes Groq keys before Gemini fallback keys", () => {
   const { translationKeyPriority } = require("../scripts/translate-worker");
   assert.ok(translationKeyPriority("gsk_primary") < translationKeyPriority("AIza-fallback"));
-  assert.ok(translationKeyPriority("gsk_primary") < translationKeyPriority("cfai:account:token"));
-  assert.ok(translationKeyPriority("cfai:account:token") < translationKeyPriority("AIza-fallback"));
 });
 
 test("translation progress reports real batch activity, attempts and errors", async () => {

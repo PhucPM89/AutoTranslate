@@ -66,7 +66,9 @@ function cleanIndexEntry(entry, original) {
     "qualityScore", "semanticReview", "translatedAt", "completedAt"
   ]) delete next[key];
   next.translationStatus = "pending";
-  if (original?.title) next.title = original.title;
+  // Do not leave a translated title visible after a full reset. The real source
+  // title is restored when the chapter is translated and published again.
+  next.title = original?.title || `Chương ${chapterNumber(entry) || "?"}`;
   if (original?.characters != null) next.characters = original.characters;
   return next;
 }
@@ -80,7 +82,7 @@ async function main() {
     }), { cacheControl: "private, no-store" });
   }
   console.log(`RESET translation pipeline: ${EXECUTE ? "THỰC THI" : "DRY-RUN"}`);
-  console.log("Giữ: original, EPUB, cover, metadata sách và reader fallback. Reset: draft, glossary, QA/story/TM và queue.");
+  console.log("Giữ: original, EPUB, cover và metadata sách. Xóa: mọi chapter dịch, draft, glossary, QA/story/TM và queue.");
 
   console.log("[1/5] Đang lập inventory R2...");
   const prefixes = ["books/", "drafts/", "glossary/", "glossary-meta/", "story-bible/", "story-context/", "tm/books/", "jobs/"];
@@ -139,12 +141,10 @@ async function main() {
     const number = chapterNumber(entry);
     return number ? LAYOUT.chapter(plan.bookId, plan.revision, number) : "";
   }).filter(Boolean)));
-  const oldReaderKeys = translatedKeys.filter((key) => !currentReaderKeys.has(key));
-
   console.log("[3/5] Kế hoạch reset:");
   console.log(`  Sách: ${plans.length}`);
   console.log(`  Chương hiện hành bắt buộc dịch lại: ${currentReaderKeys.size}`);
-  console.log(`  Chapter bản dịch revision cũ sẽ xóa: ${oldReaderKeys.length}`);
+  console.log(`  Toàn bộ chapter reader/bản dịch sẽ xóa: ${translatedKeys.length}`);
   console.log(`  Draft/glossary/story/TM sẽ xóa: ${privateKeys.length}`);
   console.log(`  Queue/lock/batch/budget sẽ xóa: ${jobKeysToDelete.length}`);
   console.log(`  Translation queue sẽ dựng lại: ${plans.length}`);
@@ -156,8 +156,16 @@ async function main() {
 
   try {
     console.log("[4/5] Đang xóa state cũ và dựng lại chapter pending...");
-    const deleteKeys = [...new Set([...oldReaderKeys, ...privateKeys, ...jobKeysToDelete])].filter((key) => key !== RESET_MARKER);
-    await mapConcurrent(deleteKeys, CONCURRENCY, (key) => storage.remove(key));
+    const deleteKeys = [...new Set([...translatedKeys, ...privateKeys, ...jobKeysToDelete])].filter((key) => key !== RESET_MARKER);
+    if (typeof storage.removeMany === "function") {
+      let removed = 0;
+      for (let offset = 0; offset < deleteKeys.length; offset += 10_000) {
+        removed += await storage.removeMany(deleteKeys.slice(offset, offset + 10_000));
+        console.log(`  Đã xóa ${removed}/${deleteKeys.length} object cũ...`);
+      }
+    } else {
+      await mapConcurrent(deleteKeys, CONCURRENCY, (key) => storage.remove(key));
+    }
 
     let completed = 0;
     await mapConcurrent(plans, Math.min(6, CONCURRENCY), async (plan) => {
