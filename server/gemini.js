@@ -12,7 +12,7 @@ const TRANSLATE_CHUNK_SIZE = Number(process.env.GEMINI_CHUNK_SIZE || 1800);
 const TRANSLATE_CONCURRENCY = Number(process.env.GEMINI_TRANSLATE_CONCURRENCY || 2);
 const MAX_KEYS_PER_CHUNK = Math.max(1, Number(process.env.TRANSLATE_MAX_KEYS_PER_CHUNK || 3));
 const REQUEST_TIMEOUT_MS = Number(process.env.GEMINI_REQUEST_TIMEOUT_MS || 90000);
-const MINUTE_QUOTA_RECOVERY_MS = Math.max(60_000, Number(process.env.TRANSLATE_MINUTE_QUOTA_RECOVERY_MS || 10 * 60_000));
+const MINUTE_QUOTA_RECOVERY_MS = Math.max(10_000, Number(process.env.TRANSLATE_MINUTE_QUOTA_RECOVERY_MS || 60_000));
 const DAILY_QUOTA_RECOVERY_MS = Math.max(60 * 60_000, Number(process.env.TRANSLATE_DAILY_QUOTA_RECOVERY_MS || 24 * 60 * 60_000));
 const QUOTA_SAFETY_MS = Math.max(10_000, Number(process.env.TRANSLATE_QUOTA_SAFETY_MS || 5 * 60_000));
 
@@ -95,6 +95,20 @@ function providerPriority(apiKey) {
   if (value.startsWith("gsk_")) return 0;
   if (value.startsWith("cfai:")) return 1;
   return 2;
+}
+
+function prioritizeProviderFallback(entries) {
+  const groups = new Map();
+  for (const entry of entries) {
+    const priority = providerPriority(entry.key);
+    if (!groups.has(priority)) groups.set(priority, []);
+    groups.get(priority).push(entry);
+  }
+  const priorities = [...groups.keys()].sort((a, b) => a - b);
+  return [
+    ...priorities.flatMap((priority) => groups.get(priority).slice(0, 1)),
+    ...priorities.flatMap((priority) => groups.get(priority).slice(1))
+  ];
 }
 
 function getActiveKeys(apiKeys) {
@@ -630,9 +644,9 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
   const keyOrder = reserveKeyOrder(keyList);
 
   // Separate keys into: ready (not on cooldown) vs on cooldown
-  const readyKeys = keyOrder
-    .filter(({ key }) => getKeyHealth(key).cooldownUntil <= now)
-    .sort((a, b) => providerPriority(a.key) - providerPriority(b.key));
+  const readyKeys = prioritizeProviderFallback(
+    keyOrder.filter(({ key }) => getKeyHealth(key).cooldownUntil <= now)
+  );
   const cooldownKeys = keyOrder.filter(({ key }) => getKeyHealth(key).cooldownUntil > now);
 
   // Chain ready keys first, followed by cooldown keys in order of earliest cooldown
@@ -772,11 +786,10 @@ async function generateStructuredText(prompt, apiKeys, generationConfig = {}) {
   if (!keyList.length) throw new Error("Không có API key cloud cho semantic review.");
 
   const now = Date.now();
-  const ordered = reserveKeyOrder(keyList)
-    .sort((a, b) => {
-      const readiness = getKeyHealth(a.key).cooldownUntil - getKeyHealth(b.key).cooldownUntil;
-      return readiness || providerPriority(a.key) - providerPriority(b.key);
-    });
+  const ordered = prioritizeProviderFallback(
+    reserveKeyOrder(keyList)
+      .filter(({ key }) => getKeyHealth(key).cooldownUntil <= now)
+  );
   let lastError = null;
   let triedKeys = 0;
 

@@ -272,6 +272,41 @@ test("uses Cloudflare Workers AI as a provider when given a cfai credential", as
   }
 });
 
+test("falls through to Gemini after one Groq quota failure instead of spending the whole key slice on Groq", async () => {
+  const originalFetch = global.fetch;
+  const vietnamese = "Đây là bản dịch tiếng Việt hoàn chỉnh, tự nhiên, đầy đủ và không còn bất kỳ chữ Hán nào. ".repeat(14);
+  const urls = [];
+  global.fetch = async (url) => {
+    urls.push(String(url));
+    if (String(url).includes("api.groq.com")) {
+      return {
+        ok: false,
+        status: 429,
+        headers: new Headers(),
+        json: async () => ({ error: { message: "tokens per minute; retry in 12s" } })
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({ candidates: [{ content: { parts: [{ text: vietnamese }] } }] })
+    };
+  };
+  try {
+    const result = await translateText(chineseSource, [
+      "gsk_provider-fallback-a-1234567890",
+      "gsk_provider-fallback-b-1234567890",
+      "AQ.provider-fallback-gemini"
+    ], { provider: "cloud" });
+    assert.deepEqual(result.providersUsed, ["gemini"]);
+    assert.equal(urls.filter((url) => url.includes("api.groq.com")).length, 1);
+    assert.equal(urls.filter((url) => url.includes("googleapis.com")).length, 1);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test("one chunk tries only a bounded slice of the key pool", async () => {
   const originalFetch = global.fetch;
   const authorizations = [];
@@ -344,7 +379,8 @@ test("minute quota gets a quiet recovery window", () => {
   const recovery = computeQuotaRecovery(new Error("TPM limit reached; retry in 12s"), "gsk_minute-key");
   assert.equal(classifyQuotaError("requests per minute"), "minute");
   assert.equal(recovery.policy, "wait_full_minute_window");
-  assert.ok(recovery.durationMs >= 10 * 60_000);
+  assert.ok(recovery.durationMs >= 90_000);
+  assert.ok(recovery.durationMs < 2 * 60_000);
 });
 
 test("unknown quota dimension waits a conservative full cycle", () => {
