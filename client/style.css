@@ -3779,16 +3779,23 @@ body.theme-forest .document-text .tts-paragraph-highlight.tts-speaking {
   }
 
   .count-badge {
-    height: 34px;
-    padding: 0 0.75rem;
-    font-size: 0.76rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: unset;
+    height: 36px;
+    padding: 0 0.85rem;
+    font-size: 0.78rem;
     font-weight: 600;
-    line-height: 32px;
     white-space: nowrap;
+    border-radius: 999px;
   }
 
   .count-badge::after {
     content: " chương";
+    margin-left: 0.25rem;
+    font-weight: 500;
+    opacity: 0.85;
   }
 
   .chapter-picker {
@@ -3798,12 +3805,17 @@ body.theme-forest .document-text .tts-paragraph-highlight.tts-speaking {
     padding: 0;
     border: 0;
     flex: 1;
-    max-width: 250px;
+    max-width: 280px;
     justify-content: flex-end;
   }
 
   .chapter-picker label {
-    display: none;
+    display: inline-block;
+    margin: 0;
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: var(--muted);
+    white-space: nowrap;
   }
 
   .chapter-jump-control {
