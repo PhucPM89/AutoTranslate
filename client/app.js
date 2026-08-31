@@ -1553,8 +1553,11 @@ async function showBookDetail(book, { updateHash = true } = {}) {
   if (libraryState.detailBook !== book) return;
   if (progress?.chapterCount && Number(progress.currentIndex) >= 0) {
     const index = Math.min(Number(progress.currentIndex) || 0, progress.chapterCount - 1);
-    els.bookViewProgress.textContent = `${progress.chapterTitle || `Chương ${index + 1}`} · ${index + 1}/${progress.chapterCount}`;
-    els.bookViewReadLabel.textContent = `Đọc tiếp chương ${index + 1}`;
+    const storyNumMatch = progress.chapterTitle?.match(/Chương\s*(\d+)/i);
+    const storyNum = progress.storyNumber || (storyNumMatch ? parseInt(storyNumMatch[1], 10) : (index + 1));
+    const totalChapters = progress.totalStoryChapters || (progress.chapterCount > 3 ? progress.chapterCount - 3 : progress.chapterCount);
+    els.bookViewProgress.textContent = `${progress.chapterTitle || `Chương ${storyNum}`} · ${storyNum}/${totalChapters}`;
+    els.bookViewReadLabel.textContent = `Đọc tiếp chương ${storyNum}`;
     els.bookViewRestart.hidden = false;
   } else {
     els.bookViewProgress.textContent = "Chưa đọc";
@@ -1731,8 +1734,11 @@ function updateContinueReading() {
     return;
   }
   const index = Math.min(Number(progress.currentIndex) || 0, progress.chapterCount - 1);
+  const storyNumMatch = progress.chapterTitle?.match(/Chương\s*(\d+)/i);
+  const storyNum = progress.storyNumber || (storyNumMatch ? parseInt(storyNumMatch[1], 10) : (index + 1));
+  const totalChapters = progress.totalStoryChapters || (progress.chapterCount > 3 ? progress.chapterCount - 3 : progress.chapterCount);
   els.continueTitle.textContent = progress.title || progress.fileName || "EPUB gần đây";
-  els.continueMeta.textContent = `${progress.chapterTitle || `Chương ${index + 1}`} · ${index + 1}/${progress.chapterCount}`;
+  els.continueMeta.textContent = `${progress.chapterTitle || `Chương ${storyNum}`} · ${storyNum}/${totalChapters}`;
   els.continueSection.hidden = false;
 }
 
@@ -3704,6 +3710,8 @@ function buildBookRecord() {
 
 function buildProgressRecord() {
   const now = Date.now();
+  const storyNum = getStoryChapterNumber(state.currentIndex);
+  const totalStory = getTotalStoryChapters();
   return {
     id: state.bookId,
     title: state.title,
@@ -3712,6 +3720,8 @@ function buildProgressRecord() {
     chapterCount: state.chapters.length,
     chapterTitle: displayChapterTitle(state.currentIndex),
     currentIndex: state.currentIndex,
+    storyNumber: storyNum,
+    totalStoryChapters: totalStory,
     lastOpenedAt: now,
     expiresAt: now + CACHE_TTL_MS
   };
