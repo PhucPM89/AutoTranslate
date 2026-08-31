@@ -1302,6 +1302,7 @@ function renderCrawlerStatus(status = {}) {
 
 const ADMIN_TABS = [
   { key: "library", tab: "libraryTab", panel: "uploadForm" },
+  { key: "books", tab: "booksTab", panel: "booksPanel" },
   { key: "translate", tab: "translateTab", panel: "translatePanel" },
   { key: "keys", tab: "keysTab", panel: "keysPanel" },
   { key: "crawler", tab: "crawlerTab", panel: "crawlerForm" },
