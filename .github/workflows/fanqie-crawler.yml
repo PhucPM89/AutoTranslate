@@ -24,7 +24,7 @@ on:
         default: ""
 
 concurrency:
-  group: fanqie-crawler-pipeline
+  group: novel-pipeline-storage-writes
   cancel-in-progress: false
 
 permissions:

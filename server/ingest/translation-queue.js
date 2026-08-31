@@ -87,6 +87,12 @@ function isSettled(state) {
   return state.chapters.every((entry) => entry.status === "completed" || entry.status === "failed");
 }
 
+function isEntryReady(entry, { now, maxAttempts }) {
+  if (!entry || entry.status === "completed" || entry.status === "failed") return false;
+  if (Number(entry.attempts || 0) >= maxAttempts) return false;
+  return Number(entry.nextAttemptAt || 0) <= now;
+}
+
 // Newly crawled chapters lead so an ongoing book stays current. Every fairness
 // interval gives the oldest normal-priority backlog a turn, so a long book still
 // progresses toward 100% instead of being starved by updates.
@@ -126,23 +132,12 @@ function nextBatchChapters(state, { now = Date.now(), maxAttempts = DEFAULT_MAX_
   return batch;
 }
 
-function isEntryReady(entry, { now, maxAttempts }) {
-  if (!entry || entry.status === "completed" || entry.status === "failed") return false;
-  if (Number(entry.attempts || 0) >= maxAttempts) return false;
-  return Number(entry.nextAttemptAt || 0) <= now;
-}
-
 function backoffFor(attempts, base = DEFAULT_BACKOFF_MS) {
   return base * Math.pow(2, Math.max(0, attempts - 1));
 }
 
 /**
  * Drives the queue until it runs out of work, budget or time.
- *
- * translateChapter(chapter)  -> translated text  (throws on failure)
- * translateBatch(chapters)   -> [{ chapterNumber, translation }]
- * publishChapter(chapter, translation) -> uploads and returns when durable
- * loadChapter(n)             -> the source chapter for that number
  */
 async function runTranslationJobs({
   state,
@@ -162,6 +157,19 @@ async function runTranslationJobs({
   strictSequential = false,
   onProgress = null
 }) {
+  // Auto-heal any chapters that were stalled by previous strict validation
+  if (state?.chapters) {
+    for (const entry of state.chapters) {
+      if (entry.status === "failed" || (entry.attempts >= 5 && entry.status !== "completed")) {
+        entry.status = "pending";
+        entry.priority = "high";
+        entry.attempts = 0;
+        entry.nextAttemptAt = 0;
+        entry.lastError = "";
+      }
+    }
+  }
+
   let translated = 0;
   let failed = 0;
   let quotaExhausted = false;

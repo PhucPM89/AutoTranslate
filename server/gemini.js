@@ -1083,7 +1083,7 @@ function assessTranslation(source, translation) {
   // 3. Đảm bảo cấu trúc số đoạn văn tương đối phù hợp (nới lỏng để không drop chương)
   const sourceParagraphs = paragraphCount(source);
   const outputParagraphs = paragraphCount(output);
-  if (sourceParagraphs >= 15 && outputParagraphs < 2) {
+  if (sourceParagraphs >= 8 && outputParagraphs < Math.max(2, Math.ceil(sourceParagraphs * 0.20))) {
     return {
       acceptable: false,
       reason: `cấu trúc đoạn bị mất (${outputParagraphs}/${sourceParagraphs} đoạn)`
@@ -1141,8 +1141,19 @@ function assessTranslation(source, translation) {
 }
 
 function detectLiteralEverydayHanViet(source, translation) {
-  // Relaxed: auto-repaired during post-processing to avoid stalling queue
-  return "";
+  const sourceText = String(source || "");
+  const output = String(translation || "");
+  const rules = [
+    { zh: "爷爷", vi: /\bGia Gia\b/iu, meaning: "ông nội" },
+    { zh: "我", vi: /\bNgã\b/iu, meaning: "tôi/ta" },
+    { zh: "你", vi: /\bNhĩ\b/iu, meaning: "bạn/ngươi" },
+    { zh: "却", vi: /\bKhước\b/iu, meaning: "lại/vậy mà" },
+    { zh: "爷爷教", vi: /\bGiáo\b/iu, meaning: "dạy" },
+    { zh: "帮我", vi: /\bBang\b/iu, meaning: "giúp tôi" }
+  ];
+  const hit = rules.find((rule) => sourceText.includes(rule.zh) && rule.vi.test(output));
+  if (!hit) return "";
+  return `bản dịch chuyển âm máy móc từ thường ngày; cần dịch nghĩa "${hit.meaning}" thay vì Hán-Việt hóa`;
 }
 
 function paragraphCount(value) {
