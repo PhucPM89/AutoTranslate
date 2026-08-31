@@ -2928,9 +2928,8 @@ async function loadAdminBooksCatalog() {
   renderAdminBooksCatalog();
 }
 
-async function openBilingualEditor(book, startChapterIndex = 0) {
+async function openBilingualEditor(book, startChapterIndex = null) {
   bilingualState.activeBook = book;
-  bilingualState.currentChapterIndex = startChapterIndex;
 
   if (els.booksListView) els.booksListView.hidden = true;
   if (els.bilingualView) els.bilingualView.hidden = false;
@@ -2950,8 +2949,17 @@ async function openBilingualEditor(book, startChapterIndex = 0) {
     bilingualState.chapters = [];
   }
 
+  let initialIndex = 0;
+  if (typeof startChapterIndex === "number") {
+    initialIndex = startChapterIndex;
+  } else if (bilingualState.chapters.length) {
+    const storyIdx = bilingualState.chapters.findIndex((c) => /chương|第|hồi/i.test(c.title || ""));
+    initialIndex = storyIdx >= 0 ? storyIdx : 0;
+  }
+  bilingualState.currentChapterIndex = initialIndex;
+
   renderBilingualChapterSelect();
-  loadBilingualChapter(bilingualState.currentChapterIndex);
+  loadBilingualChapter(initialIndex);
 }
 
 function closeBilingualEditor() {
