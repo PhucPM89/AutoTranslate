@@ -1501,6 +1501,31 @@ async function handleAdminChapterSave({ request, env }) {
     cacheControl: SHORT
   });
 
+  // Update book index on R2 so worker skips this chapter and catalog progress updates
+  try {
+    const indexKey = LAYOUT.bookIndex(bookId);
+    const indexObj = await storage.get(indexKey);
+    if (indexObj) {
+      const indexDoc = JSON.parse(await indexObj.text());
+      if (Array.isArray(indexDoc?.chapters)) {
+        const entry = indexDoc.chapters.find((c) => c.n === chapterNumber);
+        if (entry) {
+          entry.title = doc.title;
+          entry.status = doc.translationStatus;
+          entry.manualEdited = true;
+        }
+        indexDoc.translatedChapters = indexDoc.chapters.filter((c) => c.status === "completed").length;
+        indexDoc.updatedAt = new Date().toISOString();
+        await storage.put(indexKey, JSON.stringify(indexDoc), {
+          contentType: "application/json; charset=utf-8",
+          cacheControl: SHORT
+        });
+      }
+    }
+  } catch (err) {
+    console.warn("Unable to update index.json on chapter save:", err);
+  }
+
   if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
     try {
       const db = createSupabaseClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
