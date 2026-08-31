@@ -2775,12 +2775,67 @@ function cleanBookId(rawId) {
   return match ? match[1] : id;
 }
 
+function shouldProxyReaderCdn() {
+  if (typeof window === "undefined") return false;
+  return window.location.hostname !== "tram-chu.online";
+}
+
+function readerContentUrl(url) {
+  if (!shouldProxyReaderCdn()) return url;
+  try {
+    const parsed = new URL(url, window.location.origin);
+    const cdn = new URL(CDN_BASE);
+    if (parsed.origin !== cdn.origin) return url;
+    const key = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
+    return `/api/reader/content?key=${encodeURIComponent(key)}`;
+  } catch {
+    return url;
+  }
+}
+
+function readerContentProxyUrl(url) {
+  try {
+    const parsed = new URL(url, typeof window !== "undefined" ? window.location.origin : "https://tram-chu.online");
+    const cdn = new URL(CDN_BASE);
+    if (parsed.origin === cdn.origin || parsed.pathname.startsWith("/books/") || parsed.pathname.startsWith("/catalog/")) {
+      const key = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
+      return `/api/reader/content?key=${encodeURIComponent(key)}`;
+    }
+  } catch {}
+  return "";
+}
+
+async function fetchCdnOrProxy(url, options) {
+  const primaryUrl = readerContentUrl(url);
+  try {
+    const response = await fetch(primaryUrl, options);
+    if (response.ok) return response;
+  } catch {}
+
+  const proxy = readerContentProxyUrl(url);
+  if (proxy && proxy !== primaryUrl) {
+    try {
+      const response = await fetch(proxy, options);
+      if (response.ok) return response;
+    } catch {}
+  }
+
+  try {
+    const separator = url.includes("?") ? "&" : "?";
+    const bustUrl = `${url}${separator}_t=${Date.now()}`;
+    const response = await fetch(readerContentUrl(bustUrl), options);
+    if (response.ok) return response;
+  } catch {}
+
+  throw new Error("Không tải được nội dung từ CDN.");
+}
+
 async function fetchBookIndex(bookId) {
   const clean = cleanBookId(bookId);
   if (!clean) return null;
   const cdnIndexUrl = `${CDN_BASE}/books/${encodeURIComponent(clean)}/index.json?_v=${Date.now()}`;
   try {
-    const res = await fetch(cdnIndexUrl);
+    const res = await fetchCdnOrProxy(cdnIndexUrl);
     if (!res.ok) return null;
     const data = await res.json();
     return data;
@@ -3039,12 +3094,12 @@ async function loadBilingualChapter(index) {
   if (els.adminBilingualViTextarea) els.adminBilingualViTextarea.value = "Đang tải bản dịch...";
   updateBilingualViCounts("");
 
-  const zhUrl = CDN_BASE + "/books/" + encodeURIComponent(cleanId) + "/r1/ch/" + chapterNumber + ".original.json";
-  const viUrl = CDN_BASE + "/books/" + encodeURIComponent(cleanId) + "/r1/ch/" + chapterNumber + ".json";
+  const zhUrl = `${CDN_BASE}/books/${encodeURIComponent(cleanId)}/r1/ch/${chapterNumber}.original.json?_v=${Date.now()}`;
+  const viUrl = `${CDN_BASE}/books/${encodeURIComponent(cleanId)}/r1/ch/${chapterNumber}.json?_v=${Date.now()}`;
 
   const [zhRes, viRes] = await Promise.all([
-    fetch(zhUrl).catch(() => null),
-    fetch(viUrl).catch(() => null)
+    fetchCdnOrProxy(zhUrl).catch(() => null),
+    fetchCdnOrProxy(viUrl).catch(() => null)
   ]);
 
   // Render ZH
