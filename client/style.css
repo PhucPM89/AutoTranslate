@@ -11422,3 +11422,409 @@ body.zen-mode .document-paper {
   margin: 0.35rem 0 0;
   font-size: 1.25rem;
 }
+
+/* ==========================================================================
+   Admin Books Manager & Bilingual Side-by-Side QA Editor
+   ========================================================================== */
+.admin-books-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+  width: 100%;
+}
+
+.admin-books-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.admin-books-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.admin-books-search-input {
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: var(--surface-subtle);
+  color: var(--text);
+  font-size: 0.85rem;
+  min-width: 220px;
+  outline: none;
+}
+
+.admin-books-search-input:focus {
+  border-color: var(--accent);
+}
+
+.admin-books-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.admin-books-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  text-align: left;
+}
+
+.admin-books-table th {
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.admin-books-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-soft);
+  vertical-align: middle;
+}
+
+.admin-books-table tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-books-table tr:hover td {
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+
+.admin-book-thumb {
+  width: 42px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--border-soft);
+}
+
+.admin-book-title-cell strong {
+  display: block;
+  color: var(--text);
+  font-size: 0.92rem;
+  margin-bottom: 0.2rem;
+}
+
+.admin-book-title-cell span {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.admin-book-genre-pill {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.admin-book-progress-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 110px;
+}
+
+.admin-book-progress-bar small {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.admin-book-progress-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  overflow: hidden;
+}
+
+.admin-book-progress-fill {
+  height: 100%;
+  background: #10b981;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.admin-book-actions-cell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.admin-book-btn {
+  padding: 0.35rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.admin-book-btn.bilingual-btn {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.admin-book-btn.bilingual-btn:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.admin-book-btn.edit-btn {
+  background: var(--surface-subtle);
+  border-color: var(--border-soft);
+  color: var(--text);
+}
+
+.admin-book-btn.edit-btn:hover {
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+.admin-book-btn.delete-btn {
+  background: color-mix(in srgb, #ef4444 12%, transparent);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+.admin-book-btn.delete-btn:hover {
+  background: #ef4444;
+  color: #fff;
+}
+
+/* Bilingual Workspace */
+.admin-bilingual-view {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+}
+
+.bilingual-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.bilingual-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.bilingual-book-info h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.bilingual-book-meta {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.bilingual-nav-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.bilingual-chapter-select {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: var(--surface-subtle);
+  color: var(--text);
+  font-size: 0.85rem;
+  min-width: 180px;
+  outline: none;
+}
+
+.bilingual-split-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  width: 100%;
+}
+
+@media (max-width: 900px) {
+  .bilingual-split-container {
+    grid-template-columns: 1fr;
+  }
+}
+
+.bilingual-panel {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface);
+  overflow: hidden;
+  min-height: 520px;
+}
+
+.bilingual-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0.8rem;
+  background: var(--surface-subtle);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.panel-header-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.86rem;
+}
+
+.read-only-pill {
+  font-size: 0.72rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+}
+
+.status-pill.completed {
+  font-size: 0.72rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  font-weight: 600;
+}
+
+.bilingual-chapter-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.8rem;
+  border-bottom: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--surface) 60%, var(--surface-subtle));
+}
+
+.bilingual-chapter-title-row label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.bilingual-title-input {
+  flex: 1;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 600;
+  outline: none;
+}
+
+.bilingual-title-input:focus {
+  border-color: var(--accent);
+}
+
+.bilingual-body-wrap {
+  flex: 1;
+  display: flex;
+  padding: 0.8rem;
+  overflow-y: auto;
+  min-height: 380px;
+  max-height: 520px;
+}
+
+.bilingual-content-view.zh-text {
+  width: 100%;
+  height: 100%;
+  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 0.95rem;
+  line-height: 1.8;
+  color: #cbd5e1;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+.bilingual-editor-textarea.vi-text {
+  width: 100%;
+  height: 100%;
+  font-family: inherit;
+  font-size: 0.92rem;
+  line-height: 1.75;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  resize: none;
+  outline: none;
+}
+
+.bilingual-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.8rem;
+  background: var(--surface-subtle);
+  border-top: 1px solid var(--border-soft);
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.bilingual-save-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.save-notice {
+  color: #34d399;
+  font-weight: 600;
+}
+
+/* Edit Book Dialog */
+.admin-book-edit-dialog {
+  padding: 1.5rem;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  max-width: 650px;
+  width: 95vw;
+}
+
+.admin-book-edit-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+}
+

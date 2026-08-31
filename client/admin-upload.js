@@ -257,6 +257,24 @@ export function mountAdmin(options = {}) {
     els.uploadForm?.addEventListener("submit", submitBook);
     els.crawlerForm?.addEventListener("submit", saveCrawlerConfig);
     els.libraryTab?.addEventListener("click", () => selectAdminTab("library"));
+    els.booksTab?.addEventListener("click", () => selectAdminTab("books"));
+    els.booksSearch?.addEventListener("input", renderAdminBooksCatalog);
+    els.addBookBtn?.addEventListener("click", () => selectAdminTab("library"));
+    els.bilingualBackBtn?.addEventListener("click", closeBilingualEditor);
+    els.bilingualPrevCh?.addEventListener("click", () => loadBilingualChapter(bilingualState.currentChapterIndex - 1));
+    els.bilingualNextCh?.addEventListener("click", () => loadBilingualChapter(bilingualState.currentChapterIndex + 1));
+    els.bilingualChSelect?.addEventListener("change", (e) => loadBilingualChapter(Number(e.target.value) || 0));
+    els.bilingualCopyZh?.addEventListener("click", () => {
+      const text = els.bilingualZhContent?.textContent || "";
+      navigator.clipboard?.writeText(text);
+      alert("Đã sao chép nội dung tiếng Trung!");
+    });
+    els.bilingualViTextarea?.addEventListener("input", (e) => updateBilingualViCounts(e.target.value));
+    els.bilingualSaveBtn?.addEventListener("click", saveBilingualChapter);
+    els.bilingualAiTranslate?.addEventListener("click", aiTranslateBilingualChapter);
+    els.bookEditClose?.addEventListener("click", () => els.bookEditDialog?.close());
+    els.bookEditCancel?.addEventListener("click", () => els.bookEditDialog?.close());
+    els.bookEditForm?.addEventListener("submit", handleBookEditSubmit);
     els.translateTab?.addEventListener("click", () => selectAdminTab("translate"));
     els.keysTab?.addEventListener("click", () => selectAdminTab("keys"));
     els.crawlerTab?.addEventListener("click", () => selectAdminTab("crawler"));
@@ -1305,6 +1323,7 @@ function selectAdminTab(tab) {
   });
   setStatus("");
   if (activeAdminTab === "epubStudio") initEpubStudio();
+  if (activeAdminTab === "books") loadAdminBooksCatalog();
   if (activeAdminTab === "translate") startTranslatePolling();
   else stopTranslatePolling();
   if (activeAdminTab === "keys") loadAdminKeys();
@@ -2680,4 +2699,426 @@ async function clearStudioCache() {
   studioState.activeChapterIndex = 0;
   renderStudioBookLoaded();
   setStudioNotice("Đã xoá EPUB và các bản dịch cục bộ của truyện.", "success");
+}
+
+// ---- Admin Books Catalog & Bilingual QA Editor -----------------------------
+
+const bilingualState = {
+  activeBook: null,
+  chapters: [],
+  currentChapterIndex: 0,
+  isZhLoading: false,
+  isViLoading: false,
+  isSaving: false
+};
+
+function renderAdminBooksCatalog() {
+  if (!els.booksTbody) return;
+  const books = adminCatalog.books || [];
+  const query = (els.booksSearch?.value || "").toLowerCase().trim();
+
+  const filtered = query
+    ? books.filter((b) =>
+        (b.title || "").toLowerCase().includes(query) ||
+        (b.author || "").toLowerCase().includes(query) ||
+        (b.genre || "").toLowerCase().includes(query)
+      )
+    : books;
+
+  if (!filtered.length) {
+    els.booksTbody.innerHTML = '<tr><td colspan="6" class="stats-empty">' + (query ? 'Không tìm thấy truyện phù hợp.' : 'Chưa có truyện nào trong thư viện.') + '</td></tr>';
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+
+  filtered.forEach((book) => {
+    const tr = document.createElement("tr");
+
+    // 1. Cover
+    const tdCover = document.createElement("td");
+    const img = document.createElement("img");
+    img.src = book.cover || "/library/covers/misty-pagoda-hero.webp";
+    img.alt = "";
+    img.className = "admin-book-thumb";
+    img.loading = "lazy";
+    tdCover.appendChild(img);
+    tr.appendChild(tdCover);
+
+    // 2. Title & Author
+    const tdTitle = document.createElement("td");
+    tdTitle.className = "admin-book-title-cell";
+    const strong = document.createElement("strong");
+    strong.textContent = book.title || "Chưa có tên";
+    if (book.featured) {
+      const featBadge = document.createElement("span");
+      featBadge.className = "admin-book-genre-pill";
+      featBadge.style.cssText = "background: rgba(245, 158, 11, 0.15); color: #f59e0b; margin-left: 0.4rem; display: inline-block;";
+      featBadge.textContent = "⭐ Nổi bật";
+      strong.appendChild(featBadge);
+    }
+    const spanAuthor = document.createElement("span");
+    spanAuthor.textContent = book.author ? ("Tác giả: " + book.author) : "Chưa rõ tác giả";
+    tdTitle.appendChild(strong);
+    tdTitle.appendChild(spanAuthor);
+    tr.appendChild(tdTitle);
+
+    // 3. Genre
+    const tdGenre = document.createElement("td");
+    if (book.genre) {
+      const genrePill = document.createElement("span");
+      genrePill.className = "admin-book-genre-pill";
+      genrePill.textContent = book.genre;
+      tdGenre.appendChild(genrePill);
+    } else {
+      tdGenre.textContent = "—";
+    }
+    tr.appendChild(tdGenre);
+
+    // 4. Progress
+    const tdProgress = document.createElement("td");
+    const total = Number(book.chapterCount || book.totalChapters || 0);
+    const translated = Number(book.translatedChapters || 0);
+    const pct = total > 0 ? Math.min(100, Math.round((translated / total) * 100)) : 0;
+
+    const progBox = document.createElement("div");
+    progBox.className = "admin-book-progress-bar";
+    const progLabel = document.createElement("small");
+    progLabel.textContent = translated.toLocaleString("vi-VN") + "/" + total.toLocaleString("vi-VN") + " (" + pct + "%)";
+    const track = document.createElement("div");
+    track.className = "admin-book-progress-track";
+    const fill = document.createElement("div");
+    fill.className = "admin-book-progress-fill";
+    fill.style.width = pct + "%";
+    track.appendChild(fill);
+    progBox.appendChild(progLabel);
+    progBox.appendChild(track);
+    tdProgress.appendChild(progBox);
+    tr.appendChild(tdProgress);
+
+    // 5. Status
+    const tdStatus = document.createElement("td");
+    tdStatus.textContent = book.status || "Đang cập nhật";
+    tr.appendChild(tdStatus);
+
+    // 6. Actions
+    const tdActions = document.createElement("td");
+    tdActions.className = "admin-book-actions-cell";
+
+    // Bilingual QA Button
+    const btnBilingual = document.createElement("button");
+    btnBilingual.type = "button";
+    btnBilingual.className = "admin-book-btn bilingual-btn";
+    btnBilingual.innerHTML = '<svg class="icon" viewBox="0 0 24 24"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M6 6h10M6 10h10"/></svg> Biên tập Song ngữ';
+    btnBilingual.addEventListener("click", () => openBilingualEditor(book));
+    tdActions.appendChild(btnBilingual);
+
+    // Edit Metadata Button
+    const btnEdit = document.createElement("button");
+    btnEdit.type = "button";
+    btnEdit.className = "admin-book-btn edit-btn";
+    btnEdit.innerHTML = '<svg class="icon" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Sửa';
+    btnEdit.addEventListener("click", () => openEditBookDialog(book));
+    tdActions.appendChild(btnEdit);
+
+    // Delete Button
+    const btnDelete = document.createElement("button");
+    btnDelete.type = "button";
+    btnDelete.className = "admin-book-btn delete-btn";
+    btnDelete.innerHTML = '<svg class="icon" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 15H6L5 6M10 11v6M14 11v6"/></svg> Xóa';
+    btnDelete.addEventListener("click", () => deleteBookPrompt(book));
+    tdActions.appendChild(btnDelete);
+
+    tr.appendChild(tdActions);
+    fragment.appendChild(tr);
+  });
+
+  els.booksTbody.replaceChildren(fragment);
+}
+
+async function loadAdminBooksCatalog() {
+  await loadAdminCatalog();
+  renderAdminBooksCatalog();
+}
+
+async function openBilingualEditor(book, startChapterIndex = 0) {
+  bilingualState.activeBook = book;
+  bilingualState.currentChapterIndex = startChapterIndex;
+
+  if (els.booksListView) els.booksListView.hidden = true;
+  if (els.bilingualView) els.bilingualView.hidden = false;
+
+  if (els.adminBilingualBookTitle) els.adminBilingualBookTitle.textContent = book.title || "Truyện";
+  const total = Number(book.chapterCount || book.totalChapters || 0);
+  if (els.adminBilingualBookMeta) {
+    els.adminBilingualBookMeta.textContent = (book.author ? ("Tác giả: " + book.author + " · ") : "") + total.toLocaleString("vi-VN") + " chương";
+  }
+
+  // Load index to get chapters
+  const cleanId = cleanBookId(book.id);
+  try {
+    const idx = await fetchBookIndex(cleanId);
+    bilingualState.chapters = Array.isArray(idx?.chapters) ? idx.chapters : [];
+  } catch {
+    bilingualState.chapters = [];
+  }
+
+  renderBilingualChapterSelect();
+  loadBilingualChapter(bilingualState.currentChapterIndex);
+}
+
+function closeBilingualEditor() {
+  if (els.bilingualView) els.bilingualView.hidden = true;
+  if (els.booksListView) els.booksListView.hidden = false;
+  loadAdminBooksCatalog();
+}
+
+function renderBilingualChapterSelect() {
+  if (!els.bilingualChSelect) return;
+  const fragment = document.createDocumentFragment();
+
+  if (!bilingualState.chapters.length) {
+    const opt = document.createElement("option");
+    opt.value = "0";
+    opt.textContent = "Chương 1 (Mặc định)";
+    fragment.appendChild(opt);
+  } else {
+    bilingualState.chapters.forEach((ch, i) => {
+      const opt = document.createElement("option");
+      opt.value = String(i);
+      const isDone = ch.status === "completed";
+      opt.textContent = (ch.title || ("Chương " + (ch.n || i + 1))) + " [" + (isDone ? "Đã dịch" : "Chờ dịch") + "]";
+      fragment.appendChild(opt);
+    });
+  }
+
+  els.bilingualChSelect.replaceChildren(fragment);
+  els.bilingualChSelect.value = String(bilingualState.currentChapterIndex);
+}
+
+async function loadBilingualChapter(index) {
+  const book = bilingualState.activeBook;
+  if (!book) return;
+  const totalChapters = bilingualState.chapters.length || 1;
+  const chIdx = Math.max(0, Math.min(index, totalChapters - 1));
+  bilingualState.currentChapterIndex = chIdx;
+
+  if (els.bilingualChSelect) els.bilingualChSelect.value = String(chIdx);
+  if (els.adminBilingualPrevCh) els.adminBilingualPrevCh.disabled = chIdx <= 0;
+  if (els.adminBilingualNextCh) els.adminBilingualNextCh.disabled = chIdx >= totalChapters - 1;
+
+  const chObj = bilingualState.chapters[chIdx] || { n: chIdx + 1, title: ("Chương " + (chIdx + 1)) };
+  const chapterNumber = chObj.n || chIdx + 1;
+  const cleanId = cleanBookId(book.id);
+
+  // 1. Fetch Chinese Original
+  if (els.adminBilingualZhTitle) els.adminBilingualZhTitle.value = "Đang tải...";
+  if (els.adminBilingualZhContent) els.adminBilingualZhContent.textContent = "Đang tải nội dung tiếng Trung...";
+  if (els.adminBilingualZhCharCount) els.adminBilingualZhCharCount.textContent = "0 ký tự chữ Hán";
+
+  // 2. Fetch Vietnamese Translation
+  if (els.adminBilingualViTitle) els.adminBilingualViTitle.value = "Đang tải...";
+  if (els.adminBilingualViTextarea) els.adminBilingualViTextarea.value = "Đang tải bản dịch...";
+  updateBilingualViCounts("");
+
+  const zhUrl = CDN_BASE + "/books/" + encodeURIComponent(cleanId) + "/r1/ch/" + chapterNumber + ".original.json";
+  const viUrl = CDN_BASE + "/books/" + encodeURIComponent(cleanId) + "/r1/ch/" + chapterNumber + ".json";
+
+  const [zhRes, viRes] = await Promise.all([
+    fetch(zhUrl).catch(() => null),
+    fetch(viUrl).catch(() => null)
+  ]);
+
+  // Render ZH
+  if (zhRes && zhRes.ok) {
+    const zhData = await zhRes.json().catch(() => ({}));
+    if (els.adminBilingualZhTitle) els.adminBilingualZhTitle.value = zhData.title || chObj.title || ("Chương " + chapterNumber);
+    const zhText = zhData.content || "";
+    if (els.adminBilingualZhContent) els.adminBilingualZhContent.textContent = zhText;
+    if (els.adminBilingualZhCharCount) els.adminBilingualZhCharCount.textContent = zhText.length.toLocaleString("vi-VN") + " ký tự chữ Hán";
+  } else {
+    if (els.adminBilingualZhTitle) els.adminBilingualZhTitle.value = chObj.title || ("Chương " + chapterNumber);
+    if (els.adminBilingualZhContent) els.adminBilingualZhContent.textContent = "(Không tìm thấy bản tiếng Trung gốc trong R2 Archive)";
+  }
+
+  // Render VI
+  if (viRes && viRes.ok) {
+    const viData = await viRes.json().catch(() => ({}));
+    if (els.adminBilingualViTitle) els.adminBilingualViTitle.value = viData.title || chObj.title || ("Chương " + chapterNumber);
+    const viText = viData.content || "";
+    if (els.adminBilingualViTextarea) els.adminBilingualViTextarea.value = viText;
+    updateBilingualViCounts(viText);
+    if (els.adminBilingualViStatusBadge) {
+      const isDone = viData.translationStatus === "completed" || viData.status === "completed";
+      els.adminBilingualViStatusBadge.textContent = isDone ? "Đã dịch" : "Chờ dịch";
+      els.adminBilingualViStatusBadge.className = "status-pill " + (isDone ? "completed" : "pending");
+    }
+  } else {
+    if (els.adminBilingualViTitle) els.adminBilingualViTitle.value = chObj.title || ("Chương " + chapterNumber);
+    if (els.adminBilingualViTextarea) els.adminBilingualViTextarea.value = "";
+    updateBilingualViCounts("");
+  }
+}
+
+function updateBilingualViCounts(text) {
+  const str = String(text || "");
+  const chars = str.length;
+  const words = str.trim() ? str.trim().split(/\s+/).length : 0;
+  if (els.adminBilingualViCharCount) els.adminBilingualViCharCount.textContent = chars.toLocaleString("vi-VN") + " ký tự";
+  if (els.adminBilingualViWordCount) els.adminBilingualViWordCount.textContent = words.toLocaleString("vi-VN") + " từ";
+}
+
+async function saveBilingualChapter() {
+  const book = bilingualState.activeBook;
+  if (!book) return;
+  const chIdx = bilingualState.currentChapterIndex;
+  const chObj = bilingualState.chapters[chIdx] || { n: chIdx + 1 };
+  const chapterNumber = chObj.n || chIdx + 1;
+  const cleanId = cleanBookId(book.id);
+
+  const title = String(els.adminBilingualViTitle?.value || "").trim();
+  const content = String(els.adminBilingualViTextarea?.value || "").trim();
+
+  if (!content) {
+    alert("Nội dung chương không được để trống.");
+    return;
+  }
+
+  if (els.bilingualSaveBtn) {
+    els.bilingualSaveBtn.disabled = true;
+    els.bilingualSaveBtn.textContent = "Đang lưu lên R2...";
+  }
+
+  try {
+    const res = await requestJson("/api/admin/chapter-save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        bookId: cleanId,
+        chapterNumber,
+        revision: 1,
+        title,
+        content,
+        status: "completed"
+      })
+    });
+
+    if (res.ok) {
+      if (els.bilingualSaveNotice) {
+        els.bilingualSaveNotice.hidden = false;
+        setTimeout(() => { if (els.bilingualSaveNotice) els.bilingualSaveNotice.hidden = true; }, 3000);
+      }
+      if (bilingualState.chapters[chIdx]) {
+        bilingualState.chapters[chIdx].status = "completed";
+        bilingualState.chapters[chIdx].title = title;
+        renderBilingualChapterSelect();
+      }
+    }
+  } catch (err) {
+    alert("Lỗi khi lưu chương: " + err.message);
+  } finally {
+    if (els.bilingualSaveBtn) {
+      els.bilingualSaveBtn.disabled = false;
+      els.bilingualSaveBtn.innerHTML = '<svg class="icon" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Lưu bản dịch lên R2';
+    }
+  }
+}
+
+async function aiTranslateBilingualChapter() {
+  const zhText = String(els.adminBilingualZhContent?.textContent || "").trim();
+  if (!zhText || zhText.startsWith("(") || zhText.startsWith("Đang tải")) {
+    alert("Chưa có văn bản tiếng Trung gốc để dịch.");
+    return;
+  }
+
+  if (els.bilingualAiTranslate) {
+    els.bilingualAiTranslate.disabled = true;
+    els.bilingualAiTranslate.textContent = "🤖 AI đang dịch...";
+  }
+
+  try {
+    const prompt = "Dịch toàn bộ chương truyện tiểu thuyết sau sang tiếng Việt thuần thục, văn phong mượt mà, thuần Việt, chuẩn tiên hiệp/huyền huyễn:\n\n" + zhText;
+    const res = await requestJson("/api/admin/gemini-translate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, model: "gemini-3.6-flash" })
+    });
+
+    if (res.translation) {
+      if (els.adminBilingualViTextarea) {
+        els.adminBilingualViTextarea.value = res.translation;
+        updateBilingualViCounts(res.translation);
+      }
+      alert("Đã dịch xong chương bằng AI! Bạn có thể kiểm tra, chỉnh sửa câu từ và bấm 'Lưu bản dịch lên R2'.");
+    }
+  } catch (err) {
+    alert("Lỗi AI dịch: " + err.message);
+  } finally {
+    if (els.bilingualAiTranslate) {
+      els.bilingualAiTranslate.disabled = false;
+      els.bilingualAiTranslate.innerHTML = '<svg class="icon" viewBox="0 0 24 24"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3z"/></svg> <span>Dịch lại bằng AI</span>';
+    }
+  }
+}
+
+function openEditBookDialog(book) {
+  if (!els.bookEditDialog || !els.bookEditForm) return;
+  els.editBookId.value = book.id || "";
+  els.editBookTitle.value = book.title || "";
+  els.editBookAuthor.value = book.author || "";
+  els.editBookGenre.value = book.genre || "";
+  els.editBookStatus.value = book.status || "Đang cập nhật";
+  els.editBookChapterCount.value = Number(book.chapterCount || book.totalChapters || 0);
+  els.editBookCover.value = book.cover || "";
+  els.editBookDescription.value = book.description || "";
+  els.editBookFeatured.checked = Boolean(book.featured);
+  els.bookEditDialog.showModal();
+}
+
+async function handleBookEditSubmit(event) {
+  event.preventDefault();
+  const id = String(els.editBookId.value || "").trim();
+  if (!id) return;
+
+  const payload = {
+    id,
+    title: els.editBookTitle.value.trim(),
+    author: els.editBookAuthor.value.trim(),
+    genre: els.editBookGenre.value.trim(),
+    status: els.editBookStatus.value,
+    cover: els.editBookCover.value.trim(),
+    description: els.editBookDescription.value.trim(),
+    featured: els.editBookFeatured.checked
+  };
+
+  try {
+    await requestJson("/api/admin/catalog", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    els.bookEditDialog.close();
+    await loadAdminBooksCatalog();
+    setStatus("Đã cập nhật thông tin truyện thành công!");
+  } catch (err) {
+    alert("Không thể lưu thông tin truyện: " + err.message);
+  }
+}
+
+async function deleteBookPrompt(book) {
+  if (!book || !book.id) return;
+  const confirmed = confirm('Bạn có chắc chắn muốn xóa vĩnh viễn bộ truyện "' + book.title + '" khỏi hệ thống?\nThao tác này sẽ xóa mọi chương trên R2 và Database.');
+  if (!confirmed) return;
+
+  try {
+    await requestJson("/api/admin/catalog", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: book.id })
+    });
+    await loadAdminBooksCatalog();
+    setStatus('Đã xóa bộ truyện "' + book.title + '".');
+  } catch (err) {
+    alert("Không thể xóa truyện: " + err.message);
+  }
 }

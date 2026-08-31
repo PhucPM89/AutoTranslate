@@ -69,7 +69,8 @@ const ROUTES = {
   "/api/admin/analytics": handleAnalytics,
   "/api/admin/users": handleAdminUsers,
   "/api/admin/community": handleAdminCommunity,
-  "/api/admin/gemini-translate": handleAdminGeminiTranslate
+  "/api/admin/gemini-translate": handleAdminGeminiTranslate,
+  "/api/admin/chapter-save": handleAdminChapterSave
 };
 
 // Returns a Response for an API path, or null when the request is for something
@@ -1437,6 +1438,92 @@ async function handleAdminKeys({ request, env }) {
     keys: summary,
     activeModel: model,
     fallbackModels
+  });
+}
+
+async function handleAdminChapterSave({ request, env }) {
+  await requireAdmin(request, env);
+  if (request.method !== "POST") return methodNotAllowed("POST");
+
+  const body = await readJson(request, 1024 * 1024);
+  const bookId = String(body?.bookId || "").trim();
+  const chapterNumber = Number(body?.chapterNumber);
+  const revision = Number(body?.revision || 1);
+  const title = String(body?.title || "").trim();
+  const content = String(body?.content || "").trim();
+  const status = String(body?.status || "completed").trim();
+
+  if (!bookId || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(bookId)) {
+    throw fail(400, "ID truyện không hợp lệ.");
+  }
+  if (!Number.isSafeInteger(chapterNumber) || chapterNumber < 1) {
+    throw fail(400, "Số chương không hợp lệ.");
+  }
+  if (!content) {
+    throw fail(400, "Nội dung chương không được để trống.");
+  }
+
+  const storage = readerStorage(env);
+  const key = LAYOUT.chapter(bookId, revision, chapterNumber);
+
+  let doc;
+  try {
+    const existing = await storage.get(key);
+    if (existing) {
+      doc = JSON.parse(await existing.text());
+    }
+  } catch {}
+
+  if (!doc) {
+    doc = {
+      schema: 1,
+      bookId,
+      revision,
+      chapterNumber,
+      title: title || `Chương ${chapterNumber}`,
+      content,
+      translationStatus: status,
+      characters: content.length,
+      updatedAt: new Date().toISOString(),
+      manualEdited: true
+    };
+  } else {
+    doc.title = title || doc.title || `Chương ${chapterNumber}`;
+    doc.content = content;
+    doc.translationStatus = status;
+    doc.characters = content.length;
+    doc.updatedAt = new Date().toISOString();
+    doc.manualEdited = true;
+  }
+
+  await storage.put(key, JSON.stringify(doc), {
+    contentType: "application/json; charset=utf-8",
+    cacheControl: SHORT
+  });
+
+  if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
+    try {
+      const db = createSupabaseClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+      await db.request("chapters", {
+        method: "PATCH",
+        query: `?book_id=eq.${encodeURIComponent(bookId)}&chapter_number=eq.${chapterNumber}`,
+        body: {
+          title: doc.title,
+          translation_status: doc.translationStatus,
+          updated_at: doc.updatedAt
+        }
+      }).catch(() => {});
+    } catch {}
+  }
+
+  return json({
+    ok: true,
+    chapter: {
+      n: chapterNumber,
+      title: doc.title,
+      characters: doc.characters,
+      updatedAt: doc.updatedAt
+    }
   });
 }
 
