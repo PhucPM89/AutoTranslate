@@ -1445,7 +1445,7 @@ function showLibrary() {
   if (els.libraryView) els.libraryView.hidden = false;
   libraryState.detailBook = null;
   updatePageMeta();
-  if (window.location.hash.startsWith("#book/") || window.location.hash === "#epub-studio" || window.location.hash === "#vip-epub") {
+  if (window.location.hash.startsWith("#book/") || window.location.hash.startsWith("#read/") || window.location.hash === "#epub-studio" || window.location.hash === "#vip-epub") {
     history.replaceState(null, "", `${window.location.pathname}#catalog`);
   }
   window.scrollTo({ top: 0 });
@@ -1630,22 +1630,22 @@ async function openFromUrl() {
     return libraryState.books.find((item) => cleanBookId(item.id) === cleanId || item.id === rawId);
   }
 
-  // 1. Check Hash: #read/<bookId>/<chapterNumber>
-  const readMatch = window.location.hash.match(/^#read\/([^/]+)(?:\/(\d+))?$/);
-  if (readMatch) {
+  // 1. Check Hash: #read/<bookId>/<chapterNumber> or #book/<bookId>/<chapterNumber>
+  const readMatch = window.location.hash.match(/^#(?:read|book)\/([^/]+)(?:\/(\d+))?$/);
+  if (readMatch && (readMatch[2] || window.location.hash.startsWith("#read/"))) {
     const bookId = decodeURIComponent(readMatch[1]);
-    const chNum = Number(readMatch[2]) || 1;
+    const chNum = Number(readMatch[2]) || null;
     const catalogBook = findBookById(bookId);
     if (catalogBook) {
       const cover = catalogBook.cover || fallbackCoverForBook(catalogBook);
       showReader();
       const opened = READER_CDN_ENABLED ? await openBookFromCdn(catalogBook, cover, { startAtFirstChapter: false }) : false;
       if (opened) {
-        goToChapter(Math.max(0, chNum - 1));
+        if (chNum !== null) goToChapter(Math.max(0, chNum - 1));
         return true;
       }
       await loadCatalogBook(catalogBook, cover);
-      goToChapter(Math.max(0, chNum - 1));
+      if (chNum !== null) goToChapter(Math.max(0, chNum - 1));
       return true;
     }
   }
@@ -2206,6 +2206,11 @@ function goToChapter(index) {
       url: `${window.location.origin}/?book=${encodeURIComponent(bookSlugParam)}&ch=${state.currentIndex + 1}`,
       book: { title: state.title, author: state.author, genre: state.genre }
     });
+  }
+
+  if (state.bookId) {
+    const cleanId = cleanBookId(state.bookId);
+    history.replaceState(null, "", `${window.location.pathname}#read/${encodeURIComponent(cleanId)}/${state.currentIndex + 1}`);
   }
 
   const isFirstChapter = state.currentIndex === 0;
