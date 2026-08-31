@@ -539,7 +539,7 @@ function bindEvents() {
   els.catalogPrevPage?.addEventListener("click", () => changeCatalogPage(libraryState.catalogPage - 1));
   els.catalogNextPage?.addEventListener("click", () => changeCatalogPage(libraryState.catalogPage + 1));
   els.continueReading?.addEventListener("click", resumeCachedBook);
-  els.backToLibrary?.addEventListener("click", showLibrary);
+  els.backToLibrary?.addEventListener("click", handleReaderBack);
   els.bookBackToLibrary?.addEventListener("click", showLibrary);
   els.bookThemeToggle?.addEventListener("click", toggleTheme);
   els.bookViewRead?.addEventListener("click", () => {
@@ -1428,6 +1428,18 @@ function showReader() {
   if (els.readerView) els.readerView.hidden = false;
   window.scrollTo({ top: 0 });
   requestAnimationFrame(() => renderChapterControls({ ensureCurrent: true }));
+}
+
+function handleReaderBack() {
+  if (state.bookId) {
+    const cleanId = cleanBookId(state.bookId);
+    const book = libraryState.books.find((item) => cleanBookId(item.id) === cleanId || item.id === state.bookId);
+    if (book) {
+      showBookDetail(book);
+      return;
+    }
+  }
+  showLibrary();
 }
 
 function showLibrary() {
