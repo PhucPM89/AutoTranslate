@@ -24,9 +24,7 @@ on:
         default: ""
 
 concurrency:
-  # Crawler ingest and translator both update book indexes and translation job
-  # objects. R2 has no transaction around those writes, so they must not overlap.
-  group: novel-pipeline-storage-writes
+  group: fanqie-crawler-pipeline
   cancel-in-progress: false
 
 permissions:
