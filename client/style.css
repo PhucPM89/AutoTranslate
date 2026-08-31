@@ -1703,6 +1703,185 @@ dialog:not([open]) {
   background: var(--surface);
 }
 
+.book-view-column-main {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1.2rem, 3vw, 2.2rem);
+  min-width: 0;
+}
+
+.book-view-chapters-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.book-view-chapters-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.book-view-chapters-title-wrap h2 {
+  margin: 0;
+}
+
+.book-view-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.book-view-chapters-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.book-view-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.book-view-search-box .search-icon {
+  position: absolute;
+  left: 0.6rem;
+  width: 15px;
+  height: 15px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.book-view-search-box input {
+  padding: 0.4rem 0.6rem 0.4rem 2rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: var(--surface-subtle);
+  color: var(--text);
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+  width: 180px;
+}
+
+.book-view-search-box input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.book-view-chapter-ranges {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding-bottom: 0.6rem;
+  margin-bottom: 0.8rem;
+  scrollbar-width: thin;
+}
+
+.book-view-range-btn {
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.book-view-range-btn:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.book-view-range-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.book-view-chapter-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0.5rem;
+  max-height: 480px;
+  overflow-y: auto;
+  padding-right: 0.3rem;
+  scrollbar-width: thin;
+}
+
+.book-view-chapter-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: var(--surface-subtle);
+  color: var(--text);
+  text-align: left;
+  font-size: 0.86rem;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+}
+
+.book-view-chapter-item:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-color: var(--accent);
+  transform: translateX(2px);
+}
+
+.book-view-chapter-item .ch-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.book-view-chapter-item .ch-tag {
+  font-size: 0.72rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.book-view-chapter-item .ch-tag.translated {
+  background: color-mix(in srgb, #10b981 15%, transparent);
+  color: #10b981;
+}
+
+.book-view-chapter-item .ch-tag.pending {
+  background: color-mix(in srgb, var(--text-muted) 15%, transparent);
+  color: var(--text-muted);
+}
+
+.book-view-chapters-loading,
+.book-view-chapters-empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  grid-column: 1 / -1;
+}
+
 .book-view-panel h2 {
   margin: 0 0 0.9rem;
   font-size: 1rem;

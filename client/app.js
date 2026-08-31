@@ -172,6 +172,13 @@ const els = {
   bookViewReadLabel: document.getElementById("bookViewReadLabel"),
   bookViewRestart: document.getElementById("bookViewRestart"),
   bookViewDescription: document.getElementById("bookViewDescription"),
+  bookViewChaptersPanel: document.getElementById("bookViewChaptersPanel"),
+  bookViewChaptersBadge: document.getElementById("bookViewChaptersBadge"),
+  bookViewChapterSearch: document.getElementById("bookViewChapterSearch"),
+  bookViewSortToggle: document.getElementById("bookViewSortToggle"),
+  bookViewSortLabel: document.getElementById("bookViewSortLabel"),
+  bookViewChapterRanges: document.getElementById("bookViewChapterRanges"),
+  bookViewChapterList: document.getElementById("bookViewChapterList"),
   bookViewRelated: document.getElementById("bookViewRelated"),
   bookViewRelatedEmpty: document.getElementById("bookViewRelatedEmpty"),
   libraryBrand: document.getElementById("libraryBrand"),
@@ -549,6 +556,17 @@ function bindEvents() {
   els.bookViewRestart?.addEventListener("click", () => {
     const book = libraryState.detailBook;
     if (book) loadCatalogBook(book, fallbackCoverForBook(book), { startAtFirstChapter: true });
+  });
+  els.bookViewChapterSearch?.addEventListener("input", (e) => {
+    detailChaptersState.searchQuery = e.target.value.trim();
+    const currentBook = libraryState.detailBook;
+    if (currentBook) updateDetailChapterView(currentBook);
+  });
+  els.bookViewSortToggle?.addEventListener("click", () => {
+    detailChaptersState.isAsc = !detailChaptersState.isAsc;
+    if (els.bookViewSortLabel) els.bookViewSortLabel.textContent = detailChaptersState.isAsc ? "Cũ nhất" : "Mới nhất";
+    const currentBook = libraryState.detailBook;
+    if (currentBook) updateDetailChapterView(currentBook);
   });
   els.readerImportButton?.addEventListener("click", () => els.fileInput?.click());
   els.readerThemeToggle?.addEventListener("click", toggleTheme);
@@ -1583,6 +1601,7 @@ async function showBookDetail(book, { updateHash = true } = {}) {
     els.bookViewReadLabel.textContent = "Đọc từ đầu";
     els.bookViewRestart.hidden = true;
   }
+  renderDetailChapters(book);
 }
 
 // The catalog description is plain text from Gemini, so paragraphs are rebuilt
@@ -1617,18 +1636,154 @@ function renderRelatedBooks(book) {
     image.decoding = "async";
     image.width = 480;
     image.height = 720;
-    image.addEventListener("error", () => { image.src = fallbackCover; }, { once: true });
+    const body = document.createElement("div");
+    appendTextElement(body, "strong", "", item.title);
+    appendTextElement(body, "span", "", item.author ? `Tác giả: ${item.author}` : "Khuyết danh");
     entry.appendChild(image);
-    const copy = document.createElement("span");
-    appendTextElement(copy, "strong", "", item.title);
-    appendTextElement(copy, "small", "", item.chapterCount ? `${item.chapterCount} chương` : "EPUB");
-    entry.appendChild(copy);
+    entry.appendChild(body);
     entry.addEventListener("click", () => showBookDetail(item));
     fragment.appendChild(entry);
   });
 
   els.bookViewRelated.replaceChildren(fragment);
   els.bookViewRelatedEmpty.hidden = related.length > 0;
+}
+
+const detailChaptersState = {
+  bookId: null,
+  chapters: [],
+  filtered: [],
+  selectedRange: 0,
+  isAsc: true,
+  searchQuery: "",
+  pageSize: 50
+};
+
+async function renderDetailChapters(book) {
+  if (!els.bookViewChapterList) return;
+  const cleanId = cleanBookId(typeof book === "object" ? book.id : book);
+  detailChaptersState.bookId = cleanId;
+  detailChaptersState.selectedRange = 0;
+  detailChaptersState.searchQuery = "";
+  if (els.bookViewChapterSearch) els.bookViewChapterSearch.value = "";
+
+  els.bookViewChapterList.innerHTML = `<div class="book-view-chapters-loading">Đang tải danh sách chương...</div>`;
+  if (els.bookViewChaptersBadge) els.bookViewChaptersBadge.textContent = "Đang nạp...";
+  if (els.bookViewChapterRanges) els.bookViewChapterRanges.innerHTML = "";
+
+  try {
+    const index = await fetchBookIndex(cleanId);
+    if (!index || !Array.isArray(index.chapters) || !index.chapters.length || detailChaptersState.bookId !== cleanId) {
+      if (els.bookViewChapterList) els.bookViewChapterList.innerHTML = `<div class="book-view-chapters-empty">Chưa có danh sách chương.</div>`;
+      if (els.bookViewChaptersBadge) els.bookViewChaptersBadge.textContent = "0 chương";
+      return;
+    }
+
+    const totalChapters = index.chapters.length;
+    const transCount = index.translatedChapters || index.chapters.filter((c) => c.status === "completed").length;
+    if (els.bookViewChaptersBadge) els.bookViewChaptersBadge.textContent = `${transCount.toLocaleString("vi-VN")} / ${totalChapters.toLocaleString("vi-VN")} đã dịch`;
+
+    detailChaptersState.chapters = index.chapters.map((ch, idx) => ({
+      index: idx,
+      n: ch.n,
+      title: ch.title || `Chương ${ch.n}`,
+      status: ch.status || "pending"
+    }));
+
+    updateDetailChapterView(book);
+  } catch (e) {
+    if (els.bookViewChapterList) els.bookViewChapterList.innerHTML = `<div class="book-view-chapters-empty">Không thể tải mục lục chương.</div>`;
+  }
+}
+
+function updateDetailChapterView(book) {
+  let list = [...detailChaptersState.chapters];
+  if (!detailChaptersState.isAsc) {
+    list.reverse();
+  }
+
+  if (detailChaptersState.searchQuery) {
+    const q = detailChaptersState.searchQuery.toLowerCase();
+    list = list.filter((item) => item.title.toLowerCase().includes(q) || String(item.n).includes(q));
+    if (els.bookViewChapterRanges) els.bookViewChapterRanges.hidden = true;
+  } else {
+    if (els.bookViewChapterRanges) {
+      els.bookViewChapterRanges.hidden = false;
+      renderDetailChapterRanges(list.length);
+    }
+    const start = detailChaptersState.selectedRange * detailChaptersState.pageSize;
+    list = list.slice(start, start + detailChaptersState.pageSize);
+  }
+
+  detailChaptersState.filtered = list;
+  renderDetailChapterGrid(list, book);
+}
+
+function renderDetailChapterRanges(total) {
+  if (!els.bookViewChapterRanges) return;
+  const numRanges = Math.ceil(total / detailChaptersState.pageSize);
+  if (numRanges <= 1) {
+    els.bookViewChapterRanges.innerHTML = "";
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  for (let i = 0; i < numRanges; i++) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `book-view-range-btn ${i === detailChaptersState.selectedRange ? "active" : ""}`;
+    const startCh = i * detailChaptersState.pageSize + 1;
+    const endCh = Math.min((i + 1) * detailChaptersState.pageSize, total);
+    btn.textContent = `${startCh} - ${endCh}`;
+    btn.addEventListener("click", () => {
+      detailChaptersState.selectedRange = i;
+      const currentBook = libraryState.detailBook;
+      if (currentBook) updateDetailChapterView(currentBook);
+    });
+    fragment.appendChild(btn);
+  }
+  els.bookViewChapterRanges.replaceChildren(fragment);
+}
+
+function renderDetailChapterGrid(items, book) {
+  if (!els.bookViewChapterList) return;
+  if (!items.length) {
+    els.bookViewChapterList.innerHTML = `<div class="book-view-chapters-empty">Không tìm thấy chương phù hợp.</div>`;
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  const fallbackCover = fallbackCoverForBook(book);
+
+  items.forEach((ch) => {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "book-view-chapter-item";
+
+    const isDone = ch.status === "completed";
+    const statusText = isDone ? "Đã dịch" : "Chờ dịch";
+    const statusClass = isDone ? "translated" : "pending";
+
+    const titleSpan = document.createElement("span");
+    titleSpan.className = "ch-title";
+    titleSpan.title = ch.title;
+    titleSpan.textContent = ch.title;
+
+    const tagSpan = document.createElement("span");
+    tagSpan.className = `ch-tag ${statusClass}`;
+    tagSpan.textContent = statusText;
+
+    card.appendChild(titleSpan);
+    card.appendChild(tagSpan);
+
+    card.addEventListener("click", () => {
+      loadCatalogBook(book, fallbackCover, { targetChapterIndex: ch.index });
+    });
+
+    fragment.appendChild(card);
+  });
+
+  els.bookViewChapterList.replaceChildren(fragment);
 }
 
 function updateBookViewBookmark(book) {
@@ -1761,7 +1916,7 @@ function updateContinueReading() {
   els.continueSection.hidden = false;
 }
 
-async function loadCatalogBook(book, assignedFallbackCover = fallbackCoverForBook(book), { startAtFirstChapter = false } = {}) {
+async function loadCatalogBook(book, assignedFallbackCover = fallbackCoverForBook(book), { startAtFirstChapter = false, targetChapterIndex = null } = {}) {
   if (!book) return;
   const cleanId = cleanBookId(typeof book === "object" ? book.id : book);
   showReader();
@@ -1774,7 +1929,7 @@ async function loadCatalogBook(book, assignedFallbackCover = fallbackCoverForBoo
 
   // Preferred path: one small chapter JSON from the CDN.
   try {
-    const opened = await openBookFromCdn(book, cover, { startAtFirstChapter });
+    const opened = await openBookFromCdn(book, cover, { startAtFirstChapter, targetChapterIndex });
     if (opened) return;
   } catch (error) {
     console.error("Lỗi khi mở truyện từ CDN:", error);
@@ -4204,7 +4359,7 @@ function withQueryParam(url, key, value) {
 }
 
 // Returns true when the book was opened from the CDN.
-async function openBookFromCdn(book, cover, { startAtFirstChapter = false } = {}) {
+async function openBookFromCdn(book, cover, { startAtFirstChapter = false, targetChapterIndex = null } = {}) {
   const cleanId = cleanBookId(typeof book === "object" ? book.id : book);
   if (!cleanId) return false;
   const index = await fetchBookIndex(cleanId);
@@ -4236,7 +4391,8 @@ async function openBookFromCdn(book, cover, { startAtFirstChapter = false } = {}
   const savedProgress = startAtFirstChapter
     ? null
     : ((await readProgress(state.bookId).catch(() => null)) || (await findProgressForBook(typeof book === "object" ? book : { id: cleanId })));
-  goToChapter(startAtFirstChapter ? 0 : Number(savedProgress?.currentIndex) || 0);
+  const initialIndex = targetChapterIndex !== null ? targetChapterIndex : (startAtFirstChapter ? 0 : Number(savedProgress?.currentIndex) || 0);
+  goToChapter(initialIndex);
   return true;
 }
 
