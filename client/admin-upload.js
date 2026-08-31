@@ -132,6 +132,10 @@ const els = {
   adminBilingualBookMeta: document.getElementById("adminBilingualBookMeta"),
   bilingualPrevCh: document.getElementById("adminBilingualPrevCh"),
   adminBilingualPrevCh: document.getElementById("adminBilingualPrevCh"),
+  bilingualJumpInput: document.getElementById("adminBilingualJumpInput"),
+  adminBilingualJumpInput: document.getElementById("adminBilingualJumpInput"),
+  bilingualTotalChText: document.getElementById("adminBilingualTotalChText"),
+  adminBilingualTotalChText: document.getElementById("adminBilingualTotalChText"),
   bilingualChSelect: document.getElementById("adminBilingualChSelect"),
   bilingualNextCh: document.getElementById("adminBilingualNextCh"),
   adminBilingualNextCh: document.getElementById("adminBilingualNextCh"),
@@ -322,6 +326,8 @@ export function mountAdmin(options = {}) {
     els.bilingualPrevCh?.addEventListener("click", () => loadBilingualChapter(bilingualState.currentChapterIndex - 1));
     els.bilingualNextCh?.addEventListener("click", () => loadBilingualChapter(bilingualState.currentChapterIndex + 1));
     els.bilingualChSelect?.addEventListener("change", (e) => loadBilingualChapter(Number(e.target.value) || 0));
+    els.bilingualJumpInput?.addEventListener("change", handleBilingualJump);
+    els.bilingualJumpInput?.addEventListener("keydown", (e) => { if (e.key === "Enter") handleBilingualJump(); });
     els.bilingualCopyZh?.addEventListener("click", () => {
       const text = els.bilingualZhContent?.textContent || "";
       navigator.clipboard?.writeText(text);
@@ -2954,9 +2960,28 @@ function closeBilingualEditor() {
   loadAdminBooksCatalog();
 }
 
+function handleBilingualJump() {
+  if (!els.bilingualJumpInput) return;
+  const val = parseInt(els.bilingualJumpInput.value, 10);
+  if (isNaN(val) || val < 1) return;
+  const total = bilingualState.chapters.length || 1;
+  const targetNumber = Math.max(1, Math.min(val, total));
+  let targetIndex = bilingualState.chapters.findIndex((c) => c.n === targetNumber);
+  if (targetIndex < 0) targetIndex = targetNumber - 1;
+  loadBilingualChapter(targetIndex);
+}
+
 function renderBilingualChapterSelect() {
   if (!els.bilingualChSelect) return;
   const fragment = document.createDocumentFragment();
+  const total = bilingualState.chapters.length || 1;
+
+  if (els.bilingualJumpInput) {
+    els.bilingualJumpInput.max = String(total);
+  }
+  if (els.bilingualTotalChText) {
+    els.bilingualTotalChText.textContent = "/ " + total.toLocaleString("vi-VN");
+  }
 
   if (!bilingualState.chapters.length) {
     const opt = document.createElement("option");
@@ -2968,7 +2993,9 @@ function renderBilingualChapterSelect() {
       const opt = document.createElement("option");
       opt.value = String(i);
       const isDone = ch.status === "completed";
-      opt.textContent = (ch.title || ("Chương " + (ch.n || i + 1))) + " [" + (isDone ? "Đã dịch" : "Chờ dịch") + "]";
+      const chNum = ch.n || i + 1;
+      const titleText = ch.title ? (ch.title.startsWith("Chương") ? ch.title : "Chương " + chNum + ": " + ch.title) : "Chương " + chNum;
+      opt.textContent = titleText + " " + (isDone ? "✓ [Đã dịch]" : "⏳ [Chờ dịch]");
       fragment.appendChild(opt);
     });
   }
@@ -2991,6 +3018,8 @@ async function loadBilingualChapter(index) {
   const chObj = bilingualState.chapters[chIdx] || { n: chIdx + 1, title: ("Chương " + (chIdx + 1)) };
   const chapterNumber = chObj.n || chIdx + 1;
   const cleanId = cleanBookId(book.id);
+
+  if (els.bilingualJumpInput) els.bilingualJumpInput.value = String(chapterNumber);
 
   // 1. Fetch Chinese Original
   if (els.adminBilingualZhTitle) els.adminBilingualZhTitle.value = "Đang tải...";

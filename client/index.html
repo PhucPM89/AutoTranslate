@@ -557,8 +557,13 @@
               <button id="adminBilingualPrevCh" class="secondary-action nav-ch-btn" type="button" title="Chương trước">
                 <svg class="icon" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"></path></svg>
               </button>
+              <div class="bilingual-jump-wrap">
+                <span>Chương</span>
+                <input id="adminBilingualJumpInput" type="number" min="1" class="bilingual-jump-input" placeholder="1" title="Nhập số chương và ấn Enter để chuyển nhanh">
+                <span id="adminBilingualTotalChText">/ 1</span>
+              </div>
               <div class="bilingual-chapter-select-wrap">
-                <select id="adminBilingualChSelect" class="bilingual-chapter-select"></select>
+                <select id="adminBilingualChSelect" class="bilingual-chapter-select" aria-label="Chọn chương truyện"></select>
               </div>
               <button id="adminBilingualNextCh" class="secondary-action nav-ch-btn" type="button" title="Chương tiếp theo">
                 <svg class="icon" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg>
