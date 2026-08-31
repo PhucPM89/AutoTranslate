@@ -17,6 +17,11 @@ on:
     # keeps working for hours, so this is a safety net rather than the mechanism.
     - cron: "3,13,23,33,43,53 * * * *"
   workflow_dispatch:
+    inputs:
+      target_book_id:
+        description: "Fanqie Book ID cụ thể cần cào lại/bổ sung (ví dụ: 6497813734990285837)"
+        required: false
+        default: ""
 
 concurrency:
   # Crawler ingest and translator both update book indexes and translation job
@@ -53,6 +58,7 @@ jobs:
       GROQ_API_KEYS: ${{ secrets.GROQ_API_KEYS }}
       GROQ_MODEL: ${{ secrets.GROQ_MODEL }}
       GROQ_FALLBACK_MODELS: ${{ secrets.GROQ_FALLBACK_MODELS }}
+      TARGET_BOOK_ID: ${{ github.event.inputs.target_book_id || '' }}
     steps:
       - name: Checkout website
         uses: actions/checkout@v4

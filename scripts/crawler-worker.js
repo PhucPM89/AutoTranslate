@@ -176,7 +176,25 @@ async function main() {
       }
     };
 
-    // Tomato keeps partially downloaded chapters in the Actions cache, so a book
+    const targetSourceId = String(process.env.TARGET_BOOK_ID || process.env.TARGET_SOURCE_ID || "").replace(/^fanqie-/, "").trim();
+    if (targetSourceId) {
+      console.log(`[CRAWLER TARGET] Yêu cầu cào/bổ sung đích danh bộ Fanqie ID: ${targetSourceId}`);
+      status.message = `Đang cào lại và bổ sung chương cho Fanqie book ${targetSourceId}...`;
+      await updateStatus(status);
+      const targetJob = {
+        sourceId: targetSourceId,
+        genre: "Tiên Hiệp",
+        category: "xianxia",
+        isUpdate: true,
+        isTarget: true
+      };
+      await runJobs([targetJob]);
+      status.message = `Hoàn tất cào lại và bổ sung chương cho Fanqie book ${targetSourceId}.`;
+      status.finishedAt = new Date().toISOString();
+      await updateStatus(status);
+      return;
+    }
+
     // an earlier run left unfinished is retried first rather than being dropped
     // in favour of a different novel.
     if (resumeJob) {
