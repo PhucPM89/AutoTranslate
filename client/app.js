@@ -1554,6 +1554,13 @@ async function showBookDetail(book, { updateHash = true } = {}) {
 
   const finalDescription = book.description || catalogBook.description || "";
   renderBookDescription(finalDescription);
+  if (!finalDescription && READER_CDN_ENABLED) {
+    fetchBookIndex(cleanBookId(book.id)).then((idx) => {
+      if (idx?.description && libraryState.detailBook?.id === book.id) {
+        renderBookDescription(idx.description);
+      }
+    }).catch(() => {});
+  }
   renderRelatedBooks(book);
   updateBookViewBookmark(book);
 
