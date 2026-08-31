@@ -2762,6 +2762,28 @@ async function clearStudioCache() {
 
 // ---- Admin Books Catalog & Bilingual QA Editor -----------------------------
 
+function cleanBookId(rawId) {
+  if (!rawId) return "";
+  let id = String(rawId).replace(/^(cdn|library):/, "").split(":")[0];
+  const match = id.match(/--([A-Za-z0-9._-]+)$/);
+  return match ? match[1] : id;
+}
+
+async function fetchBookIndex(bookId) {
+  const clean = cleanBookId(bookId);
+  if (!clean) return null;
+  const cdnIndexUrl = `${CDN_BASE}/books/${encodeURIComponent(clean)}/index.json?_v=${Date.now()}`;
+  try {
+    const res = await fetch(cdnIndexUrl);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data;
+  } catch (err) {
+    console.error("fetchBookIndex error:", err);
+    return null;
+  }
+}
+
 const bilingualState = {
   activeBook: null,
   chapters: [],
