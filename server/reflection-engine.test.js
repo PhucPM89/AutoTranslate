@@ -5,7 +5,8 @@ const assert = require("node:assert/strict");
 const {
   calculateFluencyScore,
   auditGlossaryCompliance,
-  reflectAndPolish
+  reflectAndPolish,
+  convertResidualHanToHanViet
 } = require("./reflection-engine.js");
 
 test("Reflection Engine: calculateFluencyScore penalizes stiff grammar and Han remnants", () => {
@@ -42,4 +43,39 @@ test("Reflection Engine: reflectAndPolish cleans stiff structures and boosts flu
   assert.ok(result.text.includes("trong lòng không khỏi kỳ quái"));
   assert.ok(result.text.includes("không ngừng bước đi"));
   assert.ok(result.finalScore > result.initialScore);
+});
+
+test("Reflection Engine: fixes common literal family-title transliteration", () => {
+  const result = reflectAndPolish("Gia Gia bảo tôi đi tìm Hải Nhược颖.");
+
+  assert.ok(result.text.includes("ông nội"));
+  assert.doesNotMatch(result.text, /\bGia Gia\b/i);
+  assert.doesNotMatch(result.text, /\p{Script=Han}/u);
+});
+
+test("Reflection Engine: fixes common everyday Han-Viet literal artifacts", () => {
+  const result = reflectAndPolish("Ba Ba và Mụ Mụ nói: Ngã sẽ Bang tôi, còn Nãi Nãi sẽ Giáo em đọc sách.");
+
+  assert.ok(result.text.includes("bố"));
+  assert.ok(result.text.includes("mẹ"));
+  assert.ok(result.text.includes("tôi sẽ giúp tôi"));
+  assert.ok(result.text.includes("bà nội sẽ dạy em"));
+  assert.doesNotMatch(result.text, /\b(?:Ba Ba|Mụ Mụ|Ngã|Bang|Nãi Nãi|Giáo)\b/i);
+});
+
+test("Reflection Engine: converts mixed Vietnamese-Han names without retrying the chapter", () => {
+  const raw = 'Thái 邪 nói với Hải Nhược颖: "Đi thôi."';
+  const fixed = convertResidualHanToHanViet(raw);
+
+  assert.equal(fixed, 'Thái Tà nói với Hải Nhược Dĩnh: "Đi thôi."');
+  assert.doesNotMatch(fixed, /\p{Script=Han}/u);
+});
+
+test("Reflection Engine: converts repeated residual Han names in mostly Vietnamese output", () => {
+  const raw = Array.from({ length: 40 }, () => "Thái 邪 quay sang nhìn Hải Nhược颖.").join("\n");
+  const fixed = convertResidualHanToHanViet(raw);
+
+  assert.doesNotMatch(fixed, /\p{Script=Han}/u);
+  assert.ok(fixed.includes("Thái Tà"));
+  assert.ok(fixed.includes("Hải Nhược Dĩnh"));
 });

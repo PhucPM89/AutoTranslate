@@ -25,10 +25,10 @@ test("formatVietnameseChapterTitle formats sections and chapter numbers correctl
   assert.equal(formatVietnameseChapterTitle("简介", 1), "Giới thiệu");
   assert.equal(formatVietnameseChapterTitle("目录", 2), "Mục lục");
   assert.equal(formatVietnameseChapterTitle("序章", 1), "Lời mở đầu");
-  assert.equal(formatVietnameseChapterTitle("第1章 落地岛国", 3), "Chương 1");
-  assert.equal(formatVietnameseChapterTitle("第2章 无耻的掮客", 4), "Chương 2");
-  assert.equal(formatVietnameseChapterTitle("第二千五百四十四章 大结局", 2544), "Chương 2544");
-  assert.equal(formatVietnameseChapterTitle("第10回 激战", 10), "Hồi 10");
+  assert.equal(formatVietnameseChapterTitle("第1章 落地岛国", 3), "Chương 1: 落地岛国");
+  assert.equal(formatVietnameseChapterTitle("第2章 无耻的掮客", 4), "Chương 2: 无耻的掮客");
+  assert.equal(formatVietnameseChapterTitle("第二千五百四十四章 大结局", 2544), "Chương 2544: 大结局");
+  assert.equal(formatVietnameseChapterTitle("第10回 激战", 10), "Hồi 10: 激战");
   assert.equal(formatVietnameseChapterTitle("番外 现代篇", 100), "Ngoại truyện");
 });
 

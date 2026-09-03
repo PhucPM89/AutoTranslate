@@ -283,6 +283,7 @@ const els = {
   bookViewTranslateProgress: document.getElementById("bookViewTranslateProgress"),
   bookViewTranslatePercent: document.getElementById("bookViewTranslatePercent"),
   bookViewTranslateFill: document.getElementById("bookViewTranslateFill"),
+  bookViewTranslateState: document.getElementById("bookViewTranslateState"),
   ttsToggleBtn: document.getElementById("ttsToggleBtn"),
   ttsToggleLabel: document.getElementById("ttsToggleLabel"),
   zenModeBtn: document.getElementById("zenModeBtn"),
@@ -304,6 +305,7 @@ const els = {
   crossDeviceQrClose: document.getElementById("crossDeviceQrClose"),
   crossDeviceQrCanvas: document.getElementById("crossDeviceQrCanvas"),
   suggestTermBtn: document.getElementById("suggestTermBtn"),
+  reportIssueBtn: document.getElementById("reportIssueBtn"),
   suggestGlossaryDialog: document.getElementById("suggestGlossaryDialog"),
   suggestGlossaryClose: document.getElementById("suggestGlossaryClose"),
   suggestGlossaryForm: document.getElementById("suggestGlossaryForm"),
@@ -311,6 +313,15 @@ const els = {
   suggestTranslationTerm: document.getElementById("suggestTranslationTerm"),
   suggestNote: document.getElementById("suggestNote"),
   suggestGlossaryCancel: document.getElementById("suggestGlossaryCancel"),
+  readerReportDialog: document.getElementById("readerReportDialog"),
+  readerReportClose: document.getElementById("readerReportClose"),
+  readerReportForm: document.getElementById("readerReportForm"),
+  readerReportMeta: document.getElementById("readerReportMeta"),
+  readerReportQuote: document.getElementById("readerReportQuote"),
+  readerReportOptions: document.getElementById("readerReportOptions"),
+  readerReportNote: document.getElementById("readerReportNote"),
+  readerReportCancel: document.getElementById("readerReportCancel"),
+  readerReportSubmit: document.getElementById("readerReportSubmit"),
   quoteFormatPost: document.getElementById("quoteFormatPost"),
   quoteFormatStory: document.getElementById("quoteFormatStory"),
   commentsDrawer: document.getElementById("commentsDrawer"),
@@ -391,6 +402,7 @@ bindEvents();
 initQuoteCardAndSelection();
 initCrossDeviceQrController();
 initGlossarySuggestionController();
+initReaderReportModal();
 initCommentsController();
 initStreakTracker();
 initSponsorController();
@@ -1569,6 +1581,14 @@ async function showBookDetail(book, { updateHash = true } = {}) {
   if (els.bookViewTranslateFill) {
     els.bookViewTranslateFill.style.width = `${fillWidthPct}%`;
   }
+  if (els.bookViewTranslateState) {
+    const pendingChapters = Math.max(0, totalCh - transCh);
+    els.bookViewTranslateState.textContent = pendingChapters === 0 && totalCh > 0
+      ? "Bản dịch tiếng Việt đã hoàn tất đủ theo danh sách chương hiện có."
+      : transCh > 0
+        ? `Đang cập nhật tự động, còn khoảng ${pendingChapters.toLocaleString("vi-VN")} chương.`
+        : "Truyện đang nằm trong hàng đợi dịch tự động.";
+  }
 
   const finalDescription = book.description || catalogBook.description || "";
   renderBookDescription(finalDescription);
@@ -1807,11 +1827,21 @@ async function openFromUrl() {
     return libraryState.books.find((item) => cleanBookId(item.id) === cleanId || item.id === rawId);
   }
 
-  // 1. Check Hash: #read/<bookId>/<chapterNumber> or #book/<bookId>/<chapterNumber>
-  const readMatch = window.location.hash.match(/^#(?:read|book)\/([^/]+)(?:\/(\d+))?$/);
-  if (readMatch && (readMatch[2] || window.location.hash.startsWith("#read/"))) {
+  // 1. Check Hash: #read/<bookId>/<chapterNumber>?p=<par> or #book/<bookId>/<chapterNumber>?p=<par>
+  const rawHash = window.location.hash;
+  const hashWithoutQuery = rawHash.split("?")[0];
+  const hashQuery = rawHash.includes("?") ? rawHash.slice(rawHash.indexOf("?") + 1) : "";
+  const hashParams = new URLSearchParams(hashQuery);
+
+  const readMatch = hashWithoutQuery.match(/^#(?:read|book)\/([^/]+)(?:\/(\d+))?$/);
+  if (readMatch && (readMatch[2] || hashWithoutQuery.startsWith("#read/"))) {
     const bookId = decodeURIComponent(readMatch[1]);
     const chNum = Number(readMatch[2]) || null;
+    const parParam = hashParams.get("p") ?? hashParams.get("par") ?? hashParams.get("paragraph");
+    const targetPar = parParam !== null && parParam !== "" ? Number(parParam) : null;
+    if (Number.isFinite(targetPar) && targetPar >= 0) {
+      pendingTargetParagraph = targetPar;
+    }
     const catalogBook = findBookById(bookId);
     if (catalogBook) {
       const cover = catalogBook.cover || fallbackCoverForBook(catalogBook);
@@ -1827,11 +1857,16 @@ async function openFromUrl() {
     }
   }
 
-  // 2. Check Query Params: ?book=<id>&ch=<n>
+  // 2. Check Query Params: ?book=<id>&ch=<n>&p=<par>
   const urlParams = new URLSearchParams(window.location.search);
   const paramBook = urlParams.get("book");
   if (paramBook) {
     const chNum = Number(urlParams.get("chapter") || urlParams.get("ch")) || 1;
+    const parParam = urlParams.get("p") ?? urlParams.get("par") ?? urlParams.get("paragraph");
+    const targetPar = parParam !== null && parParam !== "" ? Number(parParam) : null;
+    if (Number.isFinite(targetPar) && targetPar >= 0) {
+      pendingTargetParagraph = targetPar;
+    }
     const catalogBook = findBookById(paramBook);
     if (catalogBook) {
       const cover = catalogBook.cover || fallbackCoverForBook(catalogBook);
@@ -2558,17 +2593,15 @@ function initQuoteCardAndSelection() {
     hideSelectionTooltip();
   });
 
+  els.reportIssueBtn?.addEventListener("click", () => {
+    if (!selectedQuoteText) return;
+    openReaderReportModal(selectedQuoteText);
+    hideSelectionTooltip();
+  });
+
   els.commentSelectionBtn?.addEventListener("click", () => {
     if (!selectedQuoteText) return;
-    const selection = window.getSelection();
-    let parIdx = 0;
-    if (selection && selection.rangeCount > 0) {
-      const node = selection.getRangeAt(0).startContainer;
-      const parEl = node.nodeType === 1 ? node.closest(".tts-paragraph-highlight") : node.parentElement?.closest(".tts-paragraph-highlight");
-      if (parEl && parEl.dataset.parIndex !== undefined) {
-        parIdx = Number(parEl.dataset.parIndex) || 0;
-      }
-    }
+    const parIdx = selectedParagraphIndex();
     openCommentsDrawer(parIdx, selectedQuoteText);
     hideSelectionTooltip();
   });
@@ -2992,6 +3025,149 @@ function handleSelectionChange() {
 
 function hideSelectionTooltip() {
   if (els.selectionTooltip) els.selectionTooltip.hidden = true;
+}
+
+function selectedParagraphIndex() {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount <= 0) return 0;
+  const node = selection.getRangeAt(0).startContainer;
+  const parEl = node.nodeType === 1
+    ? node.closest(".tts-paragraph-highlight")
+    : node.parentElement?.closest(".tts-paragraph-highlight");
+  return parEl && parEl.dataset.parIndex !== undefined ? Number(parEl.dataset.parIndex) || 0 : 0;
+}
+
+let pendingTargetParagraph = null;
+
+function scrollToParagraph(parIndex, options = { highlight: true }) {
+  if (parIndex === null || parIndex === undefined || isNaN(parIndex) || parIndex < 0) return;
+  const attemptScroll = (retries = 4) => {
+    const pEl = els.translationText?.querySelector(`.tts-paragraph-highlight[data-par-index="${parIndex}"]`);
+    if (pEl) {
+      pEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (options.highlight) {
+        pEl.classList.remove("report-target-highlight");
+        void pEl.offsetWidth;
+        pEl.classList.add("report-target-highlight");
+        setTimeout(() => {
+          pEl.classList.remove("report-target-highlight");
+        }, 5000);
+      }
+    } else if (retries > 0) {
+      setTimeout(() => attemptScroll(retries - 1), 150);
+    }
+  };
+  requestAnimationFrame(() => requestAnimationFrame(() => attemptScroll()));
+}
+
+window.addEventListener("reader:jump-paragraph", (e) => {
+  const { bookId, chapter, paragraph } = e.detail || {};
+  if (Number.isFinite(paragraph) && paragraph >= 0) {
+    pendingTargetParagraph = paragraph;
+  }
+  const chIdx = Math.max(0, (Number(chapter) || 1) - 1);
+  const currentClean = state.bookId ? cleanBookId(state.bookId) : "";
+  const targetClean = bookId ? cleanBookId(bookId) : "";
+  if ((state.bookId === bookId || currentClean === targetClean) && state.currentIndex === chIdx) {
+    if (pendingTargetParagraph !== null) {
+      scrollToParagraph(pendingTargetParagraph);
+      pendingTargetParagraph = null;
+    }
+  } else if (state.bookId === bookId || currentClean === targetClean) {
+    goToChapter(chIdx);
+  }
+});
+
+let activeReportText = "";
+let activeReportParIndex = 0;
+let activeReportIssueType = "residual_han";
+let activeReportIssueDesc = "Còn sót chữ Hán";
+
+function openReaderReportModal(text) {
+  if (!els.readerReportDialog) return;
+  activeReportText = String(text || "").trim();
+  activeReportParIndex = selectedParagraphIndex();
+  activeReportIssueType = "residual_han";
+  activeReportIssueDesc = "Còn sót chữ Hán";
+
+  if (els.readerReportMeta) {
+    const chLabel = displayChapterTitle(state.currentIndex);
+    els.readerReportMeta.textContent = `${chLabel} · Đoạn ${activeReportParIndex + 1}`;
+  }
+  if (els.readerReportQuote) {
+    els.readerReportQuote.textContent = activeReportText.length > 240
+      ? activeReportText.slice(0, 240) + "..."
+      : activeReportText;
+  }
+  if (els.readerReportNote) {
+    els.readerReportNote.value = "";
+  }
+  if (els.readerReportOptions) {
+    els.readerReportOptions.querySelectorAll(".report-option-btn").forEach((btn) => {
+      btn.classList.toggle("is-active", btn.dataset.type === activeReportIssueType);
+    });
+  }
+
+  els.readerReportDialog.showModal();
+}
+
+function initReaderReportModal() {
+  els.readerReportClose?.addEventListener("click", () => els.readerReportDialog?.close());
+  els.readerReportCancel?.addEventListener("click", () => els.readerReportDialog?.close());
+  els.readerReportDialog?.addEventListener("click", (e) => {
+    if (e.target === els.readerReportDialog) els.readerReportDialog?.close();
+  });
+
+  els.readerReportOptions?.addEventListener("click", (e) => {
+    const btn = e.target.closest(".report-option-btn");
+    if (!btn || !btn.dataset.type) return;
+    activeReportIssueType = btn.dataset.type;
+    activeReportIssueDesc = btn.dataset.desc || btn.textContent.trim();
+    els.readerReportOptions.querySelectorAll(".report-option-btn").forEach((b) => {
+      b.classList.toggle("is-active", b === btn);
+    });
+  });
+
+  els.readerReportForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (els.readerReportSubmit) els.readerReportSubmit.disabled = true;
+
+    const bookId = state.mode === "cdn" ? bookIdFromState() : state.bookId;
+    if (!bookId) {
+      showToast("Không xác định được truyện để gửi báo lỗi.");
+      if (els.readerReportSubmit) els.readerReportSubmit.disabled = false;
+      return;
+    }
+
+    const extraNote = String(els.readerReportNote?.value || "").trim();
+    const finalNote = extraNote ? `${activeReportIssueDesc}: ${extraNote}` : activeReportIssueDesc;
+
+    try {
+      const res = await fetch("/api/reader/report-issue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bookId,
+          bookTitle: state.title || libraryState.detailBook?.title || "",
+          chapterIndex: state.currentIndex,
+          chapterTitle: displayChapterTitle(state.currentIndex),
+          paragraphIndex: activeReportParIndex,
+          issueType: activeReportIssueType,
+          selectedText: activeReportText,
+          note: finalNote
+        })
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result.error || result.message || "Không thể gửi báo lỗi.");
+      els.readerReportDialog?.close();
+      showToast("✓ Đã gửi báo lỗi tới hàng chờ biên tập.");
+    } catch (err) {
+      console.warn("Unable to submit reader issue:", err);
+      showToast(err.message || "Không thể gửi báo lỗi.");
+    } finally {
+      if (els.readerReportSubmit) els.readerReportSubmit.disabled = false;
+    }
+  });
 }
 
 async function refreshQuoteCard() {
@@ -3731,6 +3907,11 @@ function renderTranslation(cached, index) {
       syncChapterUiTitle(index);
     }
     attachCommentBubblesToChapter(state.bookId, index);
+    if (pendingTargetParagraph !== null && Number.isFinite(pendingTargetParagraph)) {
+      const par = pendingTargetParagraph;
+      pendingTargetParagraph = null;
+      scrollToParagraph(par);
+    }
   } else {
     els.translationText.textContent = "Chưa có bản dịch.";
     els.translationText.classList.add("empty");
@@ -4449,6 +4630,11 @@ function renderCdnChapter(chapter, index) {
       ttsEngine.play(0);
     }
     attachCommentBubblesToChapter(bookIdFromState(), index);
+    if (pendingTargetParagraph !== null && Number.isFinite(pendingTargetParagraph)) {
+      const par = pendingTargetParagraph;
+      pendingTargetParagraph = null;
+      scrollToParagraph(par);
+    }
   } else {
     // Untranslated Chinese chapter (Handled safely by background worker)
     els.translationText.innerHTML = `

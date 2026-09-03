@@ -120,8 +120,9 @@ const { translateTextWithHachimi } = require("./hachimi");
 
 async function translateText(text, apiKeys, options = {}) {
   const forceCloud = options.provider === "cloud" || options.forceCloud || options.forceGemini;
+  const isGeminiWeb = !forceCloud && (options.provider === "gemini-web" || process.env.TRANSLATION_PROVIDER === "gemini-web");
   const isHachimi =
-    !forceCloud && options.provider !== "gemini" &&
+    !isGeminiWeb && !forceCloud && options.provider !== "gemini" &&
     (options.provider === "hachimi" ||
       (process.env.TRANSLATION_PROVIDER === "hachimi" && !options.forceGemini && options.provider !== "gemini") ||
       (Boolean(process.env.HACHIMI_API_URL) && !apiKeys && !process.env.GEMINI_API_KEY));
@@ -141,13 +142,22 @@ async function translateText(text, apiKeys, options = {}) {
     };
   }
 
-  const keyList = getActiveKeys(apiKeys);
-  if (!keyList.length) throw new Error("Thiếu GROQ_API_KEY / GEMINI_API_KEY (hoặc HACHIMI_API_URL).");
+  const structuralStub = translateStructuralStub(text);
+  if (structuralStub) {
+    return {
+      translation: structuralStub,
+      chunkCount: 1,
+      modelsUsed: ["local-structure"],
+      providersUsed: ["local"],
+      tokensUsed: 0,
+      elapsedMs: 0
+    };
+  }
 
   let bookGlossary = options.glossary || {};
   const bookTitle = options.bookTitle || "";
   const engine = options.engine || defaultEngine;
-  if (options.bookId) {
+  if (options.bookId && !options.glossary) {
     bookGlossary = await engine.mineAndMergeGlossary(options.bookId, [text]);
   }
   const translationMemory = options.translationMemory || await engine.loadTranslationMemory(options.bookId || null);
@@ -164,16 +174,34 @@ async function translateText(text, apiKeys, options = {}) {
   const chunks = splitTextIntoChunks(text, TRANSLATE_CHUNK_SIZE);
   const startedAt = Date.now();
 
-  const chunkResults = await mapWithConcurrency(
-    chunks,
-    Math.max(1, TRANSLATE_CONCURRENCY),
-    (chunk, index) =>
-      translateChunkWithKeyPool(keyList, chunk, index, chunks.length, {
-        glossary,
-        bookTitle,
-        engine
-      })
-  );
+  let chunkResults;
+  if (isGeminiWeb) {
+    const webConcurrency = 1;
+    chunkResults = await mapWithConcurrency(
+      chunks,
+      webConcurrency,
+      (chunk, index) =>
+        translateChunkWithGeminiWeb(chunk, index, chunks.length, {
+          glossary,
+          bookTitle,
+          engine,
+          profileSlotId: options.profileSlotId || options.slotId
+        })
+    );
+  } else {
+    const keyList = getActiveKeys(apiKeys);
+    if (!keyList.length) throw new Error("Thiếu GROQ_API_KEY / GEMINI_API_KEY (hoặc HACHIMI_API_URL).");
+    chunkResults = await mapWithConcurrency(
+      chunks,
+      Math.max(1, TRANSLATE_CONCURRENCY),
+      (chunk, index) =>
+        translateChunkWithKeyPool(keyList, chunk, index, chunks.length, {
+          glossary,
+          bookTitle,
+          engine
+        })
+    );
+  }
 
   const translatedChunks = chunkResults.map((result) => result.text);
   const rawTranslation = translatedChunks.join("\n\n").trim();
@@ -190,6 +218,114 @@ async function translateText(text, apiKeys, options = {}) {
     tokensUsed: totalTokens,
     elapsedMs: Date.now() - startedAt
   };
+}
+
+function translateStructuralStub(text) {
+  const compact = String(text || "").replace(/\s+/g, "");
+  const direct = {
+    "目录": "Mục lục",
+    "全部章节": "Toàn bộ chương",
+    "正文": "Chính văn",
+    "序章": "Chương mở đầu",
+    "楔子": "Lời dẫn"
+  };
+  if (direct[compact]) return direct[compact];
+  const volume = compact.match(/^第([一二三四五六七八九十百千万\d]+)卷$/u);
+  if (volume) return `Quyển thứ ${translateOrdinalNumber(volume[1])}`;
+  return "";
+}
+
+function translateOrdinalNumber(value) {
+  const raw = String(value || "");
+  const direct = {
+    "一": "nhất",
+    "二": "hai",
+    "三": "ba",
+    "四": "tư",
+    "五": "năm",
+    "六": "sáu",
+    "七": "bảy",
+    "八": "tám",
+    "九": "chín",
+    "十": "mười"
+  };
+  return direct[raw] || raw;
+}
+
+async function translateChunkWithGeminiWeb(text, index, total, { glossary = {}, bookTitle = "", engine = defaultEngine, profileSlotId = null } = {}) {
+  let lastError = null;
+  let draftCandidate = "";
+  let qualityReason = "";
+  const locked = engine.protectGlossaryTerms(text, glossary);
+  const maxAttempts = Math.max(1, Number(process.env.GEMINI_WEB_MAX_ATTEMPTS || 2));
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const prompt = draftCandidate
+      ? buildTargetedRepairPrompt({
+          sourceText: text,
+          draftTranslation: draftCandidate,
+          issueReason: qualityReason,
+          glossary,
+          bookTitle,
+          index,
+          total,
+          repairAttempt: attempt
+        })
+      : engine.buildContextualPrompt({
+          text,
+          index,
+          total,
+          bookTitle,
+          glossary,
+          glossaryMatchText: text,
+          isRetry: Boolean(lastError) || attempt > 0
+        });
+
+    try {
+      if (typeof process === "undefined" || !process.versions?.node) {
+        throw new Error("Gemini Web chỉ chạy trong Node local, không chạy trong Worker runtime.");
+      }
+      const dynamicRequire = eval("require");
+      const { translateWithGeminiWeb } = dynamicRequire("./gemini-web");
+      const result = await translateWithGeminiWeb(prompt, { profileSlotId });
+      const processedText = engine.restoreGlossaryTerms(
+        engine.postProcessTranslation(result.text, glossary),
+        locked.replacements
+      );
+      const normalizedText = rebalanceCollapsedParagraphs(text, processedText);
+      const quality = assessTranslation(text, normalizedText);
+      if (quality.acceptable) {
+        return { text: normalizedText, model: result.model, provider: result.provider, usage: result.usage };
+      }
+
+      lastError = new Error(`Bản dịch Gemini Web chưa đạt yêu cầu (${quality.reason}).`);
+      lastError.status = 502;
+      lastError.code = "translation_rejected";
+      lastError.qualityRejected = true;
+      lastError.qualityReason = quality.reason;
+      draftCandidate = normalizedText || processedText || result.text || "";
+      qualityReason = quality.reason || "";
+    } catch (error) {
+      lastError = error;
+      if (isGeminiWebTimeoutError(error) || error?.code === "gemini_web_failed") {
+        console.warn(`[Gemini Web] chunk ${index + 1}/${total} attempt ${attempt + 1}/${maxAttempts} failed: ${String(error.message || error).slice(0, 220)}`);
+      }
+      if (isGeminiWebTimeoutError(error) && !draftCandidate) break;
+    }
+  }
+
+  const err = new Error(lastError ? String(lastError.message || lastError) : "Gemini Web không trả bản dịch đạt yêu cầu.");
+  err.code = lastError?.qualityRejected ? "translation_rejected" : "gemini_web_failed";
+  err.qualityRejected = Boolean(lastError?.qualityRejected);
+  if (lastError?.qualityReason) err.qualityReason = lastError.qualityReason;
+  err.status = lastError?.status || 502;
+  throw err;
+}
+
+function isGeminiWebTimeoutError(error) {
+  const code = String(error?.code || "");
+  const message = String(error?.message || error || "");
+  return code.includes("timeout") || /quá thời gian|timeout/i.test(message);
 }
 
 async function translateBatchChapters(chapters, apiKeys, options = {}) {
@@ -625,7 +761,8 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
   const nKeys = keyList.length;
   const now = Date.now();
   let lastError = null;
-  let residualHanCandidate = "";
+  let draftCandidate = "";
+  let qualityReason = "";
   const locked = engine.protectGlossaryTerms(text, glossary);
 
   // Build candidate order starting from globalKeyIndex in strict round-robin fashion
@@ -660,8 +797,17 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
     const models = getModelsForApiKey(apiKey);
     for (let modelIndex = 0; modelIndex < models.length; modelIndex += 1) {
       const model = models[modelIndex];
-      const prompt = residualHanCandidate
-        ? buildResidualHanRepairPrompt(residualHanCandidate)
+      const prompt = draftCandidate
+        ? buildTargetedRepairPrompt({
+            sourceText: text,
+            draftTranslation: draftCandidate,
+            issueReason: qualityReason,
+            glossary,
+            bookTitle,
+            index,
+            total,
+            repairAttempt: modelIndex + 1
+          })
         : engine.buildContextualPrompt({
             text: text,
             index,
@@ -693,7 +839,8 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
         error.status = 502;
         error.model = model;
         lastError = error;
-        residualHanCandidate = quality.reason.includes("chữ Hán") ? processedText : "";
+        draftCandidate = processedText || result.text || "";
+        qualityReason = quality.reason || "";
         continue;
       } catch (error) {
         lastError = error;
@@ -725,10 +872,10 @@ async function translateChunkWithKeyPool(keyList, text, index, total, { glossary
   // rare glyph), publish that near-complete candidate rather than failing the
   // chunk — which made the chapter retry the whole pool over and over (13+
   // attempts, burning quota, never publishing).
-  if (residualHanCandidate) {
-    const stats = getScriptStats(residualHanCandidate);
+  if (draftCandidate) {
+    const stats = getScriptStats(draftCandidate);
     if (stats.han > 0 && stats.han <= 8) {
-      return { text: residualHanCandidate, model: "residual-han-accepted", usage: {} };
+      return { text: draftCandidate, model: "residual-han-accepted", usage: {} };
     }
   }
 
@@ -820,11 +967,128 @@ async function generateStructuredText(prompt, apiKeys, generationConfig = {}) {
   throw error;
 }
 
-function buildResidualHanRepairPrompt(translation) {
+function sanitizeContentSafety(text) {
+  if (!text || typeof text !== "string") return "";
+  return text.trim();
+}
+
+function buildTargetedRepairPrompt({
+  sourceText = "",
+  draftTranslation = "",
+  issueReason = "",
+  glossary = {},
+  bookTitle = "",
+  index = 0,
+  total = 1,
+  repairAttempt = 1
+} = {}) {
+  const matchedTerms = defaultEngine.findMatchedGlossaryTerms(sourceText, glossary);
+  let glossarySection = "";
+  if (matchedTerms.length > 0) {
+    glossarySection = [
+      "THUẬT NGỮ & TÊN RIÊNG BẮT BUỘC TUÂN THỦ:",
+      ...matchedTerms.map((t) => `  - "${t.zh}" ➔ "${t.vi}"`),
+      ""
+    ].join("\n");
+  }
+
+  const chunkNote = total > 1 ? `(Phần ${index + 1}/${total} của chương)` : "";
+
+  // Actionable repair directives based on specific issues detected
+  const issueDirectives = [];
+
+  // 1. Check for residual Han glyphs
+  const hanMatches = String(draftTranslation).match(/[\u4e00-\u9fa5]+/gu) || [];
+  if (hanMatches.length > 0 || issueReason.includes("chữ Hán")) {
+    const sampleHan = Array.from(new Set(hanMatches)).slice(0, 8).join(", ");
+    issueDirectives.push(
+      `- SỬA TRIỆT ĐỂ CHỮ HÁN CÒN SÓT: Bản nháp còn sót chữ Hán${sampleHan ? ` (ví dụ: ${sampleHan})` : ""}. Đối chiếu với nguyên tác tiếng Trung để chuyển ngữ toàn bộ sang tiếng Việt hoặc âm Hán-Việt chuẩn xác. Tuyệt đối KHÔNG ĐỂ LẠI BẤT KỲ CHỮ HÁN NÀO.`
+    );
+  }
+
+  // 2. Check for missing / truncated content
+  const sourceLen = String(sourceText).length;
+  const draftLen = String(draftTranslation).length;
+  if (draftLen < sourceLen * 0.65 || issueReason.includes("lược bớt") || issueReason.includes("cụt câu") || issueReason.includes("thiếu nội dung") || issueReason.includes("chỉ trả tiêu đề") || issueReason.includes("cấu trúc đoạn")) {
+    issueDirectives.push(
+      `- BỔ SUNG ĐẦY ĐỦ CÁC ĐOẠN/CÂU BỊ THIẾU: Bản nháp hiện tại bị ngắn hoặc thiếu chi tiết so với bản gốc (${draftLen} ký tự so với ${sourceLen} ký tự gốc). Hãy đối chiếu từng đoạn của Nguyên tác để bổ sung toàn bộ nội dung còn thiếu, không tóm tắt, giữ nguyên tình tiết và lời thoại.`
+    );
+    issueDirectives.push(
+      `- KHÔNG GỘP ĐOẠN: Mỗi đoạn trong nguyên tác phải có một đoạn dịch tương ứng. Giữa hai đoạn dịch phải có một dòng trống. Nếu bản nháp đang dính thành một khối, hãy chia lại theo mạch câu và lời thoại.`
+    );
+  }
+
+  // 3. Check for repetitive paragraphs or runaway loop
+  if (issueReason.includes("lặp") || draftLen > sourceLen * 4.0) {
+    issueDirectives.push(
+      `- LOẠI BỎ LẶP NỘI DUNG: Bản nháp có hiện tượng lặp lại câu/đoạn. Hãy loại bỏ các phần trùng lặp và giữ mạch văn liên tục, gọn ghẽ theo đúng nguyên tác.`
+    );
+  }
+
+  // 4. Strip provider UI/code artifacts that can leak from web automation.
+  if (/rác giao diện|gemini said|show code|code fence|python|javascript|markdown/i.test(issueReason) || detectProviderUiGarbage(draftTranslation)) {
+    issueDirectives.push(
+      `- XÓA RÁC GIAO DIỆN/CODE: Bản nháp có lẫn chữ/nút của Gemini Web hoặc khối code như "Gemini said", "Show code", "Copy code", "python", dấu \`\`\`. Hãy loại bỏ toàn bộ các dòng rác đó và chỉ giữ văn bản truyện đã dịch sang tiếng Việt.`
+    );
+  }
+
+  // 5. Check for stiff Han-Viet or literal grammar artifacts
+  if (issueReason.includes("sượng") || issueReason.includes("Hán-Việt") || issueReason.includes("chúng tôi đích")) {
+    issueDirectives.push(
+      `- CHUỐT LẠI VĂN PHONG THUẦN VIỆT: Sửa các cụm từ Hán-Việt sượng, dịch máy móc (như "tự kỷ đích", "không khỏi có chút", "nói không ra lời" -> "nghẹn lời", "bị sợ nhảy dựng" -> "giật nảy mình",...) thành câu văn tiếng Việt giàu hình ảnh, biểu cảm.`
+    );
+  }
+
+  // Fallback directive if no specific flag matched
+  if (issueDirectives.length === 0) {
+    issueDirectives.push(
+      `- KIỂM TRA ĐỐI CHIẾU & HOÀN THIỆN: Rà soát bản dịch nháp đối chiếu với nguyên tác tiếng Trung, sửa các lỗi ngữ nghĩa, chính tả, sót câu hoặc sót chữ Hán còn tồn đọng.`
+    );
+  }
+
+  return [
+    "[CHẾ ĐỘ TỰ PHẢN TỈNH & SỬA LỖI BẢN DỊCH / REFLECTION & REPAIR MODE]",
+    "Bạn là một biên tập viên tiểu thuyết kỳ cựu đang chỉnh sửa bản dịch Trung - Việt.",
+    bookTitle ? `Tác phẩm: ${sanitizeContentSafety(bookTitle)}` : "",
+    chunkNote,
+    "",
+    "Dưới đây là (1) NGUYÊN TÁC TIẾNG TRUNG và (2) BẢN DỊCH NHÁP TIẾNG VIỆT vừa tạo ra.",
+    repairAttempt > 1 ? `Đây là lượt tự vá lỗi thứ ${repairAttempt}; bản trước vẫn không qua hậu kiểm, vì vậy hãy rà đối chiếu kỹ hơn trước khi trả lời.` : "",
+    "Bản dịch nháp cần được bạn chỉnh sửa, bổ sung và hoàn thiện theo các chỉ dẫn sau:",
+    ...issueDirectives,
+    "",
+    "NGUYÊN TẮC BIÊN TẬP:",
+    "1. Giữ lại những đoạn tiếng Việt đã dịch tốt và mượt mà trong Bản Nháp.",
+    "2. Đối chiếu với Nguyên Tác để bổ sung những câu/đoạn còn thiếu, sửa những từ dịch sai hoặc sót.",
+    "3. Xưng hô chuẩn phong cách tiểu thuyết (ta - ngươi, hắn - nàng, huynh - đệ...).",
+    "4. Giữ xuống dòng rõ ràng: mỗi đoạn dịch cách nhau bằng một dòng trống; không gộp toàn chương thành một khối.",
+    "5. Tuyệt đối không để sót bất kỳ chữ Hán nào trong kết quả cuối cùng.",
+    "6. Chỉ trả về bản dịch tiếng Việt HOÀN CHỈNH cuối cùng sau khi đã sửa xong, không kèm lời chào hay giải thích.",
+    "",
+    glossarySection,
+    "=== 1. NGUYÊN TÁC TIẾNG TRUNG ===",
+    sanitizeContentSafety(sourceText),
+    "",
+    "=== 2. BẢN DỊCH NHÁP CẦN SỬA ===",
+    draftTranslation
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildResidualHanRepairPrompt(translation, sourceText = "") {
+  if (sourceText) {
+    return buildTargetedRepairPrompt({
+      sourceText,
+      draftTranslation: translation,
+      issueReason: "chữ Hán"
+    });
+  }
   return [
     "Bạn là biên tập viên bản dịch Trung - Việt.",
     "Bản dịch tiếng Việt dưới đây đã đầy đủ nhưng còn sót một vài chữ Hán.",
     "Hãy thay TOÀN BỘ chữ Hán còn sót bằng từ tiếng Việt hoặc âm Hán-Việt phù hợp với ngữ cảnh.",
+    "Trước khi trả lời, tự kiểm tra từng dòng và chỉ xuất bản khi không còn bất kỳ Hán tự/Chinese character nào.",
     "Giữ nguyên toàn bộ nội dung tiếng Việt, con số, lời thoại và cấu trúc đoạn; không tóm tắt, không giải thích.",
     "Chỉ trả về bản dịch đã sửa và tuyệt đối không còn bất kỳ chữ Hán nào.",
     "",
@@ -1049,6 +1313,11 @@ function assessTranslation(source, translation) {
   const output = String(translation || "").trim();
   if (!output) return { acceptable: false, reason: "kết quả rỗng" };
 
+  const providerGarbage = detectProviderUiGarbage(output);
+  if (providerGarbage) {
+    return { acceptable: false, reason: `bản dịch lẫn rác giao diện/code (${providerGarbage})` };
+  }
+
   const compactSource = normalizeForComparison(source);
   const compactOutput = normalizeForComparison(output);
   if (compactSource && compactSource === compactOutput) {
@@ -1059,6 +1328,16 @@ function assessTranslation(source, translation) {
   const outputStats = getScriptStats(output);
   const sourceIsChinese = sourceStats.han >= 20 && sourceStats.hanRatio >= 0.3;
   if (!sourceIsChinese) return { acceptable: true };
+
+  const outputLines = output.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  const titleOnly =
+    source.length >= 500 &&
+    outputLines.length <= 2 &&
+    output.length <= 220 &&
+    /^(?:chương|chuong|chapter|tiêu đề|tên chương)\b|^.{1,80}[:：]\s*.{0,120}$/iu.test(outputLines.join(" "));
+  if (titleOnly) {
+    return { acceptable: false, reason: "Gemini Web chỉ trả tiêu đề/tóm tắt ngắn, thiếu nội dung chương" };
+  }
 
   // 1. Kiểm tra sót chữ Hán (nếu sót nhiều hơn 2 chữ Hán thì yêu cầu sửa)
   if (outputStats.han > 2) {
@@ -1127,7 +1406,7 @@ function assessTranslation(source, translation) {
   };
   const missingNumber = extractNumbers(source).find((number) => {
     if (!number || outputNumbers.has(number)) return false;
-    const words = numberWords[number];
+    const words = numberWords[number] || viNumberToWords(number);
     return !(words && words.some((word) => outputLower.includes(word)));
   });
   if (missingNumber) {
@@ -1144,11 +1423,36 @@ function assessTranslation(source, translation) {
   return { acceptable: true };
 }
 
+function detectProviderUiGarbage(text) {
+  const value = String(text || "");
+  if (!value) return "";
+  if (/```/.test(value)) return "code fence";
+  if (/^\s*Gemini said\s*:?/im.test(value)) return "Gemini said";
+  const fileTag = value.match(/\[file-tag:[^\]]+\]/iu);
+  if (fileTag) return fileTag[0];
+  if (/^\s*(?:your text file is ready|bản dịch tiếng việt .{0,260}?(?:sẵn sàng|hoàn thành|hoàn chỉnh)[.!?。]?)/imu.test(value)) return "response meta";
+
+  const uiLineRe = /^(?:gemini said|show thinking|thinking|sources|drafts|show code|hide code|copy code|copy|run|share|retry|modify response|edit in gemini|more drafts|use code with caution|content_copy|thumb_up|thumb_down|more_vert|google search|xem mã|ẩn mã|sao chép mã|sao chép|chạy|chia sẻ|thử lại|sửa trong gemini)$/iu;
+  const codeLanguageLineRe = /^(?:python|py|javascript|js|typescript|ts|json|html|css|bash|shell|powershell|plaintext|text|markdown|xml|yaml|yml)$/iu;
+  const lines = value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const badLine = lines.find((line) => uiLineRe.test(line) || codeLanguageLineRe.test(line));
+  return badLine || "";
+}
+
 function detectLiteralEverydayHanViet(source, translation) {
   const sourceText = String(source || "");
   const output = String(translation || "");
   const rules = [
     { zh: "爷爷", vi: /\bGia Gia\b/iu, meaning: "ông nội" },
+    { zh: "奶奶", vi: /\bNãi Nãi\b/iu, meaning: "bà nội" },
+    { zh: "爸爸", vi: /\bBa Ba\b/iu, meaning: "bố" },
+    { zh: "妈妈", vi: /\bMụ Mụ\b/iu, meaning: "mẹ" },
+    { zh: "哥哥", vi: /\bCa Ca\b/iu, meaning: "anh trai" },
+    { zh: "姐姐", vi: /\bTỷ Tỷ\b/iu, meaning: "chị gái" },
+    { zh: "弟弟", vi: /\bĐệ Đệ\b/iu, meaning: "em trai" },
+    { zh: "妹妹", vi: /\bMuội Muội\b/iu, meaning: "em gái" },
+    { zh: "叔叔", vi: /\bThúc Thúc\b/iu, meaning: "chú" },
+    { zh: "阿姨", vi: /\bA Di\b/iu, meaning: "dì" },
     { zh: "我", vi: /\bNgã\b/iu, meaning: "tôi/ta" },
     { zh: "你", vi: /\bNhĩ\b/iu, meaning: "bạn/ngươi" },
     { zh: "却", vi: /\bKhước\b/iu, meaning: "lại/vậy mà" },
@@ -1160,8 +1464,81 @@ function detectLiteralEverydayHanViet(source, translation) {
   return `bản dịch chuyển âm máy móc từ thường ngày; cần dịch nghĩa "${hit.meaning}" thay vì Hán-Việt hóa`;
 }
 
+function rebalanceCollapsedParagraphs(source, translation) {
+  const output = String(translation || "").trim();
+  if (!output) return output;
+
+  const sourceParagraphs = paragraphCount(source);
+  const outputParagraphs = paragraphCount(output);
+  const requiredParagraphs = Math.max(2, Math.ceil(sourceParagraphs * 0.20));
+  if (sourceParagraphs < 8 || outputParagraphs >= requiredParagraphs) return output;
+
+  const ratio = output.length / Math.max(1, String(source || "").length);
+  if (ratio < 0.75 || detectProviderUiGarbage(output)) return output;
+
+  const sentences = output
+    .replace(/\r\n?/g, "\n")
+    .split(/(?<=[.!?…。！？;；:：])\s+|(?<=[.!?…。！？;；:：])(?=["'“”‘’\p{Lu}À-Ỵ])/gu)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (sentences.length < requiredParagraphs) return output;
+
+  const targetParagraphs = Math.min(sourceParagraphs, sentences.length);
+  const groups = [];
+  for (let i = 0; i < targetParagraphs; i += 1) {
+    const start = Math.floor((i * sentences.length) / targetParagraphs);
+    const end = Math.floor(((i + 1) * sentences.length) / targetParagraphs);
+    const paragraph = sentences.slice(start, Math.max(start + 1, end)).join(" ").trim();
+    if (paragraph) groups.push(paragraph);
+  }
+  return groups.length >= requiredParagraphs ? groups.join("\n\n") : output;
+}
+
 function paragraphCount(value) {
   return String(value || "").split(/\n+/).map((part) => part.trim()).filter(Boolean).length;
+}
+
+function viNumberToWords(value) {
+  const n = parseInt(value, 10);
+  if (!Number.isFinite(n) || n < 0 || n > 999999999) return [];
+  const digits = ["không", "một", "hai", "ba", "bốn", "năm", "sáu", "bảy", "tám", "chín"];
+  if (n < 10) return [digits[n]];
+  if (n === 10) return ["mười", "thập"];
+  if (n < 20) return ["mười " + (n === 15 ? "lăm" : (n === 11 ? "một" : digits[n % 10]))];
+  if (n < 100) {
+    const d = Math.floor(n / 10);
+    const r = n % 10;
+    const ten = (d === 2 ? "hai mươi" : (d === 3 ? "ba mươi" : (d === 4 ? "bốn mươi" : digits[d] + " mươi")));
+    const base = [ten, ten.replace("mươi", "chục")];
+    if (r === 0) return base;
+    const suffix = (r === 1 ? "mốt" : (r === 4 ? "tư" : (r === 5 ? "lăm" : digits[r])));
+    return base.flatMap(b => [b + " " + suffix, r === 4 ? b + " bốn" : ""]).filter(Boolean);
+  }
+  if (n < 1000) {
+    const h = Math.floor(n / 100);
+    const r = n % 100;
+    const hundred = digits[h] + " trăm";
+    if (r === 0) return [hundred];
+    const sub = viNumberToWords(r);
+    const res = sub.flatMap(s => [hundred + " " + s, r < 10 ? hundred + " lẻ " + s : ""]).filter(Boolean);
+    if (r === 50) res.push(hundred + " rưỡi");
+    return res;
+  }
+  if (n < 1000000) {
+    const k = Math.floor(n / 1000);
+    const r = n % 1000;
+    const kWords = viNumberToWords(k);
+    const prefixes = kWords.flatMap(kw => [kw + " nghìn", kw + " ngàn", kw === "một" ? "nghìn" : "", kw === "một" ? "ngàn" : ""]).filter(Boolean);
+    if (r === 0) return prefixes;
+    if (r === 500) {
+      const halves = prefixes.map(p => p + " rưỡi");
+      const sub = viNumberToWords(r);
+      return [...halves, ...prefixes.flatMap(p => sub.map(s => p + " " + s))];
+    }
+    const sub = viNumberToWords(r);
+    return prefixes.flatMap(p => sub.map(s => p + " " + s));
+  }
+  return [];
 }
 
 function normalizeNumber(value) {
@@ -1308,6 +1685,7 @@ module.exports = {
   translateMetadata,
   generateStructuredText,
   assessTranslation,
+  detectProviderUiGarbage,
   stripMarkdown,
   stripThinkTags,
   splitTextIntoChunks,
@@ -1321,11 +1699,13 @@ module.exports = {
   reserveKeyOrder,
   outputTokenBudget,
   buildResidualHanRepairPrompt,
+  buildTargetedRepairPrompt,
   exportKeyPoolState,
   importKeyPoolState,
   keyFingerprint,
   cleanTranslatedTitle,
   getModelsForApiKey,
   providerPriority,
-  prioritizeProviderFallback
+  prioritizeProviderFallback,
+  rebalanceCollapsedParagraphs
 };

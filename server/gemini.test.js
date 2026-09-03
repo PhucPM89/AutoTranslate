@@ -15,7 +15,8 @@ const {
   computeQuotaRecovery,
   nextPacificMidnightMs,
   providerPriority,
-  prioritizeProviderFallback
+  prioritizeProviderFallback,
+  rebalanceCollapsedParagraphs
 } = require("./gemini");
 
 const chineseSource = "这是一个需要翻译成越南语的中文段落。".repeat(20);
@@ -52,6 +53,15 @@ test("rejects a translation that collapses most source paragraphs", () => {
   assert.match(result.reason, /cấu trúc đoạn/);
 });
 
+test("rebalanceCollapsedParagraphs rescues Gemini Web output that lost line breaks", () => {
+  const source = Array.from({ length: 10 }, () => "这是需要完整翻译的中文内容。".repeat(10)).join("\n\n");
+  const output = Array.from({ length: 20 }, (_, i) => `Đây là câu dịch thứ ${i + 1}, nội dung đã được chuyển sang tiếng Việt đầy đủ.`).join(" ");
+  const rebalanced = rebalanceCollapsedParagraphs(source, output);
+  const result = assessTranslation(source, rebalanced);
+  assert.ok(rebalanced.split(/\n+/).filter(Boolean).length >= 2);
+  assert.equal(result.acceptable, true);
+});
+
 test("rejects duplicated long paragraphs", () => {
   const source = "这是一个需要完整翻译的中文段落。".repeat(50);
   const paragraph = "Đây là một đoạn dịch dài bị mô hình lặp nguyên văn ngoài ý muốn, làm nội dung sai lệch dù tổng chiều dài vẫn có vẻ hợp lệ. ".repeat(4);
@@ -74,6 +84,26 @@ test("rejects literal Han-Viet transliteration of everyday narration", () => {
   const result = assessTranslation(source, output);
   assert.equal(result.acceptable, false);
   assert.match(result.reason, /chuyển âm máy móc/);
+});
+
+test("rejects title-only output for a full chapter", () => {
+  const source = `${"这是一个完整章节，需要翻译全部正文内容。".repeat(80)}`;
+  const output = "Chương 769: Tìm Kiếm Giang Thủy Hàn";
+  const result = assessTranslation(source, output);
+  assert.equal(result.acceptable, false);
+  assert.match(result.reason, /chỉ trả tiêu đề/);
+});
+
+test("rejects Gemini Web UI and code chrome leaked into a chapter", () => {
+  const output = [
+    "Gemini said:",
+    "Đây là bản dịch tiếng Việt đầy đủ của chương truyện, nội dung vẫn đang tiếp diễn với lời thoại và miêu tả. ".repeat(7),
+    "Show code",
+    "python"
+  ].join("\n");
+  const result = assessTranslation(chineseSource, output);
+  assert.equal(result.acceptable, false);
+  assert.match(result.reason, /rác giao diện/);
 });
 
 test("accepts a translation that expresses numbers in natural Vietnamese words", () => {
@@ -242,6 +272,82 @@ test("explicit cloud provider ignores a stale Hachimi environment setting", asyn
     global.fetch = originalFetch;
     if (oldProvider === undefined) delete process.env.TRANSLATION_PROVIDER; else process.env.TRANSLATION_PROVIDER = oldProvider;
     if (oldUrl === undefined) delete process.env.HACHIMI_API_URL; else process.env.HACHIMI_API_URL = oldUrl;
+  }
+});
+
+test("gemini-web provider can translate without API keys", async () => {
+  const oldMock = process.env.GEMINI_WEB_MOCK_RESPONSE;
+  const oldProvider = process.env.TRANSLATION_PROVIDER;
+  process.env.GEMINI_WEB_MOCK_RESPONSE = "Đây là nội dung tiểu thuyết đã được dịch đầy đủ sang tiếng Việt, rõ ràng và tự nhiên. ".repeat(14);
+  delete process.env.TRANSLATION_PROVIDER;
+
+  try {
+    const result = await translateText(chineseSource, "", { provider: "gemini-web" });
+    assert.equal(result.providersUsed[0], "gemini-web");
+    assert.equal(result.modelsUsed[0], "gemini-web-mock");
+    assert.ok(result.translation.includes("Đây là nội dung tiểu thuyết"));
+  } finally {
+    if (oldMock === undefined) delete process.env.GEMINI_WEB_MOCK_RESPONSE; else process.env.GEMINI_WEB_MOCK_RESPONSE = oldMock;
+    if (oldProvider === undefined) delete process.env.TRANSLATION_PROVIDER; else process.env.TRANSLATION_PROVIDER = oldProvider;
+  }
+});
+
+test("translates structural stub chapters locally without touching providers", async () => {
+  const result = await translateText("目录", "", { provider: "gemini-web" });
+  assert.equal(result.translation, "Mục lục");
+  assert.deepEqual(result.providersUsed, ["local"]);
+  assert.equal(result.tokensUsed, 0);
+
+  const volume = await translateText("第一卷", "", { provider: "gemini-web" });
+  assert.equal(volume.translation, "Quyển thứ nhất");
+});
+
+test("gemini-web quality failure is marked as translation_rejected", async () => {
+  const oldMock = process.env.GEMINI_WEB_MOCK_RESPONSE;
+  const oldProvider = process.env.TRANSLATION_PROVIDER;
+  const oldAttempts = process.env.GEMINI_WEB_MAX_ATTEMPTS;
+  process.env.GEMINI_WEB_MOCK_RESPONSE = "Bản dịch bị cụt.";
+  process.env.GEMINI_WEB_MAX_ATTEMPTS = "1";
+  delete process.env.TRANSLATION_PROVIDER;
+
+  try {
+    await assert.rejects(
+      () => translateText(chineseSource, "", { provider: "gemini-web" }),
+      (error) => {
+        assert.equal(error.code, "translation_rejected");
+        assert.equal(error.qualityRejected, true);
+        assert.match(error.message, /Bản dịch Gemini Web chưa đạt yêu cầu/);
+        return true;
+      }
+    );
+  } finally {
+    if (oldMock === undefined) delete process.env.GEMINI_WEB_MOCK_RESPONSE; else process.env.GEMINI_WEB_MOCK_RESPONSE = oldMock;
+    if (oldProvider === undefined) delete process.env.TRANSLATION_PROVIDER; else process.env.TRANSLATION_PROVIDER = oldProvider;
+    if (oldAttempts === undefined) delete process.env.GEMINI_WEB_MAX_ATTEMPTS; else process.env.GEMINI_WEB_MAX_ATTEMPTS = oldAttempts;
+  }
+});
+
+test("explicit cloud provider ignores gemini-web environment setting", async () => {
+  const originalFetch = global.fetch;
+  const oldProvider = process.env.TRANSLATION_PROVIDER;
+  const vietnamese = "Đây là nội dung tiểu thuyết đã được dịch đầy đủ sang tiếng Việt, rõ ràng và tự nhiên. ".repeat(14);
+  let calledUrl = "";
+  global.fetch = async (url) => {
+    calledUrl = String(url);
+    return {
+      ok: true,
+      json: async () => ({ candidates: [{ content: { parts: [{ text: vietnamese }] } }] })
+    };
+  };
+  process.env.TRANSLATION_PROVIDER = "gemini-web";
+
+  try {
+    const result = await translateText(chineseSource, "AQ.cloud-key", { provider: "cloud" });
+    assert.equal(result.translation, vietnamese.trim());
+    assert.match(calledUrl, /generativelanguage\.googleapis\.com/);
+  } finally {
+    global.fetch = originalFetch;
+    if (oldProvider === undefined) delete process.env.TRANSLATION_PROVIDER; else process.env.TRANSLATION_PROVIDER = oldProvider;
   }
 });
 
@@ -438,4 +544,64 @@ test("prioritizeProviderFallback places all Gemini keys before Groq fallback key
     ordered.map((e) => e.key),
     ["AIza_gemini_1", "AQ_gemini_2", "gsk_groq_1", "gsk_groq_2"]
   );
+});
+
+test("residual Han repair prompt demands a final no-Han pass", () => {
+  const { buildResidualHanRepairPrompt } = require("./gemini");
+  const prompt = buildResidualHanRepairPrompt("Bản dịch còn sót 漢.");
+  assert.match(prompt, /tự kiểm tra từng dòng/);
+  assert.match(prompt, /không còn bất kỳ chữ Hán/);
+});
+
+test("buildTargetedRepairPrompt injects both source and draft with specific repair directives", () => {
+  const { buildTargetedRepairPrompt } = require("./gemini");
+  const sourceText = "林动深吸了一口气，迈步走进了房间。";
+  const draftTranslation = "Lâm Động hít sâu một hơi, 迈步 bước vào trong phòng.";
+  const prompt = buildTargetedRepairPrompt({
+    sourceText,
+    draftTranslation,
+    issueReason: "vẫn còn sót 2 chữ Hán chưa được chuyển ngữ",
+    glossary: { "林动": "Lâm Động" },
+    bookTitle: "Vũ Động Càn Khôn"
+  });
+
+  assert.match(prompt, /REFLECT/i);
+  assert.match(prompt, /NGUYÊN TÁC TIẾNG TRUNG/);
+  assert.match(prompt, /BẢN DỊCH NHÁP CẦN SỬA/);
+  assert.match(prompt, /SỬA TRIỆT ĐỂ CHỮ HÁN CÒN SÓT/);
+  assert.match(prompt, /Lâm Động/);
+  assert.match(prompt, /Vũ Động Càn Khôn/);
+});
+
+test("cleanGeminiWebText strips Gemini UI/code labels but keeps translated prose", () => {
+  const { cleanGeminiWebText, detectGeminiUiGarbage } = require("./gemini-web");
+  const noisy = [
+    "Gemini said:",
+    "```python",
+    "Đoạn dịch tiếng Việt cần được giữ lại.",
+    "Show code",
+    "Copy code",
+    "```"
+  ].join("\n");
+  const cleaned = cleanGeminiWebText(noisy);
+  assert.equal(cleaned, "Đoạn dịch tiếng Việt cần được giữ lại.");
+  assert.equal(detectGeminiUiGarbage(noisy), "code fence");
+  assert.equal(detectGeminiUiGarbage(cleaned), "");
+});
+
+test("cleanGeminiWebText strips inline Gemini file metadata", () => {
+  const { cleanGeminiWebText, detectGeminiUiGarbage } = require("./gemini-web");
+  const noisy = "Bản dịch tiếng Việt (phần 1/2 chương 1814) của tác phẩm Ma Y Thần Toán Tử đã hoàn thành [file-tag: code-generated-file-translation.txt] Chương 1814: Mưa lớn kéo dài.";
+  const cleaned = cleanGeminiWebText(noisy);
+  assert.equal(cleaned, "Chương 1814: Mưa lớn kéo dài.");
+  assert.equal(detectGeminiUiGarbage(noisy), "[file-tag: code-generated-file-translation.txt]");
+  assert.equal(detectGeminiUiGarbage(cleaned), "");
+});
+
+test("gemini-web config parses maxProfiles concurrency cleanly", () => {
+  const { getConfig } = require("./gemini-web");
+  assert.equal(getConfig().maxProfiles, 1);
+  assert.equal(getConfig().lowResourceMode, true);
+  const config = getConfig({ maxProfiles: 3 });
+  assert.equal(config.maxProfiles, 3);
 });

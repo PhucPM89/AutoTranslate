@@ -155,17 +155,26 @@ async function runTranslationJobs({
   spacingMs = 0,
   batchSize = 1,
   strictSequential = false,
+  processingStaleMs = 15 * 60 * 1000,
   onProgress = null
 }) {
-  // Auto-heal any chapters that were stalled by previous strict validation
+  // Auto-heal only chapters abandoned while a worker was interrupted. Failed
+  // chapters are terminal; reviving them here makes a poison chapter loop
+  // forever across daemon restarts.
   if (state?.chapters) {
     for (const entry of state.chapters) {
-      if (entry.status === "failed" || (entry.attempts >= 5 && entry.status !== "completed")) {
+      if (entry.status === "processing" && entry.startedAt && now() - Date.parse(entry.startedAt) > processingStaleMs) {
         entry.status = "pending";
         entry.priority = "high";
         entry.attempts = 0;
         entry.nextAttemptAt = 0;
         entry.lastError = "";
+      }
+      if (entry.status === "retrying" && Number(entry.attempts || 0) >= maxAttempts) {
+        entry.status = "failed";
+        entry.nextAttemptAt = 0;
+        entry.startedAt = "";
+        entry.lastError = entry.lastError || "Đã hết số lượt thử lại; chuyển sang QA để worker đi tiếp.";
       }
     }
   }
@@ -175,6 +184,7 @@ async function runTranslationJobs({
   let quotaExhausted = false;
   let earliestCooldown = 0;
   let spent = 0;
+  const qualityMaxAttempts = Math.min(QUALITY_MAX_ATTEMPTS, Math.max(1, Number(maxAttempts) || QUALITY_MAX_ATTEMPTS));
 
   while (true) {
     if (spent >= requestBudget) break;
@@ -189,6 +199,7 @@ async function runTranslationJobs({
     for (const entry of entries) {
       entry.status = "processing";
       entry.attempts += 1;
+      entry.startedAt = new Date(now()).toISOString();
     }
     state.updatedAt = new Date(now()).toISOString();
     await saveState(state);
@@ -219,10 +230,17 @@ async function runTranslationJobs({
           const ch = chapters.find((c) => c && c.chapterNumber === res.chapterNumber);
           if (entry && ch && res.translation) {
             await publishChapter(ch, res.translation);
+            const repairedFromError = entry.attempts > 1 && entry.lastError ? entry.lastError : "";
             entry.status = "completed";
             entry.lastError = "";
             entry.nextAttemptAt = 0;
+            entry.startedAt = "";
             entry.completedAt = new Date(now()).toISOString();
+            if (repairedFromError) {
+              entry.repairedAt = entry.completedAt;
+              entry.repairedAttempts = entry.attempts;
+              entry.repairedFromError = repairedFromError;
+            }
             translated += 1;
           }
         }
@@ -237,10 +255,17 @@ async function runTranslationJobs({
               const translation = await translateChapter(chapter);
               await publishChapter(chapter, translation);
 
+              const repairedFromError = entry.attempts > 1 && entry.lastError ? entry.lastError : "";
               entry.status = "completed";
               entry.lastError = "";
               entry.nextAttemptAt = 0;
+              entry.startedAt = "";
               entry.completedAt = new Date(now()).toISOString();
+              if (repairedFromError) {
+                entry.repairedAt = entry.completedAt;
+                entry.repairedAttempts = entry.attempts;
+                entry.repairedFromError = repairedFromError;
+              }
               translated += 1;
               spent += 1;
             } catch (err) {
@@ -248,7 +273,7 @@ async function runTranslationJobs({
               const errMsg = String(err && err.message ? err.message : err).slice(0, 300);
               entry.lastError = errMsg;
               if (isQualityRejection(err)) {
-                if (entry.attempts >= QUALITY_MAX_ATTEMPTS) {
+                if (entry.attempts >= qualityMaxAttempts) {
                   entry.attempts = maxAttempts;
                   entry.status = "failed";
                   failed += 1;
@@ -287,10 +312,17 @@ async function runTranslationJobs({
         // Upload first, mark completed second. Never the other way round.
         await publishChapter(chapter, translation);
 
+        const repairedFromError = entry.attempts > 1 && entry.lastError ? entry.lastError : "";
         entry.status = "completed";
         entry.lastError = "";
         entry.nextAttemptAt = 0;
+        entry.startedAt = "";
         entry.completedAt = new Date(now()).toISOString();
+        if (repairedFromError) {
+          entry.repairedAt = entry.completedAt;
+          entry.repairedAttempts = entry.attempts;
+          entry.repairedFromError = repairedFromError;
+        }
         translated += 1;
       }
 
@@ -311,7 +343,7 @@ async function runTranslationJobs({
           // After a few tries, force attempts to the give-up threshold so the
           // existing isEntryReady gate skips it permanently and the queue moves
           // on instead of looping here forever.
-          if (entry.attempts >= QUALITY_MAX_ATTEMPTS) {
+          if (entry.attempts >= qualityMaxAttempts) {
             entry.attempts = maxAttempts;
             entry.status = "failed";
             failed += 1;
@@ -349,6 +381,8 @@ async function runTranslationJobs({
           status: entry.status,
           attempts: entry.attempts,
           lastError: entry.lastError,
+          repairedAttempts: entry.repairedAttempts || 0,
+          repairedFromError: entry.repairedFromError || "",
           sessionDelta: translated,
           spentDelta: spent,
           ...summarize(state)

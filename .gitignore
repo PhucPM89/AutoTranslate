@@ -5,6 +5,10 @@ npm-debug.log*
 __pycache__/
 *.py[cod]
 .playwright-cli/
+.cache/
+logs/
+*.log
+login-gemini-web.bat
 public/admin-upload.js
 
 .vercel
@@ -37,6 +41,10 @@ supabase/.temp/
 models/*.onnx
 models/*.bin
 *.ipynb
+
+# .NET build outputs
+[Bb]in/
+[Oo]bj/
 
 # Local Colab launcher may intentionally contain production credentials.
 colab/hachimi_private_launcher.py

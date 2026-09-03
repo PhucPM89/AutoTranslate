@@ -45,7 +45,28 @@ const DEFAULT_TM_PATTERNS = [
   { zh: "火药味十足", vi: "sặc mùi thuốc súng" },
   { zh: "看不顺眼", vi: "chướng tai gai mắt" },
   { zh: "扬眉吐气", vi: "dương mi thổ khí" },
-  { zh: "小人得志", vi: "tiểu nhân đắc chí" }
+  { zh: "小人得志", vi: "tiểu nhân đắc chí" },
+  { zh: "西遊釋厄傳", vi: "Tây Du Thích Ách Truyện" },
+  { zh: "西游释厄传", vi: "Tây Du Thích Ách Truyện" },
+  { zh: "西遊記", vi: "Tây Du Ký" },
+  { zh: "西游记", vi: "Tây Du Ký" },
+  { zh: "東勝神洲", vi: "Đông Thắng Thần Châu" },
+  { zh: "东胜神洲", vi: "Đông Thắng Thần Châu" },
+  { zh: "西牛賀洲", vi: "Tây Ngưu Hạ Châu" },
+  { zh: "西牛贺洲", vi: "Tây Ngưu Hạ Châu" },
+  { zh: "南贍部洲", vi: "Nam Thiệm Bộ Châu" },
+  { zh: "南赡部洲", vi: "Nam Thiệm Bộ Châu" },
+  { zh: "北俱蘆洲", vi: "Bắc Câu Lô Châu" },
+  { zh: "北俱芦洲", vi: "Bắc Câu Lô Châu" },
+  { zh: "傲來國", vi: "nước Ngạo Lai" },
+  { zh: "傲来国", vi: "nước Ngạo Lai" },
+  { zh: "花果山", vi: "Hoa Quả Sơn" },
+  { zh: "水簾洞", vi: "Thủy Liêm Động" },
+  { zh: "水帘洞", vi: "Thủy Liêm Động" },
+  { zh: "須菩提祖師", vi: "Tu Bồ Đề Tổ Sư" },
+  { zh: "须菩提祖师", vi: "Tu Bồ Đề Tổ Sư" },
+  { zh: "孫悟空", vi: "Tôn Ngộ Không" },
+  { zh: "孙悟空", vi: "Tôn Ngộ Không" }
 ];
 
 function glossaryKey(bookId) {
@@ -226,6 +247,8 @@ function createTranslationEngine({ storage = null } = {}) {
       "3. QUY TẮC CHUYỂN ÂM HÁN-VIỆT:",
       "   - CHỈ dùng âm Hán-Việt cho: Tên riêng nhân vật, địa danh, môn phái, công pháp, chiêu thức, cảnh giới và thuật ngữ tu tiên/kiếm hiệp đặc thù.",
       "   - TẤT CẢ từ ngữ đời thường, đại từ, động từ hành động, miêu tả cơ thể, trạng từ, liên từ PHẢI dịch nghĩa thuần Việt. Tuyệt đối KHÔNG chuyển âm máy móc.",
+      "   - Với tác phẩm cổ điển hoặc danh từ riêng đã có quy ước, ưu tiên thuật ngữ trong bảng thuật ngữ; không tự chế âm gần giống.",
+      "   - TUYỆT ĐỐI KHÔNG trả tên riêng nửa Việt nửa Hán như \"Thái 邪\" hoặc \"Hải Nhược颖\". Nếu chưa chắc nghĩa, chuyển toàn bộ cụm tên riêng sang âm Hán-Việt có dấu và viết hoa từng âm.",
       "4. VÍ DỤ ĐỐI CHIẾU PHONG CÁCH (FEW-SHOT):",
       '   ❌ "tự kỷ đích ấn đường" ➔ ✅ "trán của mình" / "giữa hai chân mày"',
       '   ❌ "mai bộ tẩu tiến khứ" ➔ ✅ "sải bước đi vào" / "bước vào trong"',
@@ -235,12 +258,17 @@ function createTranslationEngine({ storage = null } = {}) {
       '   ❌ "hồi quá thần lai" ➔ ✅ "hoàn hồn" / "lấy lại tinh thần"',
       '   ❌ "thần sắc bất định" ➔ ✅ "sắc mặt khó lường" / "nét mặt bất an"',
       '   ❌ "khước kiến / nhãn kiến" ➔ ✅ "lại thấy / trông thấy"',
+      '   ❌ "Gia Gia / Nãi Nãi / Ba Ba / Mụ Mụ" ➔ ✅ "ông nội / bà nội / bố / mẹ"',
+      '   ❌ "Ngã / Nhĩ / Khước / Bang / Giáo" khi là từ thường ➔ ✅ "tôi, ta / ngươi, bạn / lại / giúp / dạy"',
       '   ❌ "đảm tử bị hách một liễu / canh của ta bị sợ..." ➔ ✅ "lá gan của tôi đã bị dọa cho bay sạch rồi" / "tôi đã sợ đến mức hồn vía lên mây"',
       '   ❌ "hách phá đảm" ➔ ✅ "sợ vỡ mật / sợ chết khiếp"',
       '   ❌ "tát thối tựu bào" ➔ ✅ "co giò bỏ chạy / vắt chân lên cổ mà chạy"',
       '   ❌ "thử thử thân thủ" ➔ ✅ "thử ra tay / thử trổ tài"',
       "5. BẢO TOÀN NỘI DUNG: Giữ nguyên cấu trúc các đoạn văn, tình tiết, lời thoại và ý nghĩa gốc.",
-      "6. ĐỊNH DẠNG ĐẦU RA: Chỉ trả về duy nhất bản dịch tiếng Việt hoàn chỉnh, không kèm lời chào, ghi chú hay thẻ giải thích.",
+      "6. GIỮ XUỐNG DÒNG: Mỗi đoạn trong nguyên tác phải có một đoạn dịch tương ứng. Giữa hai đoạn dịch phải có một dòng trống. Không được gộp toàn chương thành một khối văn bản.",
+      "7. KHÔNG SÓT CHỮ HÁN: Sau khi dịch xong, tự rà lại toàn bộ đầu ra theo từng dòng. Nếu còn bất kỳ chữ Trung/Hán tự nào (kể cả một ký tự nằm trong tên riêng), hãy thay ngay bằng tiếng Việt hoặc âm Hán-Việt phù hợp. Đầu ra cuối cùng tuyệt đối không chứa chữ Hán.",
+      "8. ĐỊNH DẠNG ĐẦU RA: Chỉ trả về duy nhất bản dịch tiếng Việt hoàn chỉnh, không kèm lời chào, ghi chú hay thẻ giải thích.",
+      "9. BẢO TOÀN CON SỐ: Ưu tiên giữ nguyên các con số định lượng dạng chữ số (ví dụ: 1500, 650...) như nguyên tác, không tự ý đổi sang chữ viết.",
       "",
       glossarySection,
       "Văn bản tiếng Trung cần dịch:",
@@ -267,6 +295,7 @@ function createTranslationEngine({ storage = null } = {}) {
       // Normalize quotation marks
       .replace(/[“”]/g, '"')
       .replace(/[‘’]/g, "'")
+      .replace(/([.!?…])([A-ZÀ-Ỵ])/gu, "$1 $2")
       // Remove double blank lines
       .replace(/\n{3,}/g, "\n\n")
       .trim();

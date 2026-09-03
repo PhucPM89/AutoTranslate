@@ -142,7 +142,8 @@ function formatVietnameseChapterTitle(rawTitle, fallbackNumber = 1, content = ""
   if (chapterMatch) {
     const num = parseChineseNumber(chapterMatch[1]) || fallbackNumber;
     const type = chapterMatch[2] === "回" ? "Hồi" : chapterMatch[2] === "节" ? "Tiết" : chapterMatch[2] === "卷" ? "Quyển" : "Chương";
-    return `${type} ${num}`;
+    const suffix = String(chapterMatch[3] || "").replace(/\s+/g, " ").trim();
+    return suffix ? `${type} ${num}: ${suffix}` : `${type} ${num}`;
   }
 
   // Pure number or fallback

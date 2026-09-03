@@ -82,8 +82,8 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/style.css?v=ad9598c5e71b">
-    <script src="/app.js?v=507ba362631e" defer></script>
+    <link rel="stylesheet" href="/style.css?v=c81a37749505">
+    <script src="/app.js?v=7ffa0251ba19" defer></script>
   </head>
   <body class="dark">
     <section id="libraryView" class="library-view">
@@ -321,8 +321,9 @@
               <div><dt>Tiến độ của bạn</dt><dd id="bookViewProgress">Chưa đọc</dd></div>
             </dl>
             <div class="translate-bar-container" title="Tiến độ dịch thuật tiếng Việt">
-              <div class="translate-bar-label"><span>Tiến độ dịch:</span><strong id="bookViewTranslatePercent">0%</strong></div>
+          <div class="translate-bar-label"><span>Tiến độ dịch:</span><strong id="bookViewTranslatePercent">0%</strong></div>
               <div class="translate-bar-track"><div id="bookViewTranslateFill" class="translate-bar-fill" style="width: 0%"></div></div>
+              <p id="bookViewTranslateState" class="book-view-translate-state">Đang đồng bộ trạng thái dịch.</p>
             </div>
             <div class="book-view-actions">
               <button id="bookViewRead" class="primary-action" type="button"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m5 3 14 9-14 9V3Z"></path></svg><span id="bookViewReadLabel">Đọc từ đầu</span></button>
@@ -335,10 +336,37 @@
         </div>
 
         <section class="book-view-body">
-          <article class="book-view-panel">
-            <h2>Giới thiệu truyện</h2>
-            <div id="bookViewDescription" class="book-view-description"></div>
-          </article>
+          <div class="book-view-column-main">
+            <article class="book-view-panel">
+              <h2>Giới thiệu truyện</h2>
+              <div id="bookViewDescription" class="book-view-description"></div>
+            </article>
+
+            <article id="bookViewChaptersPanel" class="book-view-panel book-view-chapters-section">
+              <div class="book-view-chapters-header">
+                <div class="book-view-chapters-title-wrap">
+                  <h2>Danh sách chương</h2>
+                  <span id="bookViewChaptersBadge" class="book-view-badge">Đang nạp...</span>
+                </div>
+                <div class="book-view-chapters-controls">
+                  <div class="book-view-search-box">
+                    <svg class="icon search-icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    <input id="bookViewChapterSearch" type="search" placeholder="Tìm số chương, tiêu đề..." autocomplete="off" aria-label="Tìm chương trong mục lục">
+                  </div>
+                  <button id="bookViewSortToggle" class="secondary-action sort-btn" type="button" title="Đảo thứ tự chương">
+                    <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m3 16 4 4 4-4M7 20V4m14 4-4-4-4 4m4-4v16"></path></svg>
+                    <span id="bookViewSortLabel">Mới nhất</span>
+                  </button>
+                </div>
+              </div>
+
+              <div id="bookViewChapterRanges" class="book-view-chapter-ranges"></div>
+              <div id="bookViewChapterList" class="book-view-chapter-list">
+                <div class="book-view-chapters-loading">Đang tải danh sách chương...</div>
+              </div>
+            </article>
+          </div>
+
           <aside class="book-view-panel book-view-aside">
             <h2>Cùng thể loại</h2>
             <div id="bookViewRelated" class="book-view-related"></div>
@@ -347,6 +375,86 @@
         </section>
       </main>
     </section>
+
+    <!-- Dialog Sửa Chi Tiết & Thêm Mới Truyện -->
+    <dialog id="adminBookEditDialog" class="admin-book-edit-dialog" aria-labelledby="adminBookEditTitle">
+      <div class="admin-dialog-header">
+        <div><p class="eyebrow">Quản lý sách</p><h2 id="adminBookEditTitle">Chỉnh sửa thông tin truyện</h2></div>
+        <button id="adminBookEditClose" class="icon-button" type="button" aria-label="Đóng"><svg class="icon" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"></path></svg></button>
+      </div>
+      <form id="adminBookEditForm" class="admin-book-edit-form">
+        <input type="hidden" id="editBookId" name="id">
+        <div class="admin-form-grid">
+          <label class="admin-field admin-field-wide"><span>Tên truyện</span><input id="editBookTitle" name="title" required maxlength="200"></label>
+          <label class="admin-field"><span>Tác giả</span><input id="editBookAuthor" name="author" maxlength="100"></label>
+          <label class="admin-field"><span>Thể loại</span>
+            <select id="editBookGenre" name="genre">
+              <option value="Tiên hiệp">Tiên hiệp</option>
+              <option value="Huyền huyễn">Huyền huyễn</option>
+              <option value="Đô thị">Đô thị</option>
+              <option value="Khoa huyễn">Khoa huyễn</option>
+              <option value="Võng du">Võng du</option>
+              <option value="Linh dị">Linh dị / Kinh dị</option>
+              <option value="Mạt thế">Mạt thế</option>
+              <option value="Trinh thám">Trinh thám</option>
+              <option value="Ngôn tình">Ngôn tình</option>
+              <option value="Đồng nhân">Đồng nhân</option>
+              <option value="Khác">Khác</option>
+            </select>
+          </label>
+          <label class="admin-field"><span>Trạng thái</span><select id="editBookStatus" name="status"><option value="Đang cập nhật">Đang cập nhật</option><option value="Hoàn thành">Hoàn thành</option><option value="Có sẵn">Có sẵn</option></select></label>
+          <label class="admin-field"><span>Số chương</span><input id="editBookChapterCount" name="chapterCount" type="number" min="0" max="100000"></label>
+          <label class="admin-field admin-field-wide"><span>Ảnh bìa (URL hoặc Key)</span><input id="editBookCover" name="cover" placeholder="https://cdn.tram-chu.online/covers/..."></label>
+          <label class="admin-field admin-field-wide"><span>Mô tả giới thiệu</span><textarea id="editBookDescription" name="description" rows="4" maxlength="5000"></textarea></label>
+          <label class="admin-check admin-field-wide"><input id="editBookFeatured" name="featured" type="checkbox"><span>Đặt làm truyện nổi bật trang chủ (Featured Hero)</span></label>
+        </div>
+        <div class="admin-form-actions">
+          <button id="adminBookEditCancel" class="secondary-action" type="button">Hủy bỏ</button>
+          <button id="adminBookEditSave" class="primary-action" type="submit">Lưu thay đổi</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="adminUploadDialog" class="admin-upload-dialog" aria-labelledby="adminUploadDialogTitle">
+      <div class="admin-dialog-header">
+        <div><p class="eyebrow">Thư viện</p><h2 id="adminUploadDialogTitle">Upload EPUB &amp; Thêm truyện mới</h2></div>
+        <button id="adminUploadClose" class="icon-button" type="button" aria-label="Đóng" title="Đóng"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"></path></svg></button>
+      </div>
+      <form id="adminUploadForm" class="admin-upload-form">
+        <div class="admin-form-grid">
+          <label class="admin-field admin-field-wide"><span>Tên truyện</span><input name="title" required maxlength="120" placeholder="Nhập tên truyện..."></label>
+          <label class="admin-field"><span>Tác giả</span><input name="author" maxlength="100" placeholder="Tên tác giả"></label>
+          <label class="admin-field"><span>Thể loại</span>
+            <select name="genre">
+              <option value="Tiên hiệp">Tiên hiệp</option>
+              <option value="Huyền huyễn">Huyền huyễn</option>
+              <option value="Đô thị">Đô thị</option>
+              <option value="Khoa huyễn">Khoa huyễn</option>
+              <option value="Võng du">Võng du</option>
+              <option value="Linh dị">Linh dị / Kinh dị</option>
+              <option value="Mạt thế">Mạt thế</option>
+              <option value="Trinh thám">Trinh thám</option>
+              <option value="Ngôn tình">Ngôn tình</option>
+              <option value="Đồng nhân">Đồng nhân</option>
+              <option value="Khác">Khác</option>
+            </select>
+          </label>
+          <label class="admin-field"><span>Trạng thái</span><select name="status"><option value="Đang cập nhật">Đang cập nhật</option><option value="Hoàn thành">Hoàn thành</option><option value="Có sẵn">Có sẵn</option></select></label>
+          <label class="admin-field"><span>Số chương</span><input name="chapterCount" type="number" min="0" max="100000" inputmode="numeric" placeholder="Tự động tính nếu để trống"></label>
+          <label class="admin-field admin-field-wide"><span>Mô tả</span><textarea name="description" rows="3" maxlength="3000" placeholder="Tóm tắt nội dung..."></textarea></label>
+          <label class="admin-file admin-field-wide"><span id="adminEpubLabel">File EPUB <small>Tối đa 200 MB</small></span><input id="adminEpub" name="epub" type="file" accept=".epub,application/epub+zip" required></label>
+          <label class="admin-file admin-field-wide"><span id="adminCoverLabel">Ảnh bìa <small>JPG, PNG hoặc WebP; tối đa 5 MB</small></span><input id="adminCover" name="cover" type="file" accept="image/jpeg,image/png,image/webp"></label>
+          <p id="adminExistingFiles" class="admin-existing-files admin-field-wide" hidden></p>
+          <label class="admin-check admin-field-wide"><input name="featured" type="checkbox"><span>Đặt truyện nổi bật trang chủ</span></label>
+        </div>
+        <div class="admin-progress" hidden><span id="adminProgressBar"></span></div>
+        <p id="adminStatus" class="admin-status" role="status" aria-live="polite"></p>
+        <div class="admin-form-actions">
+          <button id="adminUploadCancel" class="secondary-action" type="button">Hủy bỏ</button>
+          <button id="adminSubmit" class="primary-action" type="submit">Upload truyện</button>
+        </div>
+      </form>
+    </dialog>
 
     <dialog id="supportDialog" class="support-dialog" aria-labelledby="supportDialogTitle">
       <div class="support-dialog-header">
@@ -411,11 +519,14 @@
     <dialog id="adminDialog" class="admin-dialog" aria-labelledby="adminTitle">
       <div class="admin-dialog-header">
         <div><p class="eyebrow">Khu vực riêng</p><h2 id="adminTitle">Quản trị thư viện</h2></div>
-        <button id="adminClose" class="icon-button" type="button" aria-label="Đóng" title="Đóng"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"></path></svg></button>
+        <div class="admin-header-actions" style="display:flex; align-items:center; gap:0.5rem;">
+          <button id="adminLogout" class="ghost-action admin-header-logout" type="button" title="Đăng xuất quản trị" hidden><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg> Đăng xuất</button>
+          <button id="adminClose" class="icon-button" type="button" aria-label="Đóng" title="Đóng"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"></path></svg></button>
+        </div>
       </div>
 
       <div id="adminTabs" class="admin-tabs" role="tablist" aria-label="Khu vực quản trị" hidden>
-        <button id="adminLibraryTab" class="admin-tab active" type="button" role="tab" aria-selected="true" aria-controls="adminUploadForm"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2Z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7Z"></path></svg>Thư viện</button>
+        <button id="adminBooksTab" class="admin-tab active" type="button" role="tab" aria-selected="true" aria-controls="adminBooksPanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path><path d="M6 6h10M6 10h10"></path></svg>Biên tập Song ngữ</button>
         <button id="adminTranslateTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminTranslatePanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>Tiến trình AI</button>
         <button id="adminKeysTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminKeysPanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg><span id="adminKeysTabTitle">Sức khỏe API Keys</span></button>
         <button id="adminCrawlerTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminCrawlerForm"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path><circle cx="12" cy="12" r="4"></circle></svg>Crawler Fanqie</button>
@@ -429,29 +540,138 @@
         <button class="primary-action" type="submit">Mở quyền upload</button>
       </form>
 
-      <form id="adminUploadForm" class="admin-upload-form" hidden>
-        <div class="admin-form-grid">
-          <label class="admin-field admin-field-wide admin-book-picker"><span>Chọn truyện để chỉnh sửa</span><select id="adminBookSelect"><option value="">Thêm truyện mới</option></select></label>
-          <label class="admin-field admin-field-wide"><span>Tên truyện</span><input name="title" required maxlength="120"></label>
-          <label class="admin-field"><span>Tác giả</span><input name="author" maxlength="100"></label>
-          <label class="admin-field"><span>Thể loại</span><input name="genre" maxlength="60" placeholder="Tiên hiệp"></label>
-          <label class="admin-field"><span>Trạng thái</span><select name="status"><option>Có sẵn</option><option>Đang cập nhật</option><option>Hoàn thành</option></select></label>
-          <label class="admin-field"><span>Số chương</span><input name="chapterCount" type="number" min="0" max="100000" inputmode="numeric"></label>
-          <label class="admin-field admin-field-wide"><span>Mô tả</span><textarea name="description" rows="3" maxlength="3000"></textarea></label>
-          <label class="admin-file admin-field-wide"><span id="adminEpubLabel">File EPUB <small>Tối đa 200 MB</small></span><input id="adminEpub" name="epub" type="file" accept=".epub,application/epub+zip" required></label>
-          <label class="admin-file admin-field-wide"><span id="adminCoverLabel">Ảnh bìa <small>JPG, PNG hoặc WebP; tối đa 5 MB</small></span><input id="adminCover" name="cover" type="file" accept="image/jpeg,image/png,image/webp"></label>
-          <p id="adminExistingFiles" class="admin-existing-files admin-field-wide" hidden></p>
-          <label class="admin-check admin-field-wide"><input name="featured" type="checkbox"><span>Đặt truyện nổi bật</span></label>
-        </div>
-        <div class="admin-progress" hidden><span id="adminProgressBar"></span></div>
-        <div class="admin-form-actions">
-          <button id="adminLogout" class="secondary-action" type="button">Đăng xuất</button>
-          <div class="admin-record-actions">
-            <button id="adminDelete" class="danger-action" type="button" hidden><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 15H6L5 6M10 11v6M14 11v6"></path></svg>Xóa truyện</button>
-            <button id="adminSubmit" class="primary-action" type="submit">Upload truyện</button>
+      <!-- 2. Quản lý & Biên tập Truyện Song ngữ (Books Manager & Bilingual QA Editor) -->
+      <section id="adminBooksPanel" class="admin-books-panel" hidden aria-labelledby="adminBooksTitle">
+        <!-- View 1: Catalog List & Management View -->
+        <div id="adminBooksListView" class="admin-books-list-view">
+          <div class="admin-books-header">
+            <div>
+              <p class="eyebrow">Quản lý Thư viện &amp; Kiểm dịch</p>
+              <h3 id="adminBooksTitle">Danh Sách Truyện &amp; Thao Tác</h3>
+            </div>
+            <div class="admin-books-top-actions">
+              <input id="adminBooksSearch" type="search" placeholder="Tìm kiếm truyện, tác giả..." class="admin-books-search-input" aria-label="Tìm kiếm truyện">
+              <button id="adminAddBookBtn" class="primary-action" type="button"><svg class="icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>Thêm truyện mới</button>
+            </div>
+          </div>
+
+          <div class="admin-books-table-wrap">
+            <table class="admin-books-table">
+              <thead>
+                <tr>
+                  <th style="width:54px">Bìa</th>
+                  <th>Tên truyện &amp; Tác giả</th>
+                  <th>Thể loại</th>
+                  <th>Tiến độ dịch</th>
+                  <th>Trạng thái</th>
+                  <th style="text-align:right">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="adminBooksTbody">
+                <!-- Dynamically rendered rows -->
+              </tbody>
+            </table>
           </div>
         </div>
-      </form>
+
+        <!-- View 2: Bilingual Side-by-Side QA Editor View -->
+        <div id="adminBilingualView" class="admin-bilingual-view" hidden>
+          <div class="bilingual-topbar">
+            <div class="bilingual-title-group">
+              <button id="adminBilingualBackBtn" class="secondary-action" type="button" title="Quay lại danh sách truyện">
+                <svg class="icon" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"></path></svg> Danh sách truyện
+              </button>
+              <div class="bilingual-book-info">
+                <h3 id="adminBilingualBookTitle">Ma Y Thần Toán Tử</h3>
+                <span id="adminBilingualBookMeta" class="bilingual-book-meta">Tác giả: Kỵ Mã Điếu Ngư · 2.678 chương</span>
+              </div>
+            </div>
+
+            <div class="bilingual-nav-controls">
+              <button id="adminBilingualPrevCh" class="secondary-action nav-ch-btn" type="button" title="Chương trước">
+                <svg class="icon" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"></path></svg>
+              </button>
+              <div class="bilingual-jump-wrap">
+                <span>Chương</span>
+                <input id="adminBilingualJumpInput" type="number" min="1" class="bilingual-jump-input" placeholder="1" title="Nhập số chương và ấn Enter để chuyển nhanh">
+                <span id="adminBilingualTotalChText">/ 1</span>
+              </div>
+              <div class="bilingual-chapter-select-wrap">
+                <select id="adminBilingualChSelect" class="bilingual-chapter-select" aria-label="Chọn chương truyện"></select>
+              </div>
+              <button id="adminBilingualNextCh" class="secondary-action nav-ch-btn" type="button" title="Chương tiếp theo">
+                <svg class="icon" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Split Screen Panels: Chinese (Left) vs Vietnamese (Right) -->
+          <div class="bilingual-split-container">
+            <!-- Left: Original Chinese Source (Read-only) -->
+            <div class="bilingual-panel bilingual-zh-panel">
+              <div class="bilingual-panel-header">
+                <div class="panel-header-badge">
+                  <span class="flag-icon">🇨🇳</span>
+                  <strong>Bản Tiếng Trung Gốc</strong>
+                  <span class="read-only-pill">Nguyên tác (Chỉ đọc)</span>
+                </div>
+                <button id="adminBilingualCopyZh" class="ghost-action icon-text-btn" type="button" title="Sao chép toàn bộ văn bản tiếng Trung">
+                  <svg class="icon" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                  <span>Sao chép</span>
+                </button>
+              </div>
+              <div class="bilingual-chapter-title-row">
+                <label>Tiêu đề gốc:</label>
+                <input id="adminBilingualZhTitle" type="text" readonly class="bilingual-title-input zh-input">
+              </div>
+              <div class="bilingual-body-wrap">
+                <div id="adminBilingualZhContent" class="bilingual-content-view zh-text" tabindex="0">
+                  Đang tải nội dung tiếng Trung...
+                </div>
+              </div>
+              <div class="bilingual-footer">
+                <span id="adminBilingualZhCharCount">0 ký tự chữ Hán</span>
+              </div>
+            </div>
+
+            <!-- Right: Vietnamese Translation (Editable) -->
+            <div class="bilingual-panel bilingual-vi-panel">
+              <div class="bilingual-panel-header">
+                <div class="panel-header-badge">
+                  <span class="flag-icon">🇻🇳</span>
+                  <strong>Bản Dịch Tiếng Việt</strong>
+                  <span id="adminBilingualViStatusBadge" class="status-pill completed">Đã dịch</span>
+                </div>
+                <div class="bilingual-header-tools">
+                  <button id="adminBilingualAiTranslate" class="primary-action icon-text-btn ai-btn" type="button" title="Dùng Gemini AI dịch lại chương này">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3z"></path></svg>
+                    <span>Dịch lại bằng AI</span>
+                  </button>
+                </div>
+              </div>
+              <div class="bilingual-chapter-title-row">
+                <label>Tiêu đề Việt:</label>
+                <input id="adminBilingualViTitle" type="text" placeholder="Tiêu đề chương tiếng Việt..." class="bilingual-title-input vi-input">
+              </div>
+              <div class="bilingual-body-wrap">
+                <textarea id="adminBilingualViTextarea" class="bilingual-editor-textarea vi-text" placeholder="Nhập hoặc chỉnh sửa bản dịch tiếng Việt tại đây..."></textarea>
+              </div>
+              <div class="bilingual-footer">
+                <div class="bilingual-counts">
+                  <span id="adminBilingualViCharCount">0 ký tự</span> · <span id="adminBilingualViWordCount">0 từ</span>
+                </div>
+                <div class="bilingual-save-actions">
+                  <span id="adminBilingualSaveNotice" class="save-notice" hidden>Đã lưu!</span>
+                  <button id="adminBilingualSaveBtn" class="primary-action save-btn" type="button">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                    Lưu bản dịch lên R2
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <!-- Translation Engine Live Monitor Panel - Single-Novel Focus Mode -->
       <section id="adminTranslatePanel" class="admin-translate-panel" hidden aria-labelledby="translateMonitorTitle">
@@ -476,6 +696,106 @@
             <strong id="transStopReasonTitle" class="trans-stop-title">Hệ thống đang quét &amp; chuẩn hóa các bộ truyện</strong>
           </div>
           <p id="transStopReasonDesc" class="trans-stop-desc">Tiến trình đang quét các bộ truyện chưa đạt chuẩn để tái dịch sang văn phong lưu loát.</p>
+        </div>
+
+        <div class="gemini-web-control">
+          <div class="gemini-web-control-head">
+            <div>
+              <span class="trans-section-tag">GEMINI WEB LOCAL</span>
+              <h4>Daemon chạy nền 24/7</h4>
+            </div>
+            <span id="geminiWebStateBadge" class="worker-alive-badge is-offline">Đang chờ tín hiệu</span>
+          </div>
+          <p id="geminiWebMessage" class="gemini-web-message">Đang tải trạng thái Gemini Web daemon...</p>
+          <div class="gemini-web-live-grid">
+            <div class="gemini-web-live-item">
+              <span>Đang xử lý</span>
+              <strong id="geminiWebCurrentChapter">--</strong>
+            </div>
+            <div class="gemini-web-live-item">
+              <span>Tiến độ bộ</span>
+              <strong id="geminiWebProgressText">--</strong>
+            </div>
+            <div class="gemini-web-live-item">
+              <span>Phiên này</span>
+              <strong id="geminiWebSessionCount">+0 chương</strong>
+            </div>
+            <div class="gemini-web-live-item">
+              <span>Thành công gần nhất</span>
+              <strong id="geminiWebLastSuccess">--</strong>
+            </div>
+          </div>
+          <div class="gemini-web-slots-section">
+            <div class="gemini-web-slots-head">
+              <div>
+                <span class="trans-section-tag">MULTI-PROFILE CHẠY SONG SONG</span>
+                <h5>Tiến độ &amp; Điều khiển từng Profile (3 Slots)</h5>
+              </div>
+            </div>
+            <div id="geminiWebSlotsGrid" class="gemini-web-slots-grid">
+              <!-- Dynamically populated 3 profile slot cards -->
+            </div>
+          </div>
+          <div class="gemini-web-control-grid">
+            <label class="switch-field">
+              <input id="geminiWebHeadlessToggle" type="checkbox">
+              <span class="switch-track" aria-hidden="true"></span>
+              <span>Chạy ẩn Chrome</span>
+            </label>
+            <label class="switch-field">
+              <input id="geminiWebProtectiveToggle" type="checkbox">
+              <span class="switch-track" aria-hidden="true"></span>
+              <span>Điều tốc bảo vệ</span>
+            </label>
+            <label class="switch-field">
+              <input id="geminiWebLowResourceToggle" type="checkbox">
+              <span class="switch-track" aria-hidden="true"></span>
+              <span>Tiết kiệm RAM</span>
+            </label>
+            <label class="gemini-web-number-field">
+              <span>Nhịp gửi</span>
+              <input id="geminiWebSpacingInput" type="number" min="3000" step="500" value="8000">
+              <small>ms/chương</small>
+            </label>
+            <label class="gemini-web-number-field">
+              <span>Phiên</span>
+              <input id="geminiWebSessionInput" type="number" min="15" max="1440" step="15" value="300">
+              <small>phút</small>
+            </label>
+          </div>
+          <div class="gemini-web-actions">
+            <button id="geminiWebStartBtn" class="secondary-action" type="button">Bật nền</button>
+            <button id="geminiWebPauseBtn" class="secondary-action" type="button">Tạm dừng 30 phút</button>
+            <button id="geminiWebStopBtn" class="secondary-action" type="button">Tắt daemon</button>
+            <button id="geminiWebSaveBtn" class="primary-action" type="button">Lưu cấu hình</button>
+          </div>
+        </div>
+
+        <div id="adminQaConsole" class="trans-qa-console">
+          <div class="trans-qa-head">
+            <div>
+              <span class="trans-section-tag">QA QUEUE</span>
+              <h4>Chương cần xử lý</h4>
+            </div>
+            <div class="trans-qa-actions">
+              <span id="adminQaSummaryBadge" class="crawler-state-badge">Đang nạp</span>
+              <button id="adminQaRefreshBtn" class="secondary-action" type="button">Làm mới QA</button>
+            </div>
+          </div>
+          <div class="trans-qa-grid">
+            <section class="trans-qa-list-wrap">
+              <h5>Báo lỗi từ độc giả</h5>
+              <div id="adminQaReportsList" class="trans-qa-list"><p class="stats-empty">Đang nạp...</p></div>
+            </section>
+            <section class="trans-qa-list-wrap">
+              <h5>Chương retry/failed</h5>
+              <div id="adminQaFailedList" class="trans-qa-list"><p class="stats-empty">Đang nạp...</p></div>
+            </section>
+            <section class="trans-qa-list-wrap">
+              <h5>Gợi ý thuật ngữ</h5>
+              <div id="adminQaGlossaryList" class="trans-qa-list"><p class="stats-empty">Đang nạp...</p></div>
+            </section>
+          </div>
         </div>
 
         <!-- THE MAIN FOCUS HERO CARD: Single Novel Center -->
@@ -1154,6 +1474,10 @@
         <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
         Gợi ý dịch
       </button>
+      <button id="reportIssueBtn" class="selection-btn" type="button" title="Báo lỗi đoạn dịch">
+        <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+        Báo lỗi
+      </button>
       <button id="commentSelectionBtn" class="selection-btn" type="button" title="Bình luận đoạn này">
         <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
         Bình luận
@@ -1269,6 +1593,65 @@
         <div class="glossary-form-actions">
           <button type="button" id="suggestGlossaryCancel" class="secondary-action">Hủy</button>
           <button type="submit" id="suggestGlossarySubmit" class="primary-action">Gửi đóng góp</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Reader Issue Report Modal -->
+    <dialog id="readerReportDialog" class="reader-report-dialog" aria-labelledby="readerReportTitle">
+      <div class="reader-report-header">
+        <div>
+          <p class="eyebrow">Phản hồi chất lượng</p>
+          <h3 id="readerReportTitle">Báo lỗi đoạn dịch</h3>
+        </div>
+        <button id="readerReportClose" class="icon-button" type="button" aria-label="Đóng" title="Đóng">
+          <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+        </button>
+      </div>
+      <form id="readerReportForm" class="reader-report-form">
+        <div class="reader-report-snippet-box">
+          <div class="reader-report-meta" id="readerReportMeta">Chương 1 · Đoạn 1</div>
+          <div class="reader-report-quote" id="readerReportQuote">...</div>
+        </div>
+
+        <div class="reader-report-group">
+          <label class="reader-report-label">Chọn loại lỗi phát hiện:</label>
+          <div class="reader-report-options" id="readerReportOptions">
+            <button type="button" class="report-option-btn is-active" data-type="residual_han" data-desc="Còn sót chữ Hán">
+              <span class="report-option-icon">🀄</span>
+              <span>Sót chữ Hán</span>
+            </button>
+            <button type="button" class="report-option-btn" data-type="missing_text" data-desc="Thiếu câu / thiếu đoạn">
+              <span class="report-option-icon">✂️</span>
+              <span>Thiếu câu/đoạn</span>
+            </button>
+            <button type="button" class="report-option-btn" data-type="wrong_name" data-desc="Dịch sai tên riêng / thuật ngữ">
+              <span class="report-option-icon">🏷️</span>
+              <span>Sai tên/thuật ngữ</span>
+            </button>
+            <button type="button" class="report-option-btn" data-type="rough_translation" data-desc="Câu văn lủng củng / thô">
+              <span class="report-option-icon">✍️</span>
+              <span>Văn phong thô</span>
+            </button>
+            <button type="button" class="report-option-btn" data-type="duplicate_text" data-desc="Trùng lặp nội dung">
+              <span class="report-option-icon">🔄</span>
+              <span>Trùng lặp câu</span>
+            </button>
+            <button type="button" class="report-option-btn" data-type="other" data-desc="Lỗi dịch khác">
+              <span class="report-option-icon">📝</span>
+              <span>Lỗi khác</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="reader-report-group">
+          <label for="readerReportNote" class="reader-report-label">Ghi chú bổ sung (tùy chọn):</label>
+          <textarea id="readerReportNote" class="reader-report-textarea" placeholder="Nhập thêm chi tiết nếu cần..." rows="2" maxlength="300"></textarea>
+        </div>
+
+        <div class="reader-report-actions">
+          <button type="button" id="readerReportCancel" class="secondary-action">Hủy</button>
+          <button type="submit" id="readerReportSubmit" class="primary-action">Gửi báo lỗi</button>
         </div>
       </form>
     </dialog>

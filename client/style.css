@@ -1081,7 +1081,7 @@ dialog:not([open]) {
   transition: width 0.2s ease, max-height 0.2s ease;
 }
 
-.admin-dialog:not(.is-authenticated) {
+#adminDialog:not(.is-authenticated) {
   width: min(440px, calc(100% - 1.5rem));
   max-height: min(340px, calc(100dvh - 2rem));
 }
@@ -5808,6 +5808,13 @@ body.theme-forest .document-text .tts-paragraph-highlight.tts-speaking {
   transition: width 0.4s ease;
 }
 
+.book-view-translate-state {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
 .catalog-translate-badge {
   display: inline-flex;
   align-items: center;
@@ -6222,6 +6229,24 @@ body.zen-mode .document-paper {
   color: #fff;
 }
 
+.tts-paragraph-highlight.report-target-highlight {
+  background: rgba(234, 179, 8, 0.25) !important;
+  box-shadow: 0 0 0 2px rgba(234, 179, 8, 0.8), 0 0 20px rgba(234, 179, 8, 0.4) !important;
+  border-radius: 8px;
+  animation: qa-pulse-glow 1.5s ease-in-out 3;
+}
+
+@keyframes qa-pulse-glow {
+  0%, 100% {
+    background: rgba(234, 179, 8, 0.25);
+    box-shadow: 0 0 0 2px rgba(234, 179, 8, 0.8), 0 0 20px rgba(234, 179, 8, 0.4);
+  }
+  50% {
+    background: rgba(234, 179, 8, 0.42);
+    box-shadow: 0 0 0 3px rgba(234, 179, 8, 1), 0 0 30px rgba(234, 179, 8, 0.7);
+  }
+}
+
 /* Mobile Responsive Adjustments for TTS and Reader */
 @media (max-width: 640px) {
   .tts-audio-bar {
@@ -6459,6 +6484,154 @@ body.zen-mode .document-paper {
   justify-content: flex-end;
   gap: 0.6rem;
   margin-top: 0.5rem;
+}
+
+/* Reader Report Modal Dialog */
+.reader-report-dialog {
+  border: 1px solid var(--border-soft);
+  border-radius: 20px;
+  background: rgba(18, 16, 28, 0.96);
+  color: #fff;
+  padding: 1.5rem;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8), 0 0 32px rgba(168, 85, 247, 0.2);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  width: min(500px, calc(100vw - 2rem));
+}
+
+.reader-report-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.15rem;
+}
+
+.reader-report-header h3 {
+  font-size: 1.18rem;
+  margin: 0.2rem 0 0;
+  font-weight: 700;
+  color: #fff;
+}
+
+.reader-report-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.reader-report-snippet-box {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  padding: 0.65rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.reader-report-meta {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+}
+
+.reader-report-quote {
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.88);
+  font-style: italic;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reader-report-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.reader-report-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.reader-report-options {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+}
+
+@media (max-width: 480px) {
+  .reader-report-options {
+    grid-template-columns: 1fr;
+  }
+}
+
+.report-option-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.report-option-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.report-option-btn.is-active {
+  background: rgba(168, 85, 247, 0.2);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.25);
+}
+
+.report-option-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.reader-report-textarea {
+  width: 100%;
+  padding: 0.6rem 0.8rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 0.84rem;
+  resize: vertical;
+  min-height: 52px;
+  font-family: inherit;
+}
+
+.reader-report-textarea:focus {
+  border-color: var(--accent);
+  outline: none;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.reader-report-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  margin-top: 0.35rem;
 }
 
 /* Quote Format Selector */
@@ -9798,6 +9971,387 @@ body.zen-mode .document-paper {
   .trans-focus-picker-hint { grid-column: auto; }
 }
 
+.gemini-web-control {
+  margin: 1rem 0 1.25rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.66);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.gemini-web-control-head,
+.gemini-web-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.gemini-web-control-head h4 {
+  margin: 0.2rem 0 0;
+  color: #f8fafc;
+  font-size: 1rem;
+}
+
+.gemini-web-message {
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.gemini-web-control-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.7rem;
+}
+
+.gemini-web-live-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.7rem;
+}
+
+.gemini-web-live-item {
+  min-width: 0;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.gemini-web-live-item span {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: #94a3b8;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.gemini-web-live-item strong {
+  display: block;
+  color: #f8fafc;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gemini-web-number-field {
+  display: grid;
+  grid-template-columns: auto minmax(80px, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.035);
+  color: #e2e8f0;
+  font-size: 0.82rem;
+}
+
+.gemini-web-number-field input {
+  min-width: 0;
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 7px;
+  background: #0b1220;
+  color: #f8fafc;
+}
+
+.gemini-web-number-field small {
+  color: #94a3b8;
+}
+
+.gemini-web-actions {
+  justify-content: flex-end;
+}
+
+.gemini-web-slots-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0.6rem 0;
+  padding: 0.9rem;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(56, 189, 248, 0.16);
+  border-radius: 12px;
+}
+
+.gemini-web-slots-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.gemini-web-slots-head h5 {
+  margin: 0.15rem 0 0;
+  color: #f1f5f9;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.gemini-web-slots-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.8rem;
+}
+
+.gemini-web-slot-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.8rem;
+  background: rgba(30, 41, 59, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.gemini-web-slot-card.is-translating {
+  border-color: rgba(56, 189, 248, 0.35);
+  background: rgba(15, 23, 42, 0.75);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.gemini-web-slot-card.is-disabled {
+  opacity: 0.55;
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.gemini-web-slot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.gemini-web-slot-title-box {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.gemini-web-slot-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 0.18rem 0.45rem;
+  border-radius: 6px;
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+}
+
+.gemini-web-slot-state {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.4rem;
+  border-radius: 5px;
+}
+
+.gemini-web-slot-state.is-translating {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.gemini-web-slot-state.is-completed {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.gemini-web-slot-state.is-idle {
+  background: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.gemini-web-slot-state.is-disabled {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.gemini-web-slot-book-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #f8fafc;
+  line-height: 1.3;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gemini-web-slot-progress-bar-wrap {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.gemini-web-slot-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #38bdf8, #818cf8);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.gemini-web-slot-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.74rem;
+  color: #94a3b8;
+}
+
+.gemini-web-slot-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.15rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.gemini-web-slot-toggle-row .switch-field {
+  margin: 0;
+  font-size: 0.76rem;
+  color: #cbd5e1;
+}
+
+.trans-qa-console {
+  margin: 1rem 0 1.25rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid rgba(245, 158, 11, 0.24);
+  border-radius: 12px;
+  background: rgba(20, 24, 36, 0.72);
+}
+
+.trans-qa-head,
+.trans-qa-actions,
+.trans-qa-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.trans-qa-head {
+  justify-content: space-between;
+  margin-bottom: 0.85rem;
+}
+
+.trans-qa-head h4 {
+  margin: 0.2rem 0 0;
+  color: #f8fafc;
+  font-size: 1rem;
+}
+
+.trans-qa-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.trans-qa-list-wrap {
+  min-width: 0;
+}
+
+.trans-qa-list-wrap h5 {
+  margin: 0 0 0.55rem;
+  color: #cbd5e1;
+  font-size: 0.82rem;
+  letter-spacing: 0;
+}
+
+.trans-qa-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.trans-qa-item {
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.trans-qa-item strong,
+.trans-qa-item span,
+.trans-qa-item p,
+.trans-qa-item small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.trans-qa-item strong {
+  color: #f8fafc;
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.trans-qa-item span,
+.trans-qa-item small {
+  margin-top: 0.2rem;
+  color: #94a3b8;
+  font-size: 0.75rem;
+}
+
+.trans-qa-item p {
+  margin: 0.55rem 0;
+  color: #fecaca;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.trans-qa-item-actions {
+  margin-top: 0.6rem;
+}
+
+.trans-qa-item-actions .secondary-action,
+.trans-qa-item-actions .ghost-action {
+  min-height: 32px;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.78rem;
+}
+
+.trans-qa-item-actions .ghost-action.is-danger,
+.trans-qa-item-actions .danger-action {
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.trans-qa-item-actions .ghost-action.is-danger:hover,
+.trans-qa-item-actions .danger-action:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}
+
+@media (max-width: 980px) {
+  .trans-qa-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ==========================================================================
    Admin EPUB VIP Studio (Personal EPUB Reader & Gemini Translator)
    ========================================================================== */
@@ -11875,19 +12429,67 @@ body.zen-mode .document-paper {
   font-weight: 600;
 }
 
-/* Edit Book Dialog */
+/* Upload & Edit Book Dialogs */
+.admin-upload-dialog,
 .admin-book-edit-dialog {
-  padding: 1.5rem;
-  border-radius: 12px;
+  width: min(840px, calc(100vw - 2rem));
+  max-height: min(88vh, 850px);
+  padding: 0;
+  border-radius: 16px;
   background: var(--surface);
   border: 1px solid var(--border);
   color: var(--text);
-  max-width: 650px;
-  width: 95vw;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  margin: auto;
 }
 
+.admin-upload-dialog:not([open]),
+.admin-book-edit-dialog:not([open]) {
+  display: none !important;
+}
+
+.admin-upload-dialog[open],
+.admin-book-edit-dialog[open] {
+  display: flex !important;
+  flex-direction: column;
+}
+
+.admin-upload-dialog .admin-dialog-header,
+.admin-book-edit-dialog .admin-dialog-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.15rem 1.5rem;
+  border-bottom: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--surface) 95%, transparent);
+}
+
+.admin-upload-dialog .admin-upload-form,
+.admin-book-edit-dialog .admin-book-edit-form {
+  padding: 1.5rem;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  overscroll-behavior: contain;
+}
+
+.admin-upload-dialog::backdrop,
 .admin-book-edit-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(4px);
+  background: rgba(4, 7, 5, 0.75);
+  backdrop-filter: blur(6px);
 }
 
+@media (max-width: 640px) {
+  .admin-upload-dialog,
+  .admin-book-edit-dialog {
+    width: calc(100% - 1rem);
+    max-height: calc(100dvh - 1rem);
+    border-radius: 12px;
+  }
+  .admin-upload-dialog .admin-upload-form,
+  .admin-book-edit-dialog .admin-book-edit-form {
+    padding: 1rem;
+  }
+}

@@ -13270,6 +13270,7 @@ m=m
 那=na
 邤=lân
 邦=bang
+邧=nguyên
 邨=thôn
 邪=tà
 邬=ô

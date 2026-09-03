@@ -4,43 +4,47 @@ const SENTENCE_END = ".!?;:…。！？；：";
 const CLOSING_QUOTES = "\"'”’»）)]}";
 const OPENING_QUOTES = "\"'“‘«（([{";
 
-function normalizeReaderText(value) {
+function normalizeReaderLine(value) {
   let text = String(value || "").normalize("NFC");
   if (!text.trim()) return "";
 
   text = text
     .replace(/\u00a0/g, " ")
-    .replace(/\r\n?/g, "\n")
     .replace(/[ \t\f\v]+/g, " ")
-    .replace(/\n[ \t]+/g, "\n")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .replace(/\s+([,.;:!?…，。！？；：])/g, "$1")
+    .replace(/[ \t]+([,.;:!?…，。！？；：])/g, "$1")
     .replace(/([,.;:!?…，。！？；：])(?=[^\s\d,.;:!?…，。！？；："'”’»）)\]}])/g, "$1 ")
     .replace(/([.!?…])(["“‘«])(?=\p{L})/gu, "$1 $2")
-    .replace(/([:：])\s*(["“‘«])/g, "$1 $2")
-    .replace(/(["“‘«])\s+/g, "$1")
-    .replace(/\s+(["”’»])/g, "$1")
-    .replace(/([?!。！？…])\s*(["”’»])(?=\S)/g, "$1$2 ")
+    .replace(/([:：])[ \t]*(["“‘«])/g, "$1 $2")
+    .replace(/(["“‘«])[ \t]+/g, "$1")
+    .replace(/[ \t]+(["”’»])/g, "$1")
+    .replace(/([?!。！？…])[ \t]*(["”’»])(?=\S)/g, "$1$2 ")
     .replace(/(["”’»])(?=[\p{L}\p{N}])/gu, "$1 ")
-    .replace(/([:：])\s*(["“‘«])\s*/g, "$1 $2")
-    .replace(/([.。])\s*(["“‘«])\s*(?=\p{L})/gu, "$1 $2")
-    .replace(/([!?！？…])\s*(["”’»])\s*(?=\p{L})/gu, "$1$2 ")
-    .replace(/\s+([,.;:!?…])/g, "$1")
+    .replace(/([:：])[ \t]*(["“‘«])[ \t]*/g, "$1 $2")
+    .replace(/([.。])[ \t]*(["“‘«])[ \t]*(?=\p{L})/gu, "$1 $2")
+    .replace(/([!?！？…])[ \t]*(["”’»])[ \t]*(?=\p{L})/gu, "$1$2 ")
+    .replace(/[ \t]+([,.;:!?…])/g, "$1")
     .replace(/[ \t]{2,}/g, " ")
     .trim();
 
   return text.normalize("NFC");
 }
 
+function normalizeReaderText(value) {
+  if (!value) return "";
+  const lines = String(value).replace(/\r\n?/g, "\n").split(/\n+/);
+  const normalizedLines = lines.map((line) => normalizeReaderLine(line)).filter(Boolean);
+  return normalizedLines.join("\n\n");
+}
+
 function splitReaderParagraphs(value) {
-  const text = normalizeReaderText(value);
-  if (!text) return [];
-  const paragraphs = text.split(/\n+/).map((p) => p.trim()).filter(Boolean);
+  if (!value) return [];
+  const lines = String(value).replace(/\r\n?/g, "\n").split(/\n+/);
   const out = [];
 
-  for (const paragraph of paragraphs) {
-    out.push(...splitLongParagraph(paragraph));
+  for (const line of lines) {
+    const normalized = normalizeReaderLine(line);
+    if (!normalized) continue;
+    out.push(...splitLongParagraph(normalized));
   }
   return out;
 }

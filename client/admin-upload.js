@@ -17,8 +17,10 @@ const els = {
   dialog: document.getElementById("adminDialog"),
   loginForm: document.getElementById("adminLoginForm"),
   uploadForm: document.getElementById("adminUploadForm"),
+  uploadDialog: document.getElementById("adminUploadDialog"),
+  uploadClose: document.getElementById("adminUploadClose"),
+  uploadCancel: document.getElementById("adminUploadCancel"),
   tabs: document.getElementById("adminTabs"),
-  libraryTab: document.getElementById("adminLibraryTab"),
   crawlerTab: document.getElementById("adminCrawlerTab"),
   crawlerForm: document.getElementById("adminCrawlerForm"),
   crawlerEnabled: document.getElementById("crawlerEnabled"),
@@ -81,6 +83,28 @@ const els = {
   transWorkerStatusBadge: document.getElementById("transWorkerStatusBadge"),
   transStopReasonTitle: document.getElementById("transStopReasonTitle"),
   transStopReasonDesc: document.getElementById("transStopReasonDesc"),
+  geminiWebStateBadge: document.getElementById("geminiWebStateBadge"),
+  geminiWebMessage: document.getElementById("geminiWebMessage"),
+  geminiWebHeadlessToggle: document.getElementById("geminiWebHeadlessToggle"),
+  geminiWebProtectiveToggle: document.getElementById("geminiWebProtectiveToggle"),
+  geminiWebLowResourceToggle: document.getElementById("geminiWebLowResourceToggle"),
+  geminiWebCurrentChapter: document.getElementById("geminiWebCurrentChapter"),
+  geminiWebProgressText: document.getElementById("geminiWebProgressText"),
+  geminiWebSessionCount: document.getElementById("geminiWebSessionCount"),
+  geminiWebLastSuccess: document.getElementById("geminiWebLastSuccess"),
+  geminiWebSpacingInput: document.getElementById("geminiWebSpacingInput"),
+  geminiWebSessionInput: document.getElementById("geminiWebSessionInput"),
+  geminiWebStartBtn: document.getElementById("geminiWebStartBtn"),
+  geminiWebPauseBtn: document.getElementById("geminiWebPauseBtn"),
+  geminiWebStopBtn: document.getElementById("geminiWebStopBtn"),
+  geminiWebSaveBtn: document.getElementById("geminiWebSaveBtn"),
+  geminiWebSlotsGrid: document.getElementById("geminiWebSlotsGrid"),
+  adminQaConsole: document.getElementById("adminQaConsole"),
+  adminQaSummaryBadge: document.getElementById("adminQaSummaryBadge"),
+  adminQaRefreshBtn: document.getElementById("adminQaRefreshBtn"),
+  adminQaReportsList: document.getElementById("adminQaReportsList"),
+  adminQaFailedList: document.getElementById("adminQaFailedList"),
+  adminQaGlossaryList: document.getElementById("adminQaGlossaryList"),
   transDailyScannedSection: document.getElementById("transDailyScannedSection"),
   transDailyScannedCount: document.getElementById("transDailyScannedCount"),
   transDailyScannedTbody: document.getElementById("transDailyScannedTbody"),
@@ -256,9 +280,10 @@ const els = {
 };
 
 let adminCatalog = { books: [] };
-let activeAdminTab = "library";
+let activeAdminTab = "books";
 let mounted = false;
 let translateTimer = null;
+let qaLastLoadedAt = 0;
 
 let pendingAdminTab = null;
 
@@ -314,14 +339,22 @@ export function mountAdmin(options = {}) {
         if (isOutside) els.dialog.close();
       }
     });
+    els.dialog?.addEventListener("close", () => {
+      stopTranslatePolling();
+      stopCrawlerPolling();
+    });
     els.loginForm?.addEventListener("submit", login);
     els.studioAuthForm?.addEventListener("submit", handleStudioLogin);
     els.uploadForm?.addEventListener("submit", submitBook);
     els.crawlerForm?.addEventListener("submit", saveCrawlerConfig);
-    els.libraryTab?.addEventListener("click", () => selectAdminTab("library"));
     els.booksTab?.addEventListener("click", () => selectAdminTab("books"));
     els.booksSearch?.addEventListener("input", renderAdminBooksCatalog);
-    els.addBookBtn?.addEventListener("click", () => selectAdminTab("library"));
+    els.addBookBtn?.addEventListener("click", openUploadDialog);
+    els.uploadClose?.addEventListener("click", closeUploadDialog);
+    els.uploadCancel?.addEventListener("click", closeUploadDialog);
+    els.uploadDialog?.addEventListener("click", (e) => {
+      if (e.target === els.uploadDialog) closeUploadDialog();
+    });
     els.bilingualBackBtn?.addEventListener("click", closeBilingualEditor);
     els.bilingualPrevCh?.addEventListener("click", () => loadBilingualChapter(bilingualState.currentChapterIndex - 1));
     els.bilingualNextCh?.addEventListener("click", () => loadBilingualChapter(bilingualState.currentChapterIndex + 1));
@@ -351,7 +384,14 @@ export function mountAdmin(options = {}) {
     els.addKeyForm?.addEventListener("submit", handleAddKeySubmit);
     els.translateStartBtn?.addEventListener("click", handleStartTranslate);
     els.translateRefresh?.addEventListener("click", loadTranslateStatus);
+    els.adminQaRefreshBtn?.addEventListener("click", () => loadAdminQa(true));
+    els.adminQaConsole?.addEventListener("click", handleAdminQaClick);
     els.translateFocusSave?.addEventListener("click", saveTranslationFocus);
+    els.geminiWebStartBtn?.addEventListener("click", () => saveGeminiWebControl({ action: "gemini-web-start" }));
+    els.geminiWebPauseBtn?.addEventListener("click", () => saveGeminiWebControl({ action: "gemini-web-pause", minutes: 30 }));
+    els.geminiWebStopBtn?.addEventListener("click", () => saveGeminiWebControl({ action: "gemini-web-stop" }));
+    els.geminiWebSaveBtn?.addEventListener("click", () => saveGeminiWebControl({ action: "gemini-web-control" }));
+    els.geminiWebSlotsGrid?.addEventListener("change", handleGeminiWebSlotToggle);
     els.statsRefresh?.addEventListener("click", loadAnalytics);
     els.usersRefresh?.addEventListener("click", loadAdminUsers);
     els.usersSearch?.addEventListener("input", filterAdminUsers);
@@ -623,10 +663,13 @@ async function submitBook(event) {
 
     setProgress(100);
     adminCatalog = result.catalog;
-    renderBookOptions(result.book.id);
-    populateBookForm(result.book);
-    setStatus(existingBook ? "Đã lưu thay đổi thông tin truyện." : "Upload thành công. Truyện đã xuất hiện trong thư viện.");
+    renderBookOptions(result.book?.id);
+    renderAdminBooksCatalog();
+    setStatus("Upload thành công. Truyện đã xuất hiện trong thư viện.");
     window.dispatchEvent(new CustomEvent("library:refresh", { detail: result.catalog }));
+    setTimeout(() => {
+      closeUploadDialog();
+    }, 600);
   } catch (error) {
     if (/hết hạn|quyền/.test(error.message)) showAuthenticated(false);
     setStatus(error.name === "AbortError" ? "Upload quá 30 phút và đã được dừng. Hãy kiểm tra mạng rồi thử lại." : error.message, true);
@@ -837,7 +880,7 @@ function startTranslatePolling() {
   stopTranslatePolling();
   loadTranslateStatus();
   translateTimer = setInterval(() => {
-    if (activeAdminTab !== "translate" || document.hidden) return;
+    if (activeAdminTab !== "translate" || document.hidden || (els.dialog && !els.dialog.open)) return;
     loadTranslateStatus();
   }, 10000);
 }
@@ -883,9 +926,162 @@ async function loadTranslateStatus() {
     const res = await requestJson("/api/admin/translate");
     renderTranslationFocusOptions(res.config?.focusBookId || "");
     renderTranslationFocusHint(res.config || {});
+    renderGeminiWebStatus(res.geminiWeb || {}, res.status || {});
     renderTranslateStatus(res.status);
+    if (!qaLastLoadedAt || Date.now() - qaLastLoadedAt > 30000) {
+      loadAdminQa().catch((err) => console.warn("Unable to load QA queue:", err));
+    }
   } catch (err) {
     console.warn("Unable to load translate status:", err);
+  }
+}
+
+async function loadAdminQa(force = false) {
+  if (!els.adminQaConsole) return;
+  if (!force && qaLastLoadedAt && Date.now() - qaLastLoadedAt < 30000) return;
+  qaLastLoadedAt = Date.now();
+  try {
+    const res = await requestJson("/api/admin/qa");
+    renderAdminQa(res);
+  } catch (err) {
+    console.warn("Unable to load admin QA:", err);
+    if (els.adminQaSummaryBadge) els.adminQaSummaryBadge.textContent = `QA lỗi: ${err.message || "không rõ"}`.slice(0, 80);
+    renderQaError(err);
+  }
+}
+
+function renderAdminQa(data = {}) {
+  const summary = data.summary || {};
+  const reports = Array.isArray(data.reports) ? data.reports : [];
+  const failed = Array.isArray(data.failedChapters) ? data.failedChapters : [];
+  const glossary = Array.isArray(data.glossarySuggestions) ? data.glossarySuggestions : [];
+  if (els.adminQaSummaryBadge) {
+    const total = reports.length + failed.length + glossary.length;
+    const warnings = Array.isArray(data.warnings) ? data.warnings.filter(Boolean) : [];
+    els.adminQaSummaryBadge.textContent = warnings.length
+      ? `QA có cảnh báo: ${warnings[0]}`.slice(0, 80)
+      : total
+      ? `${total.toLocaleString("vi-VN")} mục cần xem`
+      : "QA sạch";
+  }
+  renderQaReports(reports);
+  renderQaFailed(failed);
+  renderQaGlossary(glossary);
+}
+
+function renderQaError(err) {
+  const message = escapeHtml(err?.message || "Không tải được hàng chờ QA.");
+  const html = `<p class="stats-empty">Lỗi tải QA: ${message}</p>`;
+  if (els.adminQaReportsList) els.adminQaReportsList.innerHTML = html;
+  if (els.adminQaFailedList) els.adminQaFailedList.innerHTML = '<p class="stats-empty">Chưa có dữ liệu.</p>';
+  if (els.adminQaGlossaryList) els.adminQaGlossaryList.innerHTML = '<p class="stats-empty">Chưa có dữ liệu.</p>';
+}
+
+function renderQaReports(reports) {
+  if (!els.adminQaReportsList) return;
+  if (!reports.length) {
+    els.adminQaReportsList.innerHTML = '<p class="stats-empty">Chưa có báo lỗi mới.</p>';
+    return;
+  }
+  els.adminQaReportsList.innerHTML = reports.slice(0, 15).map((item) => {
+    const chNum = Number(item.chapterNumber || (Number(item.chapterIndex || 0) + 1));
+    const parIdx = Number(item.paragraphIndex || 0);
+    return `
+    <article class="trans-qa-item">
+      <div>
+        <strong>${escapeHtml(item.bookTitle || item.bookId || "Không rõ truyện")}</strong>
+        <span>Chương ${chNum.toLocaleString("vi-VN")} · đoạn ${(parIdx + 1).toLocaleString("vi-VN")}</span>
+      </div>
+      <p>${escapeHtml(item.selectedText || item.note || "")}</p>
+      ${item.note ? `<small>${escapeHtml(item.note)}</small>` : ""}
+      <div class="trans-qa-item-actions">
+        <button class="secondary-action" type="button" data-qa-open="${escapeHtml(item.bookId || "")}" data-qa-ch="${chNum}" data-qa-par="${parIdx}">Mở đoạn</button>
+        <button class="ghost-action is-danger" type="button" data-qa-action="delete-report" data-qa-id="${escapeHtml(item.id || "")}">Xóa</button>
+      </div>
+    </article>
+  `;
+  }).join("");
+}
+
+function renderQaFailed(rows) {
+  if (!els.adminQaFailedList) return;
+  if (!rows.length) {
+    els.adminQaFailedList.innerHTML = '<p class="stats-empty">Không có chương retry/failed.</p>';
+    return;
+  }
+  els.adminQaFailedList.innerHTML = rows.slice(0, 10).map((item) => `
+    <article class="trans-qa-item">
+      <div>
+        <strong>${escapeHtml(item.bookTitle || item.bookId || "Không rõ truyện")}</strong>
+        <span>Chương ${Number(item.chapter || 0).toLocaleString("vi-VN")} · ${escapeHtml(item.status || "failed")} · ${Number(item.attempts || 0)} lần</span>
+      </div>
+      <p>${escapeHtml(item.lastError || "Chưa có mô tả lỗi.")}</p>
+      <div class="trans-qa-item-actions">
+        <button class="secondary-action" type="button" data-qa-open="${escapeHtml(item.bookId || "")}" data-qa-ch="${Number(item.chapter || 1)}">Mở chương</button>
+      </div>
+    </article>
+  `).join("");
+}
+
+function renderQaGlossary(rows) {
+  if (!els.adminQaGlossaryList) return;
+  if (!rows.length) {
+    els.adminQaGlossaryList.innerHTML = '<p class="stats-empty">Chưa có gợi ý thuật ngữ.</p>';
+    return;
+  }
+  els.adminQaGlossaryList.innerHTML = rows.slice(0, 10).map((item) => `
+    <article class="trans-qa-item">
+      <div>
+        <strong>${escapeHtml(item.sourceTerm || "")} → ${escapeHtml(item.suggestedTerm || "")}</strong>
+        <span>${escapeHtml(item.bookId || "general")}</span>
+      </div>
+      <p>${escapeHtml(item.contextSnippet || item.note || "")}</p>
+      <div class="trans-qa-item-actions">
+        <button class="secondary-action" type="button" data-qa-action="approve-glossary" data-qa-id="${escapeHtml(item.id || "")}" data-qa-book="${escapeHtml(item.bookId || "")}" data-qa-source="${escapeHtml(item.sourceTerm || "")}" data-qa-term="${escapeHtml(item.suggestedTerm || "")}">Duyệt</button>
+        <button class="ghost-action" type="button" data-qa-action="reject-glossary" data-qa-id="${escapeHtml(item.id || "")}">Từ chối</button>
+      </div>
+    </article>
+  `).join("");
+}
+
+async function handleAdminQaClick(event) {
+  const openBtn = event.target.closest("[data-qa-open]");
+  if (openBtn) {
+    const bookId = openBtn.dataset.qaOpen;
+    const ch = Math.max(1, Number(openBtn.dataset.qaCh || 1));
+    const par = openBtn.dataset.qaPar !== undefined && openBtn.dataset.qaPar !== "" ? Number(openBtn.dataset.qaPar) : null;
+    if (bookId) {
+      els.dialog?.close();
+      const hash = `#read/${encodeURIComponent(bookId)}/${ch}${par !== null && par >= 0 ? `?p=${par}` : ""}`;
+      window.location.hash = hash;
+      window.dispatchEvent(new CustomEvent("reader:jump-paragraph", { detail: { bookId, chapter: ch, paragraph: par } }));
+    }
+    return;
+  }
+
+  const actionBtn = event.target.closest("[data-qa-action]");
+  if (!actionBtn || actionBtn.disabled) return;
+  const action = actionBtn.dataset.qaAction;
+  const payload = {
+    action,
+    id: actionBtn.dataset.qaId || "",
+    bookId: actionBtn.dataset.qaBook || "",
+    sourceTerm: actionBtn.dataset.qaSource || "",
+    suggestedTerm: actionBtn.dataset.qaTerm || ""
+  };
+  actionBtn.disabled = true;
+  try {
+    const res = await requestJson("/api/admin/qa", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    setStatus(res.message || "Đã cập nhật hàng chờ QA.");
+    qaLastLoadedAt = 0;
+    await loadAdminQa(true);
+  } catch (err) {
+    setStatus(`Lỗi QA: ${err.message}`, true);
+  } finally {
+    actionBtn.disabled = false;
   }
 }
 
@@ -944,6 +1140,234 @@ async function saveTranslationFocus() {
     setStatus(`Không lưu được bộ ưu tiên: ${error.message}`, true);
   } finally {
     els.translateFocusSave.disabled = false;
+  }
+}
+
+async function saveGeminiWebControl(extra = {}) {
+  const buttons = [els.geminiWebStartBtn, els.geminiWebPauseBtn, els.geminiWebStopBtn, els.geminiWebSaveBtn].filter(Boolean);
+  buttons.forEach((button) => { button.disabled = true; });
+  try {
+    const result = await requestJson("/api/admin/translate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "gemini-web-control",
+        headless: Boolean(els.geminiWebHeadlessToggle?.checked),
+        protectiveMode: Boolean(els.geminiWebProtectiveToggle?.checked),
+        lowResourceMode: els.geminiWebLowResourceToggle ? Boolean(els.geminiWebLowResourceToggle.checked) : true,
+        spacingMs: Number(els.geminiWebSpacingInput?.value || 8000),
+        sessionMinutes: Number(els.geminiWebSessionInput?.value || 300),
+        ...extra
+      })
+    });
+    renderGeminiWebStatus(result.geminiWeb || { control: result.control });
+    setStatus(result.message || "Đã lưu cấu hình Gemini Web daemon.");
+    setTimeout(loadTranslateStatus, 2500);
+  } catch (error) {
+    setStatus(`Không lưu được Gemini Web control: ${error.message}`, true);
+  } finally {
+    buttons.forEach((button) => { button.disabled = false; });
+  }
+}
+
+function renderGeminiWebStatus(geminiWeb = {}, status = {}) {
+  const control = geminiWeb.control || {};
+  const daemon = geminiWeb.daemon || {};
+  const pausedUntil = Number(control.pauseUntilEpochMs || 0);
+  const isPaused = control.enabled === false || pausedUntil > Date.now();
+  const daemonAlive = Boolean(geminiWeb.daemonAlive);
+  const active = Boolean(geminiWeb.active);
+
+  if (els.geminiWebHeadlessToggle) els.geminiWebHeadlessToggle.checked = control.headless !== false;
+  if (els.geminiWebProtectiveToggle) els.geminiWebProtectiveToggle.checked = control.protectiveMode !== false;
+  if (els.geminiWebLowResourceToggle) els.geminiWebLowResourceToggle.checked = control.lowResourceMode !== false;
+  if (els.geminiWebSpacingInput) els.geminiWebSpacingInput.value = Number(control.spacingMs || 8000);
+  if (els.geminiWebSessionInput) els.geminiWebSessionInput.value = Number(control.sessionMinutes || 300);
+
+  if (els.geminiWebStateBadge) {
+    els.geminiWebStateBadge.className = "worker-alive-badge " + (
+      active || (daemonAlive && !isPaused) ? "is-online" : isPaused ? "is-paused" : "is-offline"
+    );
+    els.geminiWebStateBadge.textContent = active
+      ? "Gemini Web đang dịch"
+      : isPaused
+        ? "Gemini Web đang tạm dừng"
+        : daemonAlive
+          ? "Daemon đang chờ"
+          : "Daemon chưa có tín hiệu";
+  }
+
+  if (els.geminiWebMessage) {
+    const activeBeat = status.updatedAt || status.lastAttemptAt || daemon.updatedAt;
+    const beat = activeBeat ? ` · nhịp ${describeAge(activeBeat)}` : "";
+    const pauseText = pausedUntil > Date.now()
+      ? ` · tự tiếp tục ${new Date(pausedUntil).toLocaleString("vi-VN")}`
+      : "";
+    const activity = status.activityMessage || daemon.message || geminiWeb.protection?.note || "Đang chờ daemon local cập nhật trạng thái.";
+    els.geminiWebMessage.textContent = `${activity}${beat}${pauseText}`;
+  }
+
+  const total = Number(status.currentTotalChapters || 0);
+  const done = Number(status.currentCompleted || status.currentChapter || 0);
+  const currentChapter = Number(status.currentChapter || status.currentChapterNum || 0);
+  const currentBook = status.currentBookTitle || status.currentBookId || "Đang chờ";
+  const translatedThisRun = Number(status.translatedThisRun || status.sessionChaptersTranslated || 0);
+  const percent = total ? Math.min(100, Math.round((done / total) * 1000) / 10) : 0;
+  if (els.geminiWebCurrentChapter) {
+    const activityState = String(status.activityState || "");
+    const verb = activityState === "retrying" ? "Retry" : activityState === "progress" ? "Vừa lưu" : "Đang dịch";
+    els.geminiWebCurrentChapter.textContent = currentChapter
+      ? `${verb} ${currentBook} - ch ${currentChapter}`
+      : currentBook;
+  }
+  if (els.geminiWebProgressText) {
+    els.geminiWebProgressText.textContent = total
+      ? `${done.toLocaleString("vi-VN")}/${total.toLocaleString("vi-VN")} (${percent}%)`
+      : "--";
+  }
+  if (els.geminiWebSessionCount) {
+    els.geminiWebSessionCount.textContent = `+${translatedThisRun.toLocaleString("vi-VN")} chương`;
+  }
+  if (els.geminiWebLastSuccess) {
+    els.geminiWebLastSuccess.textContent = status.lastSuccessAt
+      ? `${status.lastSuccessfulChapter ? `ch ${status.lastSuccessfulChapter}` : "vừa xong"} · ${describeAge(status.lastSuccessAt)}`
+      : "chưa có trong phiên";
+  }
+
+  renderGeminiWebSlots(geminiWeb, status);
+}
+
+function renderGeminiWebSlots(geminiWeb = {}, status = {}) {
+  if (!els.geminiWebSlotsGrid) return;
+  const control = geminiWeb.control || {};
+  const controlSlots = control.slots || { "1": true, "2": false, "3": false };
+  const rawSlots = Array.isArray(status.activeSlots) ? status.activeSlots : [];
+  const queue = Array.isArray(status.queue) ? status.queue : [];
+
+  const defaultSlotIds = ["1", "2", "3"];
+  const html = defaultSlotIds.map((slotId, idx) => {
+    const isEnabled = controlSlots[slotId] !== false;
+    let slotData = rawSlots.find((s) => String(s.slotId) === slotId);
+
+    if (!slotData && queue[idx]) {
+      const qJob = queue[idx];
+      const matched = (adminCatalog.books || []).find((b) => b.id === qJob.bookId);
+      const total = Number(qJob.total || matched?.chapterCount || 0);
+      const done = Number(qJob.translated || 0);
+      slotData = {
+        slotId: Number(slotId),
+        enabled: isEnabled,
+        state: status.state === "running" ? "translating" : "idle",
+        bookId: qJob.bookId,
+        bookTitle: matched?.title || qJob.bookId,
+        completed: done,
+        total,
+        percent: total ? Math.min(100, Math.round((done / total) * 1000) / 10) : 0,
+        sessionChapters: 0
+      };
+    } else if (!slotData && idx === 0 && status.currentBookId) {
+      const matched = (adminCatalog.books || []).find((b) => b.id === status.currentBookId);
+      const total = Number(status.currentTotalChapters || matched?.chapterCount || 0);
+      const done = Number(status.currentCompleted || 0);
+      slotData = {
+        slotId: 1,
+        enabled: isEnabled,
+        state: status.state === "running" ? "translating" : "idle",
+        bookId: status.currentBookId,
+        bookTitle: status.currentBookTitle || matched?.title || status.currentBookId,
+        completed: done,
+        total,
+        percent: total ? Math.min(100, Math.round((done / total) * 1000) / 10) : 0,
+        sessionChapters: Number(status.translatedThisRun || 0)
+      };
+    }
+
+    const state = !isEnabled
+      ? "disabled"
+      : slotData?.state === "completed"
+        ? "completed"
+        : slotData?.state === "translating"
+          ? "translating"
+          : slotData?.state === "resource_paused"
+            ? "resource_paused"
+          : "idle";
+
+    const stateLabels = {
+      translating: "Đang dịch",
+      completed: "Hoàn tất",
+      idle: "Đang chờ",
+      resource_paused: "Tiết kiệm RAM",
+      disabled: "Tạm tắt"
+    };
+
+    const matchedBook = slotData?.bookId ? (adminCatalog.books || []).find((b) => b.id === slotData.bookId) : null;
+    const bookTitle = (matchedBook ? matchedBook.title : slotData?.bookTitle) || (isEnabled ? (slotData?.bookId || "Đang chờ phân bổ...") : "Slot đang tắt");
+    const ch = Number(slotData?.currentChapter || 0);
+    const completed = Number(slotData?.completed || 0);
+    const total = Number(slotData?.total || 0);
+    const percent = total ? Math.min(100, Math.round((completed / total) * 1000) / 10) : 0;
+    const sessionCount = Number(slotData?.sessionChapters || 0);
+    const speedSec = slotData?.speedMs ? Math.round(slotData.speedMs / 1000) : 0;
+    const repairedAttempts = Number(slotData?.repairedAttempts || 0);
+    const sessionLabel = repairedAttempts > 1
+      ? `cứu lỗi ${repairedAttempts} lần`
+      : `+${sessionCount} ch`;
+
+    return `
+      <div class="gemini-web-slot-card is-${state}">
+        <div class="gemini-web-slot-header">
+          <div class="gemini-web-slot-title-box">
+            <span class="gemini-web-slot-badge">Profile Slot ${slotId}</span>
+          </div>
+          <span class="gemini-web-slot-state is-${state}">${stateLabels[state] || stateLabels.idle}</span>
+        </div>
+        <h6 class="gemini-web-slot-book-name" title="${escapeHtml(bookTitle)}">${escapeHtml(bookTitle)}</h6>
+        <div class="gemini-web-slot-progress-bar-wrap">
+          <div class="gemini-web-slot-progress-fill" style="width: ${percent}%;"></div>
+        </div>
+        <div class="gemini-web-slot-meta">
+          <span>${total ? `Ch. ${ch > 0 ? ch : completed}/${total} (${percent}%)` : "--"}</span>
+          <span>${speedSec ? `${speedSec}s/ch · ` : ""}${sessionLabel}</span>
+        </div>
+        <div class="gemini-web-slot-toggle-row">
+          <label class="switch-field" title="Bật hoặc tắt riêng Profile Slot ${slotId}">
+            <input type="checkbox" class="gemini-web-slot-toggle" data-slot-id="${slotId}" ${isEnabled ? "checked" : ""}>
+            <span class="switch-track" aria-hidden="true"></span>
+            <span>Bật Profile ${slotId}</span>
+          </label>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  els.geminiWebSlotsGrid.innerHTML = html;
+}
+
+async function handleGeminiWebSlotToggle(event) {
+  const toggle = event.target.closest(".gemini-web-slot-toggle");
+  if (!toggle) return;
+  const slotId = toggle.dataset.slotId;
+  const enabled = toggle.checked;
+  toggle.disabled = true;
+
+  try {
+    const result = await requestJson("/api/admin/translate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "gemini-web-toggle-slot",
+        slotId,
+        enabled
+      })
+    });
+    setStatus(result.message || `Đã ${enabled ? "bật" : "tắt"} Profile Slot ${slotId}.`);
+    renderGeminiWebStatus(result.geminiWeb || {}, {});
+    setTimeout(loadTranslateStatus, 1500);
+  } catch (err) {
+    setStatus(`Lỗi điều khiển Profile Slot ${slotId}: ${err.message}`, true);
+    toggle.checked = !enabled;
+  } finally {
+    toggle.disabled = false;
   }
 }
 
@@ -1365,7 +1789,6 @@ function renderCrawlerStatus(status = {}) {
 }
 
 const ADMIN_TABS = [
-  { key: "library", tab: "libraryTab", panel: "uploadForm" },
   { key: "books", tab: "booksTab", panel: "booksPanel" },
   { key: "translate", tab: "translateTab", panel: "translatePanel" },
   { key: "keys", tab: "keysTab", panel: "keysPanel" },
@@ -1378,8 +1801,18 @@ const ADMIN_TABS = [
 let adminUsersData = [];
 let adminCommentsData = [];
 
+function openUploadDialog() {
+  if (!els.uploadDialog) return;
+  startNewBook();
+  els.uploadDialog.showModal();
+}
+
+function closeUploadDialog() {
+  els.uploadDialog?.close();
+}
+
 function selectAdminTab(tab) {
-  activeAdminTab = ADMIN_TABS.some((entry) => entry.key === tab) ? tab : "library";
+  activeAdminTab = ADMIN_TABS.some((entry) => entry.key === tab) ? tab : "books";
   ADMIN_TABS.forEach(({ key, tab: tabId, panel }) => {
     const active = key === activeAdminTab;
     els[tabId]?.classList.toggle("active", active);
@@ -1576,6 +2009,7 @@ function renderKeysList(keys, isPingResult = false) {
 }
 
 function renderBookOptions(selectedId = "") {
+  if (!els.bookSelect) return;
   els.bookSelect.innerHTML = "";
   const newOption = document.createElement("option");
   newOption.value = "";
@@ -1603,14 +2037,16 @@ function getSelectedBook() {
 }
 
 function startNewBook() {
-  els.uploadForm.reset();
-  els.bookSelect.value = "";
-  els.epub.required = true;
-  els.epubLabel.innerHTML = "File EPUB <small>Tối đa 200 MB</small>";
-  els.coverLabel.innerHTML = "Ảnh bìa <small>JPG, PNG hoặc WebP; tối đa 5 MB</small>";
-  els.existingFiles.hidden = true;
-  els.deleteBook.hidden = true;
-  els.submit.textContent = "Upload truyện";
+  els.uploadForm?.reset();
+  if (els.bookSelect) els.bookSelect.value = "";
+  if (els.epub) els.epub.required = true;
+  if (els.epubLabel) els.epubLabel.innerHTML = "File EPUB <small>Tối đa 200 MB</small>";
+  if (els.coverLabel) els.coverLabel.innerHTML = "Ảnh bìa <small>JPG, PNG hoặc WebP; tối đa 5 MB</small>";
+  if (els.existingFiles) els.existingFiles.hidden = true;
+  if (els.deleteBook) els.deleteBook.hidden = true;
+  if (els.submit) els.submit.textContent = "Upload truyện";
+  setStatus("");
+  setProgress(0);
 }
 
 function populateBookForm(book) {
@@ -1655,6 +2091,7 @@ function showAuthenticated(authenticated) {
   els.dialog?.classList.toggle("is-authenticated", Boolean(authenticated));
   els.loginForm.hidden = authenticated;
   els.tabs.hidden = !authenticated;
+  if (els.logout) els.logout.hidden = !authenticated;
   ADMIN_TABS.forEach(({ key, panel }) => {
     if (els[panel]) els[panel].hidden = !authenticated || activeAdminTab !== key;
   });
@@ -3210,11 +3647,14 @@ async function aiTranslateBilingualChapter() {
   }
 
   try {
-    const prompt = "Dịch toàn bộ chương truyện tiểu thuyết sau sang tiếng Việt thuần thục, văn phong mượt mà, thuần Việt, chuẩn tiên hiệp/huyền huyễn:\n\n" + zhText;
     const res = await requestJson("/api/admin/gemini-translate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, model: "gemini-3.6-flash" })
+      body: JSON.stringify({
+        content: zhText,
+        title: els.adminBilingualZhTitle?.value || "",
+        model: normalizeStudioModel(els.studioGeminiModel?.value || DEFAULT_STUDIO_MODEL)
+      })
     });
 
     if (res.translation) {
@@ -3239,7 +3679,26 @@ function openEditBookDialog(book) {
   els.editBookId.value = book.id || "";
   els.editBookTitle.value = book.title || "";
   els.editBookAuthor.value = book.author || "";
-  els.editBookGenre.value = book.genre || "";
+
+  const rawGenre = String(book.genre || "").trim();
+  if (els.editBookGenre) {
+    let matched = false;
+    for (const opt of els.editBookGenre.options) {
+      if (opt.value.toLowerCase() === rawGenre.toLowerCase() || (rawGenre && (opt.value.toLowerCase().includes(rawGenre.toLowerCase()) || rawGenre.toLowerCase().includes(opt.value.toLowerCase())))) {
+        els.editBookGenre.value = opt.value;
+        matched = true;
+        break;
+      }
+    }
+    if (!matched && rawGenre) {
+      const customOpt = document.createElement("option");
+      customOpt.value = rawGenre;
+      customOpt.textContent = rawGenre;
+      els.editBookGenre.appendChild(customOpt);
+      els.editBookGenre.value = rawGenre;
+    }
+  }
+
   els.editBookStatus.value = book.status || "Đang cập nhật";
   els.editBookChapterCount.value = Number(book.chapterCount || book.totalChapters || 0);
   els.editBookCover.value = book.cover || "";

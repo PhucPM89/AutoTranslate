@@ -23,6 +23,7 @@ function createR2Storage(env = process.env) {
   // is idempotent - a PUT writes the same bytes to the same key - so replaying one
   // is safe. The signature is regenerated per attempt because it is timestamped.
   const MAX_ATTEMPTS = Math.max(1, Number(env.R2_MAX_ATTEMPTS || 4));
+  let clockOffsetMs = Number(env.R2_CLOCK_OFFSET_MS || 0);
 
   async function send(method, key, { body, headers = {}, query = "" } = {}) {
     const url = `${endpoint}/${bucket}/${encodeKey(key)}${query}`;
@@ -30,13 +31,28 @@ function createR2Storage(env = process.env) {
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
       try {
-        const signed = signRequest({ method, url, body, headers, accessKeyId, secretAccessKey });
+        const signed = signRequest({
+          method,
+          url,
+          body,
+          headers,
+          accessKeyId,
+          secretAccessKey,
+          now: new Date(Date.now() + clockOffsetMs)
+        });
         const response = await fetch(url, {
           method,
           headers: signed,
           body,
           signal: AbortSignal.timeout(Number(env.R2_TIMEOUT_MS || 30000))
         });
+        if (response.status === 403 && await learnClockOffsetFromSkew(response)) {
+          lastError = "HTTP 403 RequestTimeTooSkewed";
+          if (attempt < MAX_ATTEMPTS) {
+            console.warn(`R2 ${method} ${key}: đồng hồ local lệch R2, đã tự hiệu chỉnh chữ ký và thử lại.`);
+            continue;
+          }
+        }
         // 4xx is our own mistake and will not improve by asking again.
         if (response.status < 500 && response.status !== 429) return response;
         if (attempt === MAX_ATTEMPTS) return response;
@@ -52,6 +68,16 @@ function createR2Storage(env = process.env) {
     }
 
     throw new Error(`R2 ${method} ${key} thất bại sau ${MAX_ATTEMPTS} lần.`);
+  }
+
+  async function learnClockOffsetFromSkew(response) {
+    const clone = response.clone();
+    const text = await safeText(clone);
+    if (!/RequestTimeTooSkewed/i.test(text)) return false;
+    const serverDate = Date.parse(response.headers.get("date") || "");
+    if (!Number.isFinite(serverDate)) return false;
+    clockOffsetMs = serverDate - Date.now();
+    return true;
   }
 
   return {
@@ -167,9 +193,8 @@ function encodeKey(key) {
   return String(key).split("/").map(encodeURIComponent).join("/");
 }
 
-function signRequest({ method, url, body, headers, accessKeyId, secretAccessKey }) {
+function signRequest({ method, url, body, headers, accessKeyId, secretAccessKey, now = new Date() }) {
   const target = new URL(url);
-  const now = new Date();
   const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
   const dateStamp = amzDate.slice(0, 8);
   const payloadHash = crypto.createHash("sha256").update(body || "").digest("hex");

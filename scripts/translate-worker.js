@@ -35,7 +35,8 @@ const {
   runTranslationJobs,
   summarize,
   isDone,
-  isSettled
+  isSettled,
+  isQuotaError
 } = require("../server/ingest/translation-queue");
 const {
   translateText,
@@ -57,6 +58,7 @@ const flag = (name, fallback) => {
   const index = args.indexOf(name);
   return index >= 0 && args[index + 1] ? args[index + 1] : fallback;
 };
+const hasFlag = (name) => args.includes(name);
 
 const REQUEST_BUDGET = Number(flag("--budget", process.env.TRANSLATE_BUDGET || 0)) || Infinity;
 const RUN_MINUTES = Number(flag("--minutes", process.env.TRANSLATE_RUN_MINUTES || 300));
@@ -71,10 +73,22 @@ const CHAPTERS_PER_TURN = Math.max(1, Number(process.env.TRANSLATE_CHAPTERS_PER_
 const ROTATION_KEY = "jobs/translate-rotation.json";
 const TRANSLATE_STATUS_KEY = "jobs/translate-status.json";
 const TRANSLATE_KEY_HEALTH_KEY = "jobs/translate-key-health.json";
+const QUALITY_ISSUES_KEY = "jobs/translation-quality-issues.json";
+const GEMINI_WEB_ACTIVE_KEY = "jobs/gemini-web-active.json";
+const GEMINI_WEB_CONTROL_KEY = "jobs/gemini-web-control.json";
+const GEMINI_WEB_LOCK_TTL_MS = Math.max(5 * 60_000, Number(process.env.GEMINI_WEB_LOCK_TTL_MS || 10 * 60_000));
 
 let lastChapterTokens = 2200;
 
 function computeAdaptiveSpacing(keyList) {
+  if (process.env.TRANSLATION_PROVIDER === "gemini-web") {
+    const base = Math.max(
+      Number(process.env.GEMINI_WEB_MIN_SPACING_MS || 3000),
+      Number(process.env.GEMINI_WEB_SPACING_MS || process.env.TRANSLATE_SPACING_MS || 8000)
+    );
+    const jitter = Math.max(0, Number(process.env.GEMINI_WEB_JITTER_MS || 1500));
+    return base + (jitter ? Math.floor(Math.random() * jitter) : 0);
+  }
   if (process.env.TRANSLATE_SPACING_MS) {
     return Math.max(0, Number(process.env.TRANSLATE_SPACING_MS));
   }
@@ -117,6 +131,37 @@ async function writeTranslateStatus(storage, status) {
   }
 }
 
+async function readActiveGeminiWebLock(storage) {
+  const lock = await readJson(storage, GEMINI_WEB_ACTIVE_KEY);
+  if (!lock || lock.provider !== "gemini-web") return null;
+  const expiresAt = Number(lock.expiresAtEpochMs || 0);
+  return expiresAt > Date.now() ? lock : null;
+}
+
+async function writeGeminiWebLock(storage, status = {}) {
+  return storage.put(
+    GEMINI_WEB_ACTIVE_KEY,
+    JSON.stringify({
+      provider: "gemini-web",
+      owner: `${process.env.COMPUTERNAME || "local"}:${process.pid}`,
+      updatedAt: new Date().toISOString(),
+      expiresAtEpochMs: Date.now() + GEMINI_WEB_LOCK_TTL_MS,
+      ...status
+    }),
+    { cacheControl: "private, no-store" }
+  );
+}
+
+function startGeminiWebHeartbeat(storage) {
+  const beat = () => writeGeminiWebLock(storage).catch((error) =>
+    console.warn(`Không ghi được Gemini Web heartbeat: ${error.message}`)
+  );
+  beat();
+  const timer = setInterval(beat, Math.max(30_000, Math.floor(GEMINI_WEB_LOCK_TTL_MS / 3)));
+  if (typeof timer.unref === "function") timer.unref();
+  return timer;
+}
+
 // Buckets every key into a single clear state so the dashboard can answer
 // "is a key dead, or just resting?" at a glance:
 //   ready    - usable right now
@@ -157,6 +202,19 @@ function summarizeKeyPool(keyList) {
   return summarizeKeyStats(getKeyPoolStats(keyList));
 }
 
+function summarizeWorkerCapacity(keyList, { isGeminiWeb = false } = {}) {
+  if (isGeminiWeb) {
+    return {
+      activeKeyCount: 1,
+      readyKeyCount: 1,
+      deadKeyCount: 0,
+      dailyExhaustedKeyCount: 0,
+      cooldownKeyCount: 0
+    };
+  }
+  return summarizeKeyPool(keyList);
+}
+
 function sanitizeStatusError(value) {
   return String(value || "")
     .replace(/organization\s+`[^`]+`/gi, "organization")
@@ -165,6 +223,62 @@ function sanitizeStatusError(value) {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 300);
+}
+
+function qualityIssueSignature(errorText) {
+  const clean = sanitizeStatusError(errorText)
+    .toLowerCase()
+    .replace(/\d+/g, "#")
+    .replace(/"[^"]{1,80}"/g, "\"...\"")
+    .replace(/'[^']{1,80}'/g, "'...'");
+  return clean.slice(0, 180);
+}
+
+async function recordQualityIssue(storage, { bookId, bookTitle, chapter, status, lastError }) {
+  const cleanError = sanitizeStatusError(lastError);
+  if (!cleanError || !/chưa đạt yêu cầu|chữ hán|hán-việt|cụt|lặp|mất số|mất.*đoạn|trùng nguyên văn|chỉ trả tiêu đề|thiếu nội dung chương/i.test(cleanError)) {
+    return null;
+  }
+
+  const signature = qualityIssueSignature(cleanError);
+  const nowIso = new Date().toISOString();
+  const ledger = (await readJson(storage, QUALITY_ISSUES_KEY)) || { version: 1, updatedAt: nowIso, issues: [] };
+  const issues = Array.isArray(ledger.issues) ? ledger.issues : [];
+  let issue = issues.find((item) => item.signature === signature);
+  if (!issue) {
+    issue = {
+      signature,
+      count: 0,
+      firstSeenAt: nowIso,
+      lastSeenAt: "",
+      lastError: "",
+      examples: []
+    };
+    issues.push(issue);
+  }
+
+  issue.count = Number(issue.count || 0) + 1;
+  issue.lastSeenAt = nowIso;
+  issue.lastError = cleanError;
+  issue.lastStatus = status;
+  issue.examples = [
+    {
+      bookId,
+      bookTitle,
+      chapter,
+      status,
+      at: nowIso
+    },
+    ...(Array.isArray(issue.examples) ? issue.examples : [])
+  ].slice(0, 8);
+
+  issues.sort((a, b) => Number(b.count || 0) - Number(a.count || 0));
+  await storage.put(
+    QUALITY_ISSUES_KEY,
+    JSON.stringify({ version: 1, updatedAt: nowIso, issues: issues.slice(0, 300) }, null, 2),
+    { cacheControl: "private, no-store" }
+  );
+  return issue;
 }
 
 async function main() {
@@ -197,7 +311,28 @@ async function main() {
     process.env.GROQ_API_KEY,
   ].filter(Boolean).flatMap(k => parseApiKeys(k));
 
-  const isHachimi = process.env.TRANSLATION_PROVIDER === "hachimi" || Boolean(process.env.HACHIMI_API_URL);
+  const isGeminiWeb = process.env.TRANSLATION_PROVIDER === "gemini-web";
+  const isHachimi = !isGeminiWeb && (process.env.TRANSLATION_PROVIDER === "hachimi" || Boolean(process.env.HACHIMI_API_URL));
+  if (!isGeminiWeb) {
+    const activeWeb = await readActiveGeminiWebLock(storage);
+    if (activeWeb) {
+      const expiresAt = new Date(Number(activeWeb.expiresAtEpochMs || 0)).toISOString();
+      console.log(`Gemini Web local đang hoạt động (${activeWeb.owner || "local"}); cloud/API worker nhường queue đến ${expiresAt}.`);
+      await writeTranslateStatus(storage, {
+        state: "paused_gemini_web",
+        activityState: "waiting_gemini_web",
+        message: `Gemini Web local đang dịch; API worker tạm nhường queue đến ${expiresAt}.`,
+        currentBookId: "",
+        currentBookTitle: "",
+        currentChapter: 0,
+        finishedAt: new Date().toISOString()
+      });
+      return;
+    }
+  }
+  if (isGeminiWeb) {
+    startGeminiWebHeartbeat(storage);
+  }
 
   // R2 is the shared key registry, while environment keys are the deployment
   // bootstrap/fallback. Merge both: choosing one source made a newly-added
@@ -205,11 +340,24 @@ async function main() {
   const allUniqueKeys = Array.from(new Set([...keyList, ...envKeys]))
     .filter(Boolean)
     .sort((a, b) => translationKeyPriority(a) - translationKeyPriority(b));
-  if (!allUniqueKeys.length && !isHachimi) {
-    throw new Error("Thiếu API Keys (Gemini / Groq) hoặc HACHIMI_API_URL.");
+  if (!allUniqueKeys.length && !isHachimi && !isGeminiWeb) {
+    throw new Error("Thiếu API Keys (Gemini / Groq), HACHIMI_API_URL hoặc TRANSLATION_PROVIDER=gemini-web.");
   }
   if (isHachimi && !allUniqueKeys.length) {
     allUniqueKeys.push("hachimi-colab-endpoint");
+  }
+  if (isGeminiWeb && !allUniqueKeys.length) {
+    allUniqueKeys.push("gemini-web-session");
+  }
+  const cloudFallbackKeys = allUniqueKeys.filter((key) => key && key !== "gemini-web-session" && key !== "hachimi-colab-endpoint");
+  if (!isGeminiWeb && process.env.ALLOW_CLOUD_TRANSLATION !== "true") {
+    console.log("\n===============================================================");
+    console.log("[CHẾ ĐỘ BẢO TOÀN CHẤT LƯỢNG CAO NHẤT]");
+    console.log("Đã tắt dịch tự động bằng API Cloud (Gemini API / Groq).");
+    console.log("Hệ thống chỉ dịch bằng Gemini Web (tài khoản Google) khi bật máy.");
+    console.log("API keys chỉ dùng cho biên tập thủ công trên Admin Dashboard / EPUB Studio.");
+    console.log("===============================================================\n");
+    return;
   }
   importKeyPoolState(privateStorage ? await readJson(privateStorage, TRANSLATE_KEY_HEALTH_KEY) : null, allUniqueKeys);
   const persistKeyHealth = () => privateStorage
@@ -225,7 +373,7 @@ async function main() {
   const deadlineAt = Date.now() + Math.max(0, RUN_MINUTES * 60 * 1000 - RESERVE_MS);
 
   let translationConfig = await readTranslationConfig(storage);
-  let configuredFocus = ONLY_BOOK || translationConfig.focusBookId;
+  let configuredFocus = ONLY_BOOK || translationConfig.focusBookId || "";
   let jobs = await listJobs(storage, configuredFocus);
   if (!jobs.length && translationConfig.focusBookId && !ONLY_BOOK) {
     console.log(`Bộ ưu tiên ${translationConfig.focusBookId} không còn chương chờ; chuyển về chế độ tự động.`);
@@ -239,7 +387,7 @@ async function main() {
       state: "idle",
       focusBookId: translationConfig.focusBookId,
       selectionMode: translationConfig.focusBookId ? "focused" : "automatic",
-      ...summarizeKeyPool(allUniqueKeys),
+      ...summarizeWorkerCapacity(allUniqueKeys, { isGeminiWeb }),
       spacingMs: computeAdaptiveSpacing(allUniqueKeys),
       finishedAt: new Date().toISOString(),
       message: "Tất cả các bộ truyện đã được dịch đầy đủ. Không có job chờ."
@@ -273,10 +421,20 @@ async function main() {
   const activeBookIds = new Set(activeReadBooks.map((b) => b.bookId));
 
   // Sort queue: Sequential Book Completion Mode
-  // 1. VIP Active Books (currently being read by real readers)
-  // 2. In-progress books with highest completion (finish almost-done books first so readers get 100% full translations!)
-  // 3. Smaller pending books, then stable ID
+  // 0. Focus book takes absolute first priority if specified
+  // 1. Quality/repair retries first, so broken chapters are fixed before new backlog.
+  // 2. VIP Active Books (currently being read by real readers)
+  // 3. In-progress books with highest completion (finish almost-done books first so readers get 100% full translations!)
+  // 4. Smaller pending books, then stable ID
   queue.sort((a, b) => {
+    if (configuredFocus) {
+      if (a.bookId === configuredFocus && b.bookId !== configuredFocus) return -1;
+      if (b.bookId === configuredFocus && a.bookId !== configuredFocus) return 1;
+    }
+    const aRepair = urgentRepairScore(a);
+    const bRepair = urgentRepairScore(b);
+    if (aRepair !== bRepair) return bRepair - aRepair;
+
     const aIsActive = activeBookIds.has(a.bookId);
     const bIsActive = activeBookIds.has(b.bookId);
     if (aIsActive !== bIsActive) return bIsActive ? 1 : -1;
@@ -351,279 +509,483 @@ async function main() {
 
   const parsedKeys = parseApiKeys(apiKey);
 
-  while (!stop) {
-    cycle += 1;
-    let translatedThisCycle = 0;
+  const MULTI_BOOK_CONCURRENCY = Math.max(1, Math.min(3, Number(process.env.GEMINI_WEB_CONCURRENCY || process.env.GEMINI_WEB_MAX_PROFILES || 1)));
+  const isMultiBook = !configuredFocus && (MULTI_BOOK_CONCURRENCY > 1 || process.env.MULTI_BOOK === "true");
+  let translatedThisCycle = 0;
 
-    for (const job of activeQueue) {
-      if (spentTotal >= REQUEST_BUDGET || Date.now() >= deadlineAt) {
-        stop = true;
-        break;
-      }
-      if (isSettled(job.state)) continue;
+  const slotStates = new Map();
+  for (let i = 1; i <= Math.max(3, MULTI_BOOK_CONCURRENCY); i++) {
+    slotStates.set(i, {
+      slotId: i,
+      enabled: true,
+      state: "idle",
+      bookId: "",
+      bookTitle: "Đang chờ lượt...",
+      currentChapter: 0,
+      completed: 0,
+      total: 0,
+      percent: 0,
+      speedMs: 0,
+      sessionChapters: 0,
+      lastSuccessAt: "",
+      lastSuccessfulChapter: 0,
+      lastError: "",
+      activityMessage: "Chờ worker phân bổ bộ truyện",
+      updatedAt: new Date().toISOString()
+    });
+  }
 
-      if (!rowChecked.has(job.bookId)) {
-        await ensureBookRow({ storage, db, job });
-        rowChecked.add(job.bookId);
+  async function processBookTurn(job, turnBudget = 1, slotId = 1) {
+    if (spentTotal >= REQUEST_BUDGET || Date.now() >= deadlineAt) return { spent: 0, translated: 0 };
+    if (isSettled(job.state)) return { spent: 0, translated: 0 };
+
+    if (!rowChecked.has(job.bookId)) {
+      await ensureBookRow({ storage, db, job });
+      rowChecked.add(job.bookId);
+    }
+    if (!outputsChecked.has(job.bookId)) {
+      const index = await readJson(storage, `books/${job.bookId}/index.json`);
+      if (bookOutputsNeedRefresh(index, job.state)) {
+        console.log(`  [${job.bookId}] Index đọc bị lệch queue; đồng bộ lại trước khi dịch tiếp.`);
+        await refreshBookOutputs({ storage, db, job, state: job.state });
       }
-      if (!outputsChecked.has(job.bookId)) {
-        const index = await readJson(storage, `books/${job.bookId}/index.json`);
-        if (bookOutputsNeedRefresh(index, job.state)) {
-          console.log(`  [${job.bookId}] Index đọc bị lệch queue; đồng bộ lại trước khi dịch tiếp.`);
-          await refreshBookOutputs({ storage, db, job, state: job.state });
+      outputsChecked.add(job.bookId);
+    }
+
+    const bTitle = titleMap.get(job.bookId) || job.bookId;
+    let lastKnownCompleted = summarize(job.state).completed;
+
+    const originalCache = new Map();
+    const chapterTranslationMeta = new Map();
+    const loadOriginal = (n) => {
+      if (!originalCache.has(n)) {
+        originalCache.set(n, readJson(storage, originalKey(job.bookId, job.revision, n)));
+      }
+      return originalCache.get(n);
+    };
+    let bookGlossary = await engine.loadGlossary(job.bookId);
+
+    const result = await runTranslationJobs({
+      state: job.state,
+      requestBudget: turnBudget,
+      deadlineAt,
+      maxAttempts: isGeminiWeb ? Number(process.env.GEMINI_WEB_CHAPTER_MAX_ATTEMPTS || 3) : undefined,
+      spacingMs: () => computeAdaptiveSpacing(allUniqueKeys),
+      batchSize: isGeminiWeb ? 1 : BATCH_SIZE,
+      strictSequential: Boolean(configuredFocus),
+      processingStaleMs: isGeminiWeb ? Number(process.env.GEMINI_WEB_PROCESSING_STALE_MS || 120000) : undefined,
+      loadChapter: loadOriginal,
+      translateChapter: async (chapter) => {
+        const existing = await readJson(storage, chapterKey(job.bookId, job.revision, chapter.chapterNumber));
+        if (!job.state.forceRetranslateAll && existing && existing.translationStatus === "completed" && existing.content) {
+          console.log(`  [${bTitle}] ch ${chapter.chapterNumber}: đã có bản dịch trên R2, bỏ qua dịch lại`);
+          chapterTranslationMeta.set(chapter.chapterNumber, {
+            title: existing.title || chapter.title,
+            provider: existing.provider || "existing",
+            model: existing.model || "existing",
+            translationVersion: existing.translationVersion || "existing"
+          });
+          return existing.content;
         }
-        outputsChecked.add(job.bookId);
-      }
-
-      const bTitle = titleMap.get(job.bookId) || job.bookId;
-      let lastKnownCompleted = summarize(job.state).completed;
-      console.log(`\n===============================================================`);
-      console.log(`>>> [KHÓA CHẶT DỊCH 100%] Bộ truyện: "${bTitle}" (${job.bookId})`);
-      console.log(`===============================================================`);
-
-      const originalCache = new Map();
-      const chapterTranslationMeta = new Map();
-      const loadOriginal = (n) => {
-        if (!originalCache.has(n)) {
-          originalCache.set(n, readJson(storage, originalKey(job.bookId, job.revision, n)));
-        }
-        return originalCache.get(n);
-      };
-      // The glossary is durable in R2 and each chapter mines incremental terms
-      // immediately before translation. Re-reading every source chapter here
-      // cost thousands of R2 GETs and several idle minutes on every 15-minute
-      // Actions run without adding information after the first campaign scan.
-      let bookGlossary = await engine.loadGlossary(job.bookId);
-      console.log(`  [Glossary] đã nạp ${Object.keys(bookGlossary).length} thuật ngữ; chỉ khai thác bổ sung theo chương.`);
-
-      while (!isSettled(job.state) && spentTotal < REQUEST_BUDGET && Date.now() < deadlineAt) {
-        const remainingBudget = REQUEST_BUDGET === Infinity ? Infinity : REQUEST_BUDGET - spentTotal;
-        const result = await runTranslationJobs({
-          state: job.state,
-          requestBudget: remainingBudget, // Translate all chapters of this book until done!
-          deadlineAt,
-          spacingMs: () => computeAdaptiveSpacing(allUniqueKeys),
-          batchSize: BATCH_SIZE,
-          strictSequential: Boolean(configuredFocus),
-          loadChapter: loadOriginal,
-          translateChapter: async (chapter) => {
-            const existing = await readJson(storage, chapterKey(job.bookId, job.revision, chapter.chapterNumber));
-            if (!job.state.forceRetranslateAll && existing && existing.translationStatus === "completed" && existing.content) {
-              console.log(`  ch ${chapter.chapterNumber}: đã có bản dịch trên R2, bỏ qua Groq AI`);
-              chapterTranslationMeta.set(chapter.chapterNumber, {
-                title: existing.title || chapter.title,
-                provider: existing.provider || "existing",
-                model: existing.model || "existing",
-                translationVersion: existing.translationVersion || "existing"
-              });
-              return existing.content;
-            }
-            bookGlossary = await engine.mineAndMergeGlossary(job.bookId, [chapter.title, chapter.content]);
-            const output = await translateText(chapter.content, apiKey, {
+        bookGlossary = await engine.mineAndMergeGlossary(job.bookId, [chapter.title, chapter.content]);
+        let output;
+        try {
+          output = await translateText(chapter.content, apiKey, {
+            bookId: job.bookId,
+            bookTitle: bTitle,
+            glossary: bookGlossary,
+            engine,
+            provider: isGeminiWeb ? "gemini-web" : "cloud",
+            profileSlotId: slotId
+          });
+        } catch (error) {
+          const canCloudRepair = isGeminiWeb && cloudFallbackKeys.length > 0 && process.env.ALLOW_CLOUD_REPAIR === "true";
+          if (!canCloudRepair) throw error;
+          console.warn(`  [${bTitle}] [Slot ${slotId}] ch ${chapter.chapterNumber}: Gemini Web lỗi, chuyển sang API repair lane — ${sanitizeStatusError(error)}`);
+          try {
+            output = await translateText(chapter.content, cloudFallbackKeys.join(","), {
               bookId: job.bookId,
               bookTitle: bTitle,
               glossary: bookGlossary,
               engine,
-              provider: "cloud"
+              provider: "cloud",
+              forceCloud: true,
+              webFailureReason: sanitizeStatusError(error)
             });
-            if (!output || !output.translation) throw new Error("Groq AI không trả bản dịch.");
-            let translatedTitle = chapter.title;
-            if (/\p{Script=Han}/u.test(String(chapter.title || ""))) {
-              const titleResult = await translateMetadata({
-                title: chapter.title,
-                author: "",
-                description: ""
-              }, apiKey);
-              translatedTitle = titleResult.title || chapter.title;
+          } catch (repairError) {
+            if (isQuotaError(repairError)) {
+              console.warn(`  [${bTitle}] [Slot ${slotId}] ch ${chapter.chapterNumber}: API repair lane hết quota; giữ chương ở Web retry thay vì chặn worker — ${sanitizeStatusError(repairError)}`);
+              throw error;
             }
-            const provider = output.providersUsed?.[0] || "cloud";
-            const model = output.modelsUsed?.[0] || "unknown";
-            chapterTranslationMeta.set(chapter.chapterNumber, {
-              title: translatedTitle,
-              provider,
-              model,
-              translationVersion: provider === "groq" ? "groq-qwen-direct-v1" : `${provider}-direct-v1`
-            });
-            if (output.tokensUsed) {
-              lastChapterTokens = output.tokensUsed;
-            }
-            return output.translation;
-          },
-          publishChapter: async (chapter, translation) => {
-            const meta = chapterTranslationMeta.get(chapter.chapterNumber) || {};
-            await storage.put(
-              chapterKey(job.bookId, job.revision, chapter.chapterNumber),
-              JSON.stringify(
-                buildChapterDocument({
-                  bookId: job.bookId,
-                  revision: job.revision,
-                  chapter: { ...chapter, title: meta.title || chapter.title },
-                  translation,
-                  translationStatus: "completed",
-                  provider: meta.provider || "cloud",
-                  model: meta.model || "unknown",
-                  translationVersion: meta.translationVersion || "cloud-direct-v1"
-                })
-              )
-            );
-          },
-          saveState: (next) => storage.put(jobStateKey(job.bookId), JSON.stringify(next)),
-          onProgress: async ({ chapter, chapters, status, completed, total, sessionDelta, spentDelta, attempts, lastError }) => {
-            const currentTotalSession = translatedTotal + (sessionDelta || 0);
-            const currentSpent = spentTotal + (spentDelta || 0);
-            const bTitle = titleMap.get(job.bookId) || job.bookId;
-            const elapsedMin = Math.max(0.05, (Date.now() - new Date(startedAt).getTime()) / 60000);
-            const currentSpeed = Math.round((currentTotalSession / elapsedMin) * 10) / 10;
-            const currentSpacing = computeAdaptiveSpacing(allUniqueKeys);
-            const keyPool = summarizeKeyPool(allUniqueKeys);
-            const readyKeyCount = keyPool.readyKeyCount;
-            if (completed > lastKnownCompleted) {
-              lastKnownCompleted = completed;
-              lastSuccessAt = new Date().toISOString();
-              lastSuccessfulChapter = chapter;
-            }
-            if (lastError) lastRunError = sanitizeStatusError(lastError);
-            const activityState = readyKeyCount === 0 && status !== "completed"
-              ? "waiting_quota"
-              : status === "translating"
-              ? "translating"
-              : status === "completed"
-                ? "progress"
-                : "retrying";
-            const activeChapters = Array.isArray(chapters) && chapters.length ? chapters : [chapter].filter(Boolean);
-            const chapterLabel = activeChapters.length > 1
-              ? `${activeChapters[0]}–${activeChapters[activeChapters.length - 1]}`
-              : String(chapter || "?");
-            const activityMessage = activityState === "translating"
-              ? `Đang gửi chương ${chapterLabel} tới AI.`
-              : activityState === "progress"
-                ? `Đã dịch và lưu thành công chương ${chapter}.`
-                : activityState === "waiting_quota"
-                  ? `Chương ${chapter} đang chờ quota; 0/${allUniqueKeys.length} key sẵn sàng, worker không gửi thêm request.`
-                : `Chương ${chapter} chưa thành công; worker đang chờ để thử lại.`;
-            console.log(`  [${bTitle}] ch ${chapter}: ${status}  (${completed}/${total}) [Phiên này: +${currentTotalSession} ch] [Điều tốc: ${Math.round(currentSpacing/1000)}s/ch]`);
-            await writeTranslateStatus(storage, {
-              state: "running",
-              focusBookId: configuredFocus,
-              selectionMode,
-              ...keyPool,
-              spacingMs: currentSpacing,
-              startedAt,
-              speed: currentSpeed,
-              currentBookId: job.bookId,
-              currentBookTitle: bTitle,
-              currentChapter: chapter,
-              activeChapters,
-              currentCompleted: completed,
-              currentTotalChapters: total,
-              translatedThisRun: currentTotalSession,
-              spentRequests: currentSpent,
-              currentAttempt: Number(attempts || 0),
-              activityState,
-              activityMessage,
-              lastAttemptAt: new Date().toISOString(),
-              lastSuccessAt,
-              lastSuccessfulChapter,
-              lastError: sanitizeStatusError(lastError),
-              recentActivity,
-              message: `${activityMessage} Tiến độ thật ${completed}/${total}; phiên này +${currentTotalSession} chương.`,
-              queue: queue.map((j) => {
-                const isCurrent = j.bookId === job.bookId;
-                const failedCh = isCurrent ? summarize(job.state).failed : Number(j.failed || 0);
-                const doneCh = isCurrent ? completed : (j.total || 0) - (j.pending || 0) - failedCh;
-                const pendCh = isCurrent ? Math.max(0, total - completed - failedCh) : j.pending;
-                return {
-                  bookId: j.bookId,
-                  revision: j.revision,
-                  pending: pendCh,
-                  highPriority: j.highPriority || activeBookIds.has(j.bookId),
-                  total: j.total,
-                  translated: doneCh
-                };
-              })
-            });
-            if (status !== "translating") await persistKeyHealth();
+            throw repairError;
           }
+          output.providersUsed = ["cloud-repair", ...(output.providersUsed || []).filter((provider) => provider !== "cloud-repair")];
+        }
+        if (!output || !output.translation) throw new Error("AI provider không trả bản dịch.");
+        let translatedTitle = chapter.title;
+        if (/\p{Script=Han}/u.test(String(chapter.title || ""))) {
+          if (isGeminiWeb) {
+            const titleResult = await translateText(chapter.title, apiKey, {
+              bookTitle: bTitle,
+              glossary: bookGlossary,
+              engine,
+              provider: "gemini-web",
+              profileSlotId: slotId
+            });
+            translatedTitle = titleResult.translation || chapter.title;
+          } else {
+            const titleResult = await translateMetadata({
+              title: chapter.title,
+              author: "",
+              description: ""
+            }, apiKey);
+            translatedTitle = titleResult.title || chapter.title;
+          }
+        }
+        const provider = output.providersUsed?.[0] || "cloud";
+        const model = output.modelsUsed?.[0] || "unknown";
+        chapterTranslationMeta.set(chapter.chapterNumber, {
+          title: translatedTitle,
+          provider,
+          model,
+          translationVersion: provider === "groq" ? "groq-qwen-direct-v1" : `${provider}-direct-v1`
         });
-
-        spentTotal += result.spent;
-        await persistKeyHealth();
-        translatedTotal += result.translated;
-        translatedThisCycle += result.translated;
-
-        if (result.translated) {
-          touched.set(job.bookId, job);
-          const bTitle = titleMap.get(job.bookId) || job.bookId;
-          recentActivity = [
-            {
+        if (output.tokensUsed) {
+          lastChapterTokens = output.tokensUsed;
+        }
+        return output.translation;
+      },
+      publishChapter: async (chapter, translation) => {
+        const meta = chapterTranslationMeta.get(chapter.chapterNumber) || {};
+        await storage.put(
+          chapterKey(job.bookId, job.revision, chapter.chapterNumber),
+          JSON.stringify(
+            buildChapterDocument({
               bookId: job.bookId,
-              title: bTitle,
-              count: result.translated,
-              at: new Date().toISOString()
-            },
-            ...recentActivity
-          ].slice(0, 30);
-
-          const waiting = (sincePublish.get(job.bookId) || 0) + result.translated;
-          if (isDone(job.state)) {
-            sincePublish.set(job.bookId, 0);
-            await publishBook(job);
-            if (!ONLY_BOOK && translationConfig.focusBookId === job.bookId) {
-              translationConfig = await writeTranslationConfig(storage, { focusBookId: "" });
-              console.log(`  Đã hoàn tất bộ ưu tiên; trả dashboard về chế độ tự động.`);
-            }
-            console.log(`\n🎉🎉🎉 [${bTitle}] ĐÃ DỊCH HOÀN TẤT TRỌN VẸN 100% (${job.total}/${job.total} chương)! Đã xuất bản lên thư viện.`);
-            break;
-          } else if (waiting >= PUBLISH_EVERY_CHAPTERS) {
-            sincePublish.set(job.bookId, 0);
-            await publishBook(job);
-            console.log(`  [${job.bookId}] -> đã publish tiến độ (+${waiting} chương)`);
-          } else {
-            sincePublish.set(job.bookId, waiting);
-          }
+              revision: job.revision,
+              chapter: { ...chapter, title: meta.title || chapter.title },
+              translation,
+              translationStatus: "completed",
+              provider: meta.provider || "cloud",
+              model: meta.model || "unknown",
+              translationVersion: meta.translationVersion || "cloud-direct-v1"
+            })
+          )
+        );
+      },
+      saveState: (next) => storage.put(jobStateKey(job.bookId), JSON.stringify(next)),
+      onProgress: async ({ chapter, chapters, status, completed, total, sessionDelta, spentDelta, attempts, lastError, repairedAttempts, repairedFromError }) => {
+        const currentTotalSession = translatedTotal + (sessionDelta || 0);
+        const currentSpent = spentTotal + (spentDelta || 0);
+        const elapsedMin = Math.max(0.05, (Date.now() - new Date(startedAt).getTime()) / 60000);
+        const currentSpeed = Math.round((currentTotalSession / elapsedMin) * 10) / 10;
+        const currentSpacing = computeAdaptiveSpacing(allUniqueKeys);
+        const keyPool = summarizeWorkerCapacity(allUniqueKeys, { isGeminiWeb });
+        const readyKeyCount = keyPool.readyKeyCount;
+        if (completed > lastKnownCompleted) {
+          lastKnownCompleted = completed;
+          lastSuccessAt = new Date().toISOString();
+          lastSuccessfulChapter = chapter;
         }
+        if (lastError) lastRunError = sanitizeStatusError(lastError);
+        let learnedIssue = null;
+        if (lastError && status !== "completed") {
+          learnedIssue = await recordQualityIssue(storage, {
+            bookId: job.bookId,
+            bookTitle: bTitle,
+            chapter,
+            status,
+            lastError
+          }).catch(() => null);
+        }
+        const activityState = !isGeminiWeb && readyKeyCount === 0 && status !== "completed"
+          ? "waiting_quota"
+          : status === "translating"
+          ? "translating"
+          : status === "completed"
+            ? "progress"
+            : "retrying";
+        const activeChapters = Array.isArray(chapters) && chapters.length ? chapters : [chapter].filter(Boolean);
+        const chapterLabel = activeChapters.length > 1
+          ? `${activeChapters[0]}–${activeChapters[activeChapters.length - 1]}`
+          : String(chapter || "?");
+        const activityMessage = activityState === "translating"
+          ? `Đang gửi chương ${chapterLabel} tới AI.`
+          : activityState === "progress"
+            ? `Đã dịch và lưu thành công chương ${chapter}.`
+            : activityState === "waiting_quota"
+              ? `Chương ${chapter} đang chờ quota; 0/${allUniqueKeys.length} key sẵn sàng, worker không gửi thêm request.`
+            : `Chương ${chapter} chưa thành công; worker đang chờ để thử lại.`;
+        const reasonSuffix = lastError && status !== "completed"
+          ? ` — ${sanitizeStatusError(lastError)}`
+          : "";
+        const learnedSuffix = learnedIssue && Number(learnedIssue.count || 0) >= 3
+          ? ` [mẫu lỗi lặp #${learnedIssue.count}]`
+          : "";
+        const repairSuffix = status === "completed" && repairedAttempts > 1
+          ? ` [đã cứu lỗi sau ${repairedAttempts} lần]`
+          : "";
+        console.log(`  [${bTitle}] [Slot ${slotId}] ch ${chapter}: ${status}  (${completed}/${total}) [Phiên này: +${currentTotalSession} ch] [Điều tốc: ${Math.round(currentSpacing/1000)}s/ch]${reasonSuffix}${learnedSuffix}${repairSuffix}`);
+        const currentSlotData = {
+          slotId,
+          enabled: true,
+          state: status === "completed" ? "completed" : status === "translating" ? "translating" : "retrying",
+          bookId: job.bookId,
+          bookTitle: bTitle,
+          currentChapter: chapter,
+          completed,
+          total,
+          percent: total ? Math.min(100, Math.round((completed / total) * 1000) / 10) : 0,
+          speedMs: currentSpacing,
+          sessionChapters: currentTotalSession,
+          lastSuccessAt,
+          lastSuccessfulChapter,
+          lastError: sanitizeStatusError(lastError),
+          repairedAttempts: Number(repairedAttempts || 0),
+          repairedFromError: sanitizeStatusError(repairedFromError),
+          activityMessage,
+          updatedAt: new Date().toISOString()
+        };
+        slotStates.set(slotId, currentSlotData);
 
-        if (result.failed && isSettled(job.state) && !isDone(job.state)) {
-          touched.set(job.bookId, job);
-          sincePublish.set(job.bookId, 0);
-          await publishBook(job);
-          const counts = summarize(job.state);
-          if (!ONLY_BOOK && translationConfig.focusBookId === job.bookId) {
-            translationConfig = await writeTranslationConfig(storage, { focusBookId: "" });
-            console.log(`  Bộ ưu tiên không còn chương dịch được; trả dashboard về chế độ tự động.`);
-          }
-          console.warn(`  [${job.bookId}] Queue đã hết chương dịch được: ${counts.completed}/${counts.total} completed, ${counts.failed} failed. Đã publish trạng thái để worker không kẹt.`);
+        await writeTranslateStatus(storage, {
+          state: "running",
+          focusBookId: configuredFocus,
+          selectionMode,
+          ...keyPool,
+          spacingMs: currentSpacing,
+          startedAt,
+          speed: currentSpeed,
+          currentBookId: job.bookId,
+          currentBookTitle: bTitle,
+          currentChapter: chapter,
+          activeChapters,
+          currentCompleted: completed,
+          currentTotalChapters: total,
+          translatedThisRun: currentTotalSession,
+          spentRequests: currentSpent,
+          currentAttempt: Number(attempts || 0),
+          activityState,
+          activityMessage,
+          lastAttemptAt: new Date().toISOString(),
+          lastSuccessAt,
+          lastSuccessfulChapter,
+          lastError: sanitizeStatusError(lastError),
+          recentActivity,
+          activeSlots: Array.from(slotStates.values()).sort((a, b) => a.slotId - b.slotId),
+          message: `${activityMessage} Tiến độ thật ${completed}/${total}; phiên này +${currentTotalSession} chương.`,
+          queue: queue.map((j) => {
+            const isCurrent = j.bookId === job.bookId;
+            const failedCh = isCurrent ? summarize(job.state).failed : Number(j.failed || 0);
+            const doneCh = isCurrent ? completed : (j.total || 0) - (j.pending || 0) - failedCh;
+            const pendCh = isCurrent ? Math.max(0, total - completed - failedCh) : j.pending;
+            return {
+              bookId: j.bookId,
+              revision: j.revision,
+              pending: pendCh,
+              highPriority: j.highPriority || activeBookIds.has(j.bookId),
+              total: j.total,
+              translated: doneCh
+            };
+          })
+        });
+        if (status !== "translating") await persistKeyHealth();
+      }
+    });
+
+    spentTotal += result.spent;
+    await persistKeyHealth();
+    translatedTotal += result.translated;
+    translatedThisCycle += result.translated;
+
+    if (result.translated) {
+      touched.set(job.bookId, job);
+      recentActivity = [
+        {
+          bookId: job.bookId,
+          title: bTitle,
+          count: result.translated,
+          at: new Date().toISOString()
+        },
+        ...recentActivity
+      ].slice(0, 30);
+
+      const waiting = (sincePublish.get(job.bookId) || 0) + result.translated;
+      if (isDone(job.state)) {
+        sincePublish.set(job.bookId, 0);
+        await publishBook(job);
+        if (!ONLY_BOOK && translationConfig.focusBookId === job.bookId) {
+          translationConfig = await writeTranslationConfig(storage, { focusBookId: "" });
+          console.log(`  Đã hoàn tất bộ ưu tiên; trả dashboard về chế độ tự động.`);
+        }
+        console.log(`\n🎉🎉🎉 [${bTitle}] ĐÃ DỊCH HOÀN TẤT TRỌN VẸN 100% (${job.total}/${job.total} chương)! Đã xuất bản lên thư viện.`);
+      } else if (waiting >= PUBLISH_EVERY_CHAPTERS) {
+        sincePublish.set(job.bookId, 0);
+        await publishBook(job);
+        console.log(`  [${job.bookId}] -> đã publish tiến độ (+${waiting} chương)`);
+      } else {
+        sincePublish.set(job.bookId, waiting);
+      }
+    }
+
+    if (result.failed && isSettled(job.state) && !isDone(job.state)) {
+      touched.set(job.bookId, job);
+      sincePublish.set(job.bookId, 0);
+      await publishBook(job);
+      const counts = summarize(job.state);
+      if (!ONLY_BOOK && translationConfig.focusBookId === job.bookId) {
+        translationConfig = await writeTranslationConfig(storage, { focusBookId: "" });
+        console.log(`  Bộ ưu tiên không còn chương dịch được; trả dashboard về chế độ tự động.`);
+      }
+      console.warn(`  [${job.bookId}] Queue đã hết chương dịch được: ${counts.completed}/${counts.total} completed, ${counts.failed} failed. Đã publish trạng thái để worker không kẹt.`);
+    }
+
+    rotation.lastBookId = job.bookId;
+    await storage.put(ROTATION_KEY, JSON.stringify(rotation)).catch(() => {});
+
+    return result;
+  }
+
+  while (!stop) {
+    cycle += 1;
+    translatedThisCycle = 0;
+
+    if (isMultiBook) {
+      const geminiControl = (await readJson(storage, GEMINI_WEB_CONTROL_KEY)) || {};
+      const slotsConfig = geminiControl.slots || { "1": true, "2": false, "3": false };
+      const allSlotIds = Array.from({ length: MULTI_BOOK_CONCURRENCY }, (_, i) => i + 1);
+      const requestedSlotIds = allSlotIds.filter((id) => slotsConfig[String(id)] !== false);
+      const lowResourceMode = geminiControl.lowResourceMode !== false;
+      const enabledSlotIds = lowResourceMode ? requestedSlotIds.slice(0, 1) : requestedSlotIds;
+
+      allSlotIds.forEach((id) => {
+        if (slotsConfig[String(id)] === false) {
+          const existing = slotStates.get(id) || {};
+          slotStates.set(id, {
+            ...existing,
+            slotId: id,
+            enabled: false,
+            state: "disabled",
+            bookTitle: "Slot tạm tắt (Admin)",
+            activityMessage: "Profile slot này đang tạm tắt bởi Admin",
+            updatedAt: new Date().toISOString()
+          });
+        } else if (lowResourceMode && !enabledSlotIds.includes(id)) {
+          const existing = slotStates.get(id) || {};
+          slotStates.set(id, {
+            ...existing,
+            slotId: id,
+            enabled: true,
+            state: "resource_paused",
+            bookTitle: "Nghỉ để tiết kiệm RAM",
+            activityMessage: "Tiết kiệm RAM đang bật nên worker chỉ chạy 1 profile.",
+            updatedAt: new Date().toISOString()
+          });
+        }
+      });
+
+      if (!enabledSlotIds.length) {
+        console.log("\n[CẢNH BÁO] Tất cả Profile Slots đều đang bị tắt trong Dashboard!");
+        await writeTranslateStatus(storage, {
+          state: "idle",
+          activeSlots: Array.from(slotStates.values()).sort((a, b) => a.slotId - b.slotId),
+          message: "Tất cả các Profile slots đều đang bị tắt. Bật lại slot trong Dashboard để tiếp tục."
+        });
+        await new Promise((r) => setTimeout(r, 10000));
+        continue;
+      }
+
+      const activeBatch = activeQueue.filter((j) => !isSettled(j.state)).slice(0, enabledSlotIds.length);
+      if (!activeBatch.length) {
+        console.log("\nToàn bộ hàng đợi đã hoàn tất!");
+        break;
+      }
+
+      console.log(`\n===============================================================`);
+      console.log(`>>> [MULTI-BOOK CHẠY SONG SONG ${activeBatch.length} BỘ TRUYỆN TRÊN ${enabledSlotIds.length} PROFILES ĐƯỢC BẬT]`);
+      activeBatch.forEach((j, i) => {
+        const slotId = enabledSlotIds[i];
+        const bTitle = titleMap.get(j.bookId) || j.bookId;
+        const counts = summarize(j.state);
+        const existing = slotStates.get(slotId) || {};
+        slotStates.set(slotId, {
+          ...existing,
+          slotId,
+          enabled: true,
+          state: "translating",
+          bookId: j.bookId,
+          bookTitle: bTitle,
+          completed: counts.completed,
+          total: counts.total,
+          percent: counts.total ? Math.min(100, Math.round((counts.completed / counts.total) * 1000) / 10) : 0,
+          activityMessage: `Đang dịch ${bTitle}`,
+          updatedAt: new Date().toISOString()
+        });
+        console.log(`  Profile Slot ${slotId}: "${bTitle}" (${counts.completed}/${counts.total} ch)`);
+      });
+      console.log(`===============================================================`);
+
+      await writeTranslateStatus(storage, {
+        state: "running",
+        focusBookId: configuredFocus,
+        selectionMode,
+        startedAt,
+        activeSlots: Array.from(slotStates.values()).sort((a, b) => a.slotId - b.slotId),
+        message: `Đang dịch song song ${activeBatch.length} bộ truyện trên các Profile Slots.`,
+        queue: queue.map((j) => ({
+          bookId: j.bookId,
+          revision: j.revision,
+          pending: j.pending,
+          highPriority: j.highPriority || activeBookIds.has(j.bookId),
+          total: j.total,
+          translated: j.translated || ((j.total || 0) - (j.pending || 0))
+        }))
+      }).catch(() => {});
+
+      const turnResults = await Promise.allSettled(activeBatch.map((job, idx) => processBookTurn(job, 1, enabledSlotIds[idx])));
+      turnResults.forEach((result, idx) => {
+        if (result.status === "fulfilled") return;
+        const slotId = enabledSlotIds[idx];
+        const job = activeBatch[idx];
+        const bTitle = titleMap.get(job.bookId) || job.bookId;
+        const message = sanitizeStatusError(result.reason);
+        const existing = slotStates.get(slotId) || {};
+        slotStates.set(slotId, {
+          ...existing,
+          slotId,
+          enabled: true,
+          state: "retrying",
+          bookId: job.bookId,
+          bookTitle: bTitle,
+          lastError: message,
+          activityMessage: `Slot ${slotId} bị lỗi: ${message}. Worker sẽ thử lại ở lượt sau.`,
+          updatedAt: new Date().toISOString()
+        });
+        console.warn(`  [${bTitle}] [Slot ${slotId}] lỗi lượt dịch: ${message}`);
+      });
+
+      if (spentTotal >= REQUEST_BUDGET || Date.now() >= deadlineAt) {
+        stop = true;
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 1000));
+    } else {
+      for (const job of activeQueue) {
+        if (spentTotal >= REQUEST_BUDGET || Date.now() >= deadlineAt) {
+          stop = true;
           break;
         }
+        if (isSettled(job.state)) continue;
 
-        rotation.lastBookId = job.bookId;
-        await storage.put(ROTATION_KEY, JSON.stringify(rotation)).catch(() => {});
+        const bTitle = titleMap.get(job.bookId) || job.bookId;
+        console.log(`\n===============================================================`);
+        console.log(`>>> [KHÓA CHẶT DỊCH 100%] Bộ truyện: "${bTitle}" (${job.bookId})`);
+        console.log(`===============================================================`);
 
-        if (isSettled(job.state)) {
-          break;
-        }
-
-        if (result.quotaExhausted) {
-          const earliestMs = result.earliestCooldown ? Math.max(5000, result.earliestCooldown - Date.now()) : 30000;
-          if (CONTINUOUS_MODE && earliestMs <= 90_000) {
-            const waitSec = Math.min(60, Math.max(5, Math.round(earliestMs / 1000)));
-            console.log(`  -> [${bTitle}] Key kế tiếp sắp sẵn sàng. Nghỉ ${waitSec} giây rồi tiếp tục...`);
-            await new Promise((r) => setTimeout(r, waitSec * 1000));
-          } else {
-            stoppedForQuota = true;
-            stop = true;
-            quotaResumeAt = Number(result.earliestCooldown || Date.now() + 30_000);
-            quotaBookId = job.bookId;
-            quotaBookTitle = bTitle;
-            quotaChapter = Number(result.chapter || job.state?.cursor || 0);
-            quotaCompleted = Number(result.summary?.completed || 0);
-            quotaTotal = Number(result.summary?.total || job.total || 0);
-            const resumeLabel = new Date(quotaResumeAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
-            console.log(`  -> Mạch quota đã mở. Không gửi thêm request; sẽ tiếp tục sau ${resumeLabel}.`);
-            break;
-          }
-        } else if (!result.translated) {
-          await new Promise((r) => setTimeout(r, 5000));
+        while (!isSettled(job.state) && spentTotal < REQUEST_BUDGET && Date.now() < deadlineAt) {
+          const remainingBudget = REQUEST_BUDGET === Infinity ? Infinity : REQUEST_BUDGET - spentTotal;
+          const result = await processBookTurn(job, remainingBudget);
+          if (isSettled(job.state) || result.quotaExhausted) break;
         }
       }
     }
@@ -653,7 +1015,7 @@ async function main() {
     state: stoppedForQuota ? "paused_quota" : "idle",
     focusBookId: translationConfig.focusBookId,
     selectionMode: translationConfig.focusBookId ? "focused" : "automatic",
-    ...summarizeKeyPool(allUniqueKeys),
+    ...summarizeWorkerCapacity(allUniqueKeys, { isGeminiWeb }),
     spacingMs: computeAdaptiveSpacing(allUniqueKeys),
     startedAt,
     finishedAt: new Date().toISOString(),
@@ -708,6 +1070,30 @@ function translationKeyPriority(key) {
   return 0;
 }
 
+function urgentRepairScore(job) {
+  const chapters = Array.isArray(job?.state?.chapters) ? job.state.chapters : [];
+  const issueRe = /queued for Gemini Web|rác giao diện|show code|gemini said|file-tag|code fence|python|chỉ trả tiêu đề|cấu trúc đoạn|lược bớt|cụt câu|sót|làm mất số|bản dịch dài bất thường/i;
+  return chapters.some((entry) =>
+    ["retrying", "failed"].includes(entry.status) &&
+    Number(entry.nextAttemptAt || 0) <= Date.now() &&
+    issueRe.test(String(entry.lastError || ""))
+  ) ? 1 : 0;
+}
+
+async function mapConcurrent(items, limit, fn) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < items.length) {
+      const idx = cursor++;
+      results[idx] = await fn(items[idx], idx);
+    }
+  }
+  const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
 async function listJobs(storage, onlyBook) {
   if (onlyBook) {
     // A deletion removes the published index. Old installations may still have
@@ -731,17 +1117,13 @@ async function listJobs(storage, onlyBook) {
   }
 
   const objects = await storage.list("jobs/");
-  const jobs = [];
-  for (const object of objects) {
-    if (!object.key.endsWith("/translation.json")) continue;
+  const jobFiles = objects.filter((o) => o.key.endsWith("/translation.json"));
+  const parsedJobs = await mapConcurrent(jobFiles, 20, async (object) => {
     const state = await readJson(storage, object.key);
-    if (!state || !Array.isArray(state.chapters)) continue;
+    if (!state || !Array.isArray(state.chapters)) return null;
     const index = await readJson(storage, `books/${state.bookId}/index.json`);
-    if (!index) continue;
+    if (!index) return null;
 
-    // Recover work abandoned by an interrupted process. A `failed` entry is
-    // terminal (including poison chapters rejected for quality); resetting it on
-    // every cron made fully settled books re-enter the queue forever.
     let stateModified = false;
     for (const ch of state.chapters) {
       if (ch.status === "processing" && (Date.now() - new Date(state.updatedAt || 0).getTime() > 15 * 60 * 1000)) {
@@ -752,12 +1134,12 @@ async function listJobs(storage, onlyBook) {
       }
     }
     if (stateModified) {
-      await storage.put(object.key, JSON.stringify(state));
+      await storage.put(object.key, JSON.stringify(state)).catch(() => {});
     }
 
     const counts = summarize(state);
-    if (isSettled(state)) continue;
-    jobs.push({
+    if (isSettled(state)) return null;
+    return {
       bookId: state.bookId,
       revision: state.revision,
       state,
@@ -765,9 +1147,9 @@ async function listJobs(storage, onlyBook) {
       pending: counts.total - counts.completed - counts.failed,
       failed: counts.failed,
       highPriority: counts.highPriority || 0
-    });
-  }
-  return jobs;
+    };
+  });
+  return parsedJobs.filter(Boolean);
 }
 
 async function ensureBookRow({ storage, db, job }) {
@@ -885,6 +1267,8 @@ module.exports = {
   bookOutputsNeedRefresh,
   summarizeKeyStats,
   sanitizeStatusError,
+  qualityIssueSignature,
+  recordQualityIssue,
   translationKeyPriority
 };
 

@@ -36,7 +36,22 @@ const STIFF_REFLECTION_RULES = [
   { pattern: /bị sợ hết hồn/gi, replacement: "hồn vía lên mây" },
   { pattern: /hách phá đảm/gi, replacement: "sợ vỡ mật" },
   { pattern: /tát thối tựu bào/gi, replacement: "co giò bỏ chạy" },
-  { pattern: /thử thử thân thủ/gi, replacement: "thử trổ tài" }
+  { pattern: /thử thử thân thủ/gi, replacement: "thử trổ tài" },
+  { pattern: /(^|[^\p{L}])gia gia(?=$|[^\p{L}])/giu, replacement: "$1ông nội" },
+  { pattern: /(^|[^\p{L}])nãi nãi(?=$|[^\p{L}])/giu, replacement: "$1bà nội" },
+  { pattern: /(^|[^\p{L}])ba ba(?=$|[^\p{L}])/giu, replacement: "$1bố" },
+  { pattern: /(^|[^\p{L}])mụ mụ(?=$|[^\p{L}])/giu, replacement: "$1mẹ" },
+  { pattern: /(^|[^\p{L}])ca ca(?=$|[^\p{L}])/giu, replacement: "$1anh trai" },
+  { pattern: /(^|[^\p{L}])tỷ tỷ(?=$|[^\p{L}])/giu, replacement: "$1chị gái" },
+  { pattern: /(^|[^\p{L}])đệ đệ(?=$|[^\p{L}])/giu, replacement: "$1em trai" },
+  { pattern: /(^|[^\p{L}])muội muội(?=$|[^\p{L}])/giu, replacement: "$1em gái" },
+  { pattern: /(^|[^\p{L}])thúc thúc(?=$|[^\p{L}])/giu, replacement: "$1chú" },
+  { pattern: /(^|[^\p{L}])a di(?=$|[^\p{L}])/giu, replacement: "$1dì" },
+  { pattern: /(^|[^\p{L}])ngã(?=$|[^\p{L}])/giu, replacement: "$1tôi" },
+  { pattern: /(^|[^\p{L}])nhĩ(?=$|[^\p{L}])/giu, replacement: "$1ngươi" },
+  { pattern: /(^|[^\p{L}])khước(?=$|[^\p{L}])/giu, replacement: "$1lại" },
+  { pattern: /(^|[^\p{L}])bang(?=\s+(?:tôi|ta|ngươi|hắn|nàng|nó|chúng|em|anh)(?:$|[^\p{L}]))/giu, replacement: "$1giúp" },
+  { pattern: /(^|[^\p{L}])giáo(?=\s+(?:tôi|ta|ngươi|hắn|nàng|nó|chúng|em|anh)(?:$|[^\p{L}]))/giu, replacement: "$1dạy" }
 ];
 
 /**
@@ -120,16 +135,210 @@ function auditGlossaryCompliance(text, glossary = {}) {
   };
 }
 
+function isLikelyDialogue(p, prevP, nextP) {
+  if (!p || p.startsWith('"') || p.startsWith('–') || p.startsWith('-')) return false;
+
+  const hasDialogueEnd = /[!?…]$/.test(p);
+  const speechParticles = /\b(?:mày|tao|ngươi|ta|tôi|ông|bà|anh|chị|em|sư phụ|sư thúc|chứ|nhé|nhỉ|à|hả|sao|đấy|hử|cơ à|lắm|thế|chăng|đâu|đi|nào|thôi|mau|rồi)\b/i;
+  const speechExclamations = /^(?:Á|A|A ha|Ha ha|Hừ|Hắc hắc|Úi|Ôi|Ối|Này|Nè|Nào|Được rồi|Khốn kiếp|Mẹ kiếp|Đúng thế|Không thể nào|Có gì mà|Hóa ra|Thì ra|Thế thì)\b/i;
+
+  if (speechExclamations.test(p)) return true;
+  if (hasDialogueEnd && speechParticles.test(p)) return true;
+
+  if (prevP?.startsWith('"') && nextP?.startsWith('"') && p.length < 140 && speechParticles.test(p)) {
+    return true;
+  }
+
+  return false;
+}
+
+const NARRATION_STARTERS = /^(?:Lão\s+(?:đạo|nhân|hòa\s+thượng|thực|bản|bá|đồ\s+tể|tử|gia|thầy|đầu|hán)|Hướng\s+(?:Khuyết|Dịch|Lão\s+Thực|Gia|tiên\s+sinh)|Trần\s+(?:Tam\s+Kim|Sâm\s+Kim|gia|tiên\s+sinh)|Vương\s+(?:Côn\s+Luân|Đại\s+Quân|Lâm\s+Châu|tiên\s+sinh|Huyền\s+Chân)|Lý\s+(?:Thuận|Gia|tiên\s+sinh|Đức\s+Thành)|Đỗ\s+Kim\s+Thập|Tào\s+Thanh|Tiểu\s+(?:Lượng|tam|tứ|ngũ|cửu)|Hai\s+(?:người|bên|tay|mắt|chân)|Đám\s+người|Dân\s+làng|Mọi\s+người|Người\s+(?:đàn\s+ông|phụ\s+nữ|trung\s+niên|họ|trong|nhà|khác|xung\s+quanh)|Nam\s+thanh\s+niên|Nữ\s+thanh\s+niên|Cô\s+gái|Gã\s+đàn\s+ông|Hắn|Nó|Y|Ả|Yêu\s+ma|Con\s+(?:cương\s+thi|quỷ|chó|ngựa)|Cả\s+(?:hai|nhà|thôn|đám|người)|Sau\s+(?:đó|khi|bữa|đây)|Trước\s+(?:đó|khi|mắt)|Trong\s+(?:lúc|khi|phòng|nhà|sân|viện|núi|rừng)|Vừa\s+(?:bước|dứt|nói|thấy|nghe|lúc|mới)|Khi\s+(?:đó|hắn|người|nhìn|bước)|Lúc\s+(?:này|đó|hắn|người)|Từ\s+(?:đó|sau|nhỏ|ngày|gian)|Năm\s+(?:sau|đó|thứ)|Thấy\s+(?:thế|vậy|đối\s+phương|hắn)|Nghe\s+(?:vậy|thấy|tiếng|được)|Nhìn\s+(?:thấy|sang|vào|lên|xuống)|Dứt\s+lời|Nói\s+xong|Bỗng\s+(?:nhiên|chốc)|Đột\s+nhiên|Không\s+(?:lâu|gian|khí)|Mười\s+năm|Quanh\s+đó|Phía\s+(?:trước|sau|trên|dưới)|Ánh\s+mắt|Khuôn\s+mặt|Bàn\s+tay|Cánh\s+tay|Đôi\s+mắt|Chiếc|Căn|Cửa|Toàn\s+bộ|Luồng\s+khí|Hồn\s+phách|Ngọn\s+lửa|Tiếng|Vào\s+lúc|Mãi\s+đến|Tuy\s+nhiên|Thế\s+nhưng|Nếu\s+không|Chẳng\s+mấy\s+chốc|Tại\s+một)\b/u;
+
+function isPureNarration(text) {
+  if (!text) return false;
+  const clean = text.replace(/^"+|"+$/g, "").trim();
+  if (/[:：]$/.test(clean)) return true;
+  if (NARRATION_STARTERS.test(clean)) {
+    if (/[.:：]$/.test(clean) && !/[!?]$/.test(clean)) return true;
+  }
+  return false;
+}
+
+function formatNovelDialogueAndQuotes(rawContent) {
+  if (!rawContent) return "";
+  let text = String(rawContent).replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+
+  // 1. Normalize quote symbols
+  text = text.replace(/[“”„]/g, '"');
+  text = text.replace(/[’‘]/g, "'");
+
+  // 2. Remove AI prefixes / codeblocks
+  text = text.replace(/^```[a-z]*\s*/i, "").replace(/\s*```$/i, "");
+  text = text.replace(/^(?:Here is the translation|Dưới đây là bản dịch|Bản dịch tiếng Việt|Gemini said|Show code|Copy code)[:\s]*/i, "");
+  text = text.replace(/^\s*(?:python|py|javascript|typescript|json|markdown|text)\s*=?\s*(?=["'“]|Chương\s+\d+)/iu, "");
+
+  // 3. Fix glued dialogue after speech intro comma/colon:
+  text = text.replace(/([a-zà-ỹ0-9]),\s*"/gu, '$1:\n\n"');
+  text = text.replace(/([a-zà-ỹ0-9]):\s*"/gu, '$1:\n\n"');
+
+  // 4. Split multiple consecutive quotes: `"""` or `""`
+  text = text.replace(/([.!?…])"+(?:\s*"+)*\s*([A-ZÀ-ỸÁÀẢÃẠÂẤẦẨẪẬĂẮẰẲẴẶÉÈẺẼẸÊẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÚÙỦŨỤƯỨỪỬỮỰÝỲỶỸỴĐ])/gu, '$1"\n\n"$2');
+  text = text.replace(/"{2,}/g, '"');
+
+  // 5. Split dialogue turns:
+  text = text.replace(/([.!?…])"\s*"/g, '$1"\n\n"');
+
+  // 6. Split closing quote followed by speech or narration:
+  text = text.replace(/([.!?…])"\s*([A-ZÀ-ỸÁÀẢÃẠÂẤẦẨẪẬĂẮẰẲẴẶÉÈẺẼẸÊẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÚÙỦŨỤƯỨỪỬỮỰÝỲỶỸỴĐ][a-zà-ỹ0-9]+.*)/gu, (match, punc, rest) => {
+    rest = rest.trim();
+    if (isPureNarration(rest)) {
+      return `${punc}"\n\n${rest}`;
+    } else {
+      return `${punc}"\n\n"${rest}`;
+    }
+  });
+
+  // 7. Process paragraphs
+  const rawParas = text.split(/\n+/).map(p => p.trim()).filter(Boolean);
+  const formattedParas = [];
+
+  for (let i = 0; i < rawParas.length; i++) {
+    let p = rawParas[i].trim();
+    if (!p) continue;
+
+    // Clean stray quotes at start of paragraph
+    p = p.replace(/^"\s+/, "").replace(/"{2,}/g, '"');
+
+    // Case 1: Speech intro line ending with colon `:` -> ALWAYS PURE NARRATION, NO QUOTES
+    if (/[:：]$/.test(p)) {
+      p = p.replace(/^"+|"+$/g, "").trim();
+      formattedParas.push(p);
+      continue;
+    }
+
+    // Case 2: Pure narration paragraph -> NO OUTER QUOTES
+    if (isPureNarration(p)) {
+      p = p.replace(/^"+|"+$/g, "").trim();
+      const soundMatch = p.match(/^([A-ZÀ-Ỹ][a-zà-ỹ0-9\s,]+)"\s*(một tiếng|Một|lập tức|bỗng nhiên|ngọn lửa)/iu);
+      if (soundMatch && !p.startsWith('"')) {
+        p = `"${soundMatch[1]}" ` + p.slice(soundMatch[0].length - soundMatch[2].length);
+      }
+      formattedParas.push(p);
+      continue;
+    }
+
+    // Case 3: Dialogue dash line
+    if (/^"?[–—-]\s*/.test(p)) {
+      p = p.replace(/^"?[–—-]\s*/, "– ").replace(/"$/, "");
+      formattedParas.push(p);
+      continue;
+    }
+
+    // Case 4: Dialogue paragraph
+    const prevP = formattedParas[formattedParas.length - 1] || "";
+    const isDirectlyAfterColon = /[:：]$/.test(prevP);
+
+    if (isDirectlyAfterColon || p.startsWith('"') || p.endsWith('"') || /[!?]$/.test(p)) {
+      const cleanContent = p.replace(/^"+|"+$/g, "").trim();
+      p = `"${cleanContent}"`;
+    }
+
+    if (p === '"' || p === '""') continue;
+    formattedParas.push(p);
+  }
+
+  return formattedParas.join("\n\n");
+}
+
+function normalizeDoubleQuoteSpacing(text) {
+  let output = "";
+  let opening = true;
+  const isWord = (ch) => Boolean(ch && /[\p{L}\p{N}]/u.test(ch));
+
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (ch !== '"') {
+      output += ch;
+      continue;
+    }
+
+    while (output.endsWith(" ")) output = output.slice(0, -1);
+    const prev = output[output.length - 1] || "";
+    if (opening && (isWord(prev) || prev === ":")) output += " ";
+    output += '"';
+
+    let nextIndex = i + 1;
+    while (text[nextIndex] === " ") nextIndex += 1;
+    if (opening) {
+      i = nextIndex - 1;
+    } else if (isWord(text[nextIndex])) {
+      output += " ";
+      i = nextIndex - 1;
+    }
+    opening = !opening;
+  }
+
+  return output.replace(/[^\S\r\n]+/g, " ").trim();
+}
+
 function polishLiteraryProse(text) {
   if (!text || typeof text !== "string") return "";
-  return text
+  const clean = text
     .replace(/[“”]/g, '"')
     .replace(/[‘’]/g, "'")
     .replace(/\s+([,.!?;:])/g, "$1")
-    .replace(/(["'\[])\s+/g, "$1")
-    .replace(/\s+(["'\]])/g, "$1")
+    .replace(/([\[])\s+/g, "$1")
+    .replace(/\s+([\]])/g, "$1")
     .replace(/[^\S\r\n]+/g, " ")
     .trim();
+  return normalizeDoubleQuoteSpacing(clean);
+}
+
+function titleCaseHanViet(value) {
+  return String(value || "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function convertResidualHanToHanViet(text, { maxHan = Number(process.env.RESIDUAL_HAN_LOCAL_FIX_LIMIT || 1000) } = {}) {
+  if (!text || typeof text !== "string" || !/\p{Script=Han}/u.test(text)) return text || "";
+
+  const hanMatches = text.match(/\p{Script=Han}/gu) || [];
+  if (hanMatches.length === 0 || hanMatches.length > maxHan) return text;
+  if (hanMatches.length / Math.max(1, text.length) >= 0.12) return text;
+
+  try {
+    const { loadBase } = require("./convert/index");
+    const { hanvietChars } = loadBase();
+    let converted = text.replace(/\p{Script=Han}+/gu, (match, offset, fullText) => {
+      const hv = [...match]
+        .map((ch) => hanvietChars[ch]?.hv || "")
+        .filter(Boolean)
+        .join(" ");
+      if (!hv) return "";
+
+      const prev = fullText.slice(Math.max(0, offset - 24), offset);
+      const next = fullText.slice(offset + match.length, offset + match.length + 24);
+      const touchesVietnameseName =
+        /(?:^|[\s"'])\p{Lu}[\p{L}]*(?:\s+\p{Lu}[\p{L}]*){0,3}\s*$/u.test(prev) ||
+        /^\s*(?:\p{Lu}[\p{L}]*(?:\s+\p{Lu}[\p{L}]*){0,3})/u.test(next);
+
+      const value = touchesVietnameseName || match.length <= 3 ? titleCaseHanViet(hv) : hv.toLowerCase();
+      return ` ${value} `;
+    });
+
+    converted = converted
+      .replace(/\s+([,.!?;:])/g, "$1")
+      .replace(/([\[(])\s+/g, "$1")
+      .replace(/\s+([\])])/g, "$1")
+      .replace(/[^\S\r\n]+/g, " ")
+      .trim();
+    return polishLiteraryProse(converted);
+  } catch {
+    return text;
+  }
 }
 
 function adaptLiteraryIdioms(text) {
@@ -161,21 +370,10 @@ function reflectAndPolish(translation, { sourceText = "", glossary = {}, scene =
   // Apply prose stylistics & spacing normalization
   polished = polishLiteraryProse(polished);
 
-  // Clear any isolated residual Han glyphs if present in mostly Vietnamese text
-  if (/[\u4e00-\u9fa5]/.test(polished)) {
-    const hanMatches = polished.match(/[\u4e00-\u9fa5]/g) || [];
-    if (hanMatches.length > 0 && (hanMatches.length <= 25 || hanMatches.length / polished.length < 0.05)) {
-      try {
-        const { loadBase } = require("./convert/index");
-        const { hanvietChars } = loadBase();
-        polished = polished.replace(/[\u4e00-\u9fa5]+/g, (match) => {
-          const converted = [...match].map((ch) => (hanvietChars[ch]?.hv ? hanvietChars[ch].hv.toLowerCase() : "")).filter(Boolean).join(" ");
-          return converted ? ` ${converted} ` : "";
-        });
-        polished = polishLiteraryProse(polished);
-      } catch {}
-    }
-  }
+  // Clear residual Han glyphs in otherwise Vietnamese output. Gemini Web often
+  // leaves mixed names such as "Hải Nhược颖"; converting these locally avoids a
+  // full chapter retry for a tiny deterministic cleanup.
+  polished = convertResidualHanToHanViet(polished);
 
   const finalScore = calculateFluencyScore(polished).score;
 
@@ -191,5 +389,8 @@ module.exports = {
   calculateFluencyScore,
   auditGlossaryCompliance,
   reflectAndPolish,
+  convertResidualHanToHanViet,
+  formatNovelDialogueAndQuotes,
+  normalizeDoubleQuoteSpacing,
   STIFF_REFLECTION_RULES
 };

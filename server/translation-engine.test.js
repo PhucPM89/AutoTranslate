@@ -56,6 +56,9 @@ test("translation-engine: prompt carries book context and fiction literature fra
   assert.match(prompt, /VÍ DỤ ĐỐI CHIẾU PHONG CÁCH/);
   assert.match(prompt, /tự kỷ đích ấn đường/);
   assert.match(prompt, /trán của mình/);
+  assert.match(prompt, /KHÔNG SÓT CHỮ HÁN/);
+  assert.match(prompt, /Đầu ra cuối cùng tuyệt đối không chứa chữ Hán/);
+  assert.match(prompt, /không trả tên riêng nửa Việt nửa Hán/i);
 });
 
 test("translation-engine: postProcessTranslation cleans markdown & enforces glossary", () => {
@@ -73,6 +76,26 @@ test("translation-engine: postProcessTranslation cleans markdown & enforces glos
   assert.ok(!processed.includes("林枫")); // Leftover Hanzi replaced by glossary
   assert.ok(processed.includes('"nói"')); // Normalized quotes
   assert.ok(processed.includes("'Đi thôi!'"));
+});
+
+test("translation-engine: postProcessTranslation normalizes quote spacing and classic glossary", () => {
+  const engine = createTranslationEngine();
+  const raw = 'Muốn hay cội nguồn công tạo hóa, hãy xem"Tây Du Thuyết E Truyện". Thiệu Khang Tiết từng nói:"Đông chí giữa giờ Tý."Đến lúc ấy, trời mới có gốc.';
+  const processed = engine.postProcessTranslation(raw, {
+    "Tây Du Thuyết E Truyện": "Tây Du Thích Ách Truyện"
+  });
+
+  assert.equal(
+    processed,
+    'Muốn hay cội nguồn công tạo hóa, hãy xem "Tây Du Thích Ách Truyện". Thiệu Khang Tiết từng nói: "Đông chí giữa giờ Tý." Đến lúc ấy, trời mới có gốc.'
+  );
+});
+
+test("translation-engine: default memory includes common classic Journey to the West terms", async () => {
+  const engine = createTranslationEngine();
+  const tm = await engine.loadTranslationMemory();
+  assert.ok(tm.some((p) => p.zh === "西遊釋厄傳" && p.vi === "Tây Du Thích Ách Truyện"));
+  assert.ok(tm.some((p) => p.zh === "南贍部洲" && p.vi === "Nam Thiệm Bộ Châu"));
 });
 
 test("translation-engine: in-memory glossary save and load", async () => {
