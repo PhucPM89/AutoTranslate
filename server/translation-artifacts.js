@@ -1,6 +1,52 @@
 "use strict";
 
 const TEXT_REPLACEMENTS = [
+  { pattern: /sخان\s*\(kang\)/giu, replacement: "sạp", reason: "ký tự Arabic lẫn vào từ sạp" },
+  { pattern: /đíو/giu, replacement: "dí", reason: "ký tự Arabic lẫn vào từ dí" },
+  { pattern: /Côn Lُن/giu, replacement: "Côn Luân", reason: "ký tự Arabic lẫn vào địa danh Côn Luân" },
+  { pattern: /hoàn전히/giu, replacement: "hoàn toàn", reason: "ký tự Hangul lẫn vào cụm hoàn toàn" },
+  { pattern: /Tinh V역/giu, replacement: "Tinh Vực", reason: "ký tự Hangul lẫn vào cụm Tinh Vực" },
+  { pattern: /con طريق/giu, replacement: "con đường", reason: "ký tự Arabic lẫn vào cụm con đường" },
+  { pattern: /bọnْ họ/giu, replacement: "bọn họ", reason: "ký tự Arabic lẫn vào cụm bọn họ" },
+  { pattern: /yêu đان/giu, replacement: "yêu đan", reason: "ký tự Arabic lẫn vào cụm yêu đan" },
+  { pattern: /hậu tìиh/giu, replacement: "hậu thuẫn", reason: "ký tự Cyrillic lẫn vào cụm hậu thuẫn" },
+  { pattern: /nuốt ngј trọn lòng/giu, replacement: "yên tâm", reason: "ký tự Cyrillic lẫn vào cụm yên tâm" },
+  { pattern: /\bba ba năm năm có những âm binh\b/giu, replacement: "từng nhóm ba người năm người có những âm binh", reason: "dịch nghĩa cụm ba năm thành từng nhóm" },
+  { pattern: /\bba ba ghép lại\b/giu, replacement: "hai số ba ghép lại", reason: "dịch rõ cụm số ba ba" },
+  { pattern: /\bCon bé ngoan,\s*ba ba\b/gu, replacement: "Con ngoan, ba", reason: "dịch xưng hô ba ba thành ba" },
+  { pattern: /\bNãi nãi ương nguyệt là bà nội tôi\b/gu, replacement: "Ương Nguyệt là bà nội tôi", reason: "dịch xưng hô nãi nãi thành bà nội theo ngữ cảnh" },
+  { pattern: /\bnguyệt nãi nãi\b/giu, replacement: "bà nội Nguyệt", reason: "dịch xưng hô nãi nãi thành bà nội theo ngữ cảnh" },
+  { pattern: /\bcác ngươi Tiêu gia gia nghiệp lớn lao\b/giu, replacement: "nhà họ Tiêu các ngươi gia đại nghiệp lớn", reason: "dịch nghĩa cụm gia đại nghiệp đại" },
+  { pattern: /\bcô chú nhất trịch\s*\(cùng đường liều mạng\)/giu, replacement: "liều mạng một phen", reason: "gỡ gloss giải nghĩa thô trong ngoặc" },
+  { pattern: /\bkhó triền\s*\(khó đối phó\)/giu, replacement: "khó đối phó", reason: "gỡ gloss giải nghĩa thô trong ngoặc" },
+  { pattern: /\bchuỗi niệm châu\s*\(niệm châu\)/giu, replacement: "chuỗi niệm châu", reason: "gỡ gloss lặp trong ngoặc" },
+  {
+    pattern: /được bốn\s+sáu\s+phân\s*\(tức là ngang ngửa,\s*nhưng vẫn thua\)/giu,
+    replacement: "ở thế bốn-sáu, tuy hơi lép vế",
+    reason: "gỡ gloss giải nghĩa thô trong ngoặc"
+  },
+  {
+    pattern: /đấu với Tố Viêm được bốn sáu phân\s*\(tức là ngang ngửa,\s*nhưng vẫn thua\)/giu,
+    replacement: "đấu với Tố Viêm ở thế bốn-sáu, tuy hơi lép vế",
+    reason: "gỡ gloss giải nghĩa thô trong ngoặc"
+  },
+  { pattern: /\bai dám xưng là ca ca\b/giu, replacement: "ai dám xưng anh", reason: "dịch xưng hô ca ca thành anh" },
+  { pattern: /\bca ca chịu\b/giu, replacement: "anh chịu", reason: "dịch xưng hô ca ca thành anh" },
+  { pattern: /\btheo ca ca\b/giu, replacement: "theo anh", reason: "dịch xưng hô ca ca thành anh" },
+  { pattern: /\bca ca ta\b/giu, replacement: "anh trai ta", reason: "dịch xưng hô ca ca thành anh trai" },
+  { pattern: /\bthái tử ca ca\b/giu, replacement: "hoàng huynh thái tử", reason: "dịch xưng hô ca ca trong cung đình" },
+  { pattern: /\bcho ca ca\b/giu, replacement: "cho anh", reason: "dịch xưng hô ca ca thành anh" },
+  { pattern: /\bmuội muội\b/giu, replacement: "em gái", reason: "dịch xưng hô muội muội thành em gái" },
+  {
+    pattern: /\b([A-ZÀ-Ỹ][\p{L}\d]*(?:\s+[A-ZÀ-Ỹ][\p{L}\d]*){0,2})\s+ca ca\b/gu,
+    replacement: "anh $1",
+    reason: "dịch xưng hô tên + ca ca thành anh + tên"
+  },
+  {
+    pattern: /\bca ca\s+([A-ZÀ-Ỹ][\p{L}\d]*(?:\s+[A-ZÀ-Ỹ][\p{L}\d]*){0,2})\b/giu,
+    replacement: "anh $1",
+    reason: "dịch xưng hô ca ca + tên thành anh + tên"
+  },
   { pattern: /\bthểসার\s*\(thân thể\)/giu, replacement: "nhục thân", reason: "ký tự Bengali lẫn vào cụm nhục thân" },
   { pattern: /\bBiện Sự\s*\(làm việc\)/gu, replacement: "làm việc", reason: "gloss thô Hán-Việt" },
   { pattern: /\bmảy hem\b/giu, replacement: "mảy may", reason: "lỗi chính tả mảy may" },
@@ -17,6 +63,27 @@ const TEXT_REPLACEMENTS = [
   { pattern: /\btôi nặng nề xuống\b/giu, replacement: "ngã nặng nề xuống", reason: "vá residue từ lỗi tôi ngựa" }
 ];
 
+const RAW_HANVIET_TRANSCRIPTION_MARKERS = [
+  /\bđích\b/giu,
+  /\bliễu\b/giu,
+  /\bngã\s+môn\b/giu,
+  /\bnhĩ\s+môn\b/giu,
+  /\btựu\b/giu,
+  /\btòng\b/giu,
+  /\bgiá\s+(?:nhất|ma|thứ)\b/giu,
+  /\bna\s+(?:thiên|cái|thứ)\b/giu,
+  /\btha\b/giu,
+  /\bđô\b/giu,
+  /\bbất\s+(?:yếu|tri|điệu|khả)\b/giu,
+  /\bdĩ\s+kinh\b/giu,
+  /\bkhẩn\s+tùy\b/giu,
+  /\bcấp\s+đả\b/giu,
+  /\bkim\s+bôi\s+xa\b/giu,
+  /\bcảnh\s+xa\b/giu,
+  /\bphương\s+hướng\s+bàn\b/giu,
+  /\btát\s+thối\s+tựu\s+bào\b/giu
+];
+
 function escapeRegex(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -27,6 +94,17 @@ function withoutChapterPrefix(title) {
 
 function normalizeSpaces(value) {
   return String(value || "").replace(/[ \t]+/g, " ").trim();
+}
+
+function detectRawHanVietTranscription(value) {
+  const text = String(value || "");
+  let score = 0;
+  for (const marker of RAW_HANVIET_TRANSCRIPTION_MARKERS) {
+    marker.lastIndex = 0;
+    const matches = text.match(marker);
+    if (matches) score += Math.min(matches.length, 5);
+  }
+  return score >= 12;
 }
 
 function stripLeadingTitleArtifact(content, title) {
@@ -84,6 +162,7 @@ function repairTranslationTextArtifacts(content, { title = "" } = {}) {
 }
 
 module.exports = {
+  detectRawHanVietTranscription,
   repairTranslationTextArtifacts,
   stripLeadingTitleArtifact
 };

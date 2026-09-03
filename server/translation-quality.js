@@ -1,5 +1,7 @@
 "use strict";
 
+const { detectRawHanVietTranscription } = require("./translation-artifacts");
+
 function evaluateTranslationQuality(source, translation) {
   const original = String(source || "").trim();
   const output = String(translation || "").trim();
@@ -11,6 +13,9 @@ function evaluateTranslationQuality(source, translation) {
 
   const hanCount = (output.match(/[\u3400-\u9fff]/g) || []).length;
   if (hanCount) issues.push(`Sót ${hanCount} chữ Hán chưa dịch`);
+  if (detectRawHanVietTranscription(output)) {
+    issues.push("Còn phiên âm Hán-Việt/pinyin thô chưa dịch");
+  }
   if (/__?\s*TC[ _-]*NAME/i.test(output)) {
     issues.push("Còn token khóa tên chưa được khôi phục");
   }

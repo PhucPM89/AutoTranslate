@@ -7,6 +7,7 @@ if (typeof dns.setDefaultResultOrder === "function") {
 
 const crypto = require("crypto");
 const { createTranslationEngine } = require("./translation-engine");
+const { detectRawHanVietTranscription } = require("./translation-artifacts");
 
 const TRANSLATE_CHUNK_SIZE = Number(process.env.GEMINI_CHUNK_SIZE || 1800);
 const TRANSLATE_CONCURRENCY = Number(process.env.GEMINI_TRANSLATE_CONCURRENCY || 2);
@@ -1067,6 +1068,9 @@ function assessTranslation(source, translation) {
   const literalIssue = detectLiteralEverydayHanViet(source, output);
   if (literalIssue) {
     return { acceptable: false, reason: literalIssue };
+  }
+  if (detectRawHanVietTranscription(output)) {
+    return { acceptable: false, reason: "bản dịch còn nguyên phiên âm Hán-Việt/pinyin thô" };
   }
 
   // 2. Đảm bảo độ đầy đủ nội dung (chống cắt cụt hoặc lặp vô tận)

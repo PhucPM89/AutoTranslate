@@ -173,7 +173,9 @@ test("chapter documents repair recurring translation artifacts before publish", 
       "",
       "Nếu bọn họ mà tôi mã thì cậu cũng phiền toái.",
       "",
-      "Hắn dùng thểসার (thân thể) phàm trần qua lại âm dương."
+      "Hắn dùng thểসার (thân thể) phàm trần qua lại âm dương.",
+      "",
+      "Sơ Nhất ca ca, ca ca chịu giúp thì muội muội sẽ yên tâm."
     ].join("\n"),
     translationStatus: "completed"
   });
@@ -182,7 +184,8 @@ test("chapter documents repair recurring translation artifacts before publish", 
   assert.match(doc.content, /^Hướng Khuyết vẫn ngồi im bất động\./);
   assert.match(doc.content, /bọn họ mà ngã ngựa thì/);
   assert.match(doc.content, /nhục thân phàm trần/);
-  assert.doesNotMatch(doc.content, /Hồng nhan họa thủyHướng|tôi mã|thểসার/);
+  assert.match(doc.content, /anh Sơ Nhất, anh chịu giúp thì em gái sẽ yên tâm/);
+  assert.doesNotMatch(doc.content, /Hồng nhan họa thủyHướng|tôi mã|thểসার|ca ca|muội muội/);
 });
 
 test("translation artifact repair does not rewrite normal Vietnamese phrases", () => {
