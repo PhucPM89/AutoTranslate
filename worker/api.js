@@ -20,6 +20,7 @@ import { presignR2Url } from "../server/storage/r2-presign.js";
 import { createCrawlerState } from "../server/crawler-state.js";
 import { createSupabase } from "../server/supabase.js";
 import { publishCatalogSnapshot } from "../server/ingest/catalog-snapshot.js";
+import { repairTranslationTextArtifacts } from "../server/translation-artifacts.js";
 import {
   readTranslationConfig,
   writeTranslationConfig
@@ -34,6 +35,10 @@ import { createR2BindingStorage } from "./r2-storage.js";
 const COOKIE_NAME = "tangthu_admin";
 const SESSION_TTL_SECONDS = 30 * 60;
 const UPLOAD_TTL_SECONDS = 30 * 60;
+const GEMINI_WEB_CONTROL_KEY = "jobs/gemini-web-control.json";
+const GEMINI_WEB_DAEMON_STATUS_KEY = "jobs/gemini-web-daemon-status.json";
+const GEMINI_WEB_ACTIVE_KEY = "jobs/gemini-web-active.json";
+const SHORT = "public, max-age=60, stale-while-revalidate=600";
 
 // EPUBs go to the private archive bucket. Putting a source archive in the reader
 // bucket would publish it over the CDN.
@@ -57,6 +62,7 @@ const UPLOAD_KINDS = {
 const ROUTES = {
   "/api/catalog": handlePublicCatalog,
   "/api/reader/content": handlePublicReaderContent,
+  "/api/reader/report-issue": handleReaderIssueReport,
   "/api/reader/term-feedback": handleTermFeedback,
   "/api/admin/keys": handleAdminKeys,
   "/api/admin/session": handleSession,
@@ -69,6 +75,7 @@ const ROUTES = {
   "/api/admin/analytics": handleAnalytics,
   "/api/admin/users": handleAdminUsers,
   "/api/admin/community": handleAdminCommunity,
+  "/api/admin/qa": handleAdminQa,
   "/api/admin/gemini-translate": handleAdminGeminiTranslate,
   "/api/admin/chapter-save": handleAdminChapterSave
 };
@@ -459,6 +466,119 @@ async function republish(env) {
 
 // ---- translation status ----------------------------------------------------
 
+async function readStorageJson(storage, key) {
+  try {
+    const raw = await storage.get(key);
+    if (!raw) return null;
+    return JSON.parse(raw.toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function normalizeGeminiWebControl(control = {}) {
+  const defaultSlots = { "1": true, "2": false, "3": false };
+  const rawSlots = control.slots && typeof control.slots === "object" ? control.slots : defaultSlots;
+  const bool = (value, defaultValue = true) => {
+    if (value === undefined || value === null) return defaultValue;
+    if (typeof value === "boolean") return value;
+    const normalized = String(value).trim().toLowerCase();
+    if (["false", "0", "off", "no"].includes(normalized)) return false;
+    if (["true", "1", "on", "yes"].includes(normalized)) return true;
+    return defaultValue;
+  };
+  const slots = {
+    "1": bool(rawSlots["1"], true),
+    "2": bool(rawSlots["2"], false),
+    "3": bool(rawSlots["3"], false)
+  };
+  return {
+    schema: 1,
+    enabled: bool(control.enabled, true),
+    headless: bool(control.headless, true),
+    protectiveMode: bool(control.protectiveMode, true),
+    lowResourceMode: bool(control.lowResourceMode, true),
+    spacingMs: Math.max(3000, Number(control.spacingMs || 8000)),
+    jitterMs: Math.max(0, Number(control.jitterMs || 1500)),
+    sessionMinutes: Math.max(15, Number(control.sessionMinutes || 300)),
+    pauseUntilEpochMs: Math.max(0, Number(control.pauseUntilEpochMs || 0)),
+    slots,
+    updatedAt: control.updatedAt || ""
+  };
+}
+
+function normalizeGeminiWebPatch(body = {}, currentControl = {}) {
+  const patch = {};
+  const bool = (value, defaultValue = true) => {
+    if (value === undefined || value === null) return defaultValue;
+    if (typeof value === "boolean") return value;
+    const normalized = String(value).trim().toLowerCase();
+    if (["false", "0", "off", "no"].includes(normalized)) return false;
+    if (["true", "1", "on", "yes"].includes(normalized)) return true;
+    return defaultValue;
+  };
+  if ("enabled" in body) patch.enabled = bool(body.enabled, true);
+  if ("headless" in body) patch.headless = bool(body.headless, true);
+  if ("protectiveMode" in body) patch.protectiveMode = bool(body.protectiveMode, true);
+  if ("lowResourceMode" in body) patch.lowResourceMode = bool(body.lowResourceMode, true);
+  if ("spacingMs" in body) patch.spacingMs = Math.max(3000, Math.min(120000, Number(body.spacingMs || 8000)));
+  if ("jitterMs" in body) patch.jitterMs = Math.max(0, Math.min(60000, Number(body.jitterMs || 0)));
+  if ("sessionMinutes" in body) patch.sessionMinutes = Math.max(15, Math.min(1440, Number(body.sessionMinutes || 300)));
+  if ("pauseUntilEpochMs" in body) patch.pauseUntilEpochMs = Math.max(0, Number(body.pauseUntilEpochMs || 0));
+  if (body.slots && typeof body.slots === "object") {
+    patch.slots = { ...(currentControl.slots || { "1": true, "2": false, "3": false }), ...body.slots };
+  }
+  if (body.action === "gemini-web-toggle-slot" && body.slotId) {
+    const slotKey = String(body.slotId);
+    patch.slots = {
+      ...(currentControl.slots || { "1": true, "2": false, "3": false }),
+      [slotKey]: bool(body.enabled, true)
+    };
+  }
+  if (body.action === "gemini-web-pause") {
+    patch.enabled = true;
+    patch.pauseUntilEpochMs = Date.now() + Math.max(60_000, Math.min(24 * 60 * 60_000, Number(body.minutes || 30) * 60_000));
+  }
+  if (body.action === "gemini-web-resume") {
+    patch.enabled = true;
+    patch.pauseUntilEpochMs = 0;
+  }
+  if (body.action === "gemini-web-stop") {
+    patch.enabled = false;
+    patch.pauseUntilEpochMs = 0;
+  }
+  if (body.action === "gemini-web-start") {
+    patch.enabled = true;
+    patch.pauseUntilEpochMs = 0;
+  }
+  return patch;
+}
+
+async function buildGeminiWebDashboard(storage) {
+  const [controlRaw, daemonRaw, lockRaw] = await Promise.all([
+    readStorageJson(storage, GEMINI_WEB_CONTROL_KEY),
+    readStorageJson(storage, GEMINI_WEB_DAEMON_STATUS_KEY),
+    readStorageJson(storage, GEMINI_WEB_ACTIVE_KEY)
+  ]);
+  const control = normalizeGeminiWebControl(controlRaw || {});
+  const lockAlive = Boolean(lockRaw?.provider === "gemini-web" && Number(lockRaw.expiresAtEpochMs || 0) > Date.now());
+  const daemonBeat = daemonRaw?.updatedAt || "";
+  const daemonStale = Boolean(daemonBeat && Date.now() - new Date(daemonBeat).getTime() > 5 * 60 * 1000);
+  return {
+    control,
+    daemon: daemonRaw || null,
+    lock: lockRaw || null,
+    active: lockAlive,
+    daemonAlive: Boolean(daemonRaw && !daemonStale),
+    daemonStale,
+    paused: control.enabled === false || control.pauseUntilEpochMs > Date.now(),
+    protection: {
+      mode: control.protectiveMode ? "paced_backoff" : "manual",
+      note: "Điều tốc, jitter và tự dừng khi gặp captcha/rate-limit/sign-in; không dùng cơ chế vượt kiểm tra của Google."
+    }
+  };
+}
+
 async function handleTranslateStatus({ request, env }) {
   await requireAdmin(request, env);
   if (request.method !== "GET" && request.method !== "POST") return methodNotAllowed("GET, POST");
@@ -466,6 +586,27 @@ async function handleTranslateStatus({ request, env }) {
   if (request.method === "POST") {
     requireSameOrigin(request);
     const body = await readJson(request);
+    if (String(body?.action || "").startsWith("gemini-web")) {
+      if (!env.NOVEL_STORAGE) throw fail(503, "Chưa cấu hình NOVEL_STORAGE để lưu điều khiển Gemini Web.");
+      const storage = createR2BindingStorage(env.NOVEL_STORAGE);
+      const current = normalizeGeminiWebControl(await readStorageJson(storage, GEMINI_WEB_CONTROL_KEY) || {});
+      const control = normalizeGeminiWebControl({
+        ...current,
+        ...normalizeGeminiWebPatch(body, current),
+        updatedAt: new Date().toISOString()
+      });
+      await storage.put(GEMINI_WEB_CONTROL_KEY, JSON.stringify(control), { cacheControl: "private, no-store" });
+      return json({
+        success: true,
+        control,
+        geminiWeb: await buildGeminiWebDashboard(storage),
+        message: control.enabled
+          ? control.pauseUntilEpochMs > Date.now()
+            ? "Đã tạm dừng Gemini Web daemon; API worker có thể tiếp quản khi lock hết hạn."
+            : "Đã bật Gemini Web daemon; tiến trình nền sẽ nhận lệnh ở vòng kế tiếp."
+          : "Đã tắt Gemini Web daemon; API worker có thể tiếp quản khi lock hết hạn."
+      });
+    }
     if (body?.action === "focus") {
       if (!env.NOVEL_STORAGE) throw fail(503, "Chưa cấu hình NOVEL_STORAGE để lưu bộ truyện ưu tiên.");
       const storage = createR2BindingStorage(env.NOVEL_STORAGE);
@@ -517,11 +658,13 @@ async function handleTranslateStatus({ request, env }) {
 
   let status = null;
   let config = { schema: 1, focusBookId: "", updatedAt: "" };
+  let geminiWeb = null;
   let publishedBookIds = null;
   try {
     if (env.NOVEL_STORAGE) {
       const storage = createR2BindingStorage(env.NOVEL_STORAGE);
       config = await readTranslationConfig(storage);
+      geminiWeb = await buildGeminiWebDashboard(storage);
       const catalogRaw = await storage.get("catalog/latest.json").catch(() => null);
       if (catalogRaw) {
         const catalog = JSON.parse(catalogRaw.toString("utf8"));
@@ -575,6 +718,25 @@ async function handleTranslateStatus({ request, env }) {
       spentRequests: 0,
       queue: []
     };
+  }
+
+  if (geminiWeb?.active && !geminiWeb.paused) {
+    const staleApiQuota = status.state === "paused_quota" || status.activityState === "waiting_quota" || Number(status.readyKeyCount || 0) === 0;
+    if (staleApiQuota) {
+      status = {
+        ...status,
+        state: "running",
+        activityState: status.currentBookTitle ? "translating" : "gemini_web_running",
+        activeKeyCount: 1,
+        readyKeyCount: 1,
+        deadKeyCount: 0,
+        dailyExhaustedKeyCount: 0,
+        cooldownKeyCount: 0,
+        message: status.currentBookTitle
+          ? `Gemini Web local đang chạy nền; đang xử lý ${status.currentBookTitle}${status.currentChapter ? ` chương ${status.currentChapter}` : ""}.`
+          : "Gemini Web local đang chạy nền; đang chờ nhịp chi tiết từ worker."
+      };
+    }
   }
 
   // Heartbeat timeout check: 5 minutes
@@ -686,7 +848,7 @@ async function handleTranslateStatus({ request, env }) {
   status.dailyScannedBooks = Array.from(scannedMap.values());
   status.focusBookId = config.focusBookId;
   status.selectionMode = config.focusBookId ? "focused" : "automatic";
-  return json({ status, config });
+  return json({ status, config, geminiWeb });
 }
 
 function describeTimeAgo(isoString) {
@@ -1052,11 +1214,217 @@ async function handleAdminCommunity({ request, env }) {
   });
 }
 
+// ---- admin QA queue --------------------------------------------------------
+async function handleAdminQa({ request, env }) {
+  await requireAdmin(request, env);
+  let storage = null;
+  const sourceErrors = [];
+  try {
+    storage = readerStorage(env);
+  } catch (err) {
+    if (request.method === "POST") throw err;
+    sourceErrors.push(`storage: ${err.message || "Chưa cấu hình R2 binding."}`);
+  }
+
+  if (request.method === "POST") {
+    requireSameOrigin(request);
+    if (!storage) throw fail(503, "Chưa cấu hình R2 Storage.");
+    const body = await readJson(request);
+    const action = String(body?.action || "");
+    if (action === "dismiss-report" || action === "delete-report") {
+      const id = String(body?.id || "");
+      const doc = await readStorageJson(storage, "reports/reader-issues.json") || { reports: [] };
+      const reports = Array.isArray(doc.reports) ? doc.reports : [];
+      const nextReports = action === "delete-report"
+        ? reports.filter((report) => String(report.id) !== id)
+        : reports.map((report) => String(report.id) === id
+          ? { ...report, status: "dismissed", updatedAt: new Date().toISOString() }
+          : report);
+      await storage.put("reports/reader-issues.json", JSON.stringify({ ...doc, updatedAt: new Date().toISOString(), reports: nextReports }, null, 2), { cacheControl: "private, no-store" });
+      return json({ ok: true, message: action === "delete-report" ? "Đã xóa báo lỗi khỏi hàng chờ." : "Đã ẩn báo lỗi khỏi hàng chờ." });
+    }
+
+    if (action === "approve-glossary") {
+      const bookId = String(body?.bookId || "").trim();
+      const sourceTerm = String(body?.sourceTerm || "").trim().slice(0, 80);
+      const suggestedTerm = String(body?.suggestedTerm || "").trim().slice(0, 120);
+      if (!bookId || !sourceTerm || !suggestedTerm) throw fail(400, "Thiếu thông tin thuật ngữ.");
+      const glossaryKey = `glossary/${bookId}.json`;
+      const glossary = await readStorageJson(storage, glossaryKey) || {};
+      glossary[sourceTerm] = suggestedTerm;
+      await storage.put(glossaryKey, JSON.stringify(glossary, null, 2), { cacheControl: "public, max-age=60" });
+      await markGlossarySuggestion(env, body?.id, "approved");
+      return json({ ok: true, message: `Đã duyệt thuật ngữ: ${sourceTerm} -> ${suggestedTerm}` });
+    }
+
+    if (action === "reject-glossary") {
+      await markGlossarySuggestion(env, body?.id, "rejected");
+      return json({ ok: true, message: "Đã từ chối gợi ý thuật ngữ." });
+    }
+
+    throw fail(400, "Hành động QA không hợp lệ.");
+  }
+
+  if (request.method !== "GET") return methodNotAllowed("GET, POST");
+
+  let reportsDoc = null;
+  let translationStatus = null;
+  if (storage) {
+    try {
+      reportsDoc = await readStorageJson(storage, "reports/reader-issues.json");
+    } catch (error) {
+      sourceErrors.push(`reports: ${error.message}`);
+    }
+    try {
+      translationStatus = await readStorageJson(storage, "jobs/translate-status.json");
+    } catch (error) {
+      sourceErrors.push(`status: ${error.message}`);
+    }
+    if (!translationStatus && env.NOVEL_ARCHIVE) {
+      try {
+        const archive = createR2BindingStorage(env.NOVEL_ARCHIVE);
+        translationStatus = await readStorageJson(archive, "jobs/translate-status.json");
+      } catch {}
+    }
+  }
+
+  let failedChapters = [];
+  let glossarySuggestions = [];
+  if (storage) {
+    try {
+      failedChapters = await listQaChapters(storage, translationStatus);
+    } catch (error) {
+      sourceErrors.push(`failed-chapters: ${error.message}`);
+    }
+  }
+  try {
+    glossarySuggestions = await listGlossarySuggestions(env);
+  } catch (error) {
+    sourceErrors.push(`glossary: ${error.message}`);
+  }
+  const reports = (Array.isArray(reportsDoc?.reports) ? reportsDoc.reports : [])
+    .filter((report) => report.status !== "dismissed")
+    .slice(0, 80);
+  return json({
+    ok: true,
+    summary: {
+      reports: reports.length,
+      failedChapters: failedChapters.length,
+      glossarySuggestions: glossarySuggestions.length,
+      workerState: translationStatus?.state || "idle",
+      currentBookTitle: translationStatus?.currentBookTitle || "",
+      currentChapter: Number(translationStatus?.currentChapter || 0),
+      lastSuccessAt: translationStatus?.lastSuccessAt || ""
+    },
+    reports,
+    failedChapters,
+    glossarySuggestions,
+    warnings: sourceErrors
+  });
+}
+
+async function listQaChapters(storage, translationStatus) {
+  if (!storage) return [];
+  const rows = [];
+
+  if (Array.isArray(translationStatus?.failedChapters)) {
+    return translationStatus.failedChapters.slice(0, 50);
+  }
+
+  try {
+    const objects = await storage.list("jobs/").catch(() => []);
+    const queueKeys = (Array.isArray(objects) ? objects : [])
+      .map((item) => item.key)
+      .filter((key) => /^jobs\/[^/]+\/translation\.json$/.test(key))
+      .slice(0, 8);
+
+    const jobResults = await Promise.all(
+      queueKeys.map(async (key) => {
+        try {
+          const state = await readStorageJson(storage, key);
+          if (!state || !Array.isArray(state.chapters)) return [];
+          const index = await readStorageJson(storage, `books/${state.bookId}/index.json`);
+          const title = index?.title || state.bookId;
+          const bookFailed = [];
+          for (const entry of state.chapters) {
+            if (!["failed", "retrying"].includes(entry.status)) continue;
+            bookFailed.push({
+              bookId: state.bookId,
+              bookTitle: title,
+              revision: state.revision,
+              chapter: Number(entry.n || 0),
+              status: entry.status,
+              attempts: Number(entry.attempts || 0),
+              lastError: String(entry.lastError || "").slice(0, 240),
+              nextAttemptAt: Number(entry.nextAttemptAt || 0),
+              updatedAt: state.updatedAt || ""
+            });
+          }
+          return bookFailed;
+        } catch {
+          return [];
+        }
+      })
+    );
+
+    for (const items of jobResults) {
+      if (Array.isArray(items)) rows.push(...items);
+    }
+  } catch {}
+
+  return rows
+    .sort((a, b) => {
+      if (a.status !== b.status) return a.status === "failed" ? -1 : 1;
+      return b.attempts - a.attempts;
+    })
+    .slice(0, 50);
+}
+
+async function listGlossarySuggestions(env) {
+  const url = String(env.SUPABASE_URL || "").replace(/\/$/, "");
+  const key = env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return [];
+  const timeoutOptions = typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+    ? { signal: AbortSignal.timeout(10000) }
+    : {};
+  const response = await fetch(`${url}/rest/v1/glossary_suggestions?select=id,book_id,source_term,suggested_term,context_snippet,note,status,created_at&status=eq.pending&order=created_at.desc&limit=100`, {
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
+    ...timeoutOptions
+  }).catch(() => null);
+  if (!response?.ok) return [];
+  const rows = await response.json().catch(() => []);
+  return (Array.isArray(rows) ? rows : []).map((row) => ({
+    id: row.id,
+    bookId: row.book_id || "",
+    sourceTerm: row.source_term || "",
+    suggestedTerm: row.suggested_term || "",
+    contextSnippet: row.context_snippet || "",
+    note: row.note || "",
+    createdAt: row.created_at || ""
+  }));
+}
+
+async function markGlossarySuggestion(env, id, status) {
+  const url = String(env.SUPABASE_URL || "").replace(/\/$/, "");
+  const key = env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key || !id) return;
+  const timeoutOptions = typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+    ? { signal: AbortSignal.timeout(10000) }
+    : {};
+  await fetch(`${url}/rest/v1/glossary_suggestions?id=eq.${encodeURIComponent(String(id))}`, {
+    method: "PATCH",
+    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+    ...timeoutOptions
+  }).catch(() => null);
+}
+
 // ---- shared ----------------------------------------------------------------
 
 function readerStorage(env) {
-  if (!env.NOVEL_STORAGE) throw fail(503, "Thiếu R2 binding NOVEL_STORAGE.");
-  return createR2BindingStorage(env.NOVEL_STORAGE, { publicBase: env.R2_PUBLIC_BASE_URL });
+  const bucket = env.NOVEL_STORAGE || env.R2_READER || env.R2_STORAGE || env.STORAGE || env.NOVEL_ARCHIVE;
+  if (!bucket) throw fail(503, "Thiếu R2 binding NOVEL_STORAGE hoặc R2_READER.");
+  return createR2BindingStorage(bucket, { publicBase: env.R2_PUBLIC_BASE_URL });
 }
 
 function crawlerState(env) {
@@ -1064,7 +1432,7 @@ function crawlerState(env) {
   return createCrawlerState({
     // Crawler state is operational, so it lives in the private bucket.
     storage: createR2BindingStorage(env.NOVEL_ARCHIVE),
-    readerStorage: env.NOVEL_STORAGE ? createR2BindingStorage(env.NOVEL_STORAGE) : null,
+    readerStorage: (env.NOVEL_STORAGE || env.R2_READER) ? createR2BindingStorage(env.NOVEL_STORAGE || env.R2_READER) : null,
     db: createSupabase(env) || false
   });
 }
@@ -1449,8 +1817,9 @@ async function handleAdminChapterSave({ request, env }) {
   const bookId = String(body?.bookId || "").trim();
   const chapterNumber = Number(body?.chapterNumber);
   const revision = Number(body?.revision || 1);
-  const title = String(body?.title || "").trim();
-  const content = String(body?.content || "").trim();
+  const title = cleanAdminChapterTitle(String(body?.title || "").trim(), chapterNumber);
+  const strippedContent = stripAdminTitleFromContent(String(body?.content || "").trim(), title, chapterNumber);
+  const content = repairTranslationTextArtifacts(strippedContent, { title }).text;
   const status = String(body?.status || "completed").trim();
 
   if (!bookId || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(bookId)) {
@@ -1464,14 +1833,11 @@ async function handleAdminChapterSave({ request, env }) {
   }
 
   const storage = readerStorage(env);
-  const key = LAYOUT.chapter(bookId, revision, chapterNumber);
+  const key = `books/${bookId}/r${revision}/ch/${chapterNumber}.json`;
 
   let doc;
   try {
-    const existing = await storage.get(key);
-    if (existing) {
-      doc = JSON.parse(await existing.text());
-    }
+    doc = await readStorageJson(storage, key);
   } catch {}
 
   if (!doc) {
@@ -1501,12 +1867,37 @@ async function handleAdminChapterSave({ request, env }) {
     cacheControl: SHORT
   });
 
+  // Keep the translation queue in sync with manual edits. Otherwise the local
+  // worker can still see this chapter as pending/retrying and overwrite the
+  // editor's saved prose on the next 24/7 pass.
+  try {
+    const stateKey = `jobs/${bookId}/translation.json`;
+    const state = await readStorageJson(storage, stateKey);
+    if (state && Array.isArray(state.chapters)) {
+      const entry = state.chapters.find((chapter) => Number(chapter.n) === chapterNumber);
+      if (entry) {
+        entry.status = status;
+        entry.lastError = "";
+        entry.nextAttemptAt = 0;
+        entry.startedAt = "";
+        entry.completedAt = doc.updatedAt;
+        entry.manualEdited = true;
+      }
+      state.updatedAt = doc.updatedAt;
+      await storage.put(stateKey, JSON.stringify(state), {
+        contentType: "application/json; charset=utf-8",
+        cacheControl: "private, no-store"
+      });
+    }
+  } catch (err) {
+    console.warn("Unable to update translation queue on chapter save:", err);
+  }
+
   // Update book index on R2 so worker skips this chapter and catalog progress updates
   try {
-    const indexKey = LAYOUT.bookIndex(bookId);
-    const indexObj = await storage.get(indexKey);
-    if (indexObj) {
-      const indexDoc = JSON.parse(await indexObj.text());
+    const indexKey = `books/${bookId}/index.json`;
+    const indexDoc = await readStorageJson(storage, indexKey);
+    if (indexDoc) {
       if (Array.isArray(indexDoc?.chapters)) {
         const entry = indexDoc.chapters.find((c) => c.n === chapterNumber);
         if (entry) {
@@ -1746,6 +2137,7 @@ async function handleAdminGeminiTranslate({ request, env }) {
 
     let text = data?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim() || "";
     text = text.replace(/^```[a-z]*\n?/i, "").replace(/\n?```$/i, "").trim();
+    text = stripAdminTitleFromContent(text, title, 0);
     if (!text) throw fail(502, "Gemini không trả về nội dung bản dịch.");
 
     return json({
@@ -1763,7 +2155,147 @@ async function handleAdminGeminiTranslate({ request, env }) {
   }
 }
 
+function cleanAdminChapterTitle(title, chapterNumber) {
+  const fallback = `Chương ${chapterNumber}`;
+  let clean = String(title || "").replace(/\s+/g, " ").trim();
+  if (!clean) return fallback;
+  const quotedBody = clean.match(/^(Chương\s+\d+\s*[:：]\s*[^"“”]{2,80}\p{L}[^"“”]{0,80})\s*["“]/iu);
+  if (quotedBody) clean = quotedBody[1].trim();
+  if (clean.length > 160 && !/^Chương\s+\d+\s*[:：]/iu.test(clean)) {
+    return fallback;
+  }
+  if (clean.length > 160) {
+    const chapterMatch = clean.match(/^(Chương\s+\d+\s*[:：]\s*[^"“”.!?。！？]{1,80})/iu);
+    clean = chapterMatch ? chapterMatch[1].trim() : clean.slice(0, 140).replace(/\s+\S*$/, "").trim();
+  }
+  return clean || fallback;
+}
+
+const NARRATION_STARTERS_WORKER = /^(?:Lão\s+(?:đạo|nhân|hòa\s+thượng|thực|bản|bá|đồ\s+tể|tử|gia|thầy|đầu|hán)|Hướng\s+(?:Khuyết|Dịch|Lão\s+Thực|Gia|tiên\s+sinh)|Trần\s+(?:Tam\s+Kim|Sâm\s+Kim|gia|tiên\s+sinh)|Vương\s+(?:Côn\s+Luân|Đại\s+Quân|Lâm\s+Châu|tiên\s+sinh|Huyền\s+Chân)|Lý\s+(?:Thuận|Gia|tiên\s+sinh|Đức\s+Thành)|Đỗ\s+Kim\s+Thập|Tào\s+Thanh|Tiểu\s+(?:Lượng|tam|tứ|ngũ|cửu)|Hai\s+(?:người|bên|tay|mắt|chân)|Đám\s+người|Dân\s+làng|Mọi\s+người|Người\s+(?:đàn\s+ông|phụ\s+nữ|trung\s+niên|họ|trong|nhà|khác|xung\s+quanh)|Nam\s+thanh\s+niên|Nữ\s+thanh\s+niên|Cô\s+gái|Gã\s+đàn\s+ông|Hắn|Nó|Y|Ả|Yêu\s+ma|Con\s+(?:cương\s+thi|quỷ|chó|ngựa)|Cả\s+(?:hai|nhà|thôn|đám|người)|Sau\s+(?:đó|khi|bữa|đây)|Trước\s+(?:đó|khi|mắt)|Trong\s+(?:lúc|khi|phòng|nhà|sân|viện|núi|rừng)|Vừa\s+(?:bước|dứt|nói|thấy|nghe|lúc|mới)|Khi\s+(?:đó|hắn|người|nhìn|bước)|Lúc\s+(?:này|đó|hắn|người)|Từ\s+(?:đó|sau|nhỏ|ngày|gian)|Năm\s+(?:sau|đó|thứ)|Thấy\s+(?:thế|vậy|đối\s+phương|hắn)|Nghe\s+(?:vậy|thấy|tiếng|được)|Nhìn\s+(?:thấy|sang|vào|lên|xuống)|Dứt\s+lời|Nói\s+xong|Bỗng\s+(?:nhiên|chốc)|Đột\s+nhiên|Không\s+(?:lâu|gian|khí)|Mười\s+năm|Quanh\s+đó|Phía\s+(?:trước|sau|trên|dưới)|Ánh\s+mắt|Khuôn\s+mặt|Bàn\s+tay|Cánh\s+tay|Đôi\s+mắt|Chiếc|Căn|Cửa|Toàn\s+bộ|Luồng\s+khí|Hồn\s+phách|Ngọn\s+lửa|Tiếng|Vào\s+lúc|Mãi\s+đến|Tuy\s+nhiên|Thế\s+nhưng|Nếu\s+không|Chẳng\s+mấy\s+chốc|Tại\s+một)\b/u;
+
+function isWorkerPureNarration(text) {
+  if (!text) return false;
+  const clean = text.replace(/^"+|"+$/g, "").trim();
+  if (/[:：]$/.test(clean)) return true;
+  if (NARRATION_STARTERS_WORKER.test(clean)) {
+    if (/[.:：]$/.test(clean) && !/[!?]$/.test(clean)) return true;
+  }
+  return false;
+}
+
+function formatAdminNovelDialogueAndQuotes(rawContent) {
+  if (!rawContent) return "";
+  let text = String(rawContent).replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+  text = text.replace(/[“”„]/g, '"').replace(/[’‘]/g, "'");
+  text = text.replace(/^```[a-z]*\s*/i, "").replace(/\s*```$/i, "");
+  text = text.replace(/^(?:Here is the translation|Dưới đây là bản dịch|Bản dịch tiếng Việt|Gemini said|Show code|Copy code)[:\s]*/i, "");
+  text = text.replace(/^\s*(?:python|py|javascript|typescript|json|markdown|text)\s*=?\s*(?=["'“]|Chương\s+\d+)/iu, "");
+  text = text.replace(/([a-zà-ỹ0-9]),\s*"/gu, '$1:\n\n"');
+  text = text.replace(/([a-zà-ỹ0-9]):\s*"/gu, '$1:\n\n"');
+  text = text.replace(/([.!?…])"+(?:\s*"+)*\s*([A-ZÀ-ỸÁÀẢÃẠÂẤẦẨẪẬĂẮẰẲẴẶÉÈẺẼẸÊẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÚÙỦŨỤƯỨỪỬỮỰÝỲỶỸỴĐ])/gu, '$1"\n\n"$2');
+  text = text.replace(/"{2,}/g, '"');
+  text = text.replace(/([.!?…])"\s*"/g, '$1"\n\n"');
+  text = text.replace(/([.!?…])"\s*([A-ZÀ-ỸÁÀẢÃẠÂẤẦẨẪẬĂẮẰẲẴẶÉÈẺẼẸÊẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÚÙỦŨỤƯỨỪỬỮỰÝỲỶỸỴĐ][a-zà-ỹ0-9]+.*)/gu, (match, punc, rest) => {
+    rest = rest.trim();
+    return isWorkerPureNarration(rest) ? `${punc}"\n\n${rest}` : `${punc}"\n\n"${rest}`;
+  });
+
+  const rawParas = text.split(/\n+/).map((p) => p.trim()).filter(Boolean);
+  const formattedParas = [];
+  for (let i = 0; i < rawParas.length; i++) {
+    let p = rawParas[i].trim();
+    if (!p) continue;
+    p = p.replace(/^"\s+/, "").replace(/"{2,}/g, '"');
+    if (/[:：]$/.test(p)) {
+      p = p.replace(/^"+|"+$/g, "").trim();
+      formattedParas.push(p);
+      continue;
+    }
+    if (isWorkerPureNarration(p)) {
+      p = p.replace(/^"+|"+$/g, "").trim();
+      const soundMatch = p.match(/^([A-ZÀ-Ỹ][a-zà-ỹ0-9\s,]+)"\s*(một tiếng|Một|lập tức|bỗng nhiên|ngọn lửa)/iu);
+      if (soundMatch && !p.startsWith('"')) {
+        p = `"${soundMatch[1]}" ` + p.slice(soundMatch[0].length - soundMatch[2].length);
+      }
+      formattedParas.push(p);
+      continue;
+    }
+    if (/^"?[–—-]\s*/.test(p)) {
+      p = p.replace(/^"?[–—-]\s*/, "– ").replace(/"$/, "");
+      formattedParas.push(p);
+      continue;
+    }
+    const prevP = formattedParas[formattedParas.length - 1] || "";
+    const isDirectlyAfterColon = /[:：]$/.test(prevP);
+    if (isDirectlyAfterColon || p.startsWith('"') || p.endsWith('"') || /[!?]$/.test(p)) {
+      const cleanContent = p.replace(/^"+|"+$/g, "").trim();
+      p = `"${cleanContent}"`;
+    }
+    if (p === '"' || p === '""') continue;
+    formattedParas.push(p);
+  }
+  return formattedParas.join("\n\n");
+}
+
+function stripAdminTitleFromContent(content, title, chapterNumber) {
+  let clean = String(content || "").replace(/\r\n?/g, "\n").trim();
+  if (!clean) return clean;
+  const candidates = [title, cleanAdminChapterTitle(title, chapterNumber), `Chương ${chapterNumber}`]
+    .filter(Boolean)
+    .map((item) => item.replace(/\s+/g, " ").trim())
+    .sort((a, b) => b.length - a.length);
+  for (const candidate of candidates) {
+    const escaped = candidate.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    clean = clean.replace(new RegExp(`^\\s*${escaped}\\s*(?:\\n+|(?=[A-Z"'\u201c\u2018]))`, "iu"), "").trim();
+  }
+  clean = clean
+    .replace(/^\s*Chương\s+\d+\s*[:：][^\n]{1,140}\n+/iu, "")
+    .replace(/^\s*(?:python|py|javascript|typescript|json|markdown|text)\s*=?\s*(?=["'\u201c]|Chương\s+\d+)/iu, "")
+    .trim();
+  return formatAdminNovelDialogueAndQuotes(clean);
+}
+
 // ---- reader term feedback -------------------------------------------------
+async function handleReaderIssueReport({ request, env }) {
+  if (request.method !== "POST") return methodNotAllowed("POST");
+  const body = await readJson(request);
+  const bookId = String(body?.bookId || "").trim().slice(0, 120);
+  const bookTitle = String(body?.bookTitle || "").trim().slice(0, 200);
+  const chapterIndex = Math.max(0, Number(body?.chapterIndex || 0));
+  const chapterTitle = String(body?.chapterTitle || "").trim().slice(0, 200);
+  const paragraphIndex = Math.max(0, Number(body?.paragraphIndex || 0));
+  const issueType = String(body?.issueType || "other").trim().slice(0, 40);
+  const selectedText = String(body?.selectedText || "").trim().slice(0, 700);
+  const note = String(body?.note || "").trim().slice(0, 400);
+  if (!bookId || (!selectedText && !note)) throw fail(400, "Thiếu truyện hoặc nội dung báo lỗi.");
+
+  const storage = readerStorage(env);
+  const key = "reports/reader-issues.json";
+  const current = await readStorageJson(storage, key) || { version: 1, reports: [] };
+  const reports = Array.isArray(current.reports) ? current.reports : [];
+  const report = {
+    id: `${Date.now().toString(36)}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`,
+    status: "open",
+    bookId,
+    bookTitle,
+    chapterIndex,
+    chapterNumber: chapterIndex + 1,
+    chapterTitle,
+    paragraphIndex,
+    issueType,
+    selectedText,
+    note,
+    createdAt: new Date().toISOString()
+  };
+  reports.unshift(report);
+  await storage.put(
+    key,
+    JSON.stringify({ version: 1, updatedAt: new Date().toISOString(), reports: reports.slice(0, 500) }, null, 2),
+    { cacheControl: "private, no-store" }
+  );
+  return json({ ok: true, reportId: report.id, message: "Đã gửi báo lỗi tới hàng chờ biên tập." });
+}
+
 async function handleTermFeedback({ request, env }) {
   if (request.method !== "POST") return methodNotAllowed("POST");
   const body = await readJson(request);

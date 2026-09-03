@@ -434,6 +434,53 @@ test("translation focus refuses a book outside the published catalog", async () 
   assert.equal(response.status, 400);
 });
 
+test("Gemini Web daemon control is persisted with dashboard status", async () => {
+  const environment = env();
+  const response = await call(
+    "/api/admin/translate",
+    {
+      method: "POST",
+      cookie: cookie(),
+      body: {
+        action: "gemini-web-pause",
+        minutes: 30,
+        headless: true,
+        protectiveMode: true,
+        lowResourceMode: true,
+        spacingMs: 4500,
+        sessionMinutes: 180
+      }
+    },
+    environment
+  );
+  assert.equal(response.status, 200);
+  assert.ok(environment.NOVEL_STORAGE.objects.has("jobs/gemini-web-control.json"));
+  const saved = JSON.parse(environment.NOVEL_STORAGE.objects.get("jobs/gemini-web-control.json").toString("utf8"));
+  assert.equal(saved.headless, true);
+  assert.equal(saved.protectiveMode, true);
+  assert.equal(saved.lowResourceMode, true);
+  assert.equal(saved.spacingMs, 4500);
+  assert.equal(saved.sessionMinutes, 180);
+  assert.deepEqual(saved.slots, { "1": true, "2": false, "3": false });
+  assert.ok(saved.pauseUntilEpochMs > Date.now());
+
+  environment.NOVEL_STORAGE.objects.set(
+    "jobs/gemini-web-daemon-status.json",
+    Buffer.from(JSON.stringify({ state: "paused_until", updatedAt: new Date().toISOString() }))
+  );
+  environment.NOVEL_STORAGE.objects.set(
+    "jobs/gemini-web-active.json",
+    Buffer.from(JSON.stringify({ provider: "gemini-web", expiresAtEpochMs: Date.now() + 60000 }))
+  );
+  const loaded = await call("/api/admin/translate", { cookie: cookie() }, environment);
+  const body = await loaded.json();
+  assert.equal(body.geminiWeb.control.spacingMs, 4500);
+  assert.equal(body.geminiWeb.active, true);
+  assert.equal(body.geminiWeb.daemonAlive, true);
+  assert.equal(body.geminiWeb.paused, true);
+  assert.equal("issues" in body.geminiWeb, false);
+});
+
 test("saving translation focus dispatches an immediate replacement run", async () => {
   const environment = env({
     GITHUB_DISPATCH_TOKEN: "github-test-token"
@@ -553,6 +600,99 @@ test("translation status hides deleted books left in an old worker snapshot", as
   assert.equal(body.config.focusBookId, "");
 });
 
+test("reader issue reports feed the admin QA queue", async () => {
+  const environment = env();
+  environment.NOVEL_STORAGE.objects.set(
+    "books/book-qa/index.json",
+    Buffer.from(JSON.stringify({ bookId: "book-qa", title: "Truyện QA" }))
+  );
+  environment.NOVEL_STORAGE.objects.set(
+    "jobs/book-qa/translation.json",
+    Buffer.from(JSON.stringify({
+      bookId: "book-qa",
+      revision: "r1",
+      updatedAt: "2026-08-31T00:00:00.000Z",
+      chapters: [
+        { n: 7, status: "failed", attempts: 3, lastError: "Bản dịch làm mất số 1763." }
+      ]
+    }))
+  );
+
+  const reportResponse = await call(
+    "/api/reader/report-issue",
+    {
+      method: "POST",
+      body: {
+        bookId: "book-qa",
+        bookTitle: "Truyện QA",
+        chapterIndex: 6,
+        paragraphIndex: 2,
+        selectedText: "Thái 邪 còn sót chữ Hán",
+        note: "Còn sót chữ Hán"
+      }
+    },
+    environment
+  );
+  assert.equal(reportResponse.status, 200);
+
+  const qaResponse = await call("/api/admin/qa", { cookie: cookie() }, environment);
+  assert.equal(qaResponse.status, 200);
+  const qa = await qaResponse.json();
+  assert.equal(qa.summary.reports, 1);
+  assert.equal(qa.reports[0].chapterNumber, 7);
+  assert.equal(qa.failedChapters[0].bookTitle, "Truyện QA");
+  assert.equal(qa.failedChapters[0].chapter, 7);
+
+  const dismissResponse = await call(
+    "/api/admin/qa",
+    {
+      method: "POST",
+      cookie: cookie(),
+      origin: "https://tram-chu.online",
+      body: { action: "dismiss-report", id: qa.reports[0].id }
+    },
+    environment
+  );
+  assert.equal(dismissResponse.status, 200);
+  const afterDismiss = await call("/api/admin/qa", { cookie: cookie() }, environment);
+  const afterBody = await afterDismiss.json();
+  assert.equal(afterBody.summary.reports, 0);
+
+  // Add another report and test delete-report
+  await call(
+    "/api/reader/report-issue",
+    {
+      method: "POST",
+      body: {
+        bookId: "book-qa-2",
+        bookTitle: "Truyện QA 2",
+        chapterIndex: 1,
+        paragraphIndex: 0,
+        selectedText: "Nội dung báo lỗi spam",
+        note: "Báo lỗi"
+      }
+    },
+    environment
+  );
+  const qa2 = await (await call("/api/admin/qa", { cookie: cookie() }, environment)).json();
+  assert.equal(qa2.summary.reports, 1);
+  const deleteResponse = await call(
+    "/api/admin/qa",
+    {
+      method: "POST",
+      cookie: cookie(),
+      origin: "https://tram-chu.online",
+      body: { action: "delete-report", id: qa2.reports[0].id }
+    },
+    environment
+  );
+  assert.equal(deleteResponse.status, 200);
+  const deleteResult = await deleteResponse.json();
+  assert.equal(deleteResult.message, "Đã xóa báo lỗi khỏi hàng chờ.");
+  const afterDelete = await (await call("/api/admin/qa", { cookie: cookie() }, environment)).json();
+  assert.equal(afterDelete.summary.reports, 0);
+});
+
 test("admin deletion permanently removes book objects, job state and database row", async () => {
   const environment = env({
     SUPABASE_URL: "https://project.supabase.co",
@@ -640,6 +780,66 @@ test("no response ever carries an R2 secret", async () => {
   }
 });
 
+test("admin chapter save persists content and marks the translation queue completed", async () => {
+  const storage = bucket({
+    "books/book-1/index.json": JSON.stringify({
+      schema: 1,
+      bookId: "book-1",
+      revision: 1,
+      translatedChapters: 0,
+      chapters: [{ n: 7, title: "Chương cũ", status: "retrying" }]
+    }),
+    "books/book-1/r1/ch/7.json": JSON.stringify({
+      schema: 1,
+      bookId: "book-1",
+      revision: 1,
+      chapterNumber: 7,
+      title: "Chương cũ",
+      content: "Bản cũ",
+      translationStatus: "retrying"
+    }),
+    "jobs/book-1/translation.json": JSON.stringify({
+      schema: 1,
+      bookId: "book-1",
+      revision: 1,
+      chapters: [{ n: 7, status: "retrying", attempts: 3, lastError: "cần sửa", nextAttemptAt: 123, startedAt: "x" }]
+    })
+  });
+
+  const response = await call("/api/admin/chapter-save", {
+    method: "POST",
+    cookie: cookie(),
+    body: {
+      bookId: "book-1",
+      chapterNumber: 7,
+      revision: 1,
+      title: "Chương đã sửa",
+      content: "Chương đã sửaNội dung biên tập thủ công. Bọn họ mà tôi mã thì hỏng hết.",
+      status: "completed"
+    }
+  }, env({ NOVEL_STORAGE: storage }));
+
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).ok, true);
+
+  const savedChapter = JSON.parse(storage.objects.get("books/book-1/r1/ch/7.json").toString("utf8"));
+  assert.equal(savedChapter.title, "Chương đã sửa");
+  assert.equal(savedChapter.content, "Nội dung biên tập thủ công. Bọn họ mà ngã ngựa thì hỏng hết.");
+  assert.equal(savedChapter.translationStatus, "completed");
+  assert.equal(savedChapter.manualEdited, true);
+
+  const savedState = JSON.parse(storage.objects.get("jobs/book-1/translation.json").toString("utf8"));
+  assert.equal(savedState.chapters[0].status, "completed");
+  assert.equal(savedState.chapters[0].lastError, "");
+  assert.equal(savedState.chapters[0].nextAttemptAt, 0);
+  assert.equal(savedState.chapters[0].manualEdited, true);
+
+  const savedIndex = JSON.parse(storage.objects.get("books/book-1/index.json").toString("utf8"));
+  assert.equal(savedIndex.chapters[0].title, "Chương đã sửa");
+  assert.equal(savedIndex.chapters[0].status, "completed");
+  assert.equal(savedIndex.translatedChapters, 1);
+});
+
 test("admin gemini translate requires admin auth and validates inputs", async () => {
   const unauth = await call("/api/admin/gemini-translate", { method: "POST", body: { content: "test" } });
   assert.equal(unauth.status, 401);
@@ -693,7 +893,8 @@ test("admin gemini translate proxies translation successfully", async () => {
     assert.equal(response.status, 200);
     const data = await response.json();
     assert.equal(data.ok, true);
-    assert.ok(data.translation.includes("Chương 1: Tiên Đạo Khởi Đầu"));
+    assert.ok(!data.translation.includes("Chương 1: Tiên Đạo Khởi Đầu"));
+    assert.ok(data.translation.includes("Trời cao vạn dặm"));
     assert.equal(data.model, "gemini-3.6-flash");
     assert.ok(["VIP_SERVER_KEY_1", "VIP_SERVER_KEY_2"].includes(geminiRequest.options.headers["x-goog-api-key"]));
     assert.notEqual(geminiRequest.options.headers["x-goog-api-key"], "CLIENT_KEY_MUST_BE_IGNORED");

@@ -10,7 +10,7 @@ const JSZip = require("jszip");
 const { createStorage, hasR2Credentials } = require("./storage");
 const { cacheControlFor, LAYOUT } = require("./storage/keys");
 const { readEpub, extractChapters, extractReadableText } = require("./ingest/epub");
-const { buildChapterDocument, buildBookIndex, chapterUrlFromTemplate } = require("./ingest/documents");
+const { buildChapterDocument, buildBookIndex, chapterUrlFromTemplate, cleanChapterTitle, stripTitleFromContent } = require("./ingest/documents");
 const {
   createJobState,
   mergeJobState,
@@ -147,6 +147,82 @@ test("a chapter document carries the source text until a translation exists", ()
   assert.equal(convert.translationStatus, "convert");
   assert.equal(convert.content, "chuyen ngu");
   assert.equal(convert.characters, "chuyen ngu".length);
+});
+
+test("chapter documents strip duplicated titles from translated content", () => {
+  const chapter = { chapterNumber: 12, title: "Chương 12: Mở cửa", content: "nguon" };
+  const doc = buildChapterDocument({
+    bookId: "b",
+    revision: 1,
+    chapter,
+    translation: "Chương 12: Mở cửa\n\nNội dung chương đã dịch.",
+    translationStatus: "completed"
+  });
+  assert.equal(doc.title, "Chương 12: Mở cửa");
+  assert.equal(doc.content, "Nội dung chương đã dịch.");
+});
+
+test("chapter documents repair recurring translation artifacts before publish", () => {
+  const chapter = { chapterNumber: 98, title: "Chương 98: Hồng nhan họa thủy", content: "nguon" };
+  const doc = buildChapterDocument({
+    bookId: "b",
+    revision: 1,
+    chapter,
+    translation: [
+      "Hồng nhan họa thủyHướng Khuyết vẫn ngồi im bất động.",
+      "",
+      "Nếu bọn họ mà tôi mã thì cậu cũng phiền toái.",
+      "",
+      "Hắn dùng thểসার (thân thể) phàm trần qua lại âm dương."
+    ].join("\n"),
+    translationStatus: "completed"
+  });
+
+  assert.equal(doc.title, "Chương 98: Hồng nhan họa thủy");
+  assert.match(doc.content, /^Hướng Khuyết vẫn ngồi im bất động\./);
+  assert.match(doc.content, /bọn họ mà ngã ngựa thì/);
+  assert.match(doc.content, /nhục thân phàm trần/);
+  assert.doesNotMatch(doc.content, /Hồng nhan họa thủyHướng|tôi mã|thểসার/);
+});
+
+test("translation artifact repair does not rewrite normal Vietnamese phrases", () => {
+  const chapter = { chapterNumber: 1, title: "Chương 1: Dữ liệu", content: "nguon" };
+  const doc = buildChapterDocument({
+    bookId: "b",
+    revision: 1,
+    chapter,
+    translation: "Tôi mã hóa dữ liệu trước khi gửi đi.\n\nNội dung còn lại.",
+    translationStatus: "completed"
+  });
+
+  assert.match(doc.content, /Tôi mã hóa dữ liệu/);
+  assert.doesNotMatch(doc.content, /ngã ngựa hóa/);
+});
+
+test("chapter title cleaner trims titles polluted with body text", () => {
+  const title = cleanChapterTitle('Chương 67: Chất vấn "Vương tiên sinh, ngài đây là có ý gì?" Nội dung thân chương rất dài.', 70);
+  assert.equal(title, "Chương 67: Chất vấn");
+  assert.equal(stripTitleFromContent("Chương 67: Chất vấnNội dung chương.", title, 70), "Nội dung chương.");
+});
+
+test("chapter documents rescue a broken translated title from the content heading", () => {
+  const doc = buildChapterDocument({
+    bookId: "b",
+    revision: 1,
+    chapter: { chapterNumber: 241, title: "Chương 238: Mộ群 bí ẩn", content: "nguon" },
+    translation: "Quần bí ẩn\n\nTiếp đó, đội khảo cổ phát hiện một quần thể mộ Hán đại quy mô.",
+    translationStatus: "completed"
+  });
+  assert.equal(doc.title, "Chương 238: Quần bí ẩn");
+  assert.equal(doc.content, "Tiếp đó, đội khảo cổ phát hiện một quần thể mộ Hán đại quy mô.");
+});
+
+test("chapter title cleaner preserves Chinese title suffix through Han-Viet conversion", () => {
+  assert.equal(cleanChapterTitle("第2496章 血脉禁制", 2499), "Chương 2496: Huyết Mạch Cấm Chế");
+  assert.equal(cleanChapterTitle("第二千五百四十四章 大结局", 2544), "Chương 2544: Đại Kết Cục");
+  assert.equal(cleanChapterTitle("2206章 决战前", 2209), "Chương 2206: Quyết Chiến Tiền");
+  assert.equal(cleanChapterTitle('第050章 “0”和“1”', 53), 'Chương 50: "0" Hòa "1"');
+  assert.equal(cleanChapterTitle("第722章 “凶佛”觉醒", 725), 'Chương 722: "Hung Phật" Giác Tỉnh');
 });
 
 test("the index ships a url template instead of one url per chapter", () => {
@@ -323,6 +399,76 @@ test("a poison chapter (quality-rejected) is skipped so the queue keeps moving",
   assert.deepEqual(published, [2], "only the good chapter was published");
   assert.ok(isQualityRejection(reject));
   assert.ok(!isQualityRejection({ code: "key_pool_slice_exhausted" }), "genuine pool exhaustion stays a quota wait");
+});
+
+test("exhausted retrying chapters are failed before strict sequential picking", async () => {
+  const state = createJobState({ bookId: "b", revision: 1, chapters: [{ chapterNumber: 1 }, { chapterNumber: 2 }] });
+  state.chapters[0].status = "retrying";
+  state.chapters[0].attempts = 3;
+  state.chapters[0].lastError = "Bản dịch Gemini Web chưa đạt yêu cầu (cấu trúc đoạn bị mất).";
+  const seen = [];
+
+  await runTranslationJobs({
+    state,
+    maxAttempts: 3,
+    requestBudget: 1,
+    strictSequential: true,
+    loadChapter: async (n) => ({ chapterNumber: n, title: "t", content: "c" }),
+    translateChapter: async (chapter) => { seen.push(chapter.chapterNumber); return "d"; },
+    publishChapter: async () => {},
+    saveState: async () => {}
+  });
+
+  assert.equal(state.chapters[0].status, "failed");
+  assert.deepEqual(seen, [2], "the exhausted retry entry no longer blocks the book");
+});
+
+test("quality rejection respects a lower per-provider max attempt cap", async () => {
+  const state = createJobState({ bookId: "b", revision: 1, chapters: [{ chapterNumber: 1 }, { chapterNumber: 2 }] });
+  const reject = Object.assign(new Error("Bản dịch chưa đạt yêu cầu (cấu trúc đoạn bị mất)."), {
+    code: "translation_rejected",
+    qualityRejected: true,
+    status: 502
+  });
+  let ch1Calls = 0;
+
+  await runTranslationJobs({
+    state,
+    maxAttempts: 3,
+    strictSequential: true,
+    loadChapter: async (n) => ({ chapterNumber: n, title: "t", content: "c" }),
+    translateChapter: async (chapter) => {
+      if (chapter.chapterNumber === 1) { ch1Calls += 1; throw reject; }
+      return "d";
+    },
+    publishChapter: async () => {},
+    saveState: async () => {},
+    backoffBaseMs: 0
+  });
+
+  assert.equal(ch1Calls, 3);
+  assert.equal(state.chapters[0].status, "failed");
+  assert.equal(state.chapters[1].status, "completed");
+});
+
+test("runTranslationJobs does not revive terminal failed chapters on restart", async () => {
+  const state = createJobState({ bookId: "b", revision: 1, chapters: [{ chapterNumber: 1 }, { chapterNumber: 2 }] });
+  state.chapters[0].status = "failed";
+  state.chapters[0].attempts = 15;
+  state.chapters[0].lastError = "Bản dịch chưa đạt yêu cầu.";
+  const seen = [];
+
+  await runTranslationJobs({
+    state,
+    requestBudget: 1,
+    loadChapter: async (n) => ({ chapterNumber: n, title: "t", content: "c" }),
+    translateChapter: async (chapter) => { seen.push(chapter.chapterNumber); return "d"; },
+    publishChapter: async () => {},
+    saveState: async () => {}
+  });
+
+  assert.equal(state.chapters[0].status, "failed");
+  assert.deepEqual(seen, [2], "the worker moves past the terminal poison chapter");
 });
 
 test("a request budget stops the run early and leaves the rest resumable", async () => {
@@ -622,6 +768,32 @@ test("translation status errors keep the diagnosis but remove provider identifie
 
   assert.match(clean, /Rate limit.*tokens per day/);
   assert.doesNotMatch(clean, /org_01secret|https?:\/\//);
+});
+
+test("translation worker records repeated quality issue signatures", async () => {
+  const { recordQualityIssue } = require("../scripts/translate-worker");
+  const { storage } = tempStorage();
+
+  await recordQualityIssue(storage, {
+    bookId: "book-a",
+    bookTitle: "Book A",
+    chapter: 1,
+    status: "failed",
+    lastError: "Bản dịch Gemini Web chưa đạt yêu cầu (bản dịch chuyển âm máy móc từ thường ngày; cần dịch nghĩa \"ông nội\" thay vì Hán-Việt hóa)."
+  });
+  await recordQualityIssue(storage, {
+    bookId: "book-a",
+    bookTitle: "Book A",
+    chapter: 2,
+    status: "failed",
+    lastError: "Bản dịch Gemini Web chưa đạt yêu cầu (bản dịch chuyển âm máy móc từ thường ngày; cần dịch nghĩa \"bà nội\" thay vì Hán-Việt hóa)."
+  });
+
+  const raw = await storage.get("jobs/translation-quality-issues.json");
+  const ledger = JSON.parse(raw.toString("utf8"));
+  assert.equal(ledger.issues.length, 1);
+  assert.equal(ledger.issues[0].count, 2);
+  assert.equal(ledger.issues[0].examples[0].chapter, 2);
 });
 
 test("translation worker prioritizes Gemini keys before Groq fallback keys", () => {
