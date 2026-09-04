@@ -1418,10 +1418,30 @@ function assessTranslation(source, translation) {
   }
 
   // 5. Kiểm tra câu cụt / đứt gãy ở cuối đoạn
-  const lastLine = output.split("\n").filter(Boolean).pop() || "";
-  const endsWithIncompleteQuote = /["'“‘][^"'“”’]*$/.test(lastLine) && !/[.!?…~]["'”’]?$/.test(lastLine);
-  if (source.length > 500 && endsWithIncompleteQuote && !/[.!?…~]$/.test(output) && !output.endsWith('"') && !output.endsWith("'")) {
-    return { acceptable: false, reason: "câu cuối bị đứt gãy / cụt dấu đóng ngoặc" };
+  const cleanOutput = output.trim();
+  const doubleQuotes = (cleanOutput.match(/"/g) || []).length;
+  const smartDoubleOpen = (cleanOutput.match(/“/g) || []).length;
+  const smartDoubleClose = (cleanOutput.match(/”/g) || []).length;
+  const smartSingleOpen = (cleanOutput.match(/‘/g) || []).length;
+  const smartSingleClose = (cleanOutput.match(/’/g) || []).length;
+  const bracketOpen = (cleanOutput.match(/[【「『]/g) || []).length;
+  const bracketClose = (cleanOutput.match(/[】」』]/g) || []).length;
+
+  const hasUnclosedQuote =
+    doubleQuotes % 2 !== 0 ||
+    smartDoubleOpen > smartDoubleClose ||
+    smartSingleOpen > smartSingleClose;
+  const hasUnclosedBracket = bracketOpen > bracketClose;
+  const endsWithTerminalPunctuation = /[.!?…~。！？]["'”’』」】\)）]?$/.test(cleanOutput);
+  const endsWithMidSentenceSeparator = /[,\-:;、，；：—]\s*$/.test(cleanOutput);
+
+  if (source.length > 500) {
+    if (endsWithMidSentenceSeparator) {
+      return { acceptable: false, reason: "câu cuối bị đứt gãy ngang chừng (kết thúc bằng dấu nối/phẩy)" };
+    }
+    if ((hasUnclosedQuote || hasUnclosedBracket) && !endsWithTerminalPunctuation && !/["'”’』」】]$/.test(cleanOutput)) {
+      return { acceptable: false, reason: "câu cuối bị đứt gãy / cụt dấu đóng ngoặc" };
+    }
   }
 
   return { acceptable: true };

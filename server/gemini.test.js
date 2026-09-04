@@ -119,6 +119,29 @@ test("accepts a substantial Vietnamese translation", () => {
   assert.equal(result.acceptable, true);
 });
 
+test("accepts a translation ending with closed dialogue and CRLF", () => {
+  const source = "这是长篇中文。".repeat(80);
+  const output = "Nội dung chương dịch đầy đủ. ".repeat(20) + 'Hắn nói: "Ăn no rồi nói."\r\n';
+  const result = assessTranslation(source, output);
+  assert.equal(result.acceptable, true);
+});
+
+test("rejects translation ending with unclosed quote or bracket", () => {
+  const source = "这是长篇中文。".repeat(80);
+  const output = "Nội dung chương dịch đầy đủ. ".repeat(20) + 'Hắn nói: "Ăn no rồi nói';
+  const result = assessTranslation(source, output);
+  assert.equal(result.acceptable, false);
+  assert.match(result.reason, /cụt dấu đóng ngoặc/);
+});
+
+test("rejects translation ending with mid-sentence comma", () => {
+  const source = "这是长篇中文。".repeat(80);
+  const output = "Nội dung chương dịch đầy đủ. ".repeat(20) + "Hắn nói xong, liền quay người,";
+  const result = assessTranslation(source, output);
+  assert.equal(result.acceptable, false);
+  assert.match(result.reason, /đứt gãy ngang chừng/);
+});
+
 test("tries the next model when a model echoes Chinese text", async () => {
   const originalFetch = global.fetch;
   const vietnamese = "Đây là nội dung đã được dịch đầy đủ sang tiếng Việt và không còn lặp lại nguyên văn. ".repeat(12);

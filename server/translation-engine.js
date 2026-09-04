@@ -316,7 +316,16 @@ function createTranslationEngine({ storage = null } = {}) {
     }
 
     const structured = typeof preprocessSystemBlocks === "function" ? preprocessSystemBlocks(clean) : clean;
-    const { text: polished } = reflectAndPolish(structured, { glossary });
+    let { text: polished } = reflectAndPolish(structured, { glossary });
+    polished = String(polished || "").trim();
+    // Ensure final paragraph has closing punctuation if it ends cleanly on a word
+    if (polished && !/[.!?…~。！？"'”’』」】\)）]$/.test(polished) && /[\p{L}\p{N}]$/u.test(polished)) {
+      polished = polished + ".";
+    }
+    // Auto-close single unclosed double quote at the very end if preceded by sentence terminator
+    if ((polished.match(/"/g) || []).length % 2 !== 0 && /[.!?…~。！？]$/.test(polished)) {
+      polished = polished + '"';
+    }
     return polished;
   }
 
