@@ -10,6 +10,7 @@
 
 const { mineNovelGlossary } = require("./glossary-miner");
 const { reflectAndPolish } = require("./reflection-engine");
+const { preprocessSystemBlocks } = require("../client/reader-text");
 
 const GLOSSARY_PREFIX = "glossary";
 const TM_GLOBAL_KEY = "tm/global.json";
@@ -269,6 +270,8 @@ function createTranslationEngine({ storage = null } = {}) {
       "7. KHÔNG SÓT CHỮ HÁN: Sau khi dịch xong, tự rà lại toàn bộ đầu ra theo từng dòng. Nếu còn bất kỳ chữ Trung/Hán tự nào (kể cả một ký tự nằm trong tên riêng), hãy thay ngay bằng tiếng Việt hoặc âm Hán-Việt phù hợp. Đầu ra cuối cùng tuyệt đối không chứa chữ Hán.",
       "8. ĐỊNH DẠNG ĐẦU RA: Chỉ trả về duy nhất bản dịch tiếng Việt hoàn chỉnh, không kèm lời chào, ghi chú hay thẻ giải thích.",
       "9. BẢO TOÀN CON SỐ: Ưu tiên giữ nguyên các con số định lượng dạng chữ số (ví dụ: 1500, 650...) như nguyên tác, không tự ý đổi sang chữ viết.",
+      "10. BẢNG THUỘC TÍNH VÀ THÔNG BÁO HỆ THỐNG (【...】): Với các thông báo hệ thống hoặc bảng thuộc tính (như 【Tên gọi】: ..., 【Chủng loại】: ...), mỗi mục PHẢI nằm trọn vẹn trên MỘT DÒNG RIÊNG BIỆT (nhãn và giá trị cùng dòng, ví dụ: '【Tên gọi】: Búp bê tử linh'). Tuyệt đối không để nhãn ở cuối dòng trước rồi giá trị rớt xuống dòng sau, không gộp nhiều mục 【...】 dính liền nhau.",
+      "11. DẤU NGOẶC KÉP: Dấu ngoặc kép chỉ bao quanh lời thoại hoặc suy nghĩ trực tiếp, không bao quanh câu dẫn chuyện của người kể. Tuyệt đối không để dấu ngoặc kép thừa ở cuối câu kể.",
       "",
       glossarySection,
       "Văn bản tiếng Trung cần dịch:",
@@ -313,6 +316,8 @@ function createTranslationEngine({ storage = null } = {}) {
     }
 
     const { text: polished } = reflectAndPolish(clean, { glossary });
+    const structured = typeof preprocessSystemBlocks === "function" ? preprocessSystemBlocks(clean) : clean;
+    const { text: polished } = reflectAndPolish(structured, { glossary });
     return polished;
   }
 

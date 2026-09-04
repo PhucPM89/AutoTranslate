@@ -1,8 +1,8 @@
 "use strict";
 
-const SENTENCE_END = ".!?;:…。！？；：";
-const CLOSING_QUOTES = "\"'”’»）)]}";
-const OPENING_QUOTES = "\"'“‘«（([{";
+const SENTENCE_END = ".!?;…。！？；";
+const CLOSING_QUOTES = "\"'”’»）)]}】」』";
+const OPENING_QUOTES = "\"'“‘«（([{【「『";
 
 function normalizeReaderLine(value) {
   let text = String(value || "").normalize("NFC");
@@ -12,33 +12,116 @@ function normalizeReaderLine(value) {
     .replace(/\u00a0/g, " ")
     .replace(/[ \t\f\v]+/g, " ")
     .replace(/[ \t]+([,.;:!?…，。！？；：])/g, "$1")
-    .replace(/([,.;:!?…，。！？；：])(?=[^\s\d,.;:!?…，。！？；："'”’»）)\]}])/g, "$1 ")
-    .replace(/([.!?…])(["“‘«])(?=\p{L})/gu, "$1 $2")
-    .replace(/([:：])[ \t]*(["“‘«])/g, "$1 $2")
-    .replace(/(["“‘«])[ \t]+/g, "$1")
-    .replace(/[ \t]+(["”’»])/g, "$1")
-    .replace(/([?!。！？…])[ \t]*(["”’»])(?=\S)/g, "$1$2 ")
-    .replace(/(["”’»])(?=[\p{L}\p{N}])/gu, "$1 ")
-    .replace(/([:：])[ \t]*(["“‘«])[ \t]*/g, "$1 $2")
-    .replace(/([.。])[ \t]*(["“‘«])[ \t]*(?=\p{L})/gu, "$1 $2")
-    .replace(/([!?！？…])[ \t]*(["”’»])[ \t]*(?=\p{L})/gu, "$1$2 ")
+    .replace(/([,.;:!?…，。！？；：])(?=[^\s\d,.;:!?…，。！？；："'”’»）)\]}】」』])/g, "$1 ")
+    .replace(/([.!?…])(["“‘«【「『])(?=\p{L})/gu, "$1 $2")
+    .replace(/([:：])[ \t]*(["“‘«【「『])/g, "$1 $2")
+    .replace(/(["“‘«【「『])[ \t]+/g, "$1")
+    .replace(/[ \t]+(["”’»】」』])/g, "$1")
+    .replace(/([?!。！？…])[ \t]*(["”’»】」』])(?=\S)/g, "$1$2 ")
+    .replace(/(?<=[.!?…，。！？；：\p{L}\p{N}—\-])(["”’»])(?=[\p{L}\p{N}])/gu, "$1 ")
+    .replace(/([:：])[ \t]*(["“‘«【「『])[ \t]*/g, "$1 $2")
+    .replace(/([.。])[ \t]*(["“‘«【「『])[ \t]*(?=\p{L})/gu, "$1 $2")
+    .replace(/([!?！？…])[ \t]*(["”’»】」』])[ \t]*(?=\p{L})/gu, "$1$2 ")
     .replace(/[ \t]+([,.;:!?…])/g, "$1")
     .replace(/[ \t]{2,}/g, " ")
     .trim();
 
+  // Strip orphaned closing brackets at start of line
+  text = text.replace(/^[】」』)\]}]+[ \t]*/, "");
+
+  // Clean quote spacing: remove space after opening quote and before closing quote
+  text = text.replace(/(^|[\s(])(["“‘«【「『])\s+([^\s])/gu, "$1$2$3");
+  text = text.replace(/([^\s])\s+(["”’»】」』])(?=[\s.,;:!?…。！？；：)]|$)/gu, "$1$2");
+
+  // Strip extraneous quotes around attribute values like 【Thực lực】: "Chưa nhập giai..."
+  text = text.replace(/^(【[^】]+】[:：]?)[ \t]*["“]([^"”]+)["”]?$/, "$1 $2");
+  text = text.replace(/^(【[^】]+】[:：]?.*?)[ \t]*["”]+$/, "$1");
+
+  // Clean unclosed/mismatched quote inside brackets: 【Gợi ý: "Khuyến khích...】 -> 【Gợi ý: Khuyến khích...】
+  text = text.replace(/^(【[^】\n]+[:：])[ \t]*["“]([^"”]+)["”]?[ \t]*】$/, "$1 $2】");
+
+  // Fix dialogue + narrative trailing quote: "Oà — oà —" Một con búp bê... của Trần Dịch."
+  const dialogueNarrativeQuote = text.match(/^("[^"]+")[ \t]+([^"]+)"$/);
+  if (dialogueNarrativeQuote) {
+    text = dialogueNarrativeQuote[1] + " " + dialogueNarrativeQuote[2];
+  }
+
   return text.normalize("NFC");
+}
+
+function preprocessSystemBlocks(raw) {
+  let text = String(raw || "").replace(/\r\n?/g, "\n");
+
+  // 1. Separate glued system prompts 【...】【...】 or colon/period before 【
+  text = text
+    .replace(/(】)[ \t]*(【)/g, "$1\n\n$2")
+    .replace(/([:：.!?…])[ \t]*(【)/g, "$1\n\n$2")
+    .replace(/(】)[ \t]*([^\s\d,.;:!?…，。！？；："'”’»）)\]}】])/gu, "$1\n\n$2");
+
+  // 2. Reconnect unclosed bracket headers like 【Gợi ý: \n "Khuyến khích...】
+  let lines = text.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  const reconnected = [];
+  for (let i = 0; i < lines.length; i++) {
+    let curr = lines[i];
+    if (/^【[^】\n]+[:：]?$/.test(curr) && i + 1 < lines.length && !lines[i + 1].startsWith("【")) {
+      const next = lines[i + 1].trim();
+      if (next.includes("】")) {
+        // Line i was an unclosed bracket header like 【Gợi ý:
+        curr = curr + " " + next;
+        i++;
+      }
+    }
+    reconnected.push(curr);
+  }
+  lines = reconnected;
+
+  // 3. Fix offset table lines where label was split from value
+  const fixed = [];
+  for (let i = 0; i < lines.length; i++) {
+    let curr = lines[i];
+
+    // If line ends with a label like "Trần Dịch... 【Tên gọi】:"
+    const labelAtEndMatch = curr.match(/^(.*?)[ \t]*(【[^】\n]+】[:：]?)$/);
+    if (labelAtEndMatch && labelAtEndMatch[1]) {
+      fixed.push(labelAtEndMatch[1].trim());
+      curr = labelAtEndMatch[2].trim();
+    }
+
+    // If curr is a label like "【Tên gọi】:"
+    if (/^【[^】]+】[:：]?$/.test(curr)) {
+      if (i + 1 < lines.length && !lines[i + 1].startsWith("【")) {
+        let nextVal = lines[i + 1].trim();
+        const nextLabelMatch = nextVal.match(/^(.*?)[ \t]*(【[^】\n]+】[:：]?.*)$/);
+        if (nextLabelMatch) {
+          fixed.push(curr + " " + nextLabelMatch[1].trim());
+          lines[i + 1] = nextLabelMatch[2].trim();
+        } else {
+          fixed.push(curr + " " + nextVal);
+          i++;
+        }
+        continue;
+      }
+    }
+
+    fixed.push(curr);
+  }
+
+  // Again separate any trailing narrative that was reconnected with a bracket
+  return fixed.join("\n\n").replace(/(】)[ \t]*([^\s\d,.;:!?…，。！？；："'”’»）)\]}】])/gu, "$1\n\n$2");
 }
 
 function normalizeReaderText(value) {
   if (!value) return "";
-  const lines = String(value).replace(/\r\n?/g, "\n").split(/\n+/);
+  const preprocessed = preprocessSystemBlocks(value);
+  const lines = preprocessed.replace(/\r\n?/g, "\n").split(/\n+/);
   const normalizedLines = lines.map((line) => normalizeReaderLine(line)).filter(Boolean);
   return normalizedLines.join("\n\n");
 }
 
 function splitReaderParagraphs(value) {
   if (!value) return [];
-  const lines = String(value).replace(/\r\n?/g, "\n").split(/\n+/);
+  const preprocessed = preprocessSystemBlocks(value);
+  const lines = preprocessed.replace(/\r\n?/g, "\n").split(/\n+/);
   const out = [];
 
   for (const line of lines) {
@@ -80,6 +163,8 @@ function isLikelySentenceStart(ch) {
 }
 
 module.exports = {
+  normalizeReaderLine,
   normalizeReaderText,
+  preprocessSystemBlocks,
   splitReaderParagraphs
 };
