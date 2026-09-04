@@ -12493,3 +12493,46 @@ body.zen-mode .document-paper {
     padding: 1rem;
   }
 }
+
+/* ==========================================================================
+   Content Protection & Anti-Scraping Styles
+   ========================================================================== */
+
+.document-text,
+.reader-container,
+.reader-main,
+.reader-panel,
+#chapterView,
+.book-view-desc,
+.studio-document-text {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+}
+
+/* Allow selection in legitimate form controls only */
+input,
+textarea,
+[contenteditable="true"] {
+  -webkit-user-select: auto !important;
+  -moz-user-select: auto !important;
+  -ms-user-select: auto !important;
+  user-select: auto !important;
+}
+
+/* Prevent scraping via Print to PDF */
+@media print {
+  html,
+  body,
+  #app,
+  .document-text,
+  .reader-container,
+  .reader-panel,
+  #chapterView {
+    display: none !important;
+    visibility: hidden !important;
+  }
+}
+
