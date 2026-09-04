@@ -300,7 +300,9 @@ async function translateChunkWithGeminiWeb(text, index, total, { glossary = {}, 
       );
       const normalizedText = rebalanceCollapsedParagraphs(text, processedText);
       const quality = assessTranslation(text, normalizedText);
-      if (quality.acceptable) {
+      const isIntermediateChunk = index < total - 1;
+      const isAcceptable = quality.acceptable || (isIntermediateChunk && quality.reason?.includes("câu cuối bị đứt gãy"));
+      if (isAcceptable) {
         return { text: normalizedText, model: result.model, provider: result.provider, usage: result.usage };
       }
 
@@ -1454,7 +1456,8 @@ function assessTranslation(source, translation) {
   const endsWithMidSentenceSeparator = /[,\-:;、，；：—]\s*$/.test(cleanOutput);
 
   if (source.length > 500) {
-    if (endsWithMidSentenceSeparator) {
+    const sourceEndsWithSeparator = /[,\-:;、，；：—~…]\s*$/.test(String(source || "").trim());
+    if (endsWithMidSentenceSeparator && !sourceEndsWithSeparator) {
       return { acceptable: false, reason: "câu cuối bị đứt gãy ngang chừng (kết thúc bằng dấu nối/phẩy)" };
     }
     if ((hasUnclosedQuote || hasUnclosedBracket) && !endsWithTerminalPunctuation && !/["'”’』」】]$/.test(cleanOutput)) {
