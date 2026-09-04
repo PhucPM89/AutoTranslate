@@ -83,7 +83,7 @@ jobs:
             --book "$TRANSLATE_BOOK_INPUT"
 
       - name: Auto-relay next translation session
-        if: always() && !cancelled()
+        if: success()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

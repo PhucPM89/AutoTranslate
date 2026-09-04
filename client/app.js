@@ -29,6 +29,16 @@
 const { initAuth } = require("./auth.js");
 const { createUserSync } = require("./user-sync.js");
 const { renderQuoteCard } = require("./quote-card.js");
+const {
+  updatePageMeta,
+  shareContent,
+  toSlug,
+  getBookSlugParam,
+  DEFAULT_TITLE,
+  DEFAULT_DESC,
+  DEFAULT_IMAGE,
+  BASE_URL
+} = require("./seo.js");
 const { applyInvisibleWatermark, initSecurityGuards } = require("./security.js");
 const { extractTitleFromContent, formatVietnameseChapterTitle, displayIndexLabel, isFrontmatterSection, extractStoryChapterNumber } = require("./chapter-title.js");
 const { normalizeReaderText, splitReaderParagraphs } = require("./reader-text.js");
@@ -2078,10 +2088,11 @@ async function openFromUrl() {
 }
 
 function openDetailFromHash() {
-  const match = window.location.hash.match(/^#book\/(.+)$/);
+  const match = window.location.hash.match(/^#book\/([^?]+)/);
   if (!match) return false;
   const id = decodeURIComponent(match[1]);
-  const book = libraryState.books.find((item) => item.id === id);
+  const cleanId = cleanBookId(id);
+  const book = libraryState.books.find((item) => cleanBookId(item.id) === cleanId || item.id === id);
   if (!book) return false;
   showBookDetail(book, { updateHash: false });
   return true;
