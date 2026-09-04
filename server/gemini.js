@@ -176,18 +176,37 @@ async function translateText(text, apiKeys, options = {}) {
 
   let chunkResults;
   if (isGeminiWeb) {
-    const webConcurrency = 1;
-    chunkResults = await mapWithConcurrency(
-      chunks,
-      webConcurrency,
-      (chunk, index) =>
-        translateChunkWithGeminiWeb(chunk, index, chunks.length, {
-          glossary,
-          bookTitle,
-          engine,
-          profileSlotId: options.profileSlotId || options.slotId
-        })
-    );
+    try {
+      const webConcurrency = 1;
+      chunkResults = await mapWithConcurrency(
+        chunks,
+        webConcurrency,
+        (chunk, index) =>
+          translateChunkWithGeminiWeb(chunk, index, chunks.length, {
+            glossary,
+            bookTitle,
+            engine,
+            profileSlotId: options.profileSlotId || options.slotId
+          })
+      );
+    } catch (webError) {
+      const keyList = getActiveKeys(apiKeys);
+      if (keyList.length > 0) {
+        console.warn(`[Gemini Web] Không hoạt động hoặc lỗi: ${webError.message}. Tự động kích hoạt dịch bằng API key fallback.`);
+        chunkResults = await mapWithConcurrency(
+          chunks,
+          Math.max(1, TRANSLATE_CONCURRENCY),
+          (chunk, index) =>
+            translateChunkWithKeyPool(keyList, chunk, index, chunks.length, {
+              glossary,
+              bookTitle,
+              engine
+            })
+        );
+      } else {
+        throw webError;
+      }
+    }
   } else {
     const keyList = getActiveKeys(apiKeys);
     if (!keyList.length) throw new Error("Thiếu GROQ_API_KEY / GEMINI_API_KEY (hoặc HACHIMI_API_URL).");

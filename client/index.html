@@ -87,24 +87,31 @@
   </head>
   <body class="dark">
     <section id="libraryView" class="library-view">
+      <!-- Living World Ambient Atmosphere layer -->
+      <div id="worldAtmosphere" class="world-atmosphere" aria-hidden="true"></div>
+
       <header class="library-topbar">
         <button id="libraryBrand" class="library-brand" type="button" aria-label="Về đầu thư viện">
           <span class="brand-seal" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 5.5A3.5 3.5 0 0 1 6.5 2H11a3 3 0 0 1 3 3v15a3 3 0 0 0-3-3H3Z"></path><path d="M21 5.5A3.5 3.5 0 0 0 17.5 2H14v18a3 3 0 0 1 3-3h4Z"></path><path class="brand-bookmark" d="M17 2v7l2-1.5L21 9V5.5A3.5 3.5 0 0 0 17.5 2Z"></path></svg></span>
-          <span><strong id="libraryName">Trạm Chữ</strong><small>Truyện dịch mỗi ngày</small></span>
+          <strong id="libraryName" class="brand-title">TRẠM CHỮ</strong>
         </button>
 
         <nav class="library-nav" aria-label="Điều hướng thư viện">
-          <a href="#catalog">Thư viện</a>
-          <a href="#request">Yêu cầu truyện</a>
-          <a href="#support">Ủng hộ</a>
+          <a href="#heroSection" class="nav-link active">Tiêu điểm</a>
+          <a href="#realmsSection" class="nav-link">Vũ trụ</a>
+          <a href="#rankSection" class="nav-link">Bảng vàng</a>
+          <a href="#catalog" class="nav-link">Thư viện</a>
         </nav>
 
         <div class="library-actions">
+          <a href="#catalog" id="topbarSearch" class="icon-button topbar-search-btn" aria-label="Tìm kiếm truyện" title="Tìm truyện">
+            <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+          </a>
           <div id="streakBadge" class="streak-badge" title="Chuỗi ngày đọc liên tiếp" hidden>
             <span class="streak-flame">🔥</span>
             <span id="streakDays">1 ngày</span>
           </div>
-          <button id="readerRankBadge" class="reader-rank-badge rank-1" type="button" title="Cảnh giới tu vi / Danh hiệu độc giả (Nhấp để xem & đổi trường phái)">
+          <button id="readerRankBadge" class="reader-rank-badge rank-1" type="button" title="Cảnh giới tu vi" hidden>
             <span id="rankBadgeIcon">🔮</span>
             <span id="rankBadgeTitle">Phàm Nhân</span>
           </button>
@@ -124,31 +131,158 @@
       </header>
 
       <main class="library-main">
-        <section class="library-intro" aria-labelledby="libraryHeading">
-          <img id="featuredBackdrop" class="featured-backdrop" src="/library/covers/misty-pagoda-hero.webp" alt="" aria-hidden="true" width="960" height="1440" fetchpriority="high" decoding="async">
-          <div class="featured-overlay" aria-hidden="true"></div>
-          <div class="intro-copy">
-            <p class="eyebrow">Thư viện truyện dịch chọn lọc</p>
-            <h1 id="libraryHeading">Trạm Chữ</h1>
-            <p id="libraryTagline">Một góc đọc truyện Trung được tuyển chọn và dịch, đọc ngay trong cùng một không gian.</p>
-            <div id="featuredStory" class="featured-story">
-              <div class="featured-labels"><span id="featuredGenre">Đề cử hôm nay</span><span id="featuredStatus">Có sẵn</span></div>
-              <h2 id="featuredTitle">Đang mở kệ sách...</h2>
-              <p id="featuredDescription">Những câu chuyện mới đang được chuẩn bị.</p>
-              <div class="featured-meta"><span id="featuredAuthor">Tác giả đang cập nhật</span><span id="featuredChapters">EPUB</span></div>
-              <div class="featured-actions">
-                <button id="featuredRead" class="featured-read" type="button"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m5 3 14 9-14 9V3Z"></path></svg>Đọc ngay</button>
-                <a class="featured-browse" href="#catalog">Xem toàn bộ thư viện<svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg></a>
+        <!-- Curated Spotlight Showcase: Sân Khấu Tiêu Điểm Văn Đàn -->
+        <section class="sanctuary-spotlight" id="heroSection" aria-labelledby="spotlightTitle">
+          <div class="spotlight-ambient-glow" id="spotlightGlow" aria-hidden="true"></div>
+
+          <!-- Hidden legacy hooks to maintain 100% backward compatibility -->
+          <div id="hero3dCanvasContainer" style="display:none!important;" aria-hidden="true"></div>
+          <div id="hero3dHoverLabel" style="display:none!important;" aria-hidden="true"></div>
+          <h2 id="libraryHeading" class="sr-only">Trạm Chữ - Thư viện tiểu thuyết tuyển chọn</h2>
+          <p id="libraryTagline" class="sr-only">Một góc đọc truyện Trung được tuyển chọn và dịch.</p>
+
+          <div class="spotlight-inner">
+            <header class="spotlight-masthead">
+              <span class="spotlight-kicker">
+                <span class="kicker-gem" aria-hidden="true">◆</span>
+                <span>ẤN PHẨM TUYỂN CHỌN TRẠM CHỮ • ĐỀ CỬ ĐẶC BIỆT</span>
+              </span>
+              <p class="spotlight-subhead">Nơi hội tụ những thiên trường ca dịch thuật giàu chiều sâu và cảm xúc.</p>
+            </header>
+
+            <div class="spotlight-stage">
+              <!-- Tactile 3D Physical Hardcover Book -->
+              <div class="spotlight-book-display" id="spotlightBookDisplay">
+                <div class="physical-book-wrap" id="physicalBookWrap">
+                  <div class="physical-book" id="spotlightPhysicalBook" title="Bấm để xem giới thiệu truyện">
+                    <div class="book-spine">
+                      <span class="spine-text" id="spotlightSpineText">TRẠM CHỮ</span>
+                    </div>
+                    <div class="book-cover-surface">
+                      <img id="spotlightCover" class="spotlight-cover-img" src="/library/covers/misty-pagoda.webp" alt="Bìa tiểu thuyết tiêu điểm" loading="eager">
+                      <div class="cover-sheen" aria-hidden="true"></div>
+                      <div class="book-vermilion-seal" id="spotlightSeal">★ ĐỀ CỬ</div>
+                    </div>
+                    <div class="book-paper-edges" aria-hidden="true"></div>
+                    <div class="book-ribbon" aria-hidden="true"></div>
+                  </div>
+                  <div class="book-shadow-cast" aria-hidden="true"></div>
+                </div>
+              </div>
+
+              <!-- Literary Editorial Content -->
+              <div class="spotlight-content">
+                <div class="spotlight-labels">
+                  <span id="spotlightGenre" class="spotlight-badge-genre">Huyền Huyễn</span>
+                  <span id="spotlightStatus" class="spotlight-badge-status">Đang ra</span>
+                  <span id="spotlightChapters" class="spotlight-badge-chapters">Đang cập nhật</span>
+                </div>
+
+                <h1 id="spotlightTitle" class="spotlight-title">Đang tải câu chuyện...</h1>
+                <p class="spotlight-author-line">
+                  <span class="author-prefix">Chấp bút bởi</span>
+                  <strong id="spotlightAuthor" class="author-name">Tác giả đang cập nhật</strong>
+                </p>
+
+                <blockquote id="spotlightExcerpt" class="spotlight-excerpt">
+                  "Mỗi cuốn sách mở ra là một thế giới đang chờ được khám phá, nơi số phận của những nhân vật hòa quyện cùng trí tưởng tượng của bạn."
+                </blockquote>
+
+                <div class="spotlight-actions">
+                  <button id="spotlightReadBtn" class="spotlight-btn-read" type="button">
+                    <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2Z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7Z"></path></svg>
+                    <span>Bắt đầu đọc</span>
+                  </button>
+                  <button id="spotlightDetailBtn" class="spotlight-btn-detail" type="button">
+                    <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                    <span>Mục lục & tóm tắt</span>
+                  </button>
+                </div>
               </div>
             </div>
+
+            <!-- Curated Story Reel: Switch between 5 featured universes -->
+            <div class="spotlight-reel-wrap">
+              <div class="reel-header">
+                <span class="reel-label">BỘ SƯU TẬP TIÊU BIỂU</span>
+                <span class="reel-hint">Nhấn vào tác phẩm để đổi sân khấu</span>
+              </div>
+              <div class="spotlight-reel" id="spotlightReel" role="tablist" aria-label="Tuyển tập truyện tiêu điểm"></div>
+            </div>
           </div>
-          <a id="featuredPosterLink" class="featured-poster" href="#catalog" aria-hidden="true" tabindex="-1">
-            <img id="featuredPoster" src="/library/covers/misty-pagoda-hero.webp" alt="" width="480" height="720" decoding="async">
-          </a>
-          <div class="library-stats" aria-label="Thống kê thư viện">
-            <div><strong id="bookCount">0</strong><span>đầu truyện</span></div>
-            <div><strong id="genreCount">0</strong><span>thể loại</span></div>
-            <div><strong>7 ngày</strong><span>lưu tiến độ</span></div>
+        </section>
+
+        <!-- Hidden Fallback Anchors for app.js legacy state references (strictly invisible and zero-sized) -->
+        <div id="featuredStory" style="display:none!important;position:absolute!important;width:0!important;height:0!important;overflow:hidden!important;opacity:0!important;pointer-events:none!important;" hidden aria-hidden="true">
+          <span id="featuredGenre"></span>
+          <span id="featuredStatus"></span>
+          <h2 id="featuredTitle"></h2>
+          <p id="featuredDescription"></p>
+          <span id="featuredAuthor"></span>
+          <span id="featuredChapters"></span>
+          <button id="featuredRead" type="button"></button>
+          <button id="heroCtaRead" type="button"></button>
+          <img id="featuredBackdrop" src="" alt="">
+          <img id="featuredPoster" src="" alt="">
+          <span id="bookCount"></span>
+          <span id="genreCount"></span>
+        </div>
+
+        <!-- The Five Literary Realms: Ngũ Đại Vũ Trụ -->
+        <section class="realms-section" id="realmsSection" aria-labelledby="realmsHeading">
+          <header class="realms-header">
+            <div>
+              <p class="eyebrow">KHÁM PHÁ THEO CẢNH GIỚI</p>
+              <h2 id="realmsHeading" class="realms-title">Ngũ Đại Vũ Trụ</h2>
+            </div>
+            <p class="realms-desc">Năm dòng chảy tiểu thuyết đặc sắc nhất được tuyển chọn và chuyển ngữ chỉn chu.</p>
+          </header>
+
+          <div class="realms-grid" id="realmsGrid">
+            <button class="realm-card" type="button" data-genre="Tiên hiệp">
+              <div class="realm-icon" aria-hidden="true">🗡️</div>
+              <div class="realm-info">
+                <h3 class="realm-name">Tiên Hiệp</h3>
+                <p class="realm-tagline">Kiếm khí ngút trời, vấn đỉnh trường sinh</p>
+              </div>
+              <span class="realm-count" data-genre-count="Tiên hiệp">40 tác phẩm</span>
+            </button>
+
+            <button class="realm-card" type="button" data-genre="Huyền huyễn">
+              <div class="realm-icon" aria-hidden="true">🌌</div>
+              <div class="realm-info">
+                <h3 class="realm-name">Huyền Huyễn</h3>
+                <p class="realm-tagline">Dị giới phân tranh, vạn tộc tranh hùng</p>
+              </div>
+              <span class="realm-count" data-genre-count="Huyền huyễn">39 tác phẩm</span>
+            </button>
+
+            <button class="realm-card" type="button" data-genre="Linh dị / Kinh dị">
+              <div class="realm-icon" aria-hidden="true">🕯️</div>
+              <div class="realm-info">
+                <h3 class="realm-name">Linh Dị</h3>
+                <p class="realm-tagline">Sương mù đêm tối, bóng đen rình rập</p>
+              </div>
+              <span class="realm-count" data-genre-count="Linh dị / Kinh dị">70 tác phẩm</span>
+            </button>
+
+            <button class="realm-card" type="button" data-genre="Mạt thế">
+              <div class="realm-icon" aria-hidden="true">⚡</div>
+              <div class="realm-info">
+                <h3 class="realm-name">Mạt Thế</h3>
+                <p class="realm-tagline">Tận thế sinh tồn, tiến hóa dị năng</p>
+              </div>
+              <span class="realm-count" data-genre-count="Mạt thế">66 tác phẩm</span>
+            </button>
+
+            <button class="realm-card" type="button" data-genre="Trinh thám">
+              <div class="realm-icon" aria-hidden="true">🔍</div>
+              <div class="realm-info">
+                <h3 class="realm-name">Trinh Thám</h3>
+                <p class="realm-tagline">Suy luận logic, giải mã chân tướng</p>
+              </div>
+              <span class="realm-count" data-genre-count="Trinh thám">37 tác phẩm</span>
+            </button>
           </div>
         </section>
 
@@ -159,13 +293,17 @@
 
         <section id="rankSection" class="rank-section" aria-labelledby="rankHeading" hidden>
           <header class="rank-header">
-            <div><p class="eyebrow">Đọc nhiều nhất</p><h2 id="rankHeading">Bảng xếp hạng</h2></div>
-            <div class="rank-nav">
+            <div class="rank-header-content">
+              <p class="eyebrow"><span class="kicker-gem" aria-hidden="true">★</span> ĐỈNH CAO VĂN ĐÀN</p>
+              <h2 id="rankHeading">Bảng Vàng Đọc Nhiều Nhất</h2>
+              <p class="rank-subtitle">Những bộ đại tác phẩm được hàng ngàn độc giả Trạm Chữ say mê theo dõi.</p>
+            </div>
+            <div class="rank-nav" aria-hidden="true" style="display:none;">
               <button id="rankPrev" class="rail-arrow" type="button" aria-label="Cuộn sang trái"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"></path></svg></button>
               <button id="rankNext" class="rail-arrow" type="button" aria-label="Cuộn sang phải"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg></button>
             </div>
           </header>
-          <div id="rankRail" class="rank-rail"></div>
+          <div id="rankRail" class="rank-hall-container"></div>
         </section>
 
         <section id="catalog" class="catalog-section">

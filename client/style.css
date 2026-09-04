@@ -12536,3 +12536,1617 @@ textarea,
   }
 }
 
+/* ==========================================================================
+   TRẠM CHỮ — THE CURATED LITERARY SANCTUARY (KINH ĐÔ VĂN TỰ)
+   ========================================================================== */
+
+/* 1. ARCHIVAL FLOATING MASTHEAD */
+.library-topbar {
+  background: rgba(11, 13, 19, 0.85) !important;
+  border-bottom: 1px solid rgba(217, 155, 80, 0.14) !important;
+  backdrop-filter: blur(20px) saturate(1.3) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.3) !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 100 !important;
+  display: grid !important;
+  grid-template-columns: auto 1fr auto !important;
+  align-items: center !important;
+  gap: 2rem !important;
+  padding: 1rem clamp(2rem, 5vw, 4.5rem) !important;
+  transition: background 0.3s ease, border-color 0.3s ease !important;
+}
+
+.library-brand {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.75rem !important;
+  background: transparent !important;
+  border: none !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+}
+
+.library-brand .brand-title {
+  font-family: "Cinzel", "Times New Roman", Georgia, serif !important;
+  font-size: 1.25rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.12em !important;
+  color: #f7f4ed !important;
+}
+
+.library-brand .brand-seal {
+  width: 28px !important;
+  height: 28px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #d4af37 !important;
+}
+
+.library-brand .brand-seal svg {
+  width: 24px !important;
+  height: 24px !important;
+  fill: currentColor !important;
+}
+
+.library-nav {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 2.5rem !important;
+}
+
+.library-nav .nav-link {
+  font-family: var(--font-sans, "Plus Jakarta Sans", system-ui, sans-serif) !important;
+  color: rgba(226, 232, 240, 0.65) !important;
+  text-decoration: none !important;
+  font-size: 0.88rem !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
+  border: none !important;
+  background: transparent !important;
+  padding: 0.35rem 0 !important;
+  position: relative !important;
+  transition: color 0.2s ease !important;
+}
+
+.library-nav .nav-link:hover,
+.library-nav .nav-link.active {
+  color: #f7f4ed !important;
+}
+
+.library-nav .nav-link.active::after {
+  content: "" !important;
+  position: absolute !important;
+  bottom: -4px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  width: 18px !important;
+  height: 2px !important;
+  background: #d4af37 !important;
+  border-radius: 2px !important;
+}
+
+.library-actions {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.75rem !important;
+}
+
+.library-actions .icon-button {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(217, 155, 80, 0.15) !important;
+  color: rgba(226, 232, 240, 0.8) !important;
+  border-radius: 50% !important;
+  width: 38px !important;
+  height: 38px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+.library-actions .icon-button:hover {
+  background: rgba(217, 155, 80, 0.12) !important;
+  color: #f7f4ed !important;
+  border-color: rgba(217, 155, 80, 0.4) !important;
+}
+
+.library-main {
+  width: 100% !important;
+  max-width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* 2. THE CURATED SPOTLIGHT SHOWCASE */
+.sanctuary-spotlight {
+  position: relative !important;
+  isolation: isolate !important;
+  width: 100% !important;
+  min-height: 92vh !important;
+  padding: 7.5rem clamp(2rem, 6vw, 6rem) 4rem !important;
+  background: #0b0d13 !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+}
+
+.spotlight-ambient-glow {
+  position: absolute !important;
+  inset: 0 !important;
+  background: radial-gradient(ellipse at 50% 35%, rgba(217, 155, 80, 0.24) 0%, transparent 68%) !important;
+  pointer-events: none !important;
+  z-index: 0 !important;
+  transition: background 0.8s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.sanctuary-spotlight::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  background: 
+    radial-gradient(circle at 15% 20%, rgba(217, 155, 80, 0.06) 0%, transparent 45%),
+    radial-gradient(circle at 85% 80%, rgba(56, 189, 248, 0.04) 0%, transparent 45%),
+    linear-gradient(180deg, transparent 0%, rgba(11, 13, 19, 0.95) 100%) !important;
+  pointer-events: none !important;
+  z-index: 0 !important;
+}
+
+.spotlight-inner {
+  position: relative !important;
+  z-index: 2 !important;
+  max-width: 1380px !important;
+  width: 100% !important;
+  margin: 0 auto !important;
+}
+
+/* Masthead Header */
+.spotlight-masthead {
+  text-align: center !important;
+  margin-bottom: 2.8rem !important;
+}
+
+.spotlight-kicker {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.65rem !important;
+  font-family: var(--font-sans, "Plus Jakarta Sans", system-ui, sans-serif) !important;
+  font-size: 0.76rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.24em !important;
+  text-transform: uppercase !important;
+  color: #d4af37 !important;
+  margin-bottom: 0.5rem !important;
+}
+
+.kicker-gem {
+  color: #c84b31 !important;
+  font-size: 0.7rem !important;
+}
+
+.spotlight-subhead {
+  margin: 0 !important;
+  font-family: "Cinzel", "Times New Roman", Georgia, serif !important;
+  font-style: italic !important;
+  font-size: 1.05rem !important;
+  color: rgba(226, 232, 240, 0.65) !important;
+  letter-spacing: 0.02em !important;
+}
+
+/* Spotlight Stage */
+.spotlight-stage {
+  display: grid !important;
+  grid-template-columns: minmax(300px, 420px) 1fr !important;
+  gap: clamp(3rem, 6vw, 6rem) !important;
+  align-items: center !important;
+  margin-bottom: 3.5rem !important;
+  transition: opacity 0.35s ease, transform 0.35s ease !important;
+}
+
+.spotlight-stage.is-transitioning {
+  animation: spotlightFadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+}
+
+@keyframes spotlightFadeIn {
+  from {
+    opacity: 0.4;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 3. TACTILE PHYSICAL 3D HARDCOVER BOOK */
+.spotlight-book-display {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  perspective: 1200px !important;
+  padding: 1.5rem 0 !important;
+}
+
+.physical-book-wrap {
+  position: relative !important;
+  display: inline-block !important;
+  cursor: pointer !important;
+  transform-style: preserve-3d !important;
+}
+
+.physical-book {
+  position: relative !important;
+  width: 250px !important;
+  height: 375px !important;
+  border-radius: 4px 10px 10px 4px !important;
+  transform: perspective(1200px) rotateX(0deg) rotateY(-6deg) translateZ(0) !important;
+  transform-style: preserve-3d !important;
+  will-change: transform !important;
+  box-shadow: 
+    -18px 24px 50px rgba(0, 0, 0, 0.85),
+    -4px 8px 18px rgba(0, 0, 0, 0.6),
+    0 0 36px rgba(212, 175, 55, 0.15) !important;
+  transition: box-shadow 0.3s ease !important;
+}
+
+.physical-book:hover {
+  box-shadow: 
+    -24px 30px 60px rgba(0, 0, 0, 0.95),
+    -6px 12px 24px rgba(0, 0, 0, 0.7),
+    0 0 45px rgba(212, 175, 55, 0.28) !important;
+}
+
+/* Book Spine */
+.book-spine {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 26px !important;
+  height: 100% !important;
+  background: linear-gradient(90deg, #181d29 0%, #0d1017 60%, rgba(255, 255, 255, 0.08) 90%, transparent 100%) !important;
+  border-radius: 4px 0 0 4px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-shadow: inset -2px 0 4px rgba(0, 0, 0, 0.6) !important;
+  z-index: 5 !important;
+  pointer-events: none !important;
+}
+
+.spine-text {
+  writing-mode: vertical-rl !important;
+  text-orientation: mixed !important;
+  transform: rotate(180deg) !important;
+  font-family: "Cinzel", "Times New Roman", serif !important;
+  font-size: 0.62rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.18em !important;
+  color: #d4af37 !important;
+  opacity: 0.75 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-height: 260px !important;
+}
+
+/* Front Cover Surface */
+.book-cover-surface {
+  position: relative !important;
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 4px 10px 10px 4px !important;
+  overflow: hidden !important;
+  background: #11141d !important;
+  border: 1px solid rgba(217, 155, 80, 0.2) !important;
+}
+
+.spotlight-cover-img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  display: block !important;
+  filter: contrast(1.04) brightness(0.96) !important;
+}
+
+/* Light Sheen */
+.cover-sheen {
+  position: absolute !important;
+  inset: 0 !important;
+  pointer-events: none !important;
+  z-index: 3 !important;
+  mix-blend-mode: overlay !important;
+  transition: background 0.15s ease !important;
+}
+
+/* Vermilion Seal */
+.book-vermilion-seal {
+  position: absolute !important;
+  top: 14px !important;
+  right: 14px !important;
+  background: #c84b31 !important;
+  color: #ffffff !important;
+  font-family: var(--font-sans, "Plus Jakarta Sans", system-ui, sans-serif) !important;
+  font-size: 0.65rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.08em !important;
+  padding: 0.3rem 0.65rem !important;
+  border-radius: 6px !important;
+  box-shadow: 0 4px 14px rgba(200, 75, 49, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.25) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  z-index: 4 !important;
+  pointer-events: none !important;
+  text-transform: uppercase !important;
+}
+
+/* Paper Edges */
+.book-paper-edges {
+  position: absolute !important;
+  top: 6px !important;
+  right: -10px !important;
+  width: 10px !important;
+  height: calc(100% - 12px) !important;
+  background: repeating-linear-gradient(
+    to bottom,
+    #eae2d5,
+    #eae2d5 2px,
+    #c8c0b2 2px,
+    #c8c0b2 4px
+  ) !important;
+  border-radius: 0 2px 2px 0 !important;
+  box-shadow: inset 1px 0 3px rgba(0, 0, 0, 0.3) !important;
+  transform: rotateY(70deg) !important;
+  transform-origin: left center !important;
+  pointer-events: none !important;
+}
+
+/* Silk Ribbon */
+.book-ribbon {
+  position: absolute !important;
+  bottom: -16px !important;
+  right: 48px !important;
+  width: 12px !important;
+  height: 38px !important;
+  background: #c84b31 !important;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5) !important;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%) !important;
+  pointer-events: none !important;
+  z-index: 6 !important;
+}
+
+.book-shadow-cast {
+  position: absolute !important;
+  bottom: -20px !important;
+  left: 5% !important;
+  width: 90% !important;
+  height: 24px !important;
+  background: radial-gradient(ellipse at 50% 50%, rgba(0, 0, 0, 0.8) 0%, transparent 70%) !important;
+  filter: blur(8px) !important;
+  pointer-events: none !important;
+}
+
+/* 4. LITERARY EDITORIAL CONTENT */
+.spotlight-content {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+}
+
+.spotlight-labels {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.75rem !important;
+  flex-wrap: wrap !important;
+  margin-bottom: 1.25rem !important;
+}
+
+.spotlight-badge-genre {
+  display: inline-flex !important;
+  align-items: center !important;
+  padding: 0.35rem 0.85rem !important;
+  border-radius: 9999px !important;
+  font-family: var(--font-sans, "Plus Jakarta Sans", system-ui, sans-serif) !important;
+  font-size: 0.75rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.04em !important;
+  border: 1px solid rgba(212, 175, 55, 0.3) !important;
+  color: #d4af37 !important;
+  background: rgba(212, 175, 55, 0.08) !important;
+}
+
+.spotlight-badge-status,
+.spotlight-badge-chapters {
+  display: inline-flex !important;
+  align-items: center !important;
+  font-family: var(--font-sans, "Plus Jakarta Sans", system-ui, sans-serif) !important;
+  font-size: 0.75rem !important;
+  font-weight: 500 !important;
+  color: rgba(226, 232, 240, 0.65) !important;
+  padding: 0.35rem 0.75rem !important;
+  border-radius: 9999px !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.spotlight-title {
+  margin: 0 0 1rem 0 !important;
+  font-family: "Cinzel", "Playfair Display", "Times New Roman", Georgia, serif !important;
+  font-size: clamp(2.2rem, 4.2vw, 3.8rem) !important;
+  font-weight: 800 !important;
+  line-height: 1.15 !important;
+  letter-spacing: -0.025em !important;
+  color: #f7f4ed !important;
+  text-shadow: 0 4px 30px rgba(0, 0, 0, 0.8) !important;
+  word-break: keep-all !important;
+}
+
+.spotlight-author-line {
+  margin: 0 0 1.6rem 0 !important;
+  font-family: var(--font-sans, "Plus Jakarta Sans", system-ui, sans-serif) !important;
+  font-size: 0.95rem !important;
+  color: rgba(226, 232, 240, 0.65) !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.45rem !important;
+}
+
+.author-name {
+  color: #d4af37 !important;
+  font-weight: 600 !important;
+}
+
+.spotlight-excerpt {
+  margin: 0 0 2.4rem 0 !important;
+  padding: 0 0 0 1.25rem !important;
+  border-left: 2px solid #d4af37 !important;
+  font-family: "Cinzel", "Times New Roman", Georgia, serif !important;
+  font-style: italic !important;
+  font-size: 1.12rem !important;
+  line-height: 1.75 !important;
+  color: rgba(247, 244, 237, 0.85) !important;
+  max-width: 620px !important;
+}
+
+.spotlight-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 1.25rem !important;
+  flex-wrap: wrap !important;
+}
+
+.spotlight-btn-read {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.65rem !important;
+  padding: 0.95rem 2.2rem !important;
+  border-radius: 9999px !important;
+  font-family: var(--font-sans, "Plus Jakarta Sans", system-ui, sans-serif) !important;
+  font-size: 0.9rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  color: #0b0d13 !important;
+  background: linear-gradient(135deg, #e5a950 0%, #c28b38 100%) !important;
+  border: none !important;
+  box-shadow: 0 8px 24px rgba(212, 175, 55, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.4) !important;
+  cursor: pointer !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.spotlight-btn-read:hover {
+  transform: translateY(-2px) scale(1.02) !important;
+  box-shadow: 0 12px 32px rgba(212, 175, 55, 0.55) !important;
+}
+
+.spotlight-btn-read .icon {
+  width: 18px !important;
+  height: 18px !important;
+  stroke: currentColor !important;
+  fill: none !important;
+  stroke-width: 2.2 !important;
+}
+
+.spotlight-btn-detail {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.65rem !important;
+  padding: 0.95rem 1.8rem !important;
+  border-radius: 9999px !important;
+  font-family: var(--font-sans, "Plus Jakarta Sans", system-ui, sans-serif) !important;
+  font-size: 0.9rem !important;
+  font-weight: 600 !important;
+  color: #f7f4ed !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(217, 155, 80, 0.35) !important;
+  cursor: pointer !important;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease !important;
+}
+
+.spotlight-btn-detail:hover {
+  background: rgba(217, 155, 80, 0.12) !important;
+  border-color: rgba(217, 155, 80, 0.6) !important;
+  transform: translateY(-2px) !important;
+}
+
+.spotlight-btn-detail .icon {
+  width: 18px !important;
+  height: 18px !important;
+  stroke: currentColor !important;
+  fill: none !important;
+  stroke-width: 2 !important;
+}
+
+/* 5. CURATED STORY REEL */
+.spotlight-reel-wrap {
+  border-top: 1px solid rgba(217, 155, 80, 0.15) !important;
+  padding-top: 2rem !important;
+}
+
+.reel-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  margin-bottom: 1.25rem !important;
+}
+
+.reel-label {
+  font-family: var(--font-sans, "Plus Jakarta Sans", system-ui, sans-serif) !important;
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.2em !important;
+  text-transform: uppercase !important;
+  color: #d4af37 !important;
+}
+
+.reel-hint {
+  font-size: 0.8rem !important;
+  color: rgba(226, 232, 240, 0.45) !important;
+}
+
+.spotlight-reel {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
+  gap: 1.25rem !important;
+}
+
+.reel-item {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.85rem !important;
+  min-width: 0 !important;
+  padding: 0.65rem 0.85rem !important;
+  border-radius: 12px !important;
+  background: rgba(18, 22, 31, 0.6) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  cursor: pointer !important;
+  text-align: left !important;
+  transition: all 0.22s ease !important;
+}
+
+.reel-item:hover {
+  background: rgba(25, 30, 42, 0.8) !important;
+  border-color: rgba(217, 155, 80, 0.3) !important;
+  transform: translateY(-2px) !important;
+}
+
+.reel-item.active {
+  background: rgba(217, 155, 80, 0.12) !important;
+  border-color: #d4af37 !important;
+  box-shadow: 0 4px 20px rgba(212, 175, 55, 0.18) !important;
+}
+
+.reel-thumb {
+  width: 44px !important;
+  height: 64px !important;
+  object-fit: cover !important;
+  border-radius: 4px !important;
+  flex-shrink: 0 !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6) !important;
+}
+
+.reel-item-info {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.2rem !important;
+  min-width: 0 !important;
+}
+
+.reel-item-title {
+  font-family: var(--font-sans, "Plus Jakarta Sans", system-ui, sans-serif) !important;
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+  color: #f7f4ed !important;
+  line-height: 1.3 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.reel-item-genre {
+  font-size: 0.72rem !important;
+  color: rgba(226, 232, 240, 0.5) !important;
+}
+
+.reel-item.active .reel-item-genre {
+  color: #d4af37 !important;
+}
+
+/* 6. THE FIVE LITERARY REALMS (NGŨ ĐẠI VŨ TRỤ) */
+.realms-section {
+  width: min(1380px, calc(100% - clamp(2rem, 6vw, 6rem))) !important;
+  margin: 5rem auto !important;
+}
+
+.realms-header {
+  margin-bottom: 2.5rem !important;
+}
+
+.realms-title {
+  margin: 0.4rem 0 0.5rem 0 !important;
+  font-family: "Cinzel", "Playfair Display", "Times New Roman", Georgia, serif !important;
+  font-size: clamp(2rem, 3.5vw, 2.8rem) !important;
+  font-weight: 800 !important;
+  color: #f7f4ed !important;
+  letter-spacing: -0.02em !important;
+}
+
+.realms-desc {
+  margin: 0 !important;
+  font-size: 1rem !important;
+  color: rgba(226, 232, 240, 0.65) !important;
+}
+
+.realms-grid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)) !important;
+  gap: 1.5rem !important;
+}
+
+.realm-card {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  padding: 1.75rem 1.5rem !important;
+  min-height: 180px !important;
+  border-radius: 16px !important;
+  background: rgba(18, 22, 31, 0.65) !important;
+  border: 1px solid rgba(217, 155, 80, 0.14) !important;
+  cursor: pointer !important;
+  text-align: left !important;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s ease, box-shadow 0.25s ease, background 0.25s ease !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+.realm-card::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  background: radial-gradient(circle at 100% 0%, rgba(217, 155, 80, 0.08) 0%, transparent 60%) !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  transition: opacity 0.3s ease !important;
+}
+
+.realm-card:hover {
+  transform: translateY(-4px) !important;
+  border-color: rgba(217, 155, 80, 0.45) !important;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), 0 0 24px rgba(212, 175, 55, 0.12) !important;
+  background: rgba(24, 29, 41, 0.85) !important;
+}
+
+.realm-card:hover::before {
+  opacity: 1 !important;
+}
+
+.realm-icon {
+  font-size: 2rem !important;
+  margin-bottom: 1rem !important;
+  line-height: 1 !important;
+}
+
+.realm-info {
+  margin-bottom: 1.25rem !important;
+}
+
+.realm-name {
+  margin: 0 0 0.35rem 0 !important;
+  font-family: "Cinzel", "Times New Roman", Georgia, serif !important;
+  font-size: 1.35rem !important;
+  font-weight: 700 !important;
+  color: #f7f4ed !important;
+  letter-spacing: 0.02em !important;
+}
+
+.realm-tagline {
+  margin: 0 !important;
+  font-size: 0.85rem !important;
+  color: rgba(226, 232, 240, 0.6) !important;
+  line-height: 1.45 !important;
+}
+
+.realm-count {
+  display: inline-flex !important;
+  align-items: center !important;
+  font-family: var(--font-sans, "Plus Jakarta Sans", system-ui, sans-serif) !important;
+  font-size: 0.72rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.04em !important;
+  color: #d4af37 !important;
+  padding: 0.25rem 0.65rem !important;
+  border-radius: 9999px !important;
+  background: rgba(212, 175, 55, 0.1) !important;
+  border: 1px solid rgba(212, 175, 55, 0.25) !important;
+}
+
+/* 7. RESTRAINED EDITORIAL RANKINGS & CATALOG */
+.continue-band,
+.rank-section,
+.catalog-section,
+.library-footer {
+  width: min(1380px, calc(100% - clamp(2rem, 6vw, 6rem))) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+.sanctuary-spotlight,
+.realms-section,
+.continue-band,
+.rank-section,
+.catalog-section {
+  scroll-margin-top: calc(var(--topbar-h, 72px) + 24px) !important;
+}
+
+.rank-section {
+  margin-top: 5rem !important;
+  margin-bottom: 5rem !important;
+}
+
+.catalog-section {
+  margin-top: 5rem !important;
+  margin-bottom: 6rem !important;
+}
+
+/* Hardcover Aspect Ratio for Catalog Book Cards */
+.book-card {
+  background: rgba(18, 22, 31, 0.5) !important;
+  border: 1px solid rgba(217, 155, 80, 0.12) !important;
+  border-radius: 12px !important;
+  transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease !important;
+}
+
+.book-card:hover {
+  transform: translateY(-4px) !important;
+  border-color: rgba(217, 155, 80, 0.38) !important;
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.7), 0 0 20px rgba(212, 175, 55, 0.1) !important;
+}
+
+.book-read-button {
+  background: linear-gradient(135deg, #d4af37 0%, #c2884a 100%) !important;
+  color: #0b0d13 !important;
+  font-weight: 700 !important;
+  border-radius: 9999px !important;
+  border: none !important;
+  box-shadow: 0 4px 14px rgba(212, 175, 55, 0.3) !important;
+}
+
+.book-read-button:hover {
+  box-shadow: 0 6px 18px rgba(212, 175, 55, 0.5) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Living World Ambient Atmosphere */
+.world-atmosphere {
+  position: fixed !important;
+  inset: 0 !important;
+  pointer-events: none !important;
+  z-index: 0 !important;
+  background: radial-gradient(ellipse 95% 65% at 50% 15%, rgba(217, 155, 80, 0.18) 0%, rgba(20, 22, 26, 0) 75%) !important;
+  transition: background 0.75s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.75s ease !important;
+  opacity: 0.95 !important;
+}
+
+[data-active-realm="Tiên hiệp"] .world-atmosphere {
+  background: radial-gradient(ellipse 90% 60% at 50% 15%, rgba(217, 155, 80, 0.25) 0%, rgba(20, 22, 26, 0) 75%) !important;
+}
+
+[data-active-realm="Huyền huyễn"] .world-atmosphere {
+  background: radial-gradient(ellipse 90% 60% at 50% 15%, rgba(168, 85, 247, 0.22) 0%, rgba(20, 22, 26, 0) 75%) !important;
+}
+
+[data-active-realm="Linh dị / Kinh dị"] .world-atmosphere {
+  background: radial-gradient(ellipse 90% 60% at 50% 15%, rgba(244, 63, 94, 0.22) 0%, rgba(20, 22, 26, 0) 75%) !important;
+}
+
+[data-active-realm="Mạt thế"] .world-atmosphere {
+  background: radial-gradient(ellipse 90% 60% at 50% 15%, rgba(56, 189, 248, 0.22) 0%, rgba(20, 22, 26, 0) 75%) !important;
+}
+
+[data-active-realm="Trinh thám"] .world-atmosphere {
+  background: radial-gradient(ellipse 90% 60% at 50% 15%, rgba(45, 212, 191, 0.22) 0%, rgba(20, 22, 26, 0) 75%) !important;
+}
+
+/* Living World Grid Depth Focus */
+.catalog-grid {
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+@media (hover: hover) {
+  .catalog-grid:hover > .book-card {
+    opacity: 0.78 !important;
+    filter: saturate(0.88) !important;
+    transform: scale(0.985) !important;
+    transition: opacity 0.3s ease, transform 0.3s ease, filter 0.3s ease !important;
+  }
+
+  .catalog-grid > .book-card:hover {
+    opacity: 1 !important;
+    filter: saturate(1.05) !important;
+    transform: translateY(-8px) scale(1.02) !important;
+    z-index: 5 !important;
+    border-color: rgba(217, 155, 80, 0.5) !important;
+    box-shadow: 0 22px 50px rgba(0, 0, 0, 0.75), 0 0 32px var(--world-aura-glow, rgba(217, 155, 80, 0.22)) !important;
+  }
+}
+
+/* Editorial Lead Card in Catalog */
+@media (min-width: 960px) {
+  .book-card.is-editorial-lead {
+    grid-column: span 2 !important;
+    display: grid !important;
+    grid-template-columns: 160px 1fr !important;
+    gap: 1.25rem !important;
+    background: linear-gradient(135deg, rgba(26, 31, 43, 0.75) 0%, rgba(18, 22, 31, 0.85) 100%) !important;
+    border: 1px solid rgba(217, 155, 80, 0.28) !important;
+    border-radius: 14px !important;
+    padding: 0.85rem !important;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5) !important;
+  }
+
+  .book-card.is-editorial-lead .book-cover {
+    width: 100% !important;
+    aspect-ratio: 2 / 3 !important;
+    height: auto !important;
+    min-height: unset !important;
+    border-radius: 8px !important;
+  }
+
+  .book-card.is-editorial-lead .book-card-body {
+    padding: 0.25rem 0.25rem !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    min-width: 0 !important;
+  }
+
+  .book-card.is-editorial-lead h3 {
+    font-size: 1.15rem !important;
+    font-family: var(--font-display) !important;
+    margin-bottom: 0.35rem !important;
+    -webkit-line-clamp: 2 !important;
+  }
+
+  .book-card.is-editorial-lead .book-author {
+    font-size: 0.8rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+
+  .book-card.is-editorial-lead .book-description {
+    -webkit-line-clamp: 3 !important;
+    font-size: 0.82rem !important;
+    line-height: 1.55 !important;
+    color: rgba(226, 232, 240, 0.75) !important;
+  }
+}
+
+.editorial-lead-badge {
+  position: absolute !important;
+  top: 10px !important;
+  left: 10px !important;
+  z-index: 2 !important;
+  background: linear-gradient(135deg, #d4af37 0%, #a87932 100%) !important;
+  color: #0b0d13 !important;
+  font-family: var(--font-sans) !important;
+  font-size: 0.68rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.04em !important;
+  padding: 0.25rem 0.65rem !important;
+  border-radius: 4px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6) !important;
+}
+
+/* ============================================================================
+   ASYMMETRICAL HALL OF FAME: BẢNG VÀNG VĂN ĐÀN
+   ========================================================================= */
+.rank-section {
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+.rank-header {
+  margin-bottom: 2.25rem !important;
+}
+
+.rank-subtitle {
+  margin: 0.5rem 0 0 0 !important;
+  font-size: 1rem !important;
+  color: rgba(226, 232, 240, 0.65) !important;
+}
+
+.rank-hall-container {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.95fr) !important;
+  gap: 2rem !important;
+  align-items: stretch !important;
+}
+
+/* 1. Champion Stage */
+.rank-champion-stage {
+  position: relative !important;
+  overflow: hidden !important;
+  background: linear-gradient(145deg, rgba(29, 34, 46, 0.85) 0%, rgba(18, 22, 31, 0.92) 100%) !important;
+  border: 1px solid rgba(217, 155, 80, 0.32) !important;
+  border-radius: 20px !important;
+  padding: 2.25rem !important;
+  display: grid !important;
+  grid-template-columns: 210px 1fr !important;
+  gap: 2rem !important;
+  align-items: center !important;
+  backdrop-filter: blur(16px) !important;
+  box-shadow: 0 16px 45px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease !important;
+}
+
+.rank-champion-stage:hover {
+  transform: translateY(-4px) !important;
+  border-color: rgba(217, 155, 80, 0.55) !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75), 0 0 40px rgba(217, 155, 80, 0.18) !important;
+}
+
+.champion-bg-watermark {
+  position: absolute !important;
+  right: -15px !important;
+  bottom: -35px !important;
+  font-family: var(--font-display), "Literata", serif !important;
+  font-size: 15rem !important;
+  font-weight: 800 !important;
+  color: rgba(217, 155, 80, 0.04) !important;
+  line-height: 1 !important;
+  pointer-events: none !important;
+  user-select: none !important;
+  z-index: 0 !important;
+}
+
+.champion-display {
+  position: relative !important;
+  z-index: 1 !important;
+  cursor: pointer !important;
+}
+
+.champion-book-perspective {
+  perspective: 1000px !important;
+}
+
+.champion-book-cover-wrap {
+  position: relative !important;
+  width: 100% !important;
+  aspect-ratio: 2 / 3 !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(217, 155, 80, 0.3) !important;
+  transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.35s ease !important;
+}
+
+.champion-display:hover .champion-book-cover-wrap {
+  transform: rotateY(-8deg) scale(1.03) !important;
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.9), 0 0 25px rgba(217, 155, 80, 0.35) !important;
+}
+
+.champion-book-img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  display: block !important;
+}
+
+.champion-cover-sheen {
+  position: absolute !important;
+  inset: 0 !important;
+  background: linear-gradient(135deg, rgba(255,255,255,0.18) 0%, transparent 50%) !important;
+  pointer-events: none !important;
+}
+
+.champion-gold-badge {
+  position: absolute !important;
+  bottom: 0 !important;
+  inset-inline: 0 !important;
+  background: linear-gradient(180deg, transparent 0%, rgba(11, 13, 19, 0.92) 80%) !important;
+  color: #d4af37 !important;
+  font-size: 0.65rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.06em !important;
+  text-align: center !important;
+  padding: 1.25rem 0.5rem 0.5rem 0.5rem !important;
+}
+
+.champion-info {
+  position: relative !important;
+  z-index: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.85rem !important;
+}
+
+.champion-badges {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  flex-wrap: wrap !important;
+}
+
+.champion-rank-pill {
+  background: linear-gradient(135deg, #e04434 0%, #b82b1d 100%) !important;
+  color: #ffffff !important;
+  font-size: 0.68rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.06em !important;
+  padding: 0.2rem 0.55rem !important;
+  border-radius: 4px !important;
+  box-shadow: 0 2px 8px rgba(224, 68, 52, 0.4) !important;
+}
+
+.champion-genre-tag {
+  font-size: 0.72rem !important;
+  font-weight: 600 !important;
+  padding: 0.2rem 0.55rem !important;
+  border-radius: 9999px !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(217, 155, 80, 0.3) !important;
+}
+
+.champion-status-pill {
+  font-size: 0.72rem !important;
+  color: rgba(226, 232, 240, 0.6) !important;
+}
+
+.champion-title {
+  margin: 0 !important;
+  font-family: var(--font-display), "Literata", serif !important;
+  font-size: clamp(1.35rem, 2.2vw, 1.85rem) !important;
+  font-weight: 700 !important;
+  color: #f7f4ed !important;
+  line-height: 1.28 !important;
+}
+
+.champion-author {
+  margin: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.4rem !important;
+  font-size: 0.88rem !important;
+  color: rgba(226, 232, 240, 0.7) !important;
+}
+
+.icon-quill {
+  width: 15px !important;
+  height: 15px !important;
+  stroke: #d4af37 !important;
+  stroke-width: 1.8 !important;
+  fill: none !important;
+}
+
+.champion-quote {
+  margin: 0.2rem 0 !important;
+  padding-left: 0.85rem !important;
+  border-left: 2px solid #d4af37 !important;
+  font-family: var(--font-read), "Literata", serif !important;
+  font-size: 0.88rem !important;
+  font-style: italic !important;
+  color: rgba(226, 232, 240, 0.75) !important;
+  line-height: 1.55 !important;
+  display: -webkit-box !important;
+  -webkit-box-orient: vertical !important;
+  -webkit-line-clamp: 2 !important;
+  overflow: hidden !important;
+}
+
+.champion-meta-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 1.5rem !important;
+  padding: 0.5rem 0 !important;
+}
+
+.champion-stat {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.champion-stat .stat-num {
+  font-size: 1.05rem !important;
+  font-weight: 700 !important;
+  color: #d4af37 !important;
+}
+
+.champion-stat .stat-label {
+  font-size: 0.72rem !important;
+  color: rgba(226, 232, 240, 0.55) !important;
+}
+
+.champion-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.85rem !important;
+  margin-top: 0.35rem !important;
+}
+
+.champion-read-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  padding: 0.75rem 1.35rem !important;
+  border-radius: 9999px !important;
+  background: linear-gradient(135deg, #d4af37 0%, #b8860b 100%) !important;
+  color: #0b0d13 !important;
+  font-weight: 700 !important;
+  font-size: 0.88rem !important;
+  border: none !important;
+  cursor: pointer !important;
+  box-shadow: 0 4px 16px rgba(212, 175, 55, 0.35) !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.champion-read-btn:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 20px rgba(212, 175, 55, 0.5) !important;
+}
+
+.champion-read-btn svg {
+  width: 17px !important;
+  height: 17px !important;
+}
+
+.champion-detail-btn {
+  padding: 0.75rem 1.15rem !important;
+  border-radius: 9999px !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: rgba(247, 244, 237, 0.88) !important;
+  font-size: 0.85rem !important;
+  font-weight: 600 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  cursor: pointer !important;
+  transition: background 0.2s ease, border-color 0.2s ease !important;
+}
+
+.champion-detail-btn:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(217, 155, 80, 0.4) !important;
+}
+
+/* 2. Contenders Stack (#2 - #6) */
+.rank-contenders-stack {
+  background: rgba(18, 22, 31, 0.75) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 20px !important;
+  padding: 1.5rem !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.65rem !important;
+  backdrop-filter: blur(14px) !important;
+}
+
+.contenders-stack-header {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding-bottom: 0.65rem !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+  margin-bottom: 0.25rem !important;
+}
+
+.contenders-label {
+  font-size: 0.75rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.06em !important;
+  color: #d4af37 !important;
+}
+
+.contenders-hint {
+  font-size: 0.72rem !important;
+  color: rgba(226, 232, 240, 0.45) !important;
+}
+
+.contender-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 1rem !important;
+  padding: 0.65rem 0.85rem !important;
+  background: rgba(25, 30, 41, 0.4) !important;
+  border: 1px solid rgba(255, 255, 255, 0.04) !important;
+  border-radius: 12px !important;
+  text-align: left !important;
+  cursor: pointer !important;
+  transition: all 0.25s ease !important;
+  width: 100% !important;
+}
+
+.contender-row:hover {
+  background: rgba(32, 38, 52, 0.85) !important;
+  border-color: rgba(217, 155, 80, 0.35) !important;
+  transform: translateX(4px) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
+}
+
+.contender-rank-badge {
+  width: 28px !important;
+  height: 28px !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 6px !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: rgba(226, 232, 240, 0.6) !important;
+  font-size: 0.75rem !important;
+  font-weight: 800 !important;
+  flex-shrink: 0 !important;
+}
+
+.contender-rank-badge.badge-silver {
+  background: linear-gradient(135deg, #e2e8f0 0%, #94a3b8 100%) !important;
+  color: #0f172a !important;
+  box-shadow: 0 2px 8px rgba(226, 232, 240, 0.3) !important;
+}
+
+.contender-rank-badge.badge-bronze {
+  background: linear-gradient(135deg, #d97706 0%, #92400e 100%) !important;
+  color: #fff !important;
+  box-shadow: 0 2px 8px rgba(217, 119, 6, 0.3) !important;
+}
+
+.contender-thumb-wrap {
+  width: 44px !important;
+  height: 62px !important;
+  border-radius: 6px !important;
+  overflow: hidden !important;
+  flex-shrink: 0 !important;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5) !important;
+}
+
+.contender-thumb-img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
+
+.contender-info {
+  flex: 1 !important;
+  min-width: 0 !important;
+}
+
+.contender-meta {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  font-size: 0.72rem !important;
+  margin-bottom: 0.2rem !important;
+}
+
+.contender-genre {
+  font-weight: 600 !important;
+}
+
+.contender-status {
+  color: rgba(226, 232, 240, 0.5) !important;
+}
+
+.contender-title {
+  margin: 0 0 0.15rem 0 !important;
+  font-size: 0.95rem !important;
+  font-weight: 600 !important;
+  color: #f7f4ed !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.contender-author {
+  margin: 0 !important;
+  font-size: 0.78rem !important;
+  color: rgba(226, 232, 240, 0.55) !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.contender-action-icon {
+  width: 18px !important;
+  height: 18px !important;
+  color: rgba(226, 232, 240, 0.3) !important;
+  flex-shrink: 0 !important;
+  transition: transform 0.2s ease, color 0.2s ease !important;
+}
+
+.contender-row:hover .contender-action-icon {
+  color: #d4af37 !important;
+  transform: translateX(2px) !important;
+}
+
+/* ============================================================================
+   SIGNATURE BOOK OPENING TRANSITION
+   ========================================================================= */
+.book-opening-portal {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 99999 !important;
+  pointer-events: none !important;
+  display: grid !important;
+  place-items: center !important;
+  background: rgba(9, 11, 15, 0.94) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  opacity: 0 !important;
+  transition: opacity 0.22s ease !important;
+}
+
+.book-opening-portal.is-active {
+  opacity: 1 !important;
+}
+
+.book-opening-portal.is-fading {
+  opacity: 0 !important;
+  transition: opacity 0.28s ease !important;
+}
+
+.opening-stage {
+  perspective: 1400px !important;
+}
+
+.opening-book {
+  position: relative !important;
+  width: 280px !important;
+  height: 400px !important;
+  transform-style: preserve-3d !important;
+}
+
+.opening-cover {
+  position: absolute !important;
+  inset: 0 !important;
+  transform-origin: left center !important;
+  z-index: 2 !important;
+  border-radius: 4px 12px 12px 4px !important;
+  overflow: hidden !important;
+  box-shadow: -8px 0 24px rgba(0,0,0,0.7), 16px 20px 48px rgba(0,0,0,0.85) !important;
+  transform: rotateY(0deg) !important;
+  transition: transform 0.36s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+}
+
+.book-opening-portal.is-active .opening-cover {
+  transform: rotateY(-118deg) !important;
+}
+
+.opening-cover-img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
+
+.opening-spine {
+  position: absolute !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  width: 14px !important;
+  background: linear-gradient(90deg, rgba(0,0,0,0.6) 0%, rgba(255,255,255,0.12) 50%, transparent 100%) !important;
+}
+
+.opening-sheen {
+  position: absolute !important;
+  inset: 0 !important;
+  background: linear-gradient(135deg, rgba(255,255,255,0.2) 0%, transparent 60%) !important;
+  pointer-events: none !important;
+}
+
+.opening-page {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 1 !important;
+  background: #fdfbf7 !important;
+  border: 1px solid rgba(212, 175, 55, 0.25) !important;
+  border-radius: 4px 12px 12px 4px !important;
+  padding: 2.25rem 1.75rem !important;
+  display: flex !important;
+  flex-direction: column !important;
+  box-shadow: inset 18px 0 30px rgba(0,0,0,0.12), 10px 18px 40px rgba(0,0,0,0.6) !important;
+  transform: scale(0.96) !important;
+  transition: transform 0.36s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+}
+
+.book-opening-portal.is-active .opening-page {
+  transform: scale(1.04) !important;
+}
+
+.opening-brand {
+  font-size: 0.65rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.1em !important;
+  color: #b45309 !important;
+  margin-bottom: 1rem !important;
+}
+
+.opening-title {
+  margin: 0 0 0.5rem 0 !important;
+  font-family: var(--font-display), "Literata", serif !important;
+  font-size: 1.35rem !important;
+  font-weight: 700 !important;
+  color: #1c1917 !important;
+  line-height: 1.3 !important;
+}
+
+.opening-author {
+  margin: 0 0 1.25rem 0 !important;
+  font-family: var(--font-read), "Literata", serif !important;
+  font-size: 0.85rem !important;
+  font-style: italic !important;
+  color: #78350f !important;
+}
+
+.opening-line-divider {
+  width: 40px !important;
+  height: 2px !important;
+  background: #d4af37 !important;
+  margin-bottom: 1.5rem !important;
+}
+
+.opening-text-mock {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.65rem !important;
+}
+
+.mock-line {
+  height: 7px !important;
+  background: rgba(28, 25, 23, 0.14) !important;
+  border-radius: 4px !important;
+  width: 100% !important;
+}
+
+.mock-line.short {
+  width: 65% !important;
+}
+
+/* 8. MOBILE RESPONSIVENESS (< 960px) */
+@media (max-width: 960px) {
+  .library-topbar {
+    padding: 0.85rem 1.25rem !important;
+  }
+  .library-nav {
+    display: none !important;
+  }
+  .sanctuary-spotlight {
+    padding: 5.5rem 1.25rem 3.5rem !important;
+    min-height: auto !important;
+  }
+  .spotlight-stage {
+    grid-template-columns: 1fr !important;
+    gap: 2.5rem !important;
+    text-align: center !important;
+  }
+  .spotlight-content {
+    align-items: center !important;
+  }
+  .spotlight-excerpt {
+    border-left: none !important;
+    border-top: 2px solid #d4af37 !important;
+    padding: 1rem 0 0 0 !important;
+    text-align: center !important;
+  }
+  .spotlight-actions {
+    justify-content: center !important;
+  }
+  .physical-book {
+    width: 200px !important;
+    height: 300px !important;
+  }
+  html, body {
+    overflow-x: hidden !important;
+  }
+  .spotlight-reel-wrap {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+  }
+  .spotlight-reel {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .reel-item {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+  .reel-item-info {
+    min-width: 0 !important;
+    flex: 1 1 0% !important;
+    overflow: hidden !important;
+  }
+  .realms-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .rank-section {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    box-sizing: border-box !important;
+  }
+  .rank-hall-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    grid-template-columns: 100% !important;
+    gap: 1.5rem !important;
+    overflow: hidden !important;
+  }
+  .rank-champion-stage {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+    padding: 1.75rem 1.25rem !important;
+    gap: 1.5rem !important;
+    overflow: hidden !important;
+  }
+  .champion-bg-watermark {
+    display: none !important;
+  }
+  .champion-display {
+    max-width: 170px !important;
+    margin: 0 auto !important;
+  }
+  .champion-info {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .champion-badges,
+  .champion-author,
+  .champion-meta-row,
+  .champion-actions {
+    justify-content: center !important;
+    width: 100% !important;
+    flex-wrap: wrap !important;
+  }
+  .champion-title {
+    text-align: center !important;
+  }
+  .champion-quote {
+    text-align: center !important;
+    border-left: none !important;
+    border-top: 2px solid #d4af37 !important;
+    padding: 0.75rem 0 0 0 !important;
+    margin: 0.25rem auto !important;
+    max-width: 90% !important;
+  }
+  .rank-contenders-stack {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+}

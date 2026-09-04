@@ -2,18 +2,10 @@ name: Translation worker
 
 # Dedicated sequential novel translation worker.
 # Focuses 100% capacity on completing one novel at a time before advancing.
-# Automated cloud translation disabled: automatic translation is handled exclusively by local Gemini Web.
-# API keys are reserved for manual editing via Admin Dashboard / EPUB Studio.
+# Automatically translates using API keys whenever local Gemini Web is not active.
 on:
-  # schedule:
-  #   - cron: "*/30 * * * *"
-  # push:
-  #   branches:
-  #     - main
-  #   paths:
-  #     - "server/**"
-  #     - "scripts/**"
-  #     - ".github/workflows/translate-worker.yml"
+  schedule:
+    - cron: "*/30 * * * *"
   workflow_dispatch:
     inputs:
       book:
@@ -66,6 +58,7 @@ jobs:
       TRANSLATE_SPACING_MS: ${{ vars.TRANSLATE_SPACING_MS || '500' }}
       TRANSLATE_BOOK_INPUT: ${{ inputs.book || '' }}
       TRANSLATE_BUDGET_INPUT: ${{ inputs.budget || '10000' }}
+      ALLOW_CLOUD_TRANSLATION: "true"
     steps:
       - uses: actions/checkout@v4
 

@@ -32,7 +32,15 @@ const { renderQuoteCard } = require("./quote-card.js");
 const { applyInvisibleWatermark, initSecurityGuards } = require("./security.js");
 const { extractTitleFromContent, formatVietnameseChapterTitle, displayIndexLabel, isFrontmatterSection, extractStoryChapterNumber } = require("./chapter-title.js");
 const { normalizeReaderText, splitReaderParagraphs } = require("./reader-text.js");
-const { updatePageMeta, shareContent, getBookSlugParam } = require("./seo.js");
+const {
+  initSpotlight,
+  updateSpotlightBooks,
+  REALM_THEMES,
+  DEFAULT_THEME,
+  formatExcerpt,
+  setWorldAtmosphere,
+  resetWorldAtmosphere
+} = require("./spotlight.js");
 const { createTTS } = require("./tts.js");
 const { drawQRCodeToCanvas } = require("./qr-generator.js");
 const {
@@ -547,6 +555,10 @@ function bindEvents() {
   els.navEpubStudioBtn?.addEventListener("click", () => showEpubStudioView());
   els.studioBackToLibrary?.addEventListener("click", showLibrary);
   els.featuredRead?.addEventListener("click", openFeaturedBook);
+  document.getElementById("heroCtaRead")?.addEventListener("click", openFeaturedBook);
+  document.getElementById("topbarSearch")?.addEventListener("click", () => {
+    setTimeout(() => els.librarySearch?.focus(), 150);
+  });
   els.supportQrOpen?.addEventListener("click", () => els.supportDialog?.showModal());
   els.supportQrClose?.addEventListener("click", () => els.supportDialog?.close());
   els.supportDialog?.addEventListener("click", (event) => {
@@ -841,6 +853,27 @@ function toggleTheme() {
 
 async function initializeLibrary() {
   countVisit();
+  try {
+    initSpotlight({
+      books: libraryState.books,
+      onReadBook: (book) => {
+        loadCatalogBook(book, fallbackCoverForBook(book), { startAtFirstChapter: true });
+      },
+      onShowDetail: (book) => {
+        showBookDetail(book);
+      },
+      onSelectGenre: (genre) => {
+        if (els.libraryGenre) {
+          els.libraryGenre.value = genre;
+          resetCatalogPage();
+          renderGenrePills();
+          document.getElementById("catalog")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }
+    });
+  } catch (err) {
+    console.warn("Spotlight initialization failed:", err);
+  }
   await Promise.all([loadLibraryManifest(), loadRecentProgress()]);
   updateContinueReading();
   // Housekeeping never blocks the landing page.
@@ -907,6 +940,9 @@ async function applyLibraryManifest(manifest) {
   libraryState.books = Array.isArray(manifest?.books) ? manifest.books.filter(isValidLibraryBook) : [];
   applyLibrarySiteSettings();
   renderFeaturedBook();
+  try {
+    updateSpotlightBooks(libraryState.books);
+  } catch (_) {}
   renderGenreOptions();
   renderGenrePills();
   renderRankRail();
@@ -976,6 +1012,20 @@ function renderFeaturedBook() {
 function openFeaturedBook() {
   const book = libraryState.featuredBook;
   if (book) loadCatalogBook(book, fallbackCoverForBook(book));
+}
+
+function updateFeaturedCard(book) {
+  if (!book) return;
+  libraryState.featuredBook = book;
+  if (els.featuredStory) els.featuredStory.hidden = false;
+  if (els.featuredRead) els.featuredRead.disabled = false;
+  if (els.featuredGenre) els.featuredGenre.textContent = book.genre || "Đề cử vũ trụ 3D";
+  if (els.featuredStatus) els.featuredStatus.textContent = book.status || "Có sẵn";
+  if (els.featuredTitle) els.featuredTitle.textContent = book.title;
+  if (els.featuredDescription) els.featuredDescription.textContent = book.description || "Mở truyện để xem mục lục và bắt đầu dịch theo chương.";
+  if (els.featuredAuthor) els.featuredAuthor.textContent = book.author ? `Tác giả ${book.author}` : "Tác giả đang cập nhật";
+  const featuredCh = Number(book.chapterCount || book.totalChapters || 0);
+  if (els.featuredChapters) els.featuredChapters.textContent = featuredCh > 0 ? `${featuredCh.toLocaleString("vi-VN")} chương` : "Đang cập nhật";
 }
 
 window.addEventListener("library:refresh", (event) => {
@@ -1101,41 +1151,162 @@ function scrollRail(direction) {
 function renderRankRail() {
   if (!els.rankRail) return;
   const ranked = [...libraryState.books]
-    .sort((a, b) => Number(b.chapterCount || 0) - Number(a.chapterCount || 0))
-    .slice(0, 8);
+    .sort((a, b) => {
+      const ta = Number(a.translatedChapters || 0);
+      const tb = Number(b.translatedChapters || 0);
+      if (tb !== ta) return tb - ta;
+      return Number(b.chapterCount || 0) - Number(a.chapterCount || 0);
+    })
+    .slice(0, 6);
+
   els.rankSection.hidden = ranked.length < 3;
   els.rankRail.innerHTML = "";
-  ranked.forEach((book, index) => {
+  if (ranked.length < 3) return;
+
+  const champion = ranked[0];
+  const contenders = ranked.slice(1);
+
+  // 1. Champion Stage (Rank 1 - Bạch Kim Quán Quân)
+  const championStage = document.createElement("article");
+  championStage.className = "rank-champion-stage";
+  championStage.setAttribute("aria-label", `Quán quân bảng vàng: ${champion.title}`);
+
+  const champFallback = fallbackCoverForBook(champion);
+  const champCover = champion.cover || champFallback;
+  const champTotal = Number(champion.chapterCount || champion.totalChapters || 0);
+  const champTrans = Number(champion.translatedChapters || 0);
+  const champTheme = REALM_THEMES[champion.genre] || DEFAULT_THEME;
+  const champExcerpt = formatExcerpt(champion);
+
+  championStage.innerHTML = `
+    <div class="champion-bg-watermark" aria-hidden="true">01</div>
+    <div class="champion-display" role="button" tabindex="0" title="Bấm để xem chi tiết truyện">
+      <div class="champion-book-perspective">
+        <div class="champion-book-cover-wrap">
+          <img class="champion-book-img" src="${champCover}" alt="Bìa truyện ${escapeHtml(champion.title)}" loading="lazy">
+          <div class="champion-cover-sheen" aria-hidden="true"></div>
+          <div class="champion-gold-badge">★ QUÁN QUÂN BẢNG VÀNG</div>
+        </div>
+      </div>
+    </div>
+    <div class="champion-info">
+      <div class="champion-badges">
+        <span class="champion-rank-pill">HẠNG 01</span>
+        <span class="champion-genre-tag" style="border-color:${champTheme.color}50; color:${champTheme.color}">${escapeHtml(champion.genre || "Tiểu thuyết")}</span>
+        <span class="champion-status-pill">${champion.status || "Đang ra"}</span>
+      </div>
+      <h3 class="champion-title">${escapeHtml(champion.title)}</h3>
+      <p class="champion-author">
+        <svg class="icon icon-quill" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>
+        <span>Chấp bút: <strong>${escapeHtml(champion.author || "Tác giả đang cập nhật")}</strong></span>
+      </p>
+      <blockquote class="champion-quote">${escapeHtml(champExcerpt)}</blockquote>
+      <div class="champion-meta-row">
+        <span class="champion-stat">
+          <strong class="stat-num">${champTrans > 0 ? `${formatNumber(champTrans)}/${formatNumber(champTotal)}` : formatNumber(champTotal)}</strong>
+          <span class="stat-label">${champTrans > 0 ? "Chương dịch" : "Chương"}</span>
+        </span>
+        ${champTrans > 0 && champTotal > 0 ? `
+        <span class="champion-stat">
+          <strong class="stat-num">${Math.min(100, Math.round((champTrans / champTotal) * 100))}%</strong>
+          <span class="stat-label">Tiến độ dịch</span>
+        </span>
+        ` : ""}
+      </div>
+      <div class="champion-actions">
+        <button type="button" class="champion-read-btn">
+          <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2Z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7Z"></path></svg>
+          <span>Đọc Quán Quân</span>
+        </button>
+        <button type="button" class="champion-detail-btn">
+          <span>Xem chi tiết</span>
+        </button>
+      </div>
+    </div>
+  `;
+
+  championStage.querySelector(".champion-read-btn")?.addEventListener("click", () => {
+    loadCatalogBook(champion, champFallback);
+  });
+  championStage.querySelector(".champion-detail-btn")?.addEventListener("click", () => {
+    showBookDetail(champion);
+  });
+  championStage.querySelector(".champion-display")?.addEventListener("click", () => {
+    showBookDetail(champion);
+  });
+  championStage.addEventListener("mouseenter", () => {
+    setWorldAtmosphere(champion.genre);
+  });
+  championStage.addEventListener("mouseleave", () => {
+    resetWorldAtmosphere();
+  });
+
+  // 2. Contenders Stack
+  const contendersStack = document.createElement("div");
+  contendersStack.className = "rank-contenders-stack";
+  contendersStack.setAttribute("role", "list");
+
+  const contendersHeader = document.createElement("div");
+  contendersHeader.className = "contenders-stack-header";
+  contendersHeader.innerHTML = `
+    <span class="contenders-label">QUÂN LÂM BẢNG (#02 – #06)</span>
+    <span class="contenders-hint">Bấm xem chi tiết</span>
+  `;
+  contendersStack.appendChild(contendersHeader);
+
+  contenders.forEach((book, idx) => {
+    const rankNum = idx + 2;
+    const rankNumStr = String(rankNum).padStart(2, "0");
+    const bookFallback = fallbackCoverForBook(book);
+    const bookCover = book.cover || bookFallback;
+    const total = Number(book.chapterCount || book.totalChapters || 0);
+    const trans = Number(book.translatedChapters || 0);
+    const theme = REALM_THEMES[book.genre] || DEFAULT_THEME;
+
     const item = document.createElement("button");
     item.type = "button";
-    item.className = "rank-item";
-    item.addEventListener("click", () => showBookDetail(book));
+    item.className = `contender-row rank-pos-${rankNum}`;
+    item.setAttribute("role", "listitem");
+    item.setAttribute("aria-label", `Hạng ${rankNum}: ${book.title}`);
 
-    const position = document.createElement("span");
-    position.className = "rank-number";
-    position.textContent = String(index + 1);
-    position.setAttribute("aria-hidden", "true");
+    const badgeModifier = rankNum === 2 ? "badge-silver" : (rankNum === 3 ? "badge-bronze" : "");
 
-    const art = document.createElement("span");
-    art.className = "rank-art";
-    const image = document.createElement("img");
-    const fallback = fallbackCoverForBook(book);
-    image.src = book.cover || fallback;
-    image.alt = "";
-    image.setAttribute("aria-hidden", "true");
-    image.loading = "lazy";
-    image.decoding = "async";
-    image.addEventListener("error", () => { image.src = fallback; }, { once: true });
-    art.appendChild(image);
+    item.innerHTML = `
+      <div class="contender-rank-badge ${badgeModifier}">
+        <span class="contender-rank-num">${rankNumStr}</span>
+      </div>
+      <div class="contender-thumb-wrap">
+        <img class="contender-thumb-img" src="${bookCover}" alt="" loading="lazy" />
+      </div>
+      <div class="contender-info">
+        <div class="contender-meta">
+          <span class="contender-genre" style="color:${theme.color}">${escapeHtml(book.genre || "Tiểu thuyết")}</span>
+          <span class="contender-status">${trans > 0 ? `Dịch ${trans}/${total} ch` : `${formatNumber(total)} ch`}</span>
+        </div>
+        <h4 class="contender-title">${escapeHtml(book.title)}</h4>
+        <p class="contender-author">${escapeHtml(book.author || "Tác giả đang cập nhật")}</p>
+      </div>
+      <div class="contender-action-icon" aria-hidden="true">
+        <svg class="icon" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg>
+      </div>
+    `;
 
-    const text = document.createElement("span");
-    text.className = "rank-text";
-    appendTextElement(text, "strong", "", book.title);
-    appendTextElement(text, "span", "", `${formatNumber(book.chapterCount)} chương`);
+    item.addEventListener("click", () => {
+      showBookDetail(book);
+    });
 
-    item.append(position, art, text);
-    els.rankRail.appendChild(item);
+    item.addEventListener("mouseenter", () => {
+      setWorldAtmosphere(book.genre);
+    });
+
+    item.addEventListener("mouseleave", () => {
+      resetWorldAtmosphere();
+    });
+
+    contendersStack.appendChild(item);
   });
+
+  els.rankRail.append(championStage, contendersStack);
   revealOnScroll(els.rankRail.children);
 }
 
@@ -1314,6 +1485,11 @@ function createBookCard(book, index = 0) {
   const article = document.createElement("article");
   article.className = "book-card";
 
+  const isLead = (index === 0 && libraryState.catalogPage === 1);
+  if (isLead) {
+    article.classList.add("is-editorial-lead");
+  }
+
   const coverButton = document.createElement("button");
   coverButton.type = "button";
   coverButton.className = "book-cover";
@@ -1330,6 +1506,11 @@ function createBookCard(book, index = 0) {
   }, { once: true });
   coverButton.appendChild(image);
   appendTextElement(coverButton, "span", "book-order", String(index + 1).padStart(2, "0"));
+
+  if (isLead) {
+    appendTextElement(coverButton, "span", "editorial-lead-badge", "★ ĐẦU KỆ TUYỂN CHỌN");
+  }
+
   const coverAction = document.createElement("span");
   coverAction.className = "book-cover-action";
   coverAction.setAttribute("aria-hidden", "true");
@@ -1399,6 +1580,16 @@ function createBookCard(book, index = 0) {
   footer.appendChild(readButton);
   body.append(meta, title, author, description, footer);
   article.append(coverButton, body);
+
+  // Living World Atmosphere Reaction on Hover
+  article.setAttribute("data-genre", book.genre || "");
+  article.addEventListener("mouseenter", () => {
+    if (book.genre) setWorldAtmosphere(book.genre);
+  });
+  article.addEventListener("mouseleave", () => {
+    resetWorldAtmosphere();
+  });
+
   return article;
 }
 
@@ -1951,15 +2142,76 @@ function updateContinueReading() {
   els.continueSection.hidden = false;
 }
 
+function triggerBookOpeningTransition(book, coverUrl, onComplete) {
+  if (typeof window === "undefined" || window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) {
+    onComplete();
+    return;
+  }
+
+  const existing = document.querySelector(".book-opening-portal");
+  if (existing) existing.remove();
+
+  const portal = document.createElement("div");
+  portal.className = "book-opening-portal";
+  portal.setAttribute("aria-hidden", "true");
+
+  const title = book?.title || "Trạm Chữ";
+  const author = book?.author || "Tác phẩm tuyển chọn";
+  const cover = coverUrl || "/library/covers/misty-pagoda.webp";
+
+  portal.innerHTML = `
+    <div class="opening-stage">
+      <div class="opening-book">
+        <div class="opening-cover">
+          <img src="${cover}" alt="" class="opening-cover-img" />
+          <div class="opening-spine"></div>
+          <div class="opening-sheen"></div>
+        </div>
+        <div class="opening-page">
+          <div class="opening-parchment">
+            <span class="opening-brand">TRẠM CHỮ • KHAI MỞ VŨ TRỤ</span>
+            <h2 class="opening-title">${escapeHtml(title)}</h2>
+            <p class="opening-author">${escapeHtml(author)}</p>
+            <div class="opening-line-divider"></div>
+            <div class="opening-text-mock">
+              <div class="mock-line"></div>
+              <div class="mock-line"></div>
+              <div class="mock-line"></div>
+              <div class="mock-line short"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(portal);
+
+  requestAnimationFrame(() => {
+    portal.classList.add("is-active");
+  });
+
+  setTimeout(() => {
+    onComplete();
+    portal.classList.add("is-fading");
+    setTimeout(() => {
+      portal.remove();
+    }, 280);
+  }, 360);
+}
+
 async function loadCatalogBook(book, assignedFallbackCover = fallbackCoverForBook(book), { startAtFirstChapter = false, targetChapterIndex = null } = {}) {
   if (!book) return;
   const cleanId = cleanBookId(typeof book === "object" ? book.id : book);
-  showReader();
-  setBusy(`Đang tải ${book.title || "truyện"}...`);
-  els.bookTitle.textContent = book.title || "Trạm Chữ";
-  els.bookMeta.textContent = "Đang chuẩn bị mục lục...";
   const cover = (typeof book === "object" ? book.cover : null) || assignedFallbackCover;
-  els.readerBookCover.src = cover;
+
+  triggerBookOpeningTransition(book, cover, () => {
+    showReader();
+    setBusy(`Đang tải ${book.title || "truyện"}...`);
+    els.bookTitle.textContent = book.title || "Trạm Chữ";
+    els.bookMeta.textContent = "Đang chuẩn bị mục lục...";
+    els.readerBookCover.src = cover;
+  });
   countBookOpened(cleanId);
 
   // Preferred path: one small chapter JSON from the CDN.

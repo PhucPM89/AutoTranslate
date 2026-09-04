@@ -350,14 +350,21 @@ async function main() {
     allUniqueKeys.push("gemini-web-session");
   }
   const cloudFallbackKeys = allUniqueKeys.filter((key) => key && key !== "gemini-web-session" && key !== "hachimi-colab-endpoint");
-  if (!isGeminiWeb && process.env.ALLOW_CLOUD_TRANSLATION !== "true") {
+  if (!isGeminiWeb && process.env.ALLOW_CLOUD_TRANSLATION === "false") {
     console.log("\n===============================================================");
     console.log("[CHẾ ĐỘ BẢO TOÀN CHẤT LƯỢNG CAO NHẤT]");
-    console.log("Đã tắt dịch tự động bằng API Cloud (Gemini API / Groq).");
+    console.log("Đã tắt dịch tự động bằng API Cloud (ALLOW_CLOUD_TRANSLATION=false).");
     console.log("Hệ thống chỉ dịch bằng Gemini Web (tài khoản Google) khi bật máy.");
     console.log("API keys chỉ dùng cho biên tập thủ công trên Admin Dashboard / EPUB Studio.");
     console.log("===============================================================\n");
     return;
+  }
+  if (!isGeminiWeb) {
+    console.log("\n===============================================================");
+    console.log("[KÍCH HOẠT CHẾ ĐỘ DỊCH BẰNG API KEY]");
+    console.log("Gemini Web không hoạt động hoặc không giữ lock heartbeat.");
+    console.log(`Hệ thống tự động kích hoạt dịch bằng API key (${cloudFallbackKeys.length} key khả dụng).`);
+    console.log("===============================================================\n");
   }
   importKeyPoolState(privateStorage ? await readJson(privateStorage, TRANSLATE_KEY_HEALTH_KEY) : null, allUniqueKeys);
   const persistKeyHealth = () => privateStorage
