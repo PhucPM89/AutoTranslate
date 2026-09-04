@@ -315,7 +315,6 @@ function createTranslationEngine({ storage = null } = {}) {
       }
     }
 
-    const { text: polished } = reflectAndPolish(clean, { glossary });
     const structured = typeof preprocessSystemBlocks === "function" ? preprocessSystemBlocks(clean) : clean;
     const { text: polished } = reflectAndPolish(structured, { glossary });
     return polished;

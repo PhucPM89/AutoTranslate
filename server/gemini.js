@@ -1404,8 +1404,12 @@ function assessTranslation(source, translation) {
     "1000": ["nghìn", "ngàn", "thiên", "một nghìn", "một ngàn"],
     "10000": ["vạn", "mười nghìn", "mười ngàn"]
   };
-  const missingNumber = extractNumbers(source).find((number) => {
-    if (!number || outputNumbers.has(number)) return false;
+  const sourceLines = String(source || "").split(/\r?\n/).filter(Boolean);
+  const sourceForNumbers = (sourceLines.length > 1 && /^第\s*\d+\s*章/i.test(sourceLines[0].trim()))
+    ? sourceLines.slice(1).join("\n")
+    : source;
+  const missingNumber = extractNumbers(sourceForNumbers).find((number) => {
+    if (!number || outputNumbers.has(number) || output.includes(number)) return false;
     const words = numberWords[number] || viNumberToWords(number);
     return !(words && words.some((word) => outputLower.includes(word)));
   });
@@ -1511,8 +1515,10 @@ function viNumberToWords(value) {
     const ten = (d === 2 ? "hai mươi" : (d === 3 ? "ba mươi" : (d === 4 ? "bốn mươi" : digits[d] + " mươi")));
     const base = [ten, ten.replace("mươi", "chục")];
     if (r === 0) return base;
-    const suffix = (r === 1 ? "mốt" : (r === 4 ? "tư" : (r === 5 ? "lăm" : digits[r])));
-    return base.flatMap(b => [b + " " + suffix, r === 4 ? b + " bốn" : ""]).filter(Boolean);
+    const suffixes = (r === 1 ? ["mốt", "một"] : (r === 4 ? ["tư", "bốn"] : (r === 5 ? ["lăm", "năm"] : [digits[r]])));
+    const variants = base.flatMap(b => suffixes.map(s => b + " " + s));
+    if (d === 2 && r === 1) variants.push("hai mốt");
+    return variants;
   }
   if (n < 1000) {
     const h = Math.floor(n / 100);
