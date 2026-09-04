@@ -554,6 +554,7 @@ async function main() {
 
     const bTitle = titleMap.get(job.bookId) || job.bookId;
     let lastKnownCompleted = summarize(job.state).completed;
+    let chaptersSincePublish = 0;
 
     const originalCache = new Map();
     const chapterTranslationMeta = new Map();
@@ -790,6 +791,18 @@ async function main() {
           })
         });
         if (status !== "translating") await persistKeyHealth();
+
+        // Đồng bộ tiến độ lên Thư Viện Web & R2 mỗi 5 chương hoặc khi hoàn thành toàn bộ
+        if (status === "completed") {
+          chaptersSincePublish += 1;
+          touched.set(job.bookId, job);
+          if (chaptersSincePublish >= 5 || completed >= total) {
+            chaptersSincePublish = 0;
+            sincePublish.set(job.bookId, 0);
+            await publishBook(job);
+            console.log(`  [${bTitle}] -> Đã đồng bộ tiến độ lên Thư Viện Web (${completed}/${total} chương)`);
+          }
+        }
       }
     });
 
@@ -819,7 +832,7 @@ async function main() {
           console.log(`  Đã hoàn tất bộ ưu tiên; trả dashboard về chế độ tự động.`);
         }
         console.log(`\n🎉🎉🎉 [${bTitle}] ĐÃ DỊCH HOÀN TẤT TRỌN VẸN 100% (${job.total}/${job.total} chương)! Đã xuất bản lên thư viện.`);
-      } else if (waiting >= PUBLISH_EVERY_CHAPTERS) {
+      } else if (waiting >= PUBLISH_EVERY) {
         sincePublish.set(job.bookId, 0);
         await publishBook(job);
         console.log(`  [${job.bookId}] -> đã publish tiến độ (+${waiting} chương)`);

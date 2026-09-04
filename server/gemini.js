@@ -260,10 +260,16 @@ async function translateChunkWithGeminiWeb(text, index, total, { glossary = {}, 
   const maxAttempts = Math.max(1, Number(process.env.GEMINI_WEB_MAX_ATTEMPTS || 2));
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const prompt = draftCandidate
+    const isBloated = draftCandidate && (
+      draftCandidate.length > Math.max(1200, text.length * 2.5) ||
+      /dài bất thường|lặp nội dung|lặp nguyên đoạn/i.test(qualityReason)
+    );
+    const effectiveDraft = isBloated ? "" : draftCandidate;
+
+    const prompt = effectiveDraft
       ? buildTargetedRepairPrompt({
           sourceText: text,
-          draftTranslation: draftCandidate,
+          draftTranslation: effectiveDraft,
           issueReason: qualityReason,
           glossary,
           bookTitle,
@@ -1383,38 +1389,50 @@ function assessTranslation(source, translation) {
   }
 
   // 4. Kiểm tra bảo toàn số lượng và dữ liệu định lượng
-  const outputNumbers = new Set(extractNumbers(output));
-  const outputLower = output.toLowerCase();
-  const numberWords = {
-    "0": ["không"],
-    "1": ["một", "nhất", "đầu"],
-    "2": ["hai", "nhị", "đôi"],
-    "3": ["ba", "tam"],
-    "4": ["bốn", "tư", "tứ"],
-    "5": ["năm", "ngũ"],
-    "6": ["sáu", "lục"],
-    "7": ["bảy", "thất"],
-    "8": ["tám", "bát"],
-    "9": ["chín", "cửu"],
-    "10": ["mười", "thập"],
-    "20": ["hai mươi", "hai chục"],
-    "30": ["ba mươi", "ba chục"],
-    "50": ["năm mươi"],
-    "100": ["trăm", "bách", "một trăm"],
-    "1000": ["nghìn", "ngàn", "thiên", "một nghìn", "một ngàn"],
-    "10000": ["vạn", "mười nghìn", "mười ngàn"]
-  };
   const sourceLines = String(source || "").split(/\r?\n/).filter(Boolean);
   const sourceForNumbers = (sourceLines.length > 1 && /^第\s*\d+\s*章/i.test(sourceLines[0].trim()))
     ? sourceLines.slice(1).join("\n")
     : source;
-  const missingNumber = extractNumbers(sourceForNumbers).find((number) => {
-    if (!number || outputNumbers.has(number) || output.includes(number)) return false;
-    const words = numberWords[number] || viNumberToWords(number);
-    return !(words && words.some((word) => outputLower.includes(word)));
-  });
-  if (missingNumber) {
-    return { acceptable: false, reason: `bản dịch làm mất số ${missingNumber}` };
+  const sourceNumbers = extractNumbers(sourceForNumbers);
+  if (sourceNumbers.length > 0) {
+    const outputNumbers = new Set(extractNumbers(output));
+    const outputLower = output.toLowerCase();
+    const numberWords = {
+      "0": ["không"],
+      "1": ["một", "nhất", "đầu"],
+      "2": ["hai", "nhị", "đôi"],
+      "3": ["ba", "tam"],
+      "4": ["bốn", "tư", "tứ"],
+      "5": ["năm", "ngũ"],
+      "6": ["sáu", "lục"],
+      "7": ["bảy", "thất"],
+      "8": ["tám", "bát"],
+      "9": ["chín", "cửu"],
+      "10": ["mười", "thập"],
+      "20": ["hai mươi", "hai chục"],
+      "30": ["ba mươi", "ba chục"],
+      "50": ["năm mươi"],
+      "100": ["trăm", "bách", "một trăm"],
+      "1000": ["nghìn", "ngàn", "thiên", "một nghìn", "một ngàn"],
+      "10000": ["vạn", "mười nghìn", "mười ngàn"]
+    };
+
+    const missingNumbers = [];
+    for (const number of sourceNumbers) {
+      if (!number || outputNumbers.has(number) || output.includes(number)) continue;
+      const words = numberWords[number] || viNumberToWords(number);
+      if (words && words.some((word) => outputLower.includes(word))) continue;
+      missingNumbers.push(number);
+    }
+
+    const uniqueSourceCount = sourceNumbers.length;
+    const hasMajorMissing = missingNumbers.some((n) => n.length >= 4 && !output.includes(n));
+    const hasSystemicDrop = uniqueSourceCount >= 3 && missingNumbers.length >= 2 && (missingNumbers.length / uniqueSourceCount > 0.4);
+
+    if (hasMajorMissing || hasSystemicDrop) {
+      const sample = missingNumbers.slice(0, 3).join(", ");
+      return { acceptable: false, reason: `bản dịch làm mất số ${sample}` };
+    }
   }
 
   // 5. Kiểm tra câu cụt / đứt gãy ở cuối đoạn
@@ -1572,7 +1590,36 @@ function normalizeNumber(value) {
 }
 
 function extractNumbers(value) {
-  return (String(value || "").match(/\d+(?:[.,]\d+)*/g) || []).map(normalizeNumber);
+  if (!value) return [];
+  const cleaned = String(value)
+    .replace(/\d+(?:\.\d+)?\s*[万萬亿億]/gu, " ");
+
+  const results = new Set();
+  const tokens = cleaned.match(/\d+(?:[.,]\d+)*/g) || [];
+  for (const token of tokens) {
+    const parts = token.split(/[.,]/);
+    const isFormattedThousand = parts.length === 2 && parts[1].length === 3 && parts[0].length <= 3;
+    const isFormattedMillion = parts.length === 3 && parts[1].length === 3 && parts[2].length === 3 && parts[0].length <= 3;
+    
+    if (isFormattedThousand || isFormattedMillion) {
+      const norm = token.replace(/[.,]/g, "").replace(/^0+(?=\d)/, "");
+      if (norm) results.add(norm);
+    } else if (parts.length > 1) {
+      if (parts.length === 2 && (parts[1].length === 1 || parts[1].length === 2)) {
+        const norm = token.replace(/^0+(?=\d)/, "");
+        if (norm) results.add(norm);
+      } else {
+        for (const p of parts) {
+          const norm = p.replace(/^0+(?=\d)/, "");
+          if (norm) results.add(norm);
+        }
+      }
+    } else {
+      const norm = token.replace(/^0+(?=\d)/, "");
+      if (norm) results.add(norm);
+    }
+  }
+  return Array.from(results);
 }
 
 function getScriptStats(value) {

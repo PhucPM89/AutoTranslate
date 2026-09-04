@@ -628,3 +628,16 @@ test("gemini-web config parses maxProfiles concurrency cleanly", () => {
   const config = getConfig({ maxProfiles: 3 });
   assert.equal(config.maxProfiles, 3);
 });
+
+test("assessTranslation handles comma lists and Chinese scale units without false rejections", () => {
+  const sourceWithCommaList = `${"这是中文正文内容。".repeat(40)}陈易此时正两耳不闻窗外事的认真画着符箓。“100,100,120,120……”黑日渐渐落下。`;
+  const outputWithCommaList = "Đây là bản dịch tiếng Việt hoàn chỉnh đầy đủ. ".repeat(6) + "Trần Dịch lúc này đang chuyên tâm vẽ phù lục. \"100, 100, 120, 120...\" Mặt trời đen dần lặn xuống.";
+  const result1 = assessTranslation(sourceWithCommaList, outputWithCommaList);
+  assert.equal(result1.acceptable, true);
+
+  const sourceWithScaleUnits = `${"这是中文正文内容。".repeat(40)}2998大区，还活着的800万人都在为这排行榜的第一名展开激烈的讨论。`;
+  const outputWithScaleUnits = "Đây là bản dịch tiếng Việt hoàn chỉnh đầy đủ. ".repeat(6) + "Khu 2998, 8 triệu người còn sống sót đều đang sôi nổi bàn tán về vị trí số một trên bảng xếp hạng.";
+  const result2 = assessTranslation(sourceWithScaleUnits, outputWithScaleUnits);
+  assert.equal(result2.acceptable, true);
+});
+
