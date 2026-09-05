@@ -33,11 +33,14 @@ function isNarrationLine(inner) {
   // 1. Third person entities & subjects
   if (/^(Hắn|Cậu|Y|Bọn họ|Đám người)\s+[a-zà-ỹ]/i.test(t)) return true;
   if (/^(Trần Dịch|Trần Hạo|Trần Kiến Quốc|Hoàng Nhân Hà|Bác Hoàng|Ông lão|Người đàn ông)\s+[a-zà-ỹ]/i.test(t)) return true;
+  if (/^(Trần Dịch|Trần Hạo|Trần Kiến Quốc|Hoàng Nhân Hà|Bác Hoàng|Ông lão|Người đàn ông|Lão giả|Thanh niên|Thiếu nữ)\s+[a-zà-ỹ]/i.test(t)) return true;
   if (/^(Trái tim|Đôi mắt|Ánh mắt|Gương mặt|Khuôn mặt|Bàn tay|Ngón tay|Hai tay|Dưới chân|Bước chân|Thân thể|Cơ thể|Nội dung tâm can|Cuộc sống)\s+[a-zà-ỹ]/i.test(t)) return true;
   if (/^(Một thanh|Một luồng|Một lớp|Lớp sương|Lớp lồng|Biểu cảm|Khoảng cách|Thời gian|Con búp bê|Búp bê tử linh|Quái vật|Khung cảnh|Không gian|Bên ngoài|Bên trong|Xung quanh|Trước mắt|Phía trước|Đằng sau)\s+[a-zà-ỹ]/i.test(t)) return true;
   if (/^(Sau đó|Cùng lúc đó|Cùng lúc|Trên đường đi|Trên đường|Trong lúc|Thấy vẫn|Biết rõ|Theo giây|Sau khi|Lúc này|Vừa dứt lời|Vừa dứt câu|Đột nhiên|Bỗng nhiên|Ngay sau đó|Chỉ chốc lát|Chẳng mấy chốc)\s+[a-zà-ỹ]/i.test(t)) return true;
   
   // 2. Clear narrative actions
+  if (/^(Một thanh|Một luồng|Một lớp|Lớp sương|Lớp lồng|Biểu cảm|Khoảng cách|Thời gian|Con búp bê|Búp bê tử linh|Quái vật|Khung cảnh|Không gian|Bên ngoài|Bên trong|Xung quanh|Trước mắt|Phía trước|Đằng sau|Mặt đất|Nơi đây|Đội)\s+[a-zà-ỹ]/i.test(t)) return true;
+  if (/^(Sau đó|Cùng lúc đó|Cùng lúc|Trên đường đi|Trên đường|Trong lúc|Thấy vẫn|Biết rõ|Theo giây|Sau khi|Lúc này|Vừa dứt lời|Vừa dứt câu|Đột nhiên|Bỗng nhiên|Ngay sau đó|Chỉ chốc lát|Chẳng mấy chốc|Nhưng lúc này|Không có thời gian|Chuyển sang|Tay nâng|Có cây|Chỉ có điều|Thế mà|sau này|Đòn tấn công|Dù cảm giác|Ngẫm nghĩ|Toàn thân)\s+[a-zà-ỹ]/i.test(t)) return true;
   if (/(kinh hãi nhìn|đập thình thịch|xuất hiện trong tay|cảm thấy trong cơ thể|dựa theo tốc độ|dồn lực|vẫn đứng yên|tiện miệng hỏi|nét mặt ngập tràn|lẩm bẩm một mình|không kịp suy nghĩ|mở ô chứa đồ|đón lấy|hết cách, đành phải|ngồi trong xe|trầm tư suy nghĩ|thở phào|nuốt một ngụm|hít một hơi|siết chặt|vung đao|giơ kiếm|xoay người|ngã gục|nói lời cảm ơn|ngồi xuống bên|ngậm miệng lại)/i.test(t)) {
     return true;
   }
@@ -54,11 +57,25 @@ function repairChapterText(title, content) {
   let text = content;
   
   // 1. Remove Chinese commas on their own lines or in lists
+  let text = String(content || "").replace(/\r\n?/g, "\n");
   text = text.replace(/^[ \t]*、[ \t]*$/gm, "");
   text = text.replace(/([^\n])\s*、\s*([^\n])/g, "$1, $2");
   text = text.replace(/、/g, ", ");
   
   // 2. Fix glued title at the start
+
+  // 1. Chinese fullwidth punctuation
+  text = text
+    .replace(/？/g, "?")
+    .replace(/！/g, "!")
+    .replace(/，/g, ", ")
+    .replace(/。/g, ". ")
+    .replace(/；/g, "; ")
+    .replace(/（/g, " (")
+    .replace(/）/g, ") ")
+    .replace(/、/g, ", ");
+
+  // 2. Fix glued title at start
   const cleanTitle = (title || "")
     .replace(/^Chương\s*\d+\s*[:.]?\s*/i, "")
     .replace(/[.:]+$/, "")
@@ -85,6 +102,15 @@ function repairChapterText(title, content) {
   text = text.replace(/\)([A-ZÀ-Ỹ])/g, ")\n\n$1");
   text = text.replace(/】([A-ZÀ-Ỹ])/g, "】\n\n$1");
 
+  // 3. Separate glued system prompts 【...】
+  text = text.replace(/^(【[^】\n]+】[:：]?\s*[^"“”\n]+?)["“]([A-ZÀ-Ỹ])/gmu, '$1\n\n"$2');
+  text = text.replace(/^[“"][ \t]*(【)/gm, "$1");
+  text = text.replace(/([?!\.]+)[ \t]*(【)/gu, "$1\n\n$2");
+  text = text.replace(/(【[^】\n]+】[:：]?\s*[^【\n]+?)[ \t]+(【[^】\n]+】)/gu, "$1\n\n$2");
+  text = text.replace(/(【[^】\n]+】)[ \t]*([“"'\p{L}])/gu, "$1\n\n$2");
+  text = text.replace(/([:：.!?…])[ \t]*(【)/g, "$1\n\n$2");
+  text = text.replace(/(】)[ \t]*([^\s\d,.;:!?…"'”’»）)\]}】])/gu, "$1\n\n$2");
+
   // Reconnect split parentheticals like (Mã số:\n2998-633-4228)
   text = text.replace(/([(（][^)\uff09\n]*[:：])[\s\n]+([0-9a-zA-ZÀ-ỹ-]+[)\uff09])/gu, "$1 $2");
 
@@ -94,11 +120,56 @@ function repairChapterText(title, content) {
   text = text.replace(/(["”])\)[ \t]*$/gmu, "$1");
   
   // 4. Line-by-line repair
+
+  // 4. Fix missing spaces around quotes and brackets
+  text = text.replace(/(?<![:：])[ \t]+([,.;:!?…])/gu, "$1");
+  text = text.replace(/([,.;:!?…])(?=[^\s\d,.;:!?…"'”’»）)\]}】」』])/gu, "$1 ");
+  text = text.replace(/([:：])(?=[^\s\d:：])/gu, "$1 ");
+  text = text.replace(/([\p{L}\p{N}])"([A-ZÀ-Ỹ])/gu, '$1 "$2');
+  text = text.replace(/(?<=[^\s])"([a-zà-ỹ])/gu, '" $1');
+  text = text.replace(/(?<=[^\s])"([A-ZÀ-Ỹ])/gu, '" $1');
+  text = text.replace(/(?<=[\p{L}\p{N}])"([^",.;!?\n]+?)"(?=[\p{L}\p{N}])/gu, ' "$1" ');
+  text = text.replace(/(?<=[\p{L}\p{N}])"([^",.;!?\n]+?)"(?=[,.;:!?…\s)\]}】])/gu, ' "$1"');
+  text = text.replace(/(?<=[.!?…—\-~])"(?=[\p{L}\p{N}])/gu, '" ');
+  text = text.replace(/([”’»])(?=[\p{L}\p{N}])/gu, '$1 ');
+  text = text.replace(/(?<=[\p{L}\p{N}])([“‘«])/gu, ' $1');
+  text = text.replace(/(^|[\s(【])"[ \t]+/gu, '$1"');
+  text = text.replace(/([“‘«])[ \t]+/gu, "$1");
+  text = text.replace(/[ \t]+"(?=[,.;:!?…\s)\]}】]|$)/gu, '"');
+  text = text.replace(/[ \t]+([”’»])/gu, "$1");
+
+  // 5. Terminology normalization
+  text = text.replace(/Sát Khí Bám Sát Khí/g, "Yểm Sát Khí");
+  text = text.replace(/Sát khí bám sát khí/g, "Yểm Sát Khí");
+  text = text.replace(/sát khí bám sát khí/g, "yểm sát khí");
+  text = text.replace(/Sát Khí Phụ Trám/g, "Yểm Sát Khí");
+  text = text.replace(/Sát khí phụ trám/g, "Yểm Sát Khí");
+  text = text.replace(/sát khí phụ trám/g, "yểm sát khí");
+  text = text.replace(/Sát khí phụ trét/g, "Yểm Sát Khí");
+  text = text.replace(/sát khí phụ trét/g, "yểm sát khí");
+  text = text.replace(/phụ trám/gi, "yểm sát khí");
+  text = text.replace(/bám sát khí lên vũ khí/gi, "phủ sát khí lên vũ khí");
+  text = text.replace(/Nội dung tâm can của Trần Dịch lúc này hoàn toàn sụp đổ/gi, "Nội tâm Trần Dịch lúc này gần như sụp đổ");
+  text = text.replace(/Nã Xuất Lai/g, "mang ra");
+  text = text.replace(/nã xuất lai/gi, "mang ra");
+  text = text.replace(/Nã Khởi Lai/g, "cầm lên");
+  text = text.replace(/nã khởi lai/gi, "cầm lên");
+  text = text.replace(/tiêu tiêu diệt/gi, "tiêu diệt");
+  text = text.replace(/khoảng cách cách/gi, "khoảng cách tới");
+  text = text.replace(/Bích Tà Đào Mộc Kiếm/g, "Tịch Tà Đào Mộc Kiếm");
+  text = text.replace(/bích tà đào mộc kiếm/g, "tịch tà đào mộc kiếm");
+  text = text.replace(/Bích Tà/g, "Tịch Tà");
+  text = text.replace(/bích tà/g, "tịch tà");
+
+  // 6. Line-by-line cleanup
   const lines = text.split("\n");
   const cleanedLines = [];
   
   for (let rawLine of lines) {
     let l = rawLine.trim();
+
+  for (let idx = 0; idx < lines.length; idx++) {
+    let l = lines[idx].trim();
     if (!l) {
       cleanedLines.push("");
       continue;
@@ -106,12 +177,22 @@ function repairChapterText(title, content) {
     
     // Remove isolated single-punctuation lines
     if (/^[."“”'、]+$/.test(l)) {
+
+    // Remove isolated single-punctuation lines or tiny junk
+    if (/^["“”'?[\]().,!…—\- \t\d、]+$/.test(l) && l.length <= 5) {
       continue;
     }
 
     // Strip trailing unclosed open parenthesis at end of stat line
+    // Line 0: check if chapter title is glued to first dialogue line
+    if (idx === 0 && /^([A-ZÀ-Ỹ0-9][^"“”\n]{2,40})["“]([A-ZÀ-Ỹ])/u.test(l)) {
+      l = l.replace(/^([A-ZÀ-Ỹ0-9][^"“”\n]{2,40})["“]([A-ZÀ-Ỹ])/u, '$1\n\n"$2');
+    }
+
+    // Strip trailing unclosed parenthesis at end of stat or title line
     l = l.replace(/([a-zA-Z0-9à-ỹÀ-Ỹ])[ \t]*[(（][ \t]*$/gu, "$1");
     
+
     // Fix stray quote at end of narration following dialogue
     const strayQuoteMatch = l.match(/^(".*?["”])\s+([^"“”]+)["”]$/);
     if (strayQuoteMatch) {
@@ -130,6 +211,32 @@ function repairChapterText(title, content) {
     
     // Check if line is falsely wrapped in quotes
     if ((l.startsWith('"') && l.endsWith('"')) || (l.startsWith('“') && l.endsWith('”'))) {
+
+    // Fix dialogue + narrative trailing quote: "Oà — oà —" Một con búp bê... của Trần Dịch."
+    const dialogueNarrativeQuote = l.match(/^("[^"]+")[ \t]+([^"]+)"$/);
+    if (dialogueNarrativeQuote) {
+      l = dialogueNarrativeQuote[1] + " " + dialogueNarrativeQuote[2];
+    }
+
+    // Fix dialogue followed by "......"
+    l = l.replace(/(["”])[ \t]*[….]+["”]$/, "$1");
+
+    // Check quotes count
+    const quoteChars = l.match(/["“”]/g) || [];
+    if (quoteChars.length % 2 === 1) {
+      if (/^[“"]/.test(l) && /[?!]$/.test(l) && !isNarrationLine(l.slice(1))) {
+        l = l + '"';
+      } else if (!/^[“"]/.test(l) && /[?!]["”]$/.test(l) && !isNarrationLine(l)) {
+        l = '"' + l;
+      } else if (/^[“"]/.test(l)) {
+        const withoutQuote = l.replace(/^[“"]\s*/, "");
+        if (isNarrationLine(withoutQuote) || /^[A-ZÀ-Ỹ]/.test(withoutQuote)) {
+          l = withoutQuote;
+        }
+      } else if (/["”]$/.test(l) && !/^[“"]/.test(l)) {
+        l = l.replace(/([.!?…])[ \t]*["”]+$/u, "$1");
+      }
+    } else if ((l.startsWith('"') && l.endsWith('"')) || (l.startsWith('“') && l.endsWith('”'))) {
       const inner = l.slice(1, -1).trim();
       if (isNarrationLine(inner)) {
         l = inner;
@@ -137,11 +244,11 @@ function repairChapterText(title, content) {
     }
 
     // Fix stray closing quote at end of narrative line that has no opening quote
-    const quoteChars = l.match(/["“”]/g) || [];
-    if (quoteChars.length % 2 === 1 && /["”]$/.test(l) && !/^[“"]/.test(l)) {
+    const quoteCharsAfter = l.match(/["“”]/g) || [];
+    if (quoteCharsAfter.length % 2 === 1 && /["”]$/.test(l) && !/^[“"]/.test(l)) {
       l = l.replace(/([.!?…])[ \t]*["”]+$/u, "$1");
     }
-    
+
     // Han-Viet & terminology normalization
     l = l.replace(/cao cử/gi, "giơ cao");
     l = l.replace(/Bích Tà Đào Mộc Kiếm/g, "Tịch Tà Đào Mộc Kiếm");
@@ -159,21 +266,11 @@ function repairChapterText(title, content) {
     l = l.replace(/Nội dung tâm can của Trần Dịch lúc này hoàn toàn sụp đổ/gi, "Nội tâm Trần Dịch lúc này gần như sụp đổ");
     l = l.replace(/quỷ Quái/g, "quỷ quái");
     l = l.replace(/Quỷ Quái/g, "Quỷ quái");
-    l = l.replace(/chưa nhập giai/gi, "chưa vào cấp");
-    l = l.replace(/Chưa nhập giai/gi, "Chưa vào cấp");
-    l = l.replace(/nhập giai/gi, "lên cấp");
-    l = l.replace(/thực lực cấp nhị giai/gi, "thực lực cấp hai");
-    l = l.replace(/cấp nhị giai/gi, "cấp hai");
-    l = l.replace(/nhị giai/gi, "cấp hai");
-    l = l.replace(/đệ nhất giai/gi, "cấp một");
-    l = l.replace(/đệ nhị giai/gi, "cấp hai");
-    l = l.replace(/đệ tam giai/gi, "cấp ba");
-    l = l.replace(/đệ tứ giai/gi, "cấp bốn");
-    l = l.replace(/đệ ngũ giai/gi, "cấp năm");
-    
+
     cleanedLines.push(l);
   }
   
+
   return cleanedLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 

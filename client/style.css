@@ -3144,6 +3144,7 @@ body:not(.dark) .theme-moon {
 .chapter-jump-control {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(52px, 1fr) auto auto;
   align-items: center;
   min-height: 42px;
   overflow: hidden;
@@ -3161,6 +3162,7 @@ body:not(.dark) .theme-moon {
 .chapter-jump-control input {
   width: 100%;
   min-width: 0;
+  min-width: 52px;
   min-height: 40px;
   padding: 0 0.25rem 0 0.7rem;
   border: 0;
@@ -4221,6 +4223,23 @@ body.theme-forest .document-text .tts-paragraph-highlight.tts-speaking {
 
   .metadata-row {
     max-width: 58vw;
+  }
+
+  .chapter-picker label {
+    display: none;
+  }
+
+  .chapter-jump-control {
+    grid-template-columns: minmax(48px, 1fr) auto auto;
+    width: 100%;
+    max-width: 160px;
+  }
+
+  .chapter-jump-control input {
+    min-width: 48px;
+    width: 100%;
+    text-align: center;
+    padding-left: 0.35rem;
   }
 }
 

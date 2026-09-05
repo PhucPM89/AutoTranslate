@@ -54,7 +54,7 @@ test("splitReaderParagraphs unites broken attribute table lines and cleans quote
   assert.equal(paragraphs[1], "【Tên gọi】: Huyết Nhãn Ô Quy");
   assert.equal(paragraphs[2], "【Chủng loại】: Tinh quái");
   assert.equal(paragraphs[3], "【Thực lực】: Chưa nhập giai");
-  assert.equal(paragraphs[4], "【Năng lực】:？？？");
+  assert.equal(paragraphs[4], "【Năng lực】: ???");
 });
 
 test("normalizeReaderText does not insert space after opening quote of dialogue", () => {
@@ -87,4 +87,30 @@ test("splitReaderParagraphs normalizes awkward phrases and separates evaluation 
   assert.equal(paragraphs[3], "Nội tâm Trần Dịch lúc này gần như sụp đổ.");
 });
 
+test("splitReaderParagraphs converts Chinese punctuation and separates glued attribute cards", () => {
+  const input = [
+    "【Thực lực】:？？？ 【Năng lực】:？？？",
+    'Người ta không Nã Xuất Lai bán.',
+    '"Bốp ——"Cành cây đang bén lửa bay tới.'
+  ].join("\n");
+  const paragraphs = splitReaderParagraphs(input);
+  assert.equal(paragraphs[0], "【Thực lực】: ???");
+  assert.equal(paragraphs[1], "【Năng lực】: ???");
+  assert.equal(paragraphs[2], "Người ta không mang ra bán.");
+  assert.equal(paragraphs[3], '"Bốp ——" Cành cây đang bén lửa bay tới.');
+});
 
+test("splitReaderParagraphs handles quoted clauses with commas and glued dialogues", () => {
+  const input = [
+    'nghe đến câu"Người ta có gì, muội cũng phải có cái đó", liền không kìm được',
+    'thông báo"Giao dịch thành công, đá +1"hiện lên.',
+    '"Bùa_nhẹ_thân. jpg"Hàng ngon đấy, ngươi vớ ở đâu ra thế?',
+    '【Năng lực】: Thạch hóa độc dịch"Tổng cộng có ba con, thực lực không mạnh'
+  ].join("\n");
+  const paragraphs = splitReaderParagraphs(input);
+  assert.equal(paragraphs[0], 'nghe đến câu "Người ta có gì, muội cũng phải có cái đó", liền không kìm được');
+  assert.equal(paragraphs[1], 'thông báo "Giao dịch thành công, đá +1" hiện lên.');
+  assert.equal(paragraphs[2], '"Bùa_nhẹ_thân. jpg" Hàng ngon đấy, ngươi vớ ở đâu ra thế?');
+  assert.equal(paragraphs[3], '【Năng lực】: Thạch hóa độc dịch');
+  assert.equal(paragraphs[4], '"Tổng cộng có ba con, thực lực không mạnh');
+});

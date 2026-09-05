@@ -11,19 +11,39 @@ function normalizeReaderLine(value) {
   text = text
     .replace(/[\u00a0\u3000\u2000-\u200b\u2028\u2029]/g, " ")
     .replace(/[ \t\f\v]+/g, " ")
-    .replace(/[ \t]+([,.;:!?…，。！？；：])/g, "$1")
-    .replace(/([】」』)\]}])[ \t]+([,.;:!?…，。！？；：])/gu, "$1$2")
-    .replace(/([,.;:!?…，。！？；：])(?=[^\s\d,.;:!?…，。！？；："'”’»）)\]}】」』])/g, "$1 ")
+    .replace(/？/g, "?")
+    .replace(/！/g, "!")
+    .replace(/，/g, ", ")
+    .replace(/。/g, ". ")
+    .replace(/；/g, "; ")
+    .replace(/（/g, " (")
+    .replace(/）/g, ") ")
+    .replace(/、/g, ", ")
+    .replace(/(?<![:：])[ \t]+([,.;:!?…])/gu, "$1")
+    .replace(/([】」』)\]}])[ \t]+([,.;:!?…])/gu, "$1$2")
+    .replace(/([,.;:!?…])(?=[^\s\d,.;:!?…"'”’»）)\]}】」』])/g, "$1 ")
+    .replace(/([:：])(?=[^\s\d:：])/gu, "$1 ")
+    .replace(/(?<=[\p{L}\p{N}])"([^",.;!?\n]+?)"(?=[\p{L}\p{N}])/gu, ' "$1" ')
+    .replace(/(?<=[\p{L}\p{N}])"([^",.;!?\n]+?)"(?=[,.;:!?…\s)\]}】])/gu, ' "$1"')
+    .replace(/"([^"\n]+?)"(?=[\p{L}\p{N}])/gu, '"$1" ')
+    .replace(/([\p{L}\p{N}])"([A-ZÀ-Ỹ])/gu, '$1 "$2')
+    .replace(/(?<=[^\s])"([a-zà-ỹ])/gu, '" $1')
+    .replace(/(?<=[^\s])"([A-ZÀ-Ỹ])/gu, '" $1')
+    .replace(/(?<=[.!?…—\-~])"(?=[\p{L}\p{N}])/gu, '" ')
+    .replace(/([”’»])(?=[\p{L}\p{N}])/gu, "$1 ")
+    .replace(/(?<=[\p{L}\p{N}])([“‘«])/gu, " $1")
     .replace(/([.!?…])(["“‘«【「『])(?=\p{L})/gu, "$1 $2")
     .replace(/([:：])[ \t]*(["“‘«【「『])/g, "$1 $2")
-    .replace(/(["“‘«【「『])[ \t]+/g, "$1")
-    .replace(/[ \t]+(["”’»】」』])/g, "$1")
-    .replace(/([?!。！？…])[ \t]*(["”’»】」』])(?=\S)/g, "$1$2 ")
-    .replace(/(?<=[.!?…，。！？；：\p{L}\p{N}—\-])(["”’»])(?=[\p{L}\p{N}])/gu, "$1 ")
+    .replace(/([“‘«【「『])[ \t]+/g, "$1")
+    .replace(/[ \t]+([”’»】」』])/g, "$1")
+    .replace(/([?!…])[ \t]*(["”’»】」』])(?=\S)/g, "$1$2 ")
+    .replace(/(?<=[.!?…—\-])([”’»])(?=[\p{L}\p{N}])/gu, "$1 ")
+    .replace(/(^|[\s(【])"[ \t]+/gu, '$1"')
+    .replace(/[ \t]+"(?=[,.;:!?…\s)\]}】]|$)/gu, '"')
     .replace(/([:：])[ \t]*(["“‘«【「『])[ \t]*/g, "$1 $2")
-    .replace(/([.。])[ \t]*(["“‘«【「『])[ \t]*(?=\p{L})/gu, "$1 $2")
-    .replace(/([!?！？…])[ \t]*(["”’»】」』])[ \t]*(?=\p{L})/gu, "$1$2 ")
-    .replace(/[ \t]+([,.;:!?…])/g, "$1")
+    .replace(/([.])[ \t]*(["“‘«【「『])[ \t]*(?=\p{L})/gu, "$1 $2")
+    .replace(/([!?…])[ \t]*(["”’»】」』])[ \t]*(?=\p{L})/gu, "$1$2 ")
+    .replace(/(?<![:：])[ \t]+([,.;:!?…])/gu, "$1")
     .replace(/[ \t]{2,}/g, " ")
     .trim();
 
@@ -31,8 +51,8 @@ function normalizeReaderLine(value) {
   text = text.replace(/^[】」』)\]}]+[ \t]*/, "");
 
   // Clean quote spacing: remove space after opening quote and before closing quote
-  text = text.replace(/(^|[\s(])(["“‘«【「『])\s+([^\s])/gu, "$1$2$3");
-  text = text.replace(/([^\s])\s+(["”’»】」』])(?=[\s.,;:!?…。！？；：)]|$)/gu, "$1$2");
+  text = text.replace(/(^|[\s(])([“‘«【「『])\s+([^\s])/gu, "$1$2$3");
+  text = text.replace(/([^\s])\s+([”’»】」』])(?=[\s.,;:!?…。！？；：)]|$)/gu, "$1$2");
 
   // Strip extraneous quotes around attribute values like 【Thực lực】: "Chưa nhập giai..."
   text = text.replace(/^(【[^】]+】[:：]?)[ \t]*["“]([^"”]+)["”]?$/, "$1 $2");
@@ -77,8 +97,28 @@ function preprocessSystemBlocks(raw) {
   text = text.replace(/Sát Khí Phụ Trám/g, "Yểm Sát Khí");
   text = text.replace(/Sát khí phụ trám/g, "Yểm Sát Khí");
   text = text.replace(/sát khí phụ trám/g, "yểm sát khí");
+  text = text.replace(/Sát khí phụ trét/g, "Yểm Sát Khí");
+  text = text.replace(/sát khí phụ trét/g, "yểm sát khí");
+  text = text.replace(/phụ trám/gi, "yểm sát khí");
   text = text.replace(/bám sát khí lên vũ khí/gi, "phủ sát khí lên vũ khí");
   text = text.replace(/Nội dung tâm can của Trần Dịch lúc này hoàn toàn sụp đổ/gi, "Nội tâm Trần Dịch lúc này gần như sụp đổ");
+  text = text.replace(/Nã Xuất Lai/g, "mang ra");
+  text = text.replace(/nã xuất lai/gi, "mang ra");
+  text = text.replace(/Nã Khởi Lai/g, "cầm lên");
+  text = text.replace(/nã khởi lai/gi, "cầm lên");
+  text = text.replace(/tiêu tiêu diệt/gi, "tiêu diệt");
+  text = text.replace(/khoảng cách cách/gi, "khoảng cách tới");
+  text = text.replace(/Bích Tà Đào Mộc Kiếm/g, "Tịch Tà Đào Mộc Kiếm");
+  text = text.replace(/bích tà đào mộc kiếm/g, "tịch tà đào mộc kiếm");
+  text = text.replace(/Bích Tà/g, "Tịch Tà");
+  text = text.replace(/bích tà/g, "tịch tà");
+
+  // Separate glued attribute items like 【Thực lực】: ??? 【Năng lực】: ???
+  text = text.replace(/^(【[^】\n]+】[:：]?\s*[^"“”\n]+?)["“]([A-ZÀ-Ỹ])/gmu, '$1\n\n"$2');
+  text = text.replace(/^[“"][ \t]*(【)/gm, "$1");
+  text = text.replace(/([?？!！.]+)[ \t]*(【)/gu, "$1\n\n$2");
+  text = text.replace(/(【[^】\n]+】[:：]?\s*[^【\n]+?)[ \t]+(【[^】\n]+】)/gu, "$1\n\n$2");
+  text = text.replace(/(【[^】\n]+】)[ \t]*([“"'\p{L}])/gu, "$1\n\n$2");
 
   // 1. Separate glued system prompts 【...】【...】 or colon/period before 【
   text = text
