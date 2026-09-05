@@ -116,31 +116,9 @@ function getActiveKeys(apiKeys) {
   return parseApiKeys(fromEnv);
 }
 
-const { translateTextWithHachimi } = require("./hachimi");
-
 async function translateText(text, apiKeys, options = {}) {
   const forceCloud = options.provider === "cloud" || options.forceCloud || options.forceGemini;
   const isGeminiWeb = !forceCloud && (options.provider === "gemini-web" || process.env.TRANSLATION_PROVIDER === "gemini-web");
-  const isHachimi =
-    !isGeminiWeb && !forceCloud && options.provider !== "gemini" &&
-    (options.provider === "hachimi" ||
-      (process.env.TRANSLATION_PROVIDER === "hachimi" && !options.forceGemini && options.provider !== "gemini") ||
-      (Boolean(process.env.HACHIMI_API_URL) && !apiKeys && !process.env.GEMINI_API_KEY));
-
-  if (isHachimi) {
-    const res = await translateTextWithHachimi(text, {
-      apiUrl: options.apiUrl || process.env.HACHIMI_API_URL,
-      glossary: options.glossary
-    });
-    return {
-      translation: res.translation,
-      chunkCount: 1,
-      modelsUsed: [res.model || "HachimiMT"],
-      tokensUsed: 0,
-      startedAt: Date.now() - (res.latencyMs || 0),
-      durationMs: res.latencyMs || 0
-    };
-  }
 
   const structuralStub = translateStructuralStub(text);
   if (structuralStub) {
@@ -209,7 +187,7 @@ async function translateText(text, apiKeys, options = {}) {
     }
   } else {
     const keyList = getActiveKeys(apiKeys);
-    if (!keyList.length) throw new Error("Thiếu GROQ_API_KEY / GEMINI_API_KEY (hoặc HACHIMI_API_URL).");
+    if (!keyList.length) throw new Error("Thiếu GROQ_API_KEY / GEMINI_API_KEY.");
     chunkResults = await mapWithConcurrency(
       chunks,
       Math.max(1, TRANSLATE_CONCURRENCY),
