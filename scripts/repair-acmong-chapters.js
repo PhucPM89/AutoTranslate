@@ -84,6 +84,14 @@ function repairChapterText(title, content) {
   // 3. Split system evaluation / parentheses glued to narration
   text = text.replace(/\)([A-ZÀ-Ỹ])/g, ")\n\n$1");
   text = text.replace(/】([A-ZÀ-Ỹ])/g, "】\n\n$1");
+
+  // Reconnect split parentheticals like (Mã số:\n2998-633-4228)
+  text = text.replace(/([(（][^)\uff09\n]*[:：])[\s\n]+([0-9a-zA-ZÀ-ỹ-]+[)\uff09])/gu, "$1 $2");
+
+  // Separate evaluation blocks attached to end of stat: ...) (Đánh giá:\n"...")
+  text = text.replace(/([^\n])[ \t]*[(（]Đánh giá[:：][\s\n]*/gu, "$1\n\n【Đánh giá】: ");
+  text = text.replace(/^[ \t]*[(（]Đánh giá[:：][\s\n]*/gmu, "【Đánh giá】: ");
+  text = text.replace(/(["”])\)[ \t]*$/gmu, "$1");
   
   // 4. Line-by-line repair
   const lines = text.split("\n");
@@ -100,6 +108,9 @@ function repairChapterText(title, content) {
     if (/^[."“”'、]+$/.test(l)) {
       continue;
     }
+
+    // Strip trailing unclosed open parenthesis at end of stat line
+    l = l.replace(/([a-zA-Z0-9à-ỹÀ-Ỹ])[ \t]*[(（][ \t]*$/gu, "$1");
     
     // Fix stray quote at end of narration following dialogue
     const strayQuoteMatch = l.match(/^(".*?["”])\s+([^"“”]+)["”]$/);
@@ -124,29 +135,41 @@ function repairChapterText(title, content) {
         l = inner;
       }
     }
+
+    // Fix stray closing quote at end of narrative line that has no opening quote
+    const quoteChars = l.match(/["“”]/g) || [];
+    if (quoteChars.length % 2 === 1 && /["”]$/.test(l) && !/^[“"]/.test(l)) {
+      l = l.replace(/([.!?…])[ \t]*["”]+$/u, "$1");
+    }
     
     // Han-Viet & terminology normalization
-    l = l.replace(/\bcao cử\b/gi, "giơ cao");
-    l = l.replace(/\bBích Tà Đào Mộc Kiếm\b/g, "Tịch Tà Đào Mộc Kiếm");
-    l = l.replace(/\bbích tà đào mộc kiếm\b/g, "tịch tà đào mộc kiếm");
-    l = l.replace(/\bBích Tà\b/g, "Tịch Tà");
-    l = l.replace(/\bbích tà\b/g, "tịch tà");
-    l = l.replace(/\bSát Khí Phụ Trám\b/g, "Sát Khí Bám");
-    l = l.replace(/\bsát khí phụ trám\b/g, "sát khí bám");
-    l = l.replace(/\bphụ trám\b/gi, "bám sát khí");
-    l = l.replace(/\bquỷ Quái\b/g, "quỷ quái");
-    l = l.replace(/\bQuỷ Quái\b/g, "Quỷ quái");
-    l = l.replace(/\bchưa nhập giai\b/gi, "chưa vào cấp");
-    l = l.replace(/\bChưa nhập giai\b/gi, "Chưa vào cấp");
-    l = l.replace(/\bnhập giai\b/gi, "lên cấp");
-    l = l.replace(/\bcấp nhị giai\b/gi, "cấp hai");
-    l = l.replace(/\bthực lực cấp nhị giai\b/gi, "thực lực cấp hai");
-    l = l.replace(/\bnhị giai\b/gi, "cấp hai");
-    l = l.replace(/\bđệ nhất giai\b/gi, "cấp một");
-    l = l.replace(/\bđệ nhị giai\b/gi, "cấp hai");
-    l = l.replace(/\bđệ tam giai\b/gi, "cấp ba");
-    l = l.replace(/\bđệ tứ giai\b/gi, "cấp bốn");
-    l = l.replace(/\bđệ ngũ giai\b/gi, "cấp năm");
+    l = l.replace(/cao cử/gi, "giơ cao");
+    l = l.replace(/Bích Tà Đào Mộc Kiếm/g, "Tịch Tà Đào Mộc Kiếm");
+    l = l.replace(/bích tà đào mộc kiếm/g, "tịch tà đào mộc kiếm");
+    l = l.replace(/Bích Tà/g, "Tịch Tà");
+    l = l.replace(/bích tà/g, "tịch tà");
+    l = l.replace(/Sát Khí Bám Sát Khí/g, "Yểm Sát Khí");
+    l = l.replace(/Sát khí bám sát khí/g, "Yểm Sát Khí");
+    l = l.replace(/sát khí bám sát khí/g, "yểm sát khí");
+    l = l.replace(/Sát Khí Phụ Trám/g, "Yểm Sát Khí");
+    l = l.replace(/Sát khí phụ trám/g, "Yểm Sát Khí");
+    l = l.replace(/sát khí phụ trám/g, "yểm sát khí");
+    l = l.replace(/phụ trám/gi, "yểm sát khí");
+    l = l.replace(/bám sát khí lên vũ khí/gi, "phủ sát khí lên vũ khí");
+    l = l.replace(/Nội dung tâm can của Trần Dịch lúc này hoàn toàn sụp đổ/gi, "Nội tâm Trần Dịch lúc này gần như sụp đổ");
+    l = l.replace(/quỷ Quái/g, "quỷ quái");
+    l = l.replace(/Quỷ Quái/g, "Quỷ quái");
+    l = l.replace(/chưa nhập giai/gi, "chưa vào cấp");
+    l = l.replace(/Chưa nhập giai/gi, "Chưa vào cấp");
+    l = l.replace(/nhập giai/gi, "lên cấp");
+    l = l.replace(/thực lực cấp nhị giai/gi, "thực lực cấp hai");
+    l = l.replace(/cấp nhị giai/gi, "cấp hai");
+    l = l.replace(/nhị giai/gi, "cấp hai");
+    l = l.replace(/đệ nhất giai/gi, "cấp một");
+    l = l.replace(/đệ nhị giai/gi, "cấp hai");
+    l = l.replace(/đệ tam giai/gi, "cấp ba");
+    l = l.replace(/đệ tứ giai/gi, "cấp bốn");
+    l = l.replace(/đệ ngũ giai/gi, "cấp năm");
     
     cleanedLines.push(l);
   }

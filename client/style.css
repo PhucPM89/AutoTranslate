@@ -3793,7 +3793,7 @@ body:not(.dark) .theme-moon {
   word-spacing: normal;
   text-align: left;
   text-wrap: pretty;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   word-break: normal;
   hyphens: none;
   padding: 4px 0;
@@ -3804,6 +3804,34 @@ body:not(.dark) .theme-moon {
 .document-text p:last-child,
 .document-text .tts-paragraph-highlight:last-child {
   margin-bottom: var(--space-4);
+}
+
+/* System status window lines (e.g. 【Họ tên】, 【Thể chất】, 【Kỹ năng】) */
+.document-text p.system-stat-line,
+.document-text .tts-paragraph-highlight.system-stat-line {
+  margin-bottom: 0.4em;
+  padding: 0.35rem 0.75rem;
+  background: rgba(212, 175, 55, 0.05);
+  border-left: 2.5px solid rgba(212, 175, 55, 0.6);
+  border-radius: 4px;
+  font-family: var(--font-sans, "Plus Jakarta Sans", system-ui, sans-serif);
+  font-size: 0.94em;
+  line-height: 1.6;
+  letter-spacing: 0.01em;
+}
+
+.document-text p.system-stat-line + p:not(.system-stat-line) {
+  margin-top: 1.25em;
+}
+
+body.theme-sepia .document-text p.system-stat-line {
+  background: rgba(180, 120, 40, 0.08);
+  border-left-color: rgba(180, 120, 40, 0.65);
+}
+
+body.theme-light .document-text p.system-stat-line {
+  background: rgba(180, 120, 40, 0.06);
+  border-left-color: rgba(180, 120, 40, 0.55);
 }
 
 .document-text p:hover {
@@ -4143,7 +4171,15 @@ body.theme-forest .document-text .tts-paragraph-highlight.tts-speaking {
   }
 
   .document-text {
-    line-height: 1.72;
+    line-height: 1.8;
+  }
+
+  .document-text p,
+  .document-text .tts-paragraph-highlight {
+    line-height: 1.8;
+    margin-bottom: 1.2em;
+    overflow-wrap: break-word;
+    word-break: normal;
   }
 
   .document-text.empty {
@@ -6870,9 +6906,9 @@ body.zen-mode .document-paper {
   color: #d8b4fe;
 }
 
-@media (hover: none) {
+@media (hover: none), (max-width: 720px) {
   .paragraph-comment-bubble.is-empty {
-    opacity: 0.45;
+    display: none !important;
   }
 }
 

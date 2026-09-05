@@ -4193,6 +4193,9 @@ function renderReaderText(text) {
   paragraphs.forEach((pText, i) => {
     const pEl = document.createElement("p");
     pEl.className = "tts-paragraph-highlight";
+    if (pText.startsWith("【") || /^[【(（].*[:：]/.test(pText)) {
+      pEl.classList.add("system-stat-line");
+    }
     pEl.dataset.parIndex = String(i);
     pEl.textContent = pText;
     pEl.addEventListener("click", () => {

@@ -9,9 +9,10 @@ function normalizeReaderLine(value) {
   if (!text.trim()) return "";
 
   text = text
-    .replace(/\u00a0/g, " ")
+    .replace(/[\u00a0\u3000\u2000-\u200b\u2028\u2029]/g, " ")
     .replace(/[ \t\f\v]+/g, " ")
     .replace(/[ \t]+([,.;:!?…，。！？；：])/g, "$1")
+    .replace(/([】」』)\]}])[ \t]+([,.;:!?…，。！？；：])/gu, "$1$2")
     .replace(/([,.;:!?…，。！？；：])(?=[^\s\d,.;:!?…，。！？；："'”’»）)\]}】」』])/g, "$1 ")
     .replace(/([.!?…])(["“‘«【「『])(?=\p{L})/gu, "$1 $2")
     .replace(/([:：])[ \t]*(["“‘«【「『])/g, "$1 $2")
@@ -46,11 +47,38 @@ function normalizeReaderLine(value) {
     text = dialogueNarrativeQuote[1] + " " + dialogueNarrativeQuote[2];
   }
 
+  // Fix stray closing quote at end of narrative line that has no opening quote
+  const quoteChars = text.match(/["“”]/g) || [];
+  if (quoteChars.length % 2 === 1 && /["”]$/.test(text) && !/^[“"]/.test(text)) {
+    text = text.replace(/([.!?…])[ \t]*["”]+$/u, "$1");
+  }
+
+  // Strip trailing unclosed parenthesis at end of stat or title line
+  text = text.replace(/([a-zA-Z0-9à-ỹÀ-Ỹ])[ \t]*[(（][ \t]*$/gu, "$1");
+
   return text.normalize("NFC");
 }
 
 function preprocessSystemBlocks(raw) {
   let text = String(raw || "").replace(/\r\n?/g, "\n");
+
+  // Reconnect split parenthetical values like (Mã số:\n2998-633-4228)
+  text = text.replace(/([(（][^)\uff09\n]*[:：])[\s\n]+([0-9a-zA-ZÀ-ỹ-]+[)\uff09])/gu, "$1 $2");
+
+  // Separate evaluation blocks attached to end of stat: ...) (Đánh giá:\n"...")
+  text = text.replace(/([^\n])[ \t]*[(（]Đánh giá[:：][\s\n]*/gu, "$1\n\n【Đánh giá】: ");
+  text = text.replace(/^[ \t]*[(（]Đánh giá[:：][\s\n]*/gmu, "【Đánh giá】: ");
+  text = text.replace(/(["”])\)[ \t]*$/gmu, "$1");
+
+  // Normalize specific awkward phrasing
+  text = text.replace(/Sát Khí Bám Sát Khí/g, "Yểm Sát Khí");
+  text = text.replace(/Sát khí bám sát khí/g, "Yểm Sát Khí");
+  text = text.replace(/sát khí bám sát khí/g, "yểm sát khí");
+  text = text.replace(/Sát Khí Phụ Trám/g, "Yểm Sát Khí");
+  text = text.replace(/Sát khí phụ trám/g, "Yểm Sát Khí");
+  text = text.replace(/sát khí phụ trám/g, "yểm sát khí");
+  text = text.replace(/bám sát khí lên vũ khí/gi, "phủ sát khí lên vũ khí");
+  text = text.replace(/Nội dung tâm can của Trần Dịch lúc này hoàn toàn sụp đổ/gi, "Nội tâm Trần Dịch lúc này gần như sụp đổ");
 
   // 1. Separate glued system prompts 【...】【...】 or colon/period before 【
   text = text
@@ -70,6 +98,15 @@ function preprocessSystemBlocks(raw) {
         curr = curr + " " + next;
         i++;
       }
+    } else if (/[(（][^)\uff09]*$/.test(curr) && i + 1 < lines.length && !lines[i + 1].startsWith("【")) {
+      const next = lines[i + 1].trim();
+      if (/[)\uff09]/.test(next)) {
+        curr = curr + " " + next;
+        i++;
+      }
+    }
+    if (curr.startsWith("【Đánh giá】:") && /["”]\)$/.test(curr)) {
+      curr = curr.replace(/["”]\)$/, '"');
     }
     reconnected.push(curr);
   }

@@ -62,3 +62,29 @@ test("normalizeReaderText does not insert space after opening quote of dialogue"
   assert.equal(normalizeReaderText(input), '"Oà — oà —" Một con búp bê kêu lên.');
 });
 
+test("splitReaderParagraphs reconnects broken parentheticals like (Mã số:\\n2998...)", () => {
+  const input = [
+    "【Họ tên】: Trần Dịch (Mã số:",
+    "2998-633-4228)",
+    "【Thể chất】: Tam giai viên mãn ("
+  ].join("\n");
+  const paragraphs = splitReaderParagraphs(input);
+  assert.equal(paragraphs[0], "【Họ tên】: Trần Dịch (Mã số: 2998-633-4228)");
+  assert.equal(paragraphs[1], "【Thể chất】: Tam giai viên mãn");
+});
+
+test("splitReaderParagraphs normalizes awkward phrases and separates evaluation blocks", () => {
+  const input = [
+    '【Năng lượng】: 10(Đánh giá:',
+    '"Giao diện tân thủ hoàn toàn vô dụng...")',
+    'Trong lòng thầm niệm: "Sát khí bám sát khí!"',
+    'Nội dung tâm can của Trần Dịch lúc này hoàn toàn sụp đổ.'
+  ].join("\n");
+  const paragraphs = splitReaderParagraphs(input);
+  assert.equal(paragraphs[0], "【Năng lượng】: 10");
+  assert.equal(paragraphs[1], "【Đánh giá】: Giao diện tân thủ hoàn toàn vô dụng...");
+  assert.equal(paragraphs[2], 'Trong lòng thầm niệm: "Yểm Sát Khí!"');
+  assert.equal(paragraphs[3], "Nội tâm Trần Dịch lúc này gần như sụp đổ.");
+});
+
+
