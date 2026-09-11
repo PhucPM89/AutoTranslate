@@ -31,6 +31,7 @@ import {
   CREATION_STATUSES
 } from "../server/crawler-store.js";
 import { createR2BindingStorage } from "./r2-storage.js";
+import { synthesizeEdgeSpeech } from "../server/edge-tts.js";
 
 const COOKIE_NAME = "tangthu_admin";
 const SESSION_TTL_SECONDS = 30 * 60;
@@ -64,6 +65,7 @@ const ROUTES = {
   "/api/reader/content": handlePublicReaderContent,
   "/api/reader/report-issue": handleReaderIssueReport,
   "/api/reader/term-feedback": handleTermFeedback,
+  "/api/reader/tts": handleReaderTts,
   "/api/admin/keys": handleAdminKeys,
   "/api/admin/session": handleSession,
   "/api/admin/login": handleLogin,
@@ -97,6 +99,20 @@ export async function handleApiRequest({ request, env }) {
   }
 }
 
+async function handleReaderTts({ request }) {
+  if (request.method !== "POST") return methodNotAllowed("POST");
+  requireSameOrigin(request);
+  const body = await readJson(request);
+  const audio = await synthesizeEdgeSpeech(body?.text);
+  return new Response(audio, {
+    status: 200,
+    headers: {
+      "Content-Type": "audio/mpeg",
+      "Cache-Control": "no-store",
+      "X-TTS-Voice": "vi-VN-HoaiMyNeural"
+    }
+  });
+}
 // ---- public catalog --------------------------------------------------------
 async function handlePublicCatalog({ request, env }) {
   if (request.method !== "GET" && request.method !== "HEAD") return methodNotAllowed("GET, HEAD");
@@ -2372,7 +2388,7 @@ function contentSecurityPolicy(env) {
     "style-src 'self'",
     // The CDN for chapters, Supabase for analytics, R2 S3 endpoint, and Gemini API.
     `connect-src 'self'${cdn ? ` ${cdn}` : ""} https://*.supabase.co https://*.r2.cloudflarestorage.com https://generativelanguage.googleapis.com https://gateway.ai.cloudflare.com`,
-    "media-src 'none'",
+    "media-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
     "frame-ancestors 'none'",

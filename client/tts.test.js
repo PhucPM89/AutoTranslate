@@ -2,7 +2,13 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { TTSEngine } = require("./tts.js");
+const { TTSEngine, TTS_VOICE, splitLongParagraph } = require("./tts.js");
+
+test("TTSEngine: exposes only the shared Hoai My Edge voice", () => {
+  const tts = new TTSEngine();
+  assert.equal(TTS_VOICE.voiceURI, "vi-VN-HoaiMyNeural");
+  assert.deepEqual(tts.getAvailableVoices().map((voice) => voice.voiceURI), ["vi-VN-HoaiMyNeural"]);
+});
 
 test("TTSEngine: text segmentation and paragraph loading", () => {
   const tts = new TTSEngine();
@@ -57,5 +63,42 @@ test("TTSEngine: stop() cleans up active utterances", () => {
   assert.equal(tts.isPlaying, false);
   assert.equal(tts.isPaused, false);
   assert.equal(tts._utterances.size, 0);
+});
+
+test("TTSEngine: splits oversized paragraphs before sending them to Edge-TTS", () => {
+  const chunks = splitLongParagraph(`${"Một câu truyện dài. ".repeat(200)}`.trim());
+  assert.ok(chunks.length > 1);
+  assert.ok(chunks.every((chunk) => chunk.length <= 2800));
+  assert.equal(chunks.join(" ").replace(/\s+/g, " "), `${"Một câu truyện dài. ".repeat(200)}`.trim());
+});
+
+test("TTSEngine: reuses locally cached audio instead of synthesizing twice", async () => {
+  const originalFetch = global.fetch;
+  const originalCaches = global.caches;
+  const entries = new Map();
+  let requests = 0;
+  global.caches = {
+    async open() {
+      return {
+        async match(key) { return entries.get(key)?.clone(); },
+        async put(key, response) { entries.set(key, response.clone()); }
+      };
+    }
+  };
+  global.fetch = async () => {
+    requests += 1;
+    return new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "Content-Type": "audio/mpeg" } });
+  };
+
+  try {
+    const first = new TTSEngine();
+    const second = new TTSEngine();
+    assert.equal((await first.getAudioBlob("Một đoạn truyện.")).size, 3);
+    assert.equal((await second.getAudioBlob("Một đoạn truyện.")).size, 3);
+    assert.equal(requests, 1);
+  } finally {
+    global.fetch = originalFetch;
+    global.caches = originalCaches;
+  }
 });
 

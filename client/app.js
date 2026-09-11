@@ -3038,7 +3038,7 @@ function initTTSController() {
     }
   };
 
-  ttsEngine.onStateChange = ({ isPlaying, isPaused, hasTimer, timerLabel, currentIndex, totalParagraphs }) => {
+  ttsEngine.onStateChange = ({ isPlaying, isPaused, isLoading, hasTimer, timerLabel, currentIndex, totalParagraphs }) => {
     const active = isPlaying || isPaused;
     
     if (els.ttsAudioBar) {
@@ -3049,7 +3049,7 @@ function initTTSController() {
       els.floatingAudioBar.hidden = !active;
       if (els.floatingAudioTitle) els.floatingAudioTitle.textContent = displayChapterTitle(state.currentIndex);
       if (els.floatingAudioProgress) {
-        els.floatingAudioProgress.textContent = totalParagraphs ? `Đoạn ${currentIndex + 1} / ${totalParagraphs}` : "Đang phát...";
+        els.floatingAudioProgress.textContent = isLoading ? "Đang tạo giọng Hoài My..." : (totalParagraphs ? `Đoạn ${currentIndex + 1} / ${totalParagraphs}` : "Đang phát...");
       }
       const fPlayIcon = els.floatingAudioPlayPause?.querySelector(".audio-icon-play");
       const fPauseIcon = els.floatingAudioPlayPause?.querySelector(".audio-icon-pause");
@@ -3060,10 +3060,10 @@ function initTTSController() {
       els.ttsToggleBtn.classList.toggle("is-active", active);
     }
     if (els.ttsToggleLabel) {
-      els.ttsToggleLabel.textContent = isPlaying ? (isPaused ? "Đang dừng" : "Đang đọc") : "Nghe đọc";
+      els.ttsToggleLabel.textContent = isPlaying ? (isPaused ? "Đang dừng" : (isLoading ? "Đang tạo giọng" : "Đang đọc")) : "Hoài My";
     }
     if (els.ttsStatusText) {
-      els.ttsStatusText.textContent = isPaused ? "Tạm dừng" : "Đang phát...";
+      els.ttsStatusText.textContent = isPaused ? "Tạm dừng" : (isLoading ? "Đang tạo giọng Hoài My..." : "Đang phát...");
     }
     const playIcon = els.ttsPlayPauseBtn?.querySelector(".tts-icon-play");
     const pauseIcon = els.ttsPlayPauseBtn?.querySelector(".tts-icon-pause");
@@ -3079,6 +3079,10 @@ function initTTSController() {
     if (els.floatingAudioTimerLabel) {
       els.floatingAudioTimerLabel.textContent = timerLabel || "Tắt";
     }
+  };
+
+  ttsEngine.onError = (message) => {
+    showToast(message || "Không tạo được giọng đọc. Vui lòng thử lại.");
   };
 
   ttsEngine.onTimerTick = (timeStr) => {
@@ -3171,7 +3175,7 @@ function initTTSController() {
     if (!available.length) {
       const opt = document.createElement("option");
       opt.value = "";
-      opt.textContent = "🇻🇳 Giọng tiếng Việt (Mặc định)";
+      opt.textContent = "🇻🇳 Hoài My";
       els.ttsVoiceSelect.appendChild(opt);
       return;
     }
