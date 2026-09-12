@@ -4,6 +4,7 @@
 const TTS_ENDPOINT = "/api/reader/tts";
 const TTS_CACHE = "tram-chu-tts-v1";
 const TTS_VOICE = Object.freeze({ name: "Microsoft Hoài My (Edge-TTS)", voiceURI: "vi-VN-HoaiMyNeural", lang: "vi-VN" });
+const TTS_MAX_CONSECUTIVE_ERRORS = 3;
 
 class TTSEngine {
   constructor() {
@@ -23,6 +24,7 @@ class TTSEngine {
     this._pending = new Map();
     this._memoryCache = new Map();
     this._utterances = new Set();
+    this._consecutiveErrors = 0;
     this.timerMinutes = 0;
     this.timerRemainingSeconds = 0;
     this.timerInterval = null;
@@ -83,6 +85,7 @@ class TTSEngine {
     this.currentIndex = Math.min(Math.max(0, startIndex), this.paragraphs.length - 1);
     this.isPlaying = true;
     this.isPaused = false;
+    this._consecutiveErrors = 0;
     this.setMediaPlaybackState("playing");
     this.notifyState();
     void this.speakParagraph(this.currentIndex);
@@ -111,6 +114,7 @@ class TTSEngine {
     this.isPlaying = false;
     this.isPaused = false;
     this.isLoading = false;
+    this._consecutiveErrors = 0;
     this.setMediaPlaybackState("none");
     this.releaseAudio();
     this.currentUtterance = null;
@@ -157,6 +161,7 @@ class TTSEngine {
       if (session !== this._session || !this.isPlaying) return;
       this.isLoading = false;
       this.audioUrl = URL.createObjectURL(blob);
+      this._consecutiveErrors = 0;
       const audio = new Audio(this.audioUrl);
       this.audio = audio;
       audio.preload = "auto";
@@ -166,11 +171,15 @@ class TTSEngine {
         if (this.currentIndex + 1 < this.paragraphs.length) void this.speakParagraph(this.currentIndex + 1);
         else this.handleChapterFinished();
       };
-      audio.onerror = () => this.handleError(new Error("Không phát được audio Edge-TTS."));
+      audio.onerror = () => {
+        void this.removeAudioCache(text);
+        if (session === this._session) this.handleParagraphError(new Error("Không phát được audio Edge-TTS."), index);
+      };
       this.notifyState();
       if (!this.isPaused) await audio.play();
-      if (this.paragraphs[index + 1]) void this.getAudioBlob(this.paragraphs[index + 1]).catch(() => {});
-    } catch (error) { if (session === this._session) this.handleError(error); }
+    } catch (error) {
+      if (session === this._session) this.handleParagraphError(error, index);
+    }
   }
 
   async cacheKey(text) {
@@ -194,18 +203,7 @@ class TTSEngine {
       const cache = typeof caches !== "undefined" ? await caches.open(TTS_CACHE).catch(() => null) : null;
       const cached = cache ? await cache.match(cacheUrl) : null;
       if (cached) return cached.blob();
-      const response = await fetch(TTS_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ text })
-      });
-      if (!response.ok) {
-        let message = "Không tạo được giọng đọc. Vui lòng thử lại.";
-        try { message = (await response.json()).error || message; } catch {}
-        throw new Error(message);
-      }
-      const blob = await response.blob();
+      const blob = await this.fetchAudioBlobWithRetry(text);
       if (!blob.size) throw new Error("Edge-TTS trả về audio rỗng.");
       if (cache) await cache.put(cacheUrl, new Response(blob, { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "max-age=31536000" } })).catch(() => {});
       this._memoryCache.set(key, blob);
@@ -213,6 +211,58 @@ class TTSEngine {
     })();
     this._pending.set(key, pending);
     try { return await pending; } finally { this._pending.delete(key); }
+  }
+
+  async fetchAudioBlobWithRetry(text, attempts = 3) {
+    let lastError = null;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try { return await this.fetchAudioBlob(text); }
+      catch (error) {
+        lastError = error;
+        if (attempt < attempts) await delay(250 * attempt);
+      }
+    }
+    throw lastError || new Error("Không tạo được giọng đọc.");
+  }
+
+  async fetchAudioBlob(text) {
+    const response = await fetch(TTS_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ text })
+    });
+    if (!response.ok) {
+      let message = "Không tạo được giọng đọc. Vui lòng thử lại.";
+      try { message = (await response.json()).error || message; } catch {}
+      throw new Error(message);
+    }
+    return response.blob();
+  }
+
+  async removeAudioCache(text) {
+    try {
+      const key = await this.cacheKey(text);
+      this._memoryCache.delete(key);
+      if (typeof caches === "undefined") return;
+      const cache = await caches.open(TTS_CACHE).catch(() => null);
+      const origin = typeof location !== "undefined" ? location.origin : "https://tram-chu.local";
+      if (cache) await cache.delete(`${origin}/__tts_cache__/${key}.mp3`).catch(() => {});
+    } catch {}
+  }
+
+  handleParagraphError(error, index) {
+    console.warn("Edge-TTS paragraph error:", error);
+    this._consecutiveErrors += 1;
+    this.isLoading = false;
+    this.releaseAudio();
+    if (this.isPlaying && this._consecutiveErrors < TTS_MAX_CONSECUTIVE_ERRORS && index + 1 < this.paragraphs.length) {
+      this.onError?.("Một đoạn bị lỗi tạo giọng, đang chuyển sang đoạn kế tiếp...");
+      this.notifyState();
+      void this.speakParagraph(index + 1);
+      return;
+    }
+    this.handleError(error);
   }
 
   handleError(error) {
@@ -284,6 +334,8 @@ function splitLongParagraph(text, maxLength = 2800) {
   if (remaining) chunks.push(remaining);
   return chunks;
 }
+
+function delay(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
 function createTTS() { return new TTSEngine(); }
 

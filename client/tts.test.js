@@ -102,3 +102,29 @@ test("TTSEngine: reuses locally cached audio instead of synthesizing twice", asy
   }
 });
 
+test("TTSEngine: retries transient Edge-TTS failures before giving up", async () => {
+  const originalFetch = global.fetch;
+  const originalCaches = global.caches;
+  let requests = 0;
+  global.caches = undefined;
+  global.fetch = async () => {
+    requests += 1;
+    if (requests < 3) {
+      return new Response(JSON.stringify({ error: "Edge đang bận" }), {
+        status: 503,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    return new Response(new Uint8Array([4, 5, 6, 7]), { status: 200, headers: { "Content-Type": "audio/mpeg" } });
+  };
+
+  try {
+    const tts = new TTSEngine();
+    assert.equal((await tts.getAudioBlob("Một đoạn cần retry.")).size, 4);
+    assert.equal(requests, 3);
+  } finally {
+    global.fetch = originalFetch;
+    global.caches = originalCaches;
+  }
+});
+
