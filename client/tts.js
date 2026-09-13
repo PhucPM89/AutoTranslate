@@ -237,6 +237,7 @@ class TTSEngine {
     this.isLoading = true;
     this.isPaused = false;
     this.currentIndex = startIndex;
+    this.pendingStartIndex = startIndex;
     this.onParagraphChange?.(startIndex);
     this.notifyState();
 
@@ -258,10 +259,12 @@ class TTSEngine {
       audio.preload = "auto";
       audio.playbackRate = this.speed;
 
+      const target = this.pendingStartIndex ?? startIndex;
+
       audio.onloadedmetadata = () => {
         if (session !== this._session) return;
-        if (startIndex > 0) {
-          const startTime = this.getParagraphStartTime(startIndex);
+        if (target > 0) {
+          const startTime = this.getParagraphStartTime(target);
           if (startTime > 0 && startTime < audio.duration) {
             audio.currentTime = startTime;
           }
@@ -292,8 +295,8 @@ class TTSEngine {
 
       audio.onerror = () => {
         if (session !== this._session) return;
-        console.warn("Full chapter audio playback error. Triggering zero-failure fallback.");
-        this.fallbackToSpeechSynthesis("Lỗi phát audio, đã chuyển sang giọng đọc thiết bị...");
+        console.warn("Full chapter audio playback error.");
+        this.handleError(new Error("Lỗi phát audio cả chương."));
       };
 
       this.notifyState();
@@ -301,7 +304,7 @@ class TTSEngine {
     } catch (error) {
       if (session === this._session) {
         console.warn("Full chapter synthesis failed:", error);
-        this.fallbackToSpeechSynthesis("Đã chuyển sang chế độ đọc thiết bị (offline) để đảm bảo không bị gián đoạn.");
+        this.handleError(error);
       }
     }
   }
@@ -518,14 +521,25 @@ class TTSEngine {
     if (!this.isSupported() || !this.isPlaying) return;
     if (index >= this.paragraphs.length) return this.handleChapterFinished();
 
+    if (this.isFullChapter) {
+      if (this.audio && this.audio.duration) {
+        return this.seekToParagraph(index);
+      }
+      this.pendingStartIndex = index;
+      if (!this.isLoading && !this.audio) {
+        return this.playFullChapter(index);
+      }
+      return;
+    }
+
     if (this.mode === "speechSynthesis") {
       return this.playSpeechSynthesis(index);
     }
 
-    if (this.isFullChapter && this.audio) {
-      return this.seekToParagraph(index);
-    }
+    return this.speakSnippet(index);
+  }
 
+  async speakSnippet(index) {
     const text = this.paragraphs[index];
     if (!text) return this.speakParagraph(index + 1);
 

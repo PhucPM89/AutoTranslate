@@ -176,40 +176,33 @@ export function splitTextIntoSpeechChunks(text, maxChunkLen = 2200) {
   return chunks.filter(Boolean);
 }
 
-export async function synthesizeFullChapterSpeech(text, { maxRetries = 2, delayMs = 250 } = {}) {
-  const chunks = splitTextIntoSpeechChunks(text);
-  if (!chunks.length) throw new Error("Nội dung chương trống.");
-
-  const audioParts = [];
-  let totalLength = 0;
-
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i];
-    let audio = null;
-    let lastErr = null;
-
-    for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
-      try {
-        audio = await synthesizeEdgeSpeech(chunk);
-        if (audio && audio.length) break;
-      } catch (err) {
-        lastErr = err;
-        if (attempt <= maxRetries) {
-          await new Promise((r) => setTimeout(r, delayMs * attempt));
-        }
+async function synthesizeChunkWithRetry(chunk, index, totalChunks, maxRetries = 2) {
+  let lastErr = null;
+  for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
+    try {
+      const audio = await synthesizeEdgeSpeech(chunk);
+      if (audio && audio.length) return audio;
+    } catch (err) {
+      lastErr = err;
+      if (attempt <= maxRetries) {
+        await new Promise((r) => setTimeout(r, 200 * attempt));
       }
     }
+  }
+  throw new Error(`Lỗi tạo âm thanh cho phân đoạn ${index + 1}/${totalChunks}: ${lastErr?.message || "Không có âm thanh"}`);
+}
 
-    if (!audio || !audio.length) {
-      throw new Error(`Lỗi tạo âm thanh cho phân đoạn ${i + 1}/${chunks.length}: ${lastErr?.message || "Không có âm thanh"}`);
-    }
+export async function synthesizeFullChapterSpeech(text, { maxRetries = 2 } = {}) {
+  const chunks = splitTextIntoSpeechChunks(text, 2600);
+  if (!chunks.length) throw new Error("Nội dung chương trống.");
 
-    audioParts.push(audio);
-    totalLength += audio.length;
+  const audioParts = await Promise.all(
+    chunks.map((chunk, i) => synthesizeChunkWithRetry(chunk, i, chunks.length, maxRetries))
+  );
 
-    if (i < chunks.length - 1 && delayMs > 0) {
-      await new Promise((r) => setTimeout(r, delayMs));
-    }
+  let totalLength = 0;
+  for (const part of audioParts) {
+    totalLength += part.length;
   }
 
   const concatenated = new Uint8Array(totalLength);
@@ -221,5 +214,6 @@ export async function synthesizeFullChapterSpeech(text, { maxRetries = 2, delayM
 
   return concatenated;
 }
+
 
 export { MAX_TEXT_LENGTH, VOICE, escapeXml, makeSecurityToken };
