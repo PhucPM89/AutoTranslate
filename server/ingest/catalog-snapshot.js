@@ -50,14 +50,15 @@ async function buildSnapshotFromSupabase(env = process.env, storage = null, db =
         } catch {}
       }
 
-      const isFull = (totalChapters > 0 && translatedChapters >= totalChapters) || row.status === "Hoàn thành" || row.status === "Full" || row.status === "completed";
+      const isTranslatedFull = totalChapters > 0 && translatedChapters >= totalChapters;
       return {
         id: row.id,
         title: row.title,
         author: row.author || "",
         description: row.description || "",
         cover: resolveCoverUrl(row.id, row.cover_url, env),
-        status: isFull ? "Hoàn thành" : (row.status || "Đang cập nhật"),
+        status: isTranslatedFull ? "Hoàn thành" : (translatedChapters > 0 ? "Đang cập nhật" : "Chờ dịch"),
+        originalStatus: row.status || "Hoàn thành",
         // Flattened from the embedded join; "" when a book has no category yet, which
         // the client treats as uncategorised rather than inventing a label.
         genre: row.book_categories?.[0]?.categories?.name || "",
@@ -86,14 +87,15 @@ async function buildSnapshotFromStorage(storage) {
       if (!index || !index.title || hasHan(index.title) || hasHan(index.author)) continue;
       const totalChapters = Number(index.totalChapters || index.chapters?.length || 0);
       const translatedChapters = Number(index.translatedChapters || 0);
-      const isFull = (totalChapters > 0 && translatedChapters >= totalChapters) || index.status === "Hoàn thành" || index.status === "Full" || index.status === "completed";
+      const isTranslatedFull = totalChapters > 0 && translatedChapters >= totalChapters;
       books.push({
         id: index.bookId,
         title: index.title,
         author: index.author || "",
         description: index.description || "",
         cover: resolveCoverUrl(index.bookId, index.cover, process.env),
-        status: isFull ? "Hoàn thành" : (index.status || "Đang cập nhật"),
+        status: isTranslatedFull ? "Hoàn thành" : (translatedChapters > 0 ? "Đang cập nhật" : "Chờ dịch"),
+        originalStatus: index.status || "Hoàn thành",
         genre: index.genre || "",
         chapterCount: totalChapters,
         translatedChapters,

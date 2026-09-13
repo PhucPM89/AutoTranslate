@@ -128,3 +128,66 @@ test("TTSEngine: retries transient Edge-TTS failures before giving up", async ()
   }
 });
 
+test("TTSEngine: loadChapter configures offsets and calculates paragraph timestamps correctly", () => {
+  const tts = new TTSEngine();
+  const sample = "Đoạn 1.\n\nĐoạn 2 dài hơn nhiều.\n\nĐoạn 3 kết.";
+  tts.loadChapter({
+    bookId: "test-book-123",
+    chapterNumber: 10,
+    text: sample,
+    title: "Chương 10: Khởi đầu"
+  });
+
+  assert.equal(tts.bookId, "test-book-123");
+  assert.equal(tts.chapterNumber, 10);
+  assert.equal(tts.isFullChapter, true);
+  assert.equal(tts.paragraphs.length, 3);
+  assert.ok(tts.totalChars > 0);
+  assert.equal(tts.paragraphOffsets.length, 3);
+
+  // Mock audio object with duration
+  tts.audio = { duration: 100, currentTime: 0 };
+  const p0Start = tts.getParagraphStartTime(0);
+  const p1Start = tts.getParagraphStartTime(1);
+  const p2Start = tts.getParagraphStartTime(2);
+
+  assert.equal(p0Start, 0);
+  assert.ok(p1Start > 0 && p1Start < p2Start);
+  assert.ok(p2Start < 100);
+
+  // Test reverse mapping from currentTime to paragraph index
+  assert.equal(tts.getParagraphIndexFromTime(0), 0);
+  assert.equal(tts.getParagraphIndexFromTime(p1Start + 1), 1);
+  assert.equal(tts.getParagraphIndexFromTime(99), 2);
+});
+
+test("TTSEngine: zero-failure fallback switches mode to speechSynthesis on audio error", () => {
+  const origUtterance = global.SpeechSynthesisUtterance;
+  global.SpeechSynthesisUtterance = class {
+    constructor(text) {
+      this.text = text;
+    }
+  };
+  try {
+    const tts = new TTSEngine();
+    tts.synth = {
+      cancel() {},
+      speak() {},
+      getVoices() { return []; }
+    };
+    tts.loadText("Đoạn văn bản kiểm thử fallback.");
+
+    let notice = "";
+    tts.onError = (msg) => { notice = msg; };
+
+    tts.fallbackToSpeechSynthesis("Lỗi phát audio");
+
+    assert.equal(tts.mode, "speechSynthesis");
+    assert.equal(notice, "Lỗi phát audio");
+    assert.equal(tts.audio, null);
+  } finally {
+    global.SpeechSynthesisUtterance = origUtterance;
+  }
+});
+
+

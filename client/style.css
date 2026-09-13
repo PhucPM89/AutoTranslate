@@ -5001,6 +5001,12 @@ body.theme-forest .document-text .tts-paragraph-highlight.tts-speaking {
   color: #38bdf8;
 }
 
+.book-status.status-untranslated {
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  color: #94a3b8;
+}
+
 .book-card h3 {
   font-family: var(--font-sans);
   font-size: var(--text-base);
@@ -10026,269 +10032,6 @@ body.zen-mode .document-paper {
   .trans-focus-picker-hint { grid-column: auto; }
 }
 
-.gemini-web-control {
-  margin: 1rem 0 1.25rem;
-  padding: 1rem 1.15rem;
-  border: 1px solid rgba(56, 189, 248, 0.22);
-  border-radius: 12px;
-  background: rgba(15, 23, 42, 0.66);
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-}
-
-.gemini-web-control-head,
-.gemini-web-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.gemini-web-control-head h4 {
-  margin: 0.2rem 0 0;
-  color: #f8fafc;
-  font-size: 1rem;
-}
-
-.gemini-web-message {
-  margin: 0;
-  color: #cbd5e1;
-  font-size: 0.86rem;
-  line-height: 1.5;
-}
-
-.gemini-web-control-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.7rem;
-}
-
-.gemini-web-live-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 0.7rem;
-}
-
-.gemini-web-live-item {
-  min-width: 0;
-  padding: 0.7rem 0.8rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.035);
-}
-
-.gemini-web-live-item span {
-  display: block;
-  margin-bottom: 0.25rem;
-  color: #94a3b8;
-  font-size: 0.74rem;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.gemini-web-live-item strong {
-  display: block;
-  color: #f8fafc;
-  font-size: 0.9rem;
-  line-height: 1.35;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.gemini-web-number-field {
-  display: grid;
-  grid-template-columns: auto minmax(80px, 1fr) auto;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.55rem 0.7rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.035);
-  color: #e2e8f0;
-  font-size: 0.82rem;
-}
-
-.gemini-web-number-field input {
-  min-width: 0;
-  width: 100%;
-  padding: 0.45rem 0.55rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 7px;
-  background: #0b1220;
-  color: #f8fafc;
-}
-
-.gemini-web-number-field small {
-  color: #94a3b8;
-}
-
-.gemini-web-actions {
-  justify-content: flex-end;
-}
-
-.gemini-web-slots-section {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  margin: 0.6rem 0;
-  padding: 0.9rem;
-  background: rgba(15, 23, 42, 0.5);
-  border: 1px solid rgba(56, 189, 248, 0.16);
-  border-radius: 12px;
-}
-
-.gemini-web-slots-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.gemini-web-slots-head h5 {
-  margin: 0.15rem 0 0;
-  color: #f1f5f9;
-  font-size: 0.9rem;
-  font-weight: 600;
-}
-
-.gemini-web-slots-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 0.8rem;
-}
-
-.gemini-web-slot-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-  padding: 0.8rem;
-  background: rgba(30, 41, 59, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  position: relative;
-  transition: all 0.2s ease;
-}
-
-.gemini-web-slot-card.is-translating {
-  border-color: rgba(56, 189, 248, 0.35);
-  background: rgba(15, 23, 42, 0.75);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-}
-
-.gemini-web-slot-card.is-disabled {
-  opacity: 0.55;
-  border-style: dashed;
-  border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(15, 23, 42, 0.35);
-}
-
-.gemini-web-slot-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.4rem;
-}
-
-.gemini-web-slot-title-box {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.gemini-web-slot-badge {
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  padding: 0.18rem 0.45rem;
-  border-radius: 6px;
-  background: rgba(56, 189, 248, 0.15);
-  color: #38bdf8;
-  border: 1px solid rgba(56, 189, 248, 0.25);
-}
-
-.gemini-web-slot-state {
-  font-size: 0.7rem;
-  font-weight: 600;
-  padding: 0.15rem 0.4rem;
-  border-radius: 5px;
-}
-
-.gemini-web-slot-state.is-translating {
-  background: rgba(34, 197, 94, 0.15);
-  color: #4ade80;
-  border: 1px solid rgba(34, 197, 94, 0.3);
-}
-
-.gemini-web-slot-state.is-completed {
-  background: rgba(56, 189, 248, 0.15);
-  color: #38bdf8;
-  border: 1px solid rgba(56, 189, 248, 0.3);
-}
-
-.gemini-web-slot-state.is-idle {
-  background: rgba(148, 163, 184, 0.15);
-  color: #94a3b8;
-  border: 1px solid rgba(148, 163, 184, 0.25);
-}
-
-.gemini-web-slot-state.is-disabled {
-  background: rgba(239, 68, 68, 0.15);
-  color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.3);
-}
-
-.gemini-web-slot-book-name {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #f8fafc;
-  line-height: 1.3;
-  margin: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.gemini-web-slot-progress-bar-wrap {
-  width: 100%;
-  height: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
-  overflow: hidden;
-}
-
-.gemini-web-slot-progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #38bdf8, #818cf8);
-  border-radius: 999px;
-  transition: width 0.3s ease;
-}
-
-.gemini-web-slot-meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.74rem;
-  color: #94a3b8;
-}
-
-.gemini-web-slot-toggle-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 0.15rem;
-  padding-top: 0.35rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.gemini-web-slot-toggle-row .switch-field {
-  margin: 0;
-  font-size: 0.76rem;
-  color: #cbd5e1;
-}
-
 .trans-qa-console {
   margin: 1rem 0 1.25rem;
   padding: 1rem 1.15rem;
@@ -12230,6 +11973,49 @@ body.zen-mode .document-paper {
   color: #fff;
 }
 
+.admin-book-btn.epub-btn {
+  background: color-mix(in srgb, #10b981 14%, transparent);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #10b981;
+}
+
+.admin-book-btn.epub-btn:hover {
+  background: #10b981;
+  color: #ffffff;
+  border-color: #10b981;
+}
+
+.bilingual-export-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.export-epub-btn {
+  background: color-mix(in srgb, #10b981 16%, transparent);
+  border: 1px solid rgba(16, 185, 129, 0.45);
+  color: #10b981;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.export-epub-btn:hover {
+  background: #10b981;
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+}
+
+.export-epub-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* Bilingual Workspace */
 .admin-bilingual-view {
   display: flex;
@@ -12549,15 +12335,129 @@ body.zen-mode .document-paper {
   }
 }
 
+/* Export EPUB Progress Dialog */
+.admin-export-epub-dialog {
+  width: min(540px, calc(100vw - 2rem));
+  max-height: min(80vh, 550px);
+  padding: 0;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  margin: auto;
+}
+
+.admin-export-epub-dialog:not([open]) {
+  display: none !important;
+}
+
+.admin-export-epub-dialog[open] {
+  display: flex !important;
+  flex-direction: column;
+}
+
+.admin-export-epub-dialog .admin-dialog-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.15rem 1.5rem;
+  border-bottom: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--surface) 95%, transparent);
+}
+
+.admin-export-epub-dialog .export-epub-body {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.admin-export-epub-dialog::backdrop {
+  background: rgba(4, 7, 5, 0.75);
+  backdrop-filter: blur(6px);
+}
+
+.export-epub-book-info {
+  background: color-mix(in srgb, var(--surface-subtle) 60%, transparent);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 0.9rem 1.1rem;
+}
+
+.export-book-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 0.25rem;
+}
+
+.export-book-meta {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.export-progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.export-progress-bar-bg {
+  width: 100%;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.export-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981, #06b6d4);
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+
+.export-progress-labels {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.export-epub-status {
+  font-size: 0.84rem;
+  color: #10b981;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 1.4rem;
+  font-weight: 500;
+}
+
+.admin-export-epub-dialog .admin-form-actions {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--surface) 95%, transparent);
+  display: flex;
+  justify-content: flex-end;
+}
+
 /* ==========================================================================
    Content Protection & Anti-Scraping Styles
    ========================================================================== */
 
-.document-text,
+/* UI containers and book cards remain unselectable */
 .reader-container,
-.reader-main,
-.reader-panel,
-#chapterView,
+.reader-topbar,
+.reader-bottom-nav,
+.reader-toc-drawer,
 .book-view-desc,
 .studio-document-text {
   -webkit-user-select: none !important;
@@ -12565,6 +12465,33 @@ body.zen-mode .document-paper {
   -ms-user-select: none !important;
   user-select: none !important;
   -webkit-touch-callout: none !important;
+}
+
+/* Allow text selection inside reading surface for quotes, reports, and bookmarks */
+.document-text,
+.reader-main,
+.reader-panel,
+#chapterView,
+.tts-paragraph-highlight {
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+}
+
+/* Elegant highlight selection theme matching Trạm Chữ literary aesthetic */
+.document-text::selection,
+#chapterView::selection,
+.tts-paragraph-highlight::selection {
+  background: rgba(217, 155, 80, 0.35) !important;
+  color: inherit !important;
+}
+
+.document-text::-moz-selection,
+#chapterView::-moz-selection,
+.tts-paragraph-highlight::-moz-selection {
+  background: rgba(217, 155, 80, 0.35) !important;
+  color: inherit !important;
 }
 
 /* Allow selection in legitimate form controls only */
@@ -14204,4 +14131,151 @@ textarea,
     max-width: 100% !important;
     box-sizing: border-box !important;
   }
+}
+
+/* ============================================================================
+   Admin Video Review Generator Styles
+   ========================================================================= */
+.admin-video-panel {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+.admin-video-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.admin-video-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  gap: 1.5rem;
+}
+@media (max-width: 900px) {
+  .admin-video-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.admin-video-create-card,
+.admin-video-queue-card {
+  background: var(--surface-1, #13161c);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.video-card-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text-primary, #f0f3f8);
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+  padding-bottom: 0.75rem;
+}
+.admin-video-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.video-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+.video-checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 0.75rem;
+  border-radius: 8px;
+  border: 1px dashed var(--border-subtle, rgba(255, 255, 255, 0.08));
+}
+.video-checkbox-group .checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  cursor: pointer;
+  color: var(--text-secondary, #b4bece);
+}
+.admin-video-queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  max-height: 650px;
+  overflow-y: auto;
+}
+.video-job-item {
+  background: var(--surface-2, #181d26);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  border-radius: 8px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.video-job-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.video-job-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-primary, #f0f3f8);
+}
+.video-job-meta {
+  font-size: 0.82rem;
+  color: var(--text-muted, #7e8b9f);
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.video-job-progress {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.video-job-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #f5a623, #4ade80);
+  transition: width 0.3s ease;
+}
+.video-job-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.25rem;
+}
+.badge-status-pending { background: rgba(250, 204, 21, 0.15); color: #facc15; padding: 2px 8px; border-radius: 4px; font-size: 0.78rem; }
+.badge-status-rendering { background: rgba(56, 189, 248, 0.15); color: #38bdf8; padding: 2px 8px; border-radius: 4px; font-size: 0.78rem; }
+.badge-status-ready { background: rgba(74, 222, 128, 0.15); color: #4ade80; padding: 2px 8px; border-radius: 4px; font-size: 0.78rem; }
+.badge-status-completed { background: rgba(168, 85, 247, 0.15); color: #c084fc; padding: 2px 8px; border-radius: 4px; font-size: 0.78rem; }
+.badge-status-error { background: rgba(248, 113, 113, 0.15); color: #f87171; padding: 2px 8px; border-radius: 4px; font-size: 0.78rem; }
+.badge-status-waiting { background: rgba(251, 146, 60, 0.15); color: #fb923c; padding: 2px 8px; border-radius: 4px; font-size: 0.78rem; }
+
+.video-scene-item {
+  background: var(--surface-1, #13161c);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  border-radius: 6px;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.video-scene-header {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 600;
+  font-size: 0.88rem;
+  margin-bottom: 0.4rem;
+  color: var(--accent-gold, #f5a623);
 }

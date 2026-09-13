@@ -39,7 +39,7 @@ const {
   DEFAULT_IMAGE,
   BASE_URL
 } = require("./seo.js");
-const { applyInvisibleWatermark, initSecurityGuards } = require("./security.js");
+const { applyInvisibleWatermark, initSecurityGuards, formatCopyWithAttribution } = require("./security.js");
 const { extractTitleFromContent, formatVietnameseChapterTitle, displayIndexLabel, isFrontmatterSection, extractStoryChapterNumber } = require("./chapter-title.js");
 const { normalizeReaderText, splitReaderParagraphs } = require("./reader-text.js");
 const {
@@ -86,6 +86,7 @@ let activeQuoteText = "";
 let activeCommentParagraphIndex = 0;
 let ttsEngine = null;
 let isZenMode = false;
+let lastForegroundDataRefresh = 0;
 
 const state = {
   // "epub" is the legacy path (download the whole book, parse with JSZip).
@@ -930,7 +931,7 @@ async function loadCatalogSnapshot() {
 
   for (const u of urls) {
     try {
-      const response = await fetch(u);
+      const response = await fetch(u, { cache: "no-store" });
       if (!response.ok) continue;
       const text = await response.text();
       if (!text || !text.trim().startsWith("{")) continue;
@@ -1401,14 +1402,10 @@ function getFilteredCatalogBooks() {
       if (!status) return true;
       const total = Number(book.chapterCount || book.totalChapters || book.total_chapters || 0);
       const translated = Number(book.translatedChapters || 0);
-      const isBookFull =
-        book.status === "Hoàn thành" ||
-        book.status === "Đã hoàn thành" ||
-        book.status === "Full" ||
-        book.status === "completed" ||
-        (total > 0 && translated >= total);
+      const isBookFull = total > 0 && translated >= total;
       if (status === "Hoàn thành" || status === "Full") return isBookFull;
-      if (status === "Đang cập nhật" || status === "Đang ra") return !isBookFull;
+      if (status === "Đang cập nhật" || status === "Đang ra" || status === "Đang dịch") return !isBookFull && translated > 0;
+      if (status === "Chờ dịch" || status === "Chưa dịch") return translated === 0;
       return (book.status || "Đang cập nhật") === status;
     })
     .filter((book) => {
@@ -1548,16 +1545,18 @@ function createBookCard(book, index = 0) {
   const catalogBook = libraryState.books.find((b) => b.id === book.id) || book;
   const translated = Number(catalogBook.translatedChapters || book.translatedChapters || 0);
   const total = Number(catalogBook.chapterCount || book.chapterCount || catalogBook.totalChapters || book.totalChapters || 0);
-  const isFull =
-    book.status === "Hoàn thành" ||
-    book.status === "Đã hoàn thành" ||
-    book.status === "Full" ||
-    catalogBook.status === "Hoàn thành" ||
-    catalogBook.status === "Đã hoàn thành" ||
-    (total > 0 && translated >= total);
-  const statusLabel = isFull ? "Full" : "Đang ra";
+  const isFull = total > 0 && translated >= total;
+  let statusLabel = "Chờ dịch";
+  let statusClass = "status-untranslated";
+  if (isFull) {
+    statusLabel = "Full";
+    statusClass = "status-full";
+  } else if (translated > 0) {
+    statusLabel = "Đang dịch";
+    statusClass = "status-ongoing";
+  }
   appendTextElement(meta, "span", "genre-tag", book.genre || catalogBook.genre || "Chưa phân loại");
-  appendTextElement(meta, "span", `book-status ${isFull ? "status-full" : "status-ongoing"}`, statusLabel);
+  appendTextElement(meta, "span", `book-status ${statusClass}`, statusLabel);
   const title = appendTextElement(body, "h3", "", book.title);
   const author = appendTextElement(body, "p", "book-author", book.author ? `Tác giả: ${book.author}` : "Tác giả chưa cập nhật");
   const description = appendTextElement(body, "p", "book-description", book.description || "Mở truyện để xem mục lục và bắt đầu dịch theo chương.");
@@ -1741,15 +1740,18 @@ async function showBookDetail(book, { updateHash = true } = {}) {
   const catalogBook = libraryState.books.find((b) => b.id === book.id) || book;
   const totalCh = Number(catalogBook.chapterCount || catalogBook.totalChapters || book.chapterCount || book.totalChapters || 0);
   const transCh = Number(catalogBook.translatedChapters || book.translatedChapters || 0);
-  const isFullDetail =
-    book.status === "Hoàn thành" ||
-    book.status === "Đã hoàn thành" ||
-    book.status === "Full" ||
-    catalogBook.status === "Hoàn thành" ||
-    catalogBook.status === "Đã hoàn thành" ||
-    (totalCh > 0 && transCh >= totalCh);
-  els.bookViewStatus.textContent = isFullDetail ? "Đã hoàn thành (Full)" : "Đang ra (Chưa Full)";
-  els.bookViewStatus.className = `book-status ${isFullDetail ? "status-full" : "status-ongoing"}`;
+  const isFullDetail = totalCh > 0 && transCh >= totalCh;
+  let statusDetailText = "Chưa dịch (Chờ dịch)";
+  let statusDetailClass = "status-untranslated";
+  if (isFullDetail) {
+    statusDetailText = "Đã dịch Full (100%)";
+    statusDetailClass = "status-full";
+  } else if (transCh > 0) {
+    statusDetailText = `Đang dịch (${transCh}/${totalCh} chương)`;
+    statusDetailClass = "status-ongoing";
+  }
+  els.bookViewStatus.textContent = statusDetailText;
+  els.bookViewStatus.className = `book-status ${statusDetailClass}`;
   els.bookViewTitle.textContent = book.title;
   els.bookViewAuthor.textContent = book.author ? `Tác giả: ${book.author}` : "Tác giả chưa cập nhật";
   els.bookViewChapters.textContent = totalCh > 0 ? `${totalCh.toLocaleString("vi-VN")} chương` : "Đang cập nhật";
@@ -2081,6 +2083,13 @@ async function openFromUrl() {
       goToChapter(Math.max(0, chNum - 1));
       return true;
     }
+  }
+
+  const searchQuery = urlParams.get("q") || urlParams.get("search");
+  if (searchQuery && els.librarySearch) {
+    els.librarySearch.value = searchQuery;
+    resetCatalogPage();
+    document.getElementById("catalog")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   // 3. Check Book Detail: #book/<id>
@@ -2505,6 +2514,10 @@ function getStoryChapterNumber(index) {
   if (isFrontmatterSection(chapter.translatedTitle || chapter.title, content)) {
     return null;
   }
+  const extracted = extractStoryChapterNumber(chapter.translatedTitle || chapter.title) || extractStoryChapterNumber(content);
+  if (extracted !== null && extracted > 0) {
+    return extracted;
+  }
   const offset = getFrontmatterOffset();
   return Math.max(1, index - offset + 1);
 }
@@ -2840,7 +2853,15 @@ function initQuoteCardAndSelection() {
 
   els.quoteCopyBtn?.addEventListener("click", () => {
     if (!selectedQuoteText) return;
-    navigator.clipboard?.writeText(selectedQuoteText);
+    const clean = selectedQuoteText.trim();
+    if (clean.length > 250) {
+      showToast("⚠️ Đoạn trích quá dài. Vui lòng dùng 'Tạo ảnh' 9:16 để chia sẻ!");
+      hideSelectionTooltip();
+      return;
+    }
+    const textWithAttribution = formatCopyWithAttribution(clean);
+    navigator.clipboard?.writeText(textWithAttribution);
+    showToast("✓ Đã sao chép trích dẫn kèm nguồn Trạm Chữ");
     hideSelectionTooltip();
   });
 
@@ -3038,7 +3059,23 @@ function initTTSController() {
     }
   };
 
-  ttsEngine.onStateChange = ({ isPlaying, isPaused, isLoading, hasTimer, timerLabel, currentIndex, totalParagraphs }) => {
+  function formatTtsTime(seconds) {
+    if (!seconds || isNaN(seconds) || seconds < 0) return "00:00";
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  }
+
+  ttsEngine.onTimeUpdate = ({ currentTime, duration, currentIndex, totalParagraphs }) => {
+    if (els.ttsStatusText && duration > 0 && !ttsEngine.isLoading && !ttsEngine.isPaused) {
+      els.ttsStatusText.textContent = `${formatTtsTime(currentTime)} / ${formatTtsTime(duration)}`;
+    }
+    if (els.floatingAudioProgress && duration > 0 && !ttsEngine.isLoading) {
+      els.floatingAudioProgress.textContent = `${formatTtsTime(currentTime)} / ${formatTtsTime(duration)} · Đoạn ${currentIndex + 1}/${totalParagraphs}`;
+    }
+  };
+
+  ttsEngine.onStateChange = ({ isPlaying, isPaused, isLoading, hasTimer, timerLabel, currentIndex, totalParagraphs, mode, duration, currentTime }) => {
     const active = isPlaying || isPaused;
     
     if (els.ttsAudioBar) {
@@ -3049,7 +3086,15 @@ function initTTSController() {
       els.floatingAudioBar.hidden = !active;
       if (els.floatingAudioTitle) els.floatingAudioTitle.textContent = displayChapterTitle(state.currentIndex);
       if (els.floatingAudioProgress) {
-        els.floatingAudioProgress.textContent = isLoading ? "Đang tạo giọng Hoài My..." : (totalParagraphs ? `Đoạn ${currentIndex + 1} / ${totalParagraphs}` : "Đang phát...");
+        if (isLoading) {
+          els.floatingAudioProgress.textContent = "Đang tải audio chương...";
+        } else if (mode === "speechSynthesis") {
+          els.floatingAudioProgress.textContent = totalParagraphs ? `Đoạn ${currentIndex + 1} / ${totalParagraphs} (Thiết bị)` : "Đang đọc offline...";
+        } else if (duration > 0) {
+          els.floatingAudioProgress.textContent = `${formatTtsTime(currentTime)} / ${formatTtsTime(duration)} · Đoạn ${currentIndex + 1}/${totalParagraphs}`;
+        } else {
+          els.floatingAudioProgress.textContent = totalParagraphs ? `Đoạn ${currentIndex + 1} / ${totalParagraphs}` : "Đang phát...";
+        }
       }
       const fPlayIcon = els.floatingAudioPlayPause?.querySelector(".audio-icon-play");
       const fPauseIcon = els.floatingAudioPlayPause?.querySelector(".audio-icon-pause");
@@ -3060,10 +3105,20 @@ function initTTSController() {
       els.ttsToggleBtn.classList.toggle("is-active", active);
     }
     if (els.ttsToggleLabel) {
-      els.ttsToggleLabel.textContent = isPlaying ? (isPaused ? "Đang dừng" : (isLoading ? "Đang tạo giọng" : "Đang đọc")) : "Hoài My";
+      els.ttsToggleLabel.textContent = isPlaying ? (isPaused ? "Đang dừng" : (isLoading ? "Đang tải" : "Đang đọc")) : "Hoài My";
     }
     if (els.ttsStatusText) {
-      els.ttsStatusText.textContent = isPaused ? "Tạm dừng" : (isLoading ? "Đang tạo giọng Hoài My..." : "Đang phát...");
+      if (isPaused) {
+        els.ttsStatusText.textContent = "Tạm dừng";
+      } else if (isLoading) {
+        els.ttsStatusText.textContent = "Đang chuẩn bị audio...";
+      } else if (mode === "speechSynthesis") {
+        els.ttsStatusText.textContent = `Đang đọc thiết bị · Đoạn ${currentIndex + 1}/${totalParagraphs}`;
+      } else if (duration > 0) {
+        els.ttsStatusText.textContent = `${formatTtsTime(currentTime)} / ${formatTtsTime(duration)}`;
+      } else {
+        els.ttsStatusText.textContent = "Đang phát...";
+      }
     }
     const playIcon = els.ttsPlayPauseBtn?.querySelector(".tts-icon-play");
     const pauseIcon = els.ttsPlayPauseBtn?.querySelector(".tts-icon-pause");
@@ -3134,7 +3189,15 @@ function initTTSController() {
       coverUrl
     });
 
-    ttsEngine.loadText(text);
+    const chapterNumber = chapter?.chapterNumber || (state.currentIndex + 1);
+    const bookId = state.bookId || "";
+
+    ttsEngine.loadChapter({
+      bookId,
+      chapterNumber,
+      text,
+      title: displayChapterTitle(state.currentIndex)
+    });
     ttsEngine.play(0);
   }
 
@@ -4078,6 +4141,25 @@ function syncReaderRank(force = false) {
 }
 
 function registerServiceWorker() {
+  const refreshForegroundData = async () => {
+    if (document.visibilityState === "hidden") return;
+    const now = Date.now();
+    if (now - lastForegroundDataRefresh < 5000) return;
+    lastForegroundDataRefresh = now;
+    if (state.mode === "cdn" && state.bookId && !els.readerView.hidden) {
+      await refreshOpenCdnBook().catch((error) => console.warn("Không làm mới được chương đang đọc.", error));
+    } else {
+      await loadLibraryManifest().catch(() => {});
+    }
+  };
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) refreshForegroundData();
+  });
+  window.addEventListener("focus", refreshForegroundData);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") refreshForegroundData();
+  });
+
   if ("serviceWorker" in navigator && typeof window !== "undefined" && window.location.protocol.startsWith("http")) {
     window.addEventListener("load", () => {
       navigator.serviceWorker
@@ -4776,12 +4858,21 @@ async function fetchCdnOrProxy(url, options) {
   throw new Error("Không tải được nội dung từ CDN.");
 }
 
+async function fetchFreshReaderContent(url) {
+  const proxy = readerContentProxyUrl(url);
+  if (proxy) {
+    const response = await fetch(withQueryParam(proxy, "_t", Date.now()), { cache: "no-store" }).catch(() => null);
+    if (response?.ok) return response;
+  }
+  return fetchCdnOrProxy(withQueryParam(url, "_t", Date.now()), { cache: "reload" });
+}
+
 async function fetchBookIndex(bookId) {
   const clean = cleanBookId(bookId);
   if (!clean) return null;
   const cdnIndexUrl = `${cdnUrl(`books/${clean}/index.json`)}?_v=${Date.now()}`;
   try {
-    const response = await fetchCdnOrProxy(cdnIndexUrl);
+    const response = await fetchCdnOrProxy(cdnIndexUrl, { cache: "no-store" });
     const index = await response.json();
     if (!index || !Array.isArray(index.chapters) || !index.chapters.length) {
       console.error(`fetchBookIndex invalid chapters payload from ${cdnIndexUrl}:`, index);
@@ -4792,6 +4883,40 @@ async function fetchBookIndex(bookId) {
     console.error(`fetchBookIndex error fetching ${cdnIndexUrl}:`, error);
     return null;
   }
+}
+
+async function refreshOpenCdnBook() {
+  const cleanId = cleanBookId(state.bookId);
+  const index = await fetchBookIndex(cleanId);
+  if (!index || !Array.isArray(index.chapters) || !index.chapters.length) return;
+  const currentNumber = state.chapters[state.currentIndex]?.chapterNumber;
+  if (Number(index.revision || 1) !== revisionFromState()) {
+    const catalogBook = libraryState.books.find((book) => cleanBookId(book.id) === cleanId) || { id: cleanId, title: index.title };
+    await openBookFromCdn(catalogBook, state.cover, {
+      targetChapterIndex: Math.max(0, index.chapters.findIndex((chapter) => Number(chapter.n) === Number(currentNumber)))
+    });
+    return;
+  }
+
+  const loadedByNumber = new Map(state.chapters.map((chapter) => [Number(chapter.chapterNumber), chapter]));
+  state.cdnTemplate = index.chapterUrlTemplate || state.cdnTemplate;
+  state.cdnCacheBust = String(Date.now());
+  state.chapters = index.chapters.map((entry) => {
+    const loaded = loadedByNumber.get(Number(entry.n));
+    return {
+      title: entry.title || loaded?.title || `Chương ${entry.n}`,
+      chapterNumber: entry.n,
+      status: entry.status || loaded?.status || "pending",
+      text: loaded?.text ?? null,
+      words: loaded?.words ?? null,
+      _loaded: false
+    };
+  });
+  const nextIndex = state.chapters.findIndex((chapter) => Number(chapter.chapterNumber) === Number(currentNumber));
+  state.currentIndex = nextIndex >= 0 ? nextIndex : Math.min(state.currentIndex, state.chapters.length - 1);
+  els.bookMeta.textContent = `${BRAND_NAME} · ${index.totalChapters || state.chapters.length} chương · ${index.translatedChapters || 0} đã dịch`;
+  renderChapterControls();
+  await loadCdnChapter(state.currentIndex, true);
 }
 
 function chapterUrlFor(index, chapterNumber) {
@@ -4866,7 +4991,9 @@ async function loadCdnChapter(index, force = false) {
   try {
     const rawChapterUrl = chapterUrlFor({ bookId: bookIdFromState(), revision: revisionFromState(), chapterUrlTemplate: state.cdnTemplate }, chapter.chapterNumber);
     const chapterUrl = withQueryParam(rawChapterUrl, "_v", force ? Date.now() : state.cdnCacheBust);
-    const response = await fetchCdnOrProxy(chapterUrl, force ? { cache: "reload" } : undefined);
+    const response = force
+      ? await fetchFreshReaderContent(rawChapterUrl)
+      : await fetchCdnOrProxy(chapterUrl, { cache: "no-store" });
     const document_ = await response.json();
     if (index !== state.currentIndex) return;
     chapter.text = String(document_.content || "");

@@ -31,14 +31,12 @@ import {
   CREATION_STATUSES
 } from "../server/crawler-store.js";
 import { createR2BindingStorage } from "./r2-storage.js";
-import { synthesizeEdgeSpeech } from "../server/edge-tts.js";
+import { handleAdminVideo } from "../server/video/admin-router.js";
+import { synthesizeEdgeSpeech, synthesizeFullChapterSpeech } from "../server/edge-tts.js";
 
 const COOKIE_NAME = "tangthu_admin";
 const SESSION_TTL_SECONDS = 30 * 60;
 const UPLOAD_TTL_SECONDS = 30 * 60;
-const GEMINI_WEB_CONTROL_KEY = "jobs/gemini-web-control.json";
-const GEMINI_WEB_DAEMON_STATUS_KEY = "jobs/gemini-web-daemon-status.json";
-const GEMINI_WEB_ACTIVE_KEY = "jobs/gemini-web-active.json";
 const SHORT = "public, max-age=60, stale-while-revalidate=600";
 
 // EPUBs go to the private archive bucket. Putting a source archive in the reader
@@ -86,7 +84,21 @@ const ROUTES = {
 // else and the caller should serve a static file.
 export async function handleApiRequest({ request, env }) {
   const url = new URL(request.url);
-  const route = ROUTES[url.pathname.replace(/\/$/, "")];
+  const path = url.pathname.replace(/\/$/, "");
+
+  if (path.startsWith("/api/admin/video")) {
+    try {
+      const res = await handleAdminVideo({ request, env, url, path, requireAdmin, readJson });
+      return withSecurityHeaders(res, env);
+    } catch (error) {
+      const status = error.status || 500;
+      if (status >= 500) console.error(`${url.pathname} lỗi:`, error.message);
+      const message = error.publicMessage || (status < 500 ? error.message : "Hệ thống đang gặp lỗi. Vui lòng thử lại sau.");
+      return withSecurityHeaders(json({ error: message }, status), env);
+    }
+  }
+
+  const route = ROUTES[path];
   if (!route) return null;
 
   try {
@@ -99,20 +111,30 @@ export async function handleApiRequest({ request, env }) {
   }
 }
 
-async function handleReaderTts({ request }) {
+async function handleReaderTts({ request, env }) {
   if (request.method !== "POST") return methodNotAllowed("POST");
   requireSameOrigin(request);
   const body = await readJson(request);
-  const audio = await synthesizeEdgeSpeech(body?.text);
+  const text = String(body?.text || "").trim();
+  const fullChapter = Boolean(body?.fullChapter);
+
+  let audio;
+  if (fullChapter || text.length > 2500) {
+    audio = await synthesizeFullChapterSpeech(text);
+  } else {
+    audio = await synthesizeEdgeSpeech(text);
+  }
+
   return new Response(audio, {
     status: 200,
     headers: {
       "Content-Type": "audio/mpeg",
-      "Cache-Control": "no-store",
+      "Cache-Control": "private, no-transform, max-age=86400",
       "X-TTS-Voice": "vi-VN-HoaiMyNeural"
     }
   });
 }
+
 // ---- public catalog --------------------------------------------------------
 async function handlePublicCatalog({ request, env }) {
   if (request.method !== "GET" && request.method !== "HEAD") return methodNotAllowed("GET, HEAD");
@@ -178,14 +200,14 @@ async function handlePublicReaderContent({ request, env, url }) {
     body = await upstream.arrayBuffer();
   }
 
-  const immutable = /\/r\d+\/ch\/\d+\.json$/.test(key);
   return new Response(request.method === "HEAD" ? null : body, {
     status: 200,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": immutable
-        ? "public, max-age=31536000, immutable"
-        : "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
+      // These reader documents are mutable: translation and QA replace them in
+      // place. The proxy is the freshness path when a CDN edge still has an old
+      // chapter, so neither browsers nor Cloudflare may cache its response.
+      "Cache-Control": "no-store",
       "Access-Control-Allow-Origin": "*"
     }
   });
@@ -492,109 +514,6 @@ async function readStorageJson(storage, key) {
   }
 }
 
-function normalizeGeminiWebControl(control = {}) {
-  const defaultSlots = { "1": true, "2": false, "3": false };
-  const rawSlots = control.slots && typeof control.slots === "object" ? control.slots : defaultSlots;
-  const bool = (value, defaultValue = true) => {
-    if (value === undefined || value === null) return defaultValue;
-    if (typeof value === "boolean") return value;
-    const normalized = String(value).trim().toLowerCase();
-    if (["false", "0", "off", "no"].includes(normalized)) return false;
-    if (["true", "1", "on", "yes"].includes(normalized)) return true;
-    return defaultValue;
-  };
-  const slots = {
-    "1": bool(rawSlots["1"], true),
-    "2": bool(rawSlots["2"], false),
-    "3": bool(rawSlots["3"], false)
-  };
-  return {
-    schema: 1,
-    enabled: bool(control.enabled, true),
-    headless: bool(control.headless, true),
-    protectiveMode: bool(control.protectiveMode, true),
-    lowResourceMode: bool(control.lowResourceMode, true),
-    spacingMs: Math.max(3000, Number(control.spacingMs || 8000)),
-    jitterMs: Math.max(0, Number(control.jitterMs || 1500)),
-    sessionMinutes: Math.max(15, Number(control.sessionMinutes || 300)),
-    pauseUntilEpochMs: Math.max(0, Number(control.pauseUntilEpochMs || 0)),
-    slots,
-    updatedAt: control.updatedAt || ""
-  };
-}
-
-function normalizeGeminiWebPatch(body = {}, currentControl = {}) {
-  const patch = {};
-  const bool = (value, defaultValue = true) => {
-    if (value === undefined || value === null) return defaultValue;
-    if (typeof value === "boolean") return value;
-    const normalized = String(value).trim().toLowerCase();
-    if (["false", "0", "off", "no"].includes(normalized)) return false;
-    if (["true", "1", "on", "yes"].includes(normalized)) return true;
-    return defaultValue;
-  };
-  if ("enabled" in body) patch.enabled = bool(body.enabled, true);
-  if ("headless" in body) patch.headless = bool(body.headless, true);
-  if ("protectiveMode" in body) patch.protectiveMode = bool(body.protectiveMode, true);
-  if ("lowResourceMode" in body) patch.lowResourceMode = bool(body.lowResourceMode, true);
-  if ("spacingMs" in body) patch.spacingMs = Math.max(3000, Math.min(120000, Number(body.spacingMs || 8000)));
-  if ("jitterMs" in body) patch.jitterMs = Math.max(0, Math.min(60000, Number(body.jitterMs || 0)));
-  if ("sessionMinutes" in body) patch.sessionMinutes = Math.max(15, Math.min(1440, Number(body.sessionMinutes || 300)));
-  if ("pauseUntilEpochMs" in body) patch.pauseUntilEpochMs = Math.max(0, Number(body.pauseUntilEpochMs || 0));
-  if (body.slots && typeof body.slots === "object") {
-    patch.slots = { ...(currentControl.slots || { "1": true, "2": false, "3": false }), ...body.slots };
-  }
-  if (body.action === "gemini-web-toggle-slot" && body.slotId) {
-    const slotKey = String(body.slotId);
-    patch.slots = {
-      ...(currentControl.slots || { "1": true, "2": false, "3": false }),
-      [slotKey]: bool(body.enabled, true)
-    };
-  }
-  if (body.action === "gemini-web-pause") {
-    patch.enabled = true;
-    patch.pauseUntilEpochMs = Date.now() + Math.max(60_000, Math.min(24 * 60 * 60_000, Number(body.minutes || 30) * 60_000));
-  }
-  if (body.action === "gemini-web-resume") {
-    patch.enabled = true;
-    patch.pauseUntilEpochMs = 0;
-  }
-  if (body.action === "gemini-web-stop") {
-    patch.enabled = false;
-    patch.pauseUntilEpochMs = 0;
-  }
-  if (body.action === "gemini-web-start") {
-    patch.enabled = true;
-    patch.pauseUntilEpochMs = 0;
-  }
-  return patch;
-}
-
-async function buildGeminiWebDashboard(storage) {
-  const [controlRaw, daemonRaw, lockRaw] = await Promise.all([
-    readStorageJson(storage, GEMINI_WEB_CONTROL_KEY),
-    readStorageJson(storage, GEMINI_WEB_DAEMON_STATUS_KEY),
-    readStorageJson(storage, GEMINI_WEB_ACTIVE_KEY)
-  ]);
-  const control = normalizeGeminiWebControl(controlRaw || {});
-  const lockAlive = Boolean(lockRaw?.provider === "gemini-web" && Number(lockRaw.expiresAtEpochMs || 0) > Date.now());
-  const daemonBeat = daemonRaw?.updatedAt || "";
-  const daemonStale = Boolean(daemonBeat && Date.now() - new Date(daemonBeat).getTime() > 5 * 60 * 1000);
-  return {
-    control,
-    daemon: daemonRaw || null,
-    lock: lockRaw || null,
-    active: lockAlive,
-    daemonAlive: Boolean(daemonRaw && !daemonStale),
-    daemonStale,
-    paused: control.enabled === false || control.pauseUntilEpochMs > Date.now(),
-    protection: {
-      mode: control.protectiveMode ? "paced_backoff" : "manual",
-      note: "Điều tốc, jitter và tự dừng khi gặp captcha/rate-limit/sign-in; không dùng cơ chế vượt kiểm tra của Google."
-    }
-  };
-}
-
 async function handleTranslateStatus({ request, env }) {
   await requireAdmin(request, env);
   if (request.method !== "GET" && request.method !== "POST") return methodNotAllowed("GET, POST");
@@ -603,25 +522,7 @@ async function handleTranslateStatus({ request, env }) {
     requireSameOrigin(request);
     const body = await readJson(request);
     if (String(body?.action || "").startsWith("gemini-web")) {
-      if (!env.NOVEL_STORAGE) throw fail(503, "Chưa cấu hình NOVEL_STORAGE để lưu điều khiển Gemini Web.");
-      const storage = createR2BindingStorage(env.NOVEL_STORAGE);
-      const current = normalizeGeminiWebControl(await readStorageJson(storage, GEMINI_WEB_CONTROL_KEY) || {});
-      const control = normalizeGeminiWebControl({
-        ...current,
-        ...normalizeGeminiWebPatch(body, current),
-        updatedAt: new Date().toISOString()
-      });
-      await storage.put(GEMINI_WEB_CONTROL_KEY, JSON.stringify(control), { cacheControl: "private, no-store" });
-      return json({
-        success: true,
-        control,
-        geminiWeb: await buildGeminiWebDashboard(storage),
-        message: control.enabled
-          ? control.pauseUntilEpochMs > Date.now()
-            ? "Đã tạm dừng Gemini Web daemon; API worker có thể tiếp quản khi lock hết hạn."
-            : "Đã bật Gemini Web daemon; tiến trình nền sẽ nhận lệnh ở vòng kế tiếp."
-          : "Đã tắt Gemini Web daemon; API worker có thể tiếp quản khi lock hết hạn."
-      });
+      throw fail(410, "Điều khiển Gemini Web trên dashboard đã được gỡ; chỉ chạy reviewer bằng file BAT trên máy local.");
     }
     if (body?.action === "focus") {
       if (!env.NOVEL_STORAGE) throw fail(503, "Chưa cấu hình NOVEL_STORAGE để lưu bộ truyện ưu tiên.");
@@ -674,13 +575,11 @@ async function handleTranslateStatus({ request, env }) {
 
   let status = null;
   let config = { schema: 1, focusBookId: "", updatedAt: "" };
-  let geminiWeb = null;
   let publishedBookIds = null;
   try {
     if (env.NOVEL_STORAGE) {
       const storage = createR2BindingStorage(env.NOVEL_STORAGE);
       config = await readTranslationConfig(storage);
-      geminiWeb = await buildGeminiWebDashboard(storage);
       const catalogRaw = await storage.get("catalog/latest.json").catch(() => null);
       if (catalogRaw) {
         const catalog = JSON.parse(catalogRaw.toString("utf8"));
@@ -734,25 +633,6 @@ async function handleTranslateStatus({ request, env }) {
       spentRequests: 0,
       queue: []
     };
-  }
-
-  if (geminiWeb?.active && !geminiWeb.paused) {
-    const staleApiQuota = status.state === "paused_quota" || status.activityState === "waiting_quota" || Number(status.readyKeyCount || 0) === 0;
-    if (staleApiQuota) {
-      status = {
-        ...status,
-        state: "running",
-        activityState: status.currentBookTitle ? "translating" : "gemini_web_running",
-        activeKeyCount: 1,
-        readyKeyCount: 1,
-        deadKeyCount: 0,
-        dailyExhaustedKeyCount: 0,
-        cooldownKeyCount: 0,
-        message: status.currentBookTitle
-          ? `Gemini Web local đang chạy nền; đang xử lý ${status.currentBookTitle}${status.currentChapter ? ` chương ${status.currentChapter}` : ""}.`
-          : "Gemini Web local đang chạy nền; đang chờ nhịp chi tiết từ worker."
-      };
-    }
   }
 
   // Heartbeat timeout check: 5 minutes
@@ -864,7 +744,7 @@ async function handleTranslateStatus({ request, env }) {
   status.dailyScannedBooks = Array.from(scannedMap.values());
   status.focusBookId = config.focusBookId;
   status.selectionMode = config.focusBookId ? "focused" : "automatic";
-  return json({ status, config, geminiWeb });
+  return json({ status, config });
 }
 
 function describeTimeAgo(isoString) {
@@ -2074,19 +1954,7 @@ async function handleAdminGeminiTranslate({ request, env }) {
   const model = rawModel;
   const title = String(body?.title || "").trim();
 
-  const prompt = [
-    "Bạn là một dịch giả tiểu thuyết Trung Quốc sang tiếng Việt chuyên nghiệp.",
-    "Hãy dịch trọn vẹn chương truyện sau đây sang tiếng Việt tự nhiên, chuẩn văn phong tiểu thuyết Tiên Hiệp/Huyền Huyễn/Đô Thị.",
-    "QUY TẮC BẮT BUỘC:",
-    "- Chuyển toàn bộ tên người, địa danh, môn phái, chiêu thức, cảnh giới sang âm Hán-Việt phù hợp, quen thuộc.",
-    "- Tuyệt đối không dùng Pinyin hoặc để sót chữ Hán.",
-    "- Giữ nguyên cấu trúc phân đoạn văn bản, hội thoại rõ ràng, xưng hô tự nhiên (huynh-đệ, sư đồ, ta-ngươi, hắn-nàng).",
-    "- Không tóm tắt, không thêm lời bình luận bên ngoài, chỉ trả về duy nhất nội dung bản dịch tiếng Việt.",
-    "",
-    title ? `Tiêu đề chương: ${title}\n` : "",
-    "Nội dung cần dịch:",
-    content
-  ].join("\n");
+  const prompt = "Dịch văn bản tiếng Trung sau sang tiếng Việt tự nhiên, đúng văn phong và ngữ cảnh. Không dịch bám trật tự từ tiếng Trung; không bỏ sót nội dung, không để lại chữ Hán, không tự thêm ý. Giữ nguyên phân đoạn. Chỉ trả bản dịch.\n\n" + content;
 
   const geminiBaseUrl = (env.GEMINI_BASE_URL || env.GOOGLE_AI_GATEWAY || "https://gateway.ai.cloudflare.com/v1/aa644d98f2377007f0fa98abcafe3d21/tram-chu/google-ai-studio").replace(/\/$/, "");
   const cfToken = env.CLOUDFLARE_API_TOKEN || "";
@@ -2100,6 +1968,7 @@ async function handleAdminGeminiTranslate({ request, env }) {
     const orderedKeys = apiKeys.map((_, offset) => apiKeys[(epubStudioKeyCursor + offset) % apiKeys.length]);
     epubStudioKeyCursor = (epubStudioKeyCursor + 1) % apiKeys.length;
     let data = null;
+    let translatedText = "";
     let lastProviderError = null;
 
     for (const apiKey of orderedKeys) {
@@ -2118,17 +1987,35 @@ async function handleAdminGeminiTranslate({ request, env }) {
         signal: controller.signal,
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: prompt }] }],
-          safetySettings: [
-            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
-            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
-            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_ONLY_HIGH" },
-            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" }
-          ],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 32768 }
+          generationConfig: { maxOutputTokens: 32768 }
         })
       });
       data = await response.json().catch(() => ({}));
-      if (response.ok) break;
+      if (response.ok) {
+        if (data?.candidates?.[0]?.finishReason === "SAFETY") {
+          throw fail(400, "Nội dung chương bị bộ lọc an toàn của Gemini từ chối xử lý.");
+        }
+        if (data?.candidates?.[0]?.finishReason === "MAX_TOKENS") {
+          lastProviderError = fail(502, "Bản dịch bị cắt do hết giới hạn output token.");
+          data = null;
+          continue;
+        }
+
+        translatedText = data?.candidates?.[0]?.content?.parts
+          ?.filter((part) => !part.thought)
+          .map((part) => part.text || "")
+          .join("")
+          .trim() || "";
+        translatedText = stripAdminTitleFromContent(cleanAdminProviderWrapper(translatedText), title, 0);
+        const qualityIssue = assessAdminTranslation(content, translatedText);
+        if (!translatedText || qualityIssue) {
+          lastProviderError = fail(502, `Bản dịch không qua hậu kiểm: ${qualityIssue || "kết quả rỗng"}`);
+          data = null;
+          translatedText = "";
+          continue;
+        }
+        break;
+      }
 
       const errMsg = data?.error?.message || `Lỗi Gemini API (HTTP ${response.status})`;
       lastProviderError = fail(response.status >= 500 ? 502 : response.status || 400, errMsg);
@@ -2144,21 +2031,9 @@ async function handleAdminGeminiTranslate({ request, env }) {
       throw lastProviderError || fail(429, "Toàn bộ key VIP EPUB Studio đang chờ hồi quota.");
     }
 
-    if (data?.candidates?.[0]?.finishReason === "SAFETY") {
-      throw fail(400, "Nội dung chương bị bộ lọc an toàn của Gemini từ chối xử lý.");
-    }
-    if (data?.candidates?.[0]?.finishReason === "MAX_TOKENS") {
-      throw fail(502, "Bản dịch bị cắt do hết giới hạn output token.");
-    }
-
-    let text = data?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("").trim() || "";
-    text = text.replace(/^```[a-z]*\n?/i, "").replace(/\n?```$/i, "").trim();
-    text = stripAdminTitleFromContent(text, title, 0);
-    if (!text) throw fail(502, "Gemini không trả về nội dung bản dịch.");
-
     return json({
       ok: true,
-      translation: text,
+      translation: translatedText,
       model,
       finishReason: data?.candidates?.[0]?.finishReason || "",
       usage: data?.usageMetadata || null
@@ -2268,7 +2143,33 @@ function stripAdminTitleFromContent(content, title, chapterNumber) {
     .replace(/^\s*Chương\s+\d+\s*[:：][^\n]{1,140}\n+/iu, "")
     .replace(/^\s*(?:python|py|javascript|typescript|json|markdown|text)\s*=?\s*(?=["'\u201c]|Chương\s+\d+)/iu, "")
     .trim();
-  return formatAdminNovelDialogueAndQuotes(clean);
+  return clean;
+}
+
+function cleanAdminProviderWrapper(value) {
+  return String(value || "")
+    .replace(/\r\n?/g, "\n")
+    .trim()
+    .replace(/^\s*(?:Gemini said|Here is the translation|Dưới đây là bản dịch|Bản dịch tiếng Việt)\s*:?\s*/iu, "")
+    .replace(/^\s*```(?:text|markdown|plaintext)?\s*\n?/iu, "")
+    .replace(/\n?\s*```\s*$/u, "")
+    .trim();
+}
+
+function assessAdminTranslation(source, translation) {
+  if (!translation) return "kết quả rỗng";
+  if (/```|\[file-tag:|^\s*(?:Gemini said|Show code|Copy code)\b/imu.test(translation)) return "lẫn rác giao diện hoặc khối code";
+  const han = translation.match(/\p{Script=Han}/gu) || [];
+  if (han.length) return `còn sót ${han.length} chữ Hán`;
+  if (source.length >= 250) {
+    const ratio = translation.length / source.length;
+    if (ratio < 0.6) return `nội dung có dấu hiệu bị cắt hoặc lược bớt (${Math.round(ratio * 100)}%)`;
+    if (ratio > 4.5) return `nội dung dài bất thường (${Math.round(ratio * 100)}%)`;
+  }
+  const sourceParagraphs = source.split(/\n\s*\n|\n/).map((part) => part.trim()).filter(Boolean).length;
+  const outputParagraphs = translation.split(/\n\s*\n|\n/).map((part) => part.trim()).filter(Boolean).length;
+  if (sourceParagraphs >= 8 && outputParagraphs < Math.ceil(sourceParagraphs * 0.2)) return `mất cấu trúc đoạn (${outputParagraphs}/${sourceParagraphs})`;
+  return "";
 }
 
 // ---- reader term feedback -------------------------------------------------
