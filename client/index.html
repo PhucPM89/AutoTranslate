@@ -60,14 +60,14 @@
     <link rel="preload" href="/library/covers/misty-pagoda-hero.webp" as="image" fetchpriority="high">
     <script>
       (function() {
-        var APP_VER = "20260825-royal-v1";
+        var APP_VER = "%APP_VER%";
         if (typeof window !== "undefined" && window.localStorage) {
           if (localStorage.getItem("tramchu_app_ver") !== APP_VER) {
             localStorage.setItem("tramchu_app_ver", APP_VER);
             if ("caches" in window) {
               caches.keys().then(function(names) {
-                names.forEach(function(name) { caches.delete(name); });
-              });
+                return Promise.all(names.map(function(name) { return caches.delete(name); }));
+              }).catch(function() {});
             }
             if ("serviceWorker" in navigator) {
               navigator.serviceWorker.getRegistrations().then(function(regs) {
@@ -76,7 +76,7 @@
                     window.location.reload();
                   });
                 }
-              });
+              }).catch(function() {});
             }
           }
         }
@@ -1625,17 +1625,36 @@
 
     <!-- Floating Audio TTS Player Bar -->
     <div id="ttsAudioBar" class="tts-audio-bar" hidden>
-      <div class="tts-soundwave" aria-hidden="true">
-        <span></span><span></span><span></span><span></span>
+      <div class="tts-left-section">
+        <div class="tts-soundwave" aria-hidden="true">
+          <span></span><span></span><span></span><span></span>
+        </div>
+        <div class="tts-info">
+          <div class="tts-info-top">
+            <span id="ttsChapterTitle" class="tts-chapter-title">Chương hiện tại</span>
+            <span class="tts-badge">Hoài My</span>
+          </div>
+          <span id="ttsStatusText" class="tts-status">00:00 / 00:00</span>
+        </div>
       </div>
-      <div class="tts-info">
-        <span class="tts-badge">Hoài My</span>
-        <span id="ttsStatusText" class="tts-status">Đang phát...</span>
-      </div>
-      <div class="tts-controls">
-        <button id="ttsPrevParBtn" class="tts-btn" type="button" aria-label="Đoạn trước" title="Đoạn trước"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"></path></svg></button>
-        <button id="ttsPlayPauseBtn" class="tts-btn tts-btn-primary" type="button" aria-label="Tạm dừng/Phát" title="Tạm dừng / Phát"><svg class="icon tts-icon-play" aria-hidden="true" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg><svg class="icon tts-icon-pause" aria-hidden="true" viewBox="0 0 24 24" hidden><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg></button>
-        <button id="ttsNextParBtn" class="tts-btn" type="button" aria-label="Đoạn kế tiếp" title="Đoạn kế tiếp"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg></button>
+      <div class="tts-center-section">
+        <div class="tts-controls">
+          <button id="ttsPrevParBtn" class="tts-btn tts-skip-btn" type="button" aria-label="Lùi 15 giây" title="Lùi 15 giây (-15s)">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.2 3.16-1.93 5.12-1.93 3.91 0 7.15 2.8 7.85 6.5l2.45-.49C21.84 12.01 17.65 8 12.5 8z"/></svg>
+            <span class="tts-btn-sub">-15s</span>
+          </button>
+          <button id="ttsPlayPauseBtn" class="tts-btn tts-btn-primary" type="button" aria-label="Tạm dừng/Phát" title="Tạm dừng / Phát">
+            <svg class="icon tts-icon-play" aria-hidden="true" viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
+            <svg class="icon tts-icon-pause" aria-hidden="true" viewBox="0 0 24 24" hidden><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+          </button>
+          <button id="ttsNextParBtn" class="tts-btn tts-skip-btn" type="button" aria-label="Tiến 15 giây" title="Tiến 15 giây (+15s)">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M11.5 8c2.65 0 5.05.99 6.9 2.6L22 7v9h-9l3.62-3.62c-1.39-1.2-3.16-1.93-5.12-1.93-3.91 0-7.15 2.8-7.85 6.5l-2.45-.49C2.16 12.01 6.35 8 11.5 8z"/></svg>
+            <span class="tts-btn-sub">+15s</span>
+          </button>
+        </div>
+        <div class="tts-timeline-wrap">
+          <input id="ttsSeekBar" class="tts-seek-slider" type="range" min="0" max="100" value="0" step="0.1" aria-label="Tiến trình phát chương">
+        </div>
       </div>
       <div class="tts-settings">
         <select id="ttsVoiceSelect" class="tts-select tts-voice-select" title="Chọn giọng đọc"></select>
@@ -2164,41 +2183,6 @@
         </div>
       </div>
     </dialog>
-
-    <!-- Floating Mini Audio Player Bar -->
-    <div id="floatingAudioBar" class="floating-audio-bar" hidden>
-      <div class="audio-bar-info">
-        <button id="floatingAudioPlayPause" class="audio-bar-play-btn" type="button" aria-label="Phát hoặc tạm dừng">
-          <svg class="icon audio-icon-play" aria-hidden="true" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-          <svg class="icon audio-icon-pause" aria-hidden="true" viewBox="0 0 24 24" hidden><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
-        </button>
-        <div class="audio-bar-text">
-          <span id="floatingAudioTitle" class="audio-bar-title">Đang đọc giọng Hoài My</span>
-          <span id="floatingAudioProgress" class="audio-bar-progress-text">Đoạn 1</span>
-        </div>
-      </div>
-      <div class="audio-bar-controls">
-        <button id="floatingAudioPrev" class="icon-button audio-bar-btn" type="button" aria-label="Đoạn trước" title="Đoạn trước">
-          <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
-        </button>
-        <button id="floatingAudioNext" class="icon-button audio-bar-btn" type="button" aria-label="Đoạn kế" title="Đoạn kế">
-          <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
-        </button>
-        <select id="floatingAudioSpeed" class="audio-bar-speed" title="Tốc độ đọc">
-          <option value="0.8">0.8x</option>
-          <option value="1" selected>1.0x</option>
-          <option value="1.2">1.2x</option>
-          <option value="1.5">1.5x</option>
-        </select>
-        <button id="floatingAudioTimerBtn" class="audio-bar-timer-btn" type="button" title="Hẹn giờ tắt (Sleep timer)">
-          <span>⏱</span>
-          <small id="floatingAudioTimerLabel">Tắt</small>
-        </button>
-        <button id="floatingAudioClose" class="icon-button audio-bar-close" type="button" aria-label="Đóng trình phát" title="Dừng đọc">
-          <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"></path></svg>
-        </button>
-      </div>
-    </div>
 
     <!-- Video Script Editor Modal -->
     <dialog id="videoScriptDialog" class="admin-modal video-script-dialog" aria-labelledby="videoScriptModalTitle">

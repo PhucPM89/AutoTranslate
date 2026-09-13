@@ -178,7 +178,7 @@ class TTSEngine {
     this.bookId = options.bookId || "";
     this.chapterNumber = Number(options.chapterNumber || 0);
     this.chapterTitle = options.title || "";
-    this.isFullChapter = Boolean(options.fullChapter || this.bookId);
+    this.isFullChapter = options.fullChapter !== undefined ? Boolean(options.fullChapter) : true;
     this.mode = options.mode || "edge";
 
     this.paragraphs = String(text || "")

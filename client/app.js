@@ -308,7 +308,9 @@ const els = {
   zenModeBtn: document.getElementById("zenModeBtn"),
   zenExitBtn: document.getElementById("zenExitBtn"),
   ttsAudioBar: document.getElementById("ttsAudioBar"),
+  ttsChapterTitle: document.getElementById("ttsChapterTitle"),
   ttsStatusText: document.getElementById("ttsStatusText"),
+  ttsSeekBar: document.getElementById("ttsSeekBar"),
   ttsPrevParBtn: document.getElementById("ttsPrevParBtn"),
   ttsPlayPauseBtn: document.getElementById("ttsPlayPauseBtn"),
   ttsNextParBtn: document.getElementById("ttsNextParBtn"),
@@ -3054,9 +3056,6 @@ function initTTSController() {
       }
     });
 
-    if (els.floatingAudioProgress && ttsEngine.paragraphs.length) {
-      els.floatingAudioProgress.textContent = `Đoạn ${index + 1} / ${ttsEngine.paragraphs.length}`;
-    }
   };
 
   function formatTtsTime(seconds) {
@@ -3066,40 +3065,28 @@ function initTTSController() {
     return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   }
 
-  ttsEngine.onTimeUpdate = ({ currentTime, duration, currentIndex, totalParagraphs }) => {
-    if (els.ttsStatusText && duration > 0 && !ttsEngine.isLoading && !ttsEngine.isPaused) {
-      els.ttsStatusText.textContent = `${formatTtsTime(currentTime)} / ${formatTtsTime(duration)}`;
+  let isDraggingTtsSeekBar = false;
+
+  ttsEngine.onTimeUpdate = ({ currentTime, duration, progressPercent, currentIndex, totalParagraphs }) => {
+    if (!isDraggingTtsSeekBar && els.ttsSeekBar && duration > 0) {
+      const pct = (currentTime / duration) * 100;
+      els.ttsSeekBar.value = pct;
+      els.ttsSeekBar.style.setProperty("--seek-percent", `${pct}%`);
     }
-    if (els.floatingAudioProgress && duration > 0 && !ttsEngine.isLoading) {
-      els.floatingAudioProgress.textContent = `${formatTtsTime(currentTime)} / ${formatTtsTime(duration)} · Đoạn ${currentIndex + 1}/${totalParagraphs}`;
+    if (els.ttsStatusText && duration > 0 && !ttsEngine.isLoading) {
+      els.ttsStatusText.textContent = `${formatTtsTime(currentTime)} / ${formatTtsTime(duration)}`;
     }
   };
 
   ttsEngine.onStateChange = ({ isPlaying, isPaused, isLoading, hasTimer, timerLabel, currentIndex, totalParagraphs, mode, duration, currentTime }) => {
-    const active = isPlaying || isPaused;
+    const active = isPlaying || isPaused || isLoading;
     
     if (els.ttsAudioBar) {
       els.ttsAudioBar.hidden = !active;
       els.ttsAudioBar.classList.toggle("is-paused", isPaused);
     }
-    if (els.floatingAudioBar) {
-      els.floatingAudioBar.hidden = !active;
-      if (els.floatingAudioTitle) els.floatingAudioTitle.textContent = displayChapterTitle(state.currentIndex);
-      if (els.floatingAudioProgress) {
-        if (isLoading) {
-          els.floatingAudioProgress.textContent = "Đang tải audio chương...";
-        } else if (mode === "speechSynthesis") {
-          els.floatingAudioProgress.textContent = totalParagraphs ? `Đoạn ${currentIndex + 1} / ${totalParagraphs} (Thiết bị)` : "Đang đọc offline...";
-        } else if (duration > 0) {
-          els.floatingAudioProgress.textContent = `${formatTtsTime(currentTime)} / ${formatTtsTime(duration)} · Đoạn ${currentIndex + 1}/${totalParagraphs}`;
-        } else {
-          els.floatingAudioProgress.textContent = totalParagraphs ? `Đoạn ${currentIndex + 1} / ${totalParagraphs}` : "Đang phát...";
-        }
-      }
-      const fPlayIcon = els.floatingAudioPlayPause?.querySelector(".audio-icon-play");
-      const fPauseIcon = els.floatingAudioPlayPause?.querySelector(".audio-icon-pause");
-      if (fPlayIcon) fPlayIcon.hidden = isPlaying && !isPaused;
-      if (fPauseIcon) fPauseIcon.hidden = !isPlaying || isPaused;
+    if (els.ttsChapterTitle) {
+      els.ttsChapterTitle.textContent = displayChapterTitle(state.currentIndex);
     }
     if (els.ttsToggleBtn) {
       els.ttsToggleBtn.classList.toggle("is-active", active);
@@ -3109,17 +3096,23 @@ function initTTSController() {
     }
     if (els.ttsStatusText) {
       if (isPaused) {
-        els.ttsStatusText.textContent = "Tạm dừng";
+        els.ttsStatusText.textContent = duration > 0 ? `${formatTtsTime(currentTime)} / ${formatTtsTime(duration)} (Tạm dừng)` : "Tạm dừng";
       } else if (isLoading) {
-        els.ttsStatusText.textContent = "Đang chuẩn bị audio...";
+        els.ttsStatusText.textContent = "Đang tải trọn bộ chương...";
       } else if (mode === "speechSynthesis") {
-        els.ttsStatusText.textContent = `Đang đọc thiết bị · Đoạn ${currentIndex + 1}/${totalParagraphs}`;
+        els.ttsStatusText.textContent = `Thiết bị · Đoạn ${currentIndex + 1}/${totalParagraphs}`;
       } else if (duration > 0) {
         els.ttsStatusText.textContent = `${formatTtsTime(currentTime)} / ${formatTtsTime(duration)}`;
       } else {
         els.ttsStatusText.textContent = "Đang phát...";
       }
     }
+    if (!isDraggingTtsSeekBar && els.ttsSeekBar) {
+      const pct = duration > 0 ? (currentTime / duration) * 100 : 0;
+      els.ttsSeekBar.value = pct;
+      els.ttsSeekBar.style.setProperty("--seek-percent", `${pct}%`);
+    }
+
     const playIcon = els.ttsPlayPauseBtn?.querySelector(".tts-icon-play");
     const pauseIcon = els.ttsPlayPauseBtn?.querySelector(".tts-icon-pause");
     if (playIcon) playIcon.hidden = isPlaying && !isPaused;
@@ -3131,9 +3124,6 @@ function initTTSController() {
     if (els.ttsTimerLabel) {
       els.ttsTimerLabel.textContent = timerLabel || "Hẹn giờ";
     }
-    if (els.floatingAudioTimerLabel) {
-      els.floatingAudioTimerLabel.textContent = timerLabel || "Tắt";
-    }
   };
 
   ttsEngine.onError = (message) => {
@@ -3142,7 +3132,6 @@ function initTTSController() {
 
   ttsEngine.onTimerTick = (timeStr) => {
     if (els.ttsTimerLabel) els.ttsTimerLabel.textContent = timeStr || "Hẹn giờ";
-    if (els.floatingAudioTimerLabel) els.floatingAudioTimerLabel.textContent = timeStr || "Tắt";
   };
 
   ttsEngine.onFinished = () => {
@@ -3174,8 +3163,8 @@ function initTTSController() {
       pEl.dataset.parIndex = String(i);
       pEl.textContent = pText;
       pEl.addEventListener("click", () => {
-        if (ttsEngine.isPlaying) {
-          ttsEngine.speakParagraph(i);
+        if (ttsEngine.isPlaying || ttsEngine.isPaused) {
+          ttsEngine.seekToParagraph(i);
         }
       });
       els.translationText.appendChild(pEl);
@@ -3210,26 +3199,45 @@ function initTTSController() {
     }
   });
 
-  els.floatingAudioPlayPause?.addEventListener("click", () => {
-    if (ttsEngine.isPaused) ttsEngine.resume();
-    else if (ttsEngine.isPlaying) ttsEngine.pause();
-    else startTTSFromCurrent();
-  });
-
-  els.floatingAudioPrev?.addEventListener("click", () => ttsEngine.previous());
-  els.floatingAudioNext?.addEventListener("click", () => ttsEngine.next());
-  els.floatingAudioSpeed?.addEventListener("change", (e) => ttsEngine.setSpeed(Number(e.target.value)));
-  els.floatingAudioTimerBtn?.addEventListener("click", () => els.sleepTimerDialog?.showModal());
-  els.floatingAudioClose?.addEventListener("click", () => ttsEngine.stop());
-
   els.ttsPlayPauseBtn?.addEventListener("click", () => {
     if (ttsEngine.isPaused) ttsEngine.resume();
     else if (ttsEngine.isPlaying) ttsEngine.pause();
     else startTTSFromCurrent();
   });
 
-  els.ttsPrevParBtn?.addEventListener("click", () => ttsEngine.previous());
-  els.ttsNextParBtn?.addEventListener("click", () => ttsEngine.next());
+  els.ttsPrevParBtn?.addEventListener("click", () => {
+    if (ttsEngine.audio && Number.isFinite(ttsEngine.audio.duration) && ttsEngine.audio.duration > 0) {
+      ttsEngine.seekToTime(ttsEngine.audio.currentTime - 15);
+    } else {
+      ttsEngine.previous();
+    }
+  });
+
+  els.ttsNextParBtn?.addEventListener("click", () => {
+    if (ttsEngine.audio && Number.isFinite(ttsEngine.audio.duration) && ttsEngine.audio.duration > 0) {
+      ttsEngine.seekToTime(ttsEngine.audio.currentTime + 15);
+    } else {
+      ttsEngine.next();
+    }
+  });
+
+  els.ttsSeekBar?.addEventListener("input", (e) => {
+    isDraggingTtsSeekBar = true;
+    const pct = Number(e.target.value);
+    els.ttsSeekBar.style.setProperty("--seek-percent", `${pct}%`);
+    if (ttsEngine.audio && Number.isFinite(ttsEngine.audio.duration)) {
+      const previewTime = (pct / 100) * ttsEngine.audio.duration;
+      if (els.ttsStatusText) {
+        els.ttsStatusText.textContent = `${formatTtsTime(previewTime)} / ${formatTtsTime(ttsEngine.audio.duration)}`;
+      }
+    }
+  });
+
+  els.ttsSeekBar?.addEventListener("change", (e) => {
+    isDraggingTtsSeekBar = false;
+    const pct = Number(e.target.value);
+    ttsEngine.seekToPercent(pct);
+  });
 
   function populateVoiceSelect(voices, currentSelected) {
     if (!els.ttsVoiceSelect) return;
@@ -4245,9 +4253,8 @@ function renderTranslation(cached, index) {
     els.translateButton.hidden = true;
     els.retranslateButton.hidden = false;
 
-    if (ttsEngine && ttsEngine.isPlaying && !ttsEngine.isPaused) {
-      ttsEngine.loadText(displayText);
-      ttsEngine.play(0);
+    if (ttsEngine && (ttsEngine.isPlaying || ttsEngine.isLoading) && !ttsEngine.isPaused) {
+      startTTSFromCurrent();
     }
 
     const extracted = extractTitleFromContent(displayText);
@@ -5022,9 +5029,8 @@ function renderCdnChapter(chapter, index) {
     els.translationText.classList.remove("empty", "is-loading", "status-error");
     els.outputStatus.textContent = "Đã dịch";
 
-    if (ttsEngine && ttsEngine.isPlaying && !ttsEngine.isPaused) {
-      ttsEngine.loadText(displayText);
-      ttsEngine.play(0);
+    if (ttsEngine && (ttsEngine.isPlaying || ttsEngine.isLoading) && !ttsEngine.isPaused) {
+      startTTSFromCurrent();
     }
     attachCommentBubblesToChapter(bookIdFromState(), index);
     if (pendingTargetParagraph !== null && Number.isFinite(pendingTargetParagraph)) {

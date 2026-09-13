@@ -60,14 +60,14 @@
     <link rel="preload" href="/library/covers/misty-pagoda-hero.webp" as="image" fetchpriority="high">
     <script>
       (function() {
-        var APP_VER = "20260825-royal-v1";
+        var APP_VER = "mtzlstbn-9efbb7";
         if (typeof window !== "undefined" && window.localStorage) {
           if (localStorage.getItem("tramchu_app_ver") !== APP_VER) {
             localStorage.setItem("tramchu_app_ver", APP_VER);
             if ("caches" in window) {
               caches.keys().then(function(names) {
-                names.forEach(function(name) { caches.delete(name); });
-              });
+                return Promise.all(names.map(function(name) { return caches.delete(name); }));
+              }).catch(function() {});
             }
             if ("serviceWorker" in navigator) {
               navigator.serviceWorker.getRegistrations().then(function(regs) {
@@ -76,14 +76,14 @@
                     window.location.reload();
                   });
                 }
-              });
+              }).catch(function() {});
             }
           }
         }
       })();
     </script>
     <link rel="stylesheet" href="/style.css?v=17ed223dea0c">
-    <script src="/app.js?v=6c74b2d6d258" defer></script>
+    <script src="/app.js?v=ca047173863a" defer></script>
   </head>
   <body class="dark">
     <section id="libraryView" class="library-view">
@@ -356,7 +356,7 @@
 
           <div id="genrePills" class="genre-pills" role="group" aria-label="Lọc theo thể loại"></div>
 
-          <div id="catalogGrid" class="catalog-grid" aria-live="polite"><noscript><div class="seo-catalog-fallback" style="padding:1rem 0"><h2>Kho truyện dịch chọn lọc Trạm Chữ</h2><ul><li><a href="/?book=fanqie-6569423930556156942">Lục Chỉ Quỷ Y (Lệnh Hồ Nhị Trung)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-7379865527998483480">Ban Ngày Bán Quần Áo, Ban Đêm Khâu Thi Thể (Dạ U Ảnh)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-7027679289931729920">Sinh Tồn Kinh Hoàng Trong Thế Giới Ác Mộng (Lộ Kiếm Nhất)</a> - Trinh thám</li><li><a href="/?book=fanqie-6511963569901276163">Năm Ấy, Con Ve Ấy, Thanh Kiếm Ấy (Mô Vũ)</a> - Tiên hiệp</li><li><a href="/?book=fanqie-6511591158211152910">Tu La Thiên Đế (Thí Nghiệm Tiểu Bạch Thú)</a> - Huyền huyễn</li><li><a href="/?book=fanqie-6497814207348608014">Dân Điều Cục Dị Văn Lục: Miễn Truyện (Nhĩ Đông Thủy Thọ)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-6501193975188163598">Đạo Sĩ Không Dễ Chọc (Khốn Đích Thụy Bất Trước)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-6497813954591460365">Thiên Mệnh Thần Tướng (Tây Vực Đao Khách)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-6497813734990285837">Ma Y Thần Toán Tử (Kỵ Mã Điếu Ngư)</a> - Tiên hiệp</li><li><a href="/?book=fanqie-6568661853138848781">Âm Mộ (Kháp Linh Tiểu Đạo)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-6547995845332044807">Toán Tử Mệnh (Cửu Phẩm Nhất Cục)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-6542710247130139655">Tuyệt Thế Võ Thần (Thanh Vô Hồn)</a> - Huyền huyễn</li><li><a href="/?book=fanqie-7252272258813529100">Thôn Thiên Yêu Đế (Phiên Già Bất Phóng Đường)</a> - Huyền huyễn</li><li><a href="/?book=fanqie-7251068940355374114">Mạt Thế Giáng Lâm Đừng Hoảng, Tích Lương Thực Trước Rồi Tích Súng (Hắc Bạch Sắc Chương Ngư)</a> - Mạt thế</li><li><a href="/?book=fanqie-7250432542971530243">Mộ Táng Quỷ, Khế Ước Âm Hôn (Đường Cát Kha Đức)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-7250087472565062656">Yêu Đương Trong Trò Chơi Kinh Dị Muôn Hình Vạn Trạng (Bôn Bào Đích Đào Tử)</a> - Trinh thám</li><li><a href="/?book=fanqie-7243455282007772217">Tiểu Sư Đệ Muốn Nghịch Thiên (Khởi Lạc Ngữ)</a> - Huyền huyễn</li><li><a href="/?book=fanqie-7239954742909078565">Chư Thiên: Bắt Đầu Từ Thế Giới Tổng Võ (Kim Trí Trần)</a> - Tiên hiệp</li><li><a href="/?book=fanqie-7239220785737370657">Mạt Thế: Mục Tiêu Là Đội Quân Ba Nghìn Nữ Thần (Đề Mễ Nha)</a> - Mạt thế</li><li><a href="/?book=fanqie-7238141448254655523">Người Sống Chớ Lại Gần (Lãng Cửu Tâm)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-7236273166312541221">Những năm tháng làm cố vấn phong thủy trong giới giải trí (Khổ Qua Xào Hoa Giải)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-7234021426796170273">Phàm Nhân Tu Tiên: Ai Có Thể Âm Hiểm Hơn Cực Âm Ta! (Duỵ Dũng Quán Quân)</a> - Tiên hiệp</li><li><a href="/?book=fanqie-7222901237698530337">Hứa Tiên (Kiếm Khí Trường Tồn)</a> - Tiên hiệp</li><li><a href="/?book=fanqie-7221090838208580623">Xà Tiên: Khởi Đầu Thôn Phệ Tiên Đế (Cách Tỷ Hầu)</a> - Huyền huyễn</li><li><a href="/?book=fanqie-7221078229107346432">Trường Sinh Liên Sao: Sống Đủ Lâu Là Có Thể Xưng Bá Vũ Trụ (Nguyệt Phi Thị Nguyệt)</a> - Mạt thế</li><li><a href="/?book=fanqie-7219484532838239244">Miểu Miểu Tiên Lộ (Bàng Bàng Lô Bô)</a> - Tiên hiệp</li><li><a href="/?book=fanqie-7218833393251781666">Thiên Phú Vô Địch, Ta Chỉ Một Lòng Muốn Sống Yên (Tức Nhược Hoàng)</a> - Huyền huyễn</li><li><a href="/?book=fanqie-7215914815879908410">Trên Phế Thổ, Ta Nhặt Ve Chai Mua Nhà Trong Khu An Toàn (Tiểu Chủ Siêu Hữu Phúc)</a> - Mạt thế</li><li><a href="/?book=fanqie-7210602714797968440">Ta Là Tay Sai Của Tà Thần (Mạch Thượng Hồi)</a> - Mạt thế</li><li><a href="/?book=fanqie-7209942012030618662">Sau Mạt Thế, Ta Trở Thành Triệu Hồi Sư (Thương Hải Hữu Đại Ngư)</a> - Mạt thế</li><li><a href="/?book=fanqie-7207066781708454916">Mạt Thế Cực Hàn: Ta Dùng Tụ Bảo Bồn Tích Trữ Hàng Tỷ Vật Tư (Bạch Từ Thính Dạ Vũ)</a> - Mạt thế</li><li><a href="/?book=fanqie-7206341486365903887">Khởi Đầu Thiên Tai: Ta Tích Trữ Vạn Tỷ Vật Tư Làm Thống Soái (Vương Nhất Đao)</a> - Mạt thế</li><li><a href="/?book=fanqie-7203265839036894247">Cửu Thúc: Bắt Đầu Đơn Giản Hóa Tu Tiên Từ Nghĩa Trang (Bán Bộ Niên Hoa)</a> - Trinh thám</li><li><a href="/?book=fanqie-7202777894500699188">Khởi Đầu Ghép Tim Yêu Ma, Trở Thành Hung Vật Tuyệt Thế (Sa Trà Diện)</a> - Huyền huyễn</li><li><a href="/?book=fanqie-7201113723660930063">Quy Tắc Quái Đàm: Năng Lực Của Ta Hơi Kỳ Lạ (Thương Bạch Kỷ Nguyên)</a> - Trinh thám</li><li><a href="/?book=fanqie-7196962342398069821">Thiên Tai Mạt Thế: Quy Tắc Của Ta Chính Là Quy Tắc (Tửu Nang Phạn Đại Ngư Lão Bát)</a> - Mạt thế</li><li><a href="/?book=fanqie-7188672333664488500">Trường Sinh: Ta Ở Giáo Phường Ty Ngàn Thu Vạn Năm (Mật Vũ Phi Hoa)</a> - Tiên hiệp</li><li><a href="/?book=fanqie-7185083041159580730">Đại Hoang Kinh (Kim Ngưu Đoạn Chương)</a> - Huyền huyễn</li><li><a href="/?book=fanqie-7184684897062095884">Sinh Tồn Trên Đoàn Tàu: Bắt Đầu Từ Khi Hành Tinh Mẹ Phát Nổ (Phong Thu Mạc)</a> - Mạt thế</li><li><a href="/?book=fanqie-7183695457732791351">Mạt Thế Kinh Hoàng: Khởi Đầu Đốt Mười Vạn Tỷ Minh Tệ (Oa Oa Phi Phi)</a> - Trinh thám</li><li><a href="/?book=fanqie-7180279419959774247">Mạt Thế Băng Hà: Ta Tích Trữ Vật Tư Trị Giá Chục Tỷ (Ký Ức Đích Hải)</a> - Mạt thế</li><li><a href="/?book=fanqie-7177657326709509153">Ta Chỉ Là Thợ Làm Đồ Mã, Ngươi Lại Bắt Ta Phá Đại Án (Mưu Túy)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-7175158578485922820">Kinh Dị: Kỵ Sĩ Vong Linh Lại Chính Là Ta? (Ái Thực Táo Bình Phái)</a> - Trinh thám</li><li><a href="/?book=fanqie-7168385493590084619">Sinh Tử Thánh Hoàng (Loạn Thế Gian Thần)</a> - Huyền huyễn</li><li><a href="/?book=fanqie-7166580408522378292">Thiên Sư Tại Đây, Kỳ Môn Phong Thủy Chấn Thiên Hạ (Đại Cà Tử)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-7165730634697018382">Thiếu Niên Chưởng Khống Giả Mạt Thế (Bất Tri Thùy Hổ)</a> - Mạt thế</li><li><a href="/?book=fanqie-7158752613117201419">Linh Khư, Kiếm Quan, Kiếm Khách Mù (Chử Thục Đích Lai Phúc Cáp)</a> - Huyền huyễn</li><li><a href="/?book=fanqie-7153993829815684135">Bút Ký Cấm Kỵ Dân Gian (Thanh Tiêu Nhục Hà)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-7144933328859171848">Mạt Thế: Cô Nương Đừng Hoảng, Vật Tư Của Ta Đủ Dùng Trăm Năm (Bành Bất Dịch)</a> - Mạt thế</li><li><a href="/?book=fanqie-7143163181291015198">Phù Thiên Bất Lạc (Yêm Chi Lô)</a> - Tiên hiệp</li><li><a href="/?book=fanqie-7143134984532921382">Vạn Cổ Đệ Nhất Phế Tài (Ái Khốc Đích Tiểu Thập Thất)</a> - Huyền huyễn</li><li><a href="/?book=fanqie-7143038691944959011">Thập Nhật Chung Yên (Sát Trùng Đội Đội Viên)</a> - Trinh thám</li><li><a href="/?book=fanqie-7142811142937644062">Phàm Nhân Tu Tiên: Khởi Đầu Nhận Được Ba Mẫu Linh Điền (Bạo Tẩu Đế Tây Quả Quân)</a> - Tiên hiệp</li><li><a href="/?book=fanqie-7138786865670261796">Cảnh Sát Nhỏ Gánh Việc Lớn (Thuận Thủ Khiên Hổ)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-7138249318909086727">Thiên Uyên (Mộc Tiêu Tam Sinh)</a> - Huyền huyễn</li><li><a href="/?book=fanqie-7137169678517931011">Xin Lỗi, Hạm Đội Liên Sao Của Ta Chỉ Tuyển Nữ Binh (Thất Cân Lưu Niên)</a> - Mạt thế</li><li><a href="/?book=fanqie-7118328256125733923">Trò Chơi Kinh Dị? Ta Chỉ Cần Tay Phải Là Qua Được (Lão Ký)</a> - Trinh thám</li><li><a href="/?book=fanqie-7116414987110714368">Sinh Tồn Mạt Thế: Ta Có Thể Thăng Hoa Vạn Vật (Nhược Vân Tùy Phong)</a> - Mạt thế</li><li><a href="/?book=fanqie-7114567432542358542">Du Tiên (Ti Tư Thanh Trần)</a> - Tiên hiệp</li><li><a href="/?book=fanqie-7104916285464513566">Toàn Cầu Ngự Quỷ: Trong Cơ Thể Ta Có Hàng Trăm Triệu Con Quỷ (Thiên Tước Hoa Tử)</a> - Trinh thám</li><li><a href="/?book=fanqie-7102779074921106432">Huyền Huyễn: Khởi Đầu Với Toàn Tuyệt Chiêu Vô Địch (Ván Tố Tiên Sinh)</a> - Huyền huyễn</li><li><a href="/?book=fanqie-7101613458101111812">Bút Ký Xuất Mã Đông Bắc (Ngô Bán Tiên)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-7100882344545881127">Người Thợ Làm Đồ Mã Cuối Cùng (Trùng Hạ Nguyệt Bán)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-7087872099557051400">Ta Dùng Hồ Tiên Trấn Bách Quỷ (Tử Mộng Du Long)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-7087382316862934024">Thời Đại Tai Biến: Ta Có Thể Mở Khóa Cây Công Nghệ (Trần Nhị Lãn)</a> - Mạt thế</li><li><a href="/?book=fanqie-7085357205842562078">Những Năm Ấy, Các Tu Tiên Giả Chúng Ta Từng Cùng Nhau Chém (Mô Cổ Ngọ Hạ Địch Tùng)</a> - Tiên hiệp</li><li><a href="/?book=fanqie-7083672225286458406">Bảo Tháp Tiên Duyên (Tiêu Bất Ngữ)</a> - Tiên hiệp</li><li><a href="/?book=fanqie-7081155189415087143">Thiên Hạ Du Ngư (Khai Tâm Tượng Quả)</a> - Tiên hiệp</li><li><a href="/?book=fanqie-7077546460056652803">Nhất Kiếm Bá Thiên (Vĩnh Dạ Tinh Hà)</a> - Huyền huyễn</li><li><a href="/?book=fanqie-7077516958534470656">Phàm Cốt (Một Thêm Thầy Sĩ)</a> - Tiên hiệp</li><li><a href="/?book=fanqie-7075597792206392358">Đạo Mộ: Ta Phá Viện Điều Dưỡng Cách Nhĩ Mộc (Hạc Đỉnh Hồng Gia Băng)</a> - Trinh thám</li><li><a href="/?book=fanqie-7064405896540982309">Võ Toái Tinh Hà (Yêu Dạ)</a> - Huyền huyễn</li><li><a href="/?book=fanqie-7057481353117305856">Hoàng Tiên Đòi Phong, Ta Bảo Nó Phải Tin Vào Khoa Học (Xuất Mã Tiên)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-7056333207079226400">Nam Sinh Trường Nghề Xem Mắt Nữ Tiến Sĩ, Gặp Nhau Bàn Về Nhiệt Hạch (Sí Vũ Thiên Khung)</a> - Mạt thế</li><li><a href="/?book=fanqie-7053862151907183627">Thông U Tiểu Nho Tiên (Du Tử Ngâm)</a> - Tiên hiệp</li><li><a href="/?book=fanqie-7050311566700317730">Vì Thận Trọng Mà Hung Ác Quá Mức (Dạ Lai Phong Vũ Thanh)</a> - Trinh thám</li><li><a href="/?book=fanqie-7049588817434512420">Thiên Vũ Thần Đế (Truyền Mộng Tinh Trần)</a> - Huyền huyễn</li><li><a href="/?book=fanqie-7047805651849841671">Thái Cổ Kiếm Tôn (Thanh Thạch Tế Ngữ)</a> - Huyền huyễn</li><li><a href="/?book=fanqie-7041367966071393315">Vấn Đỉnh Tiên Đồ (Phượng Thử Vấn Thiền)</a> - Tiên hiệp</li><li><a href="/?book=fanqie-7029334489016830989">Trấn Long (Đạo Môn Cửu Công Tử)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-7028515360076729378">Trò Chơi Mạt Thế: Khởi Đầu Tự Tay Giết Bạn Gái Hoa Khôi (Thanh Mai Dịch Thệ)</a> - Mạt thế</li><li><a href="/?book=fanqie-7026703067080821797">Kỳ Lân Thần Tướng (Giang Nam Đạo Trưởng)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-7024903102301998111">Thi Sinh Tử, Quỷ Khiêng Quan (Giới Ngọc)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-6999592647790693413">Khởi Đầu Với Thiên Phú Quỷ Bí, Đốt Xác Là Mạnh Lên (Đêm Thiên Nam)</a> - Trinh thám</li><li><a href="/?book=fanqie-6995619119236123656">Đại Tướng Sư (Phỉ Di)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-6995119379645991944">Ta Biến Thế Giới Kinh Dị Thành Trò Chơi Nuôi Dưỡng! (Dự Tác)</a> - Trinh thám</li><li><a href="/?book=fanqie-6992514534682397732">Ký Túc Xá Quỷ Dị Kinh Hồn (Thần Tử Đống)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-6989516250195954702">Sinh Tồn Mạt Thế: Ta Có Thể Nhìn Thấy Gợi Ý Ẩn (Ngã Năng Đả Thập Cá)</a> - Mạt thế</li><li><a href="/?book=fanqie-6985246250434038815">Bút Ký Trộm Mộ Bắc Phái (Vân Phong)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-6976981020113374244">Tai Biến Toàn Cầu: Tiến Hóa Thiết Huyết (Đạo Gia Từ Bi)</a> - Mạt thế</li><li><a href="/?book=fanqie-6972549864093649933">Người Mượn Mệnh Chốn Dương Gian (Miêu Kỳ Miểu)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-6967225901427723277">Vạn Cổ Chi Vương (Phi Thiên Thần Nho)</a> - Huyền huyễn</li><li><a href="/?book=fanqie-6964287029689453604">Kiếm Nguyệt Cầm Tinh (Ngô Đồng Du Du)</a> - Huyền huyễn</li><li><a href="/?book=fanqie-6950489390904773646">Võ Đạo Đan Đế (Thiêu Khảo Tây Qua)</a> - Huyền huyễn</li><li><a href="/?book=fanqie-6942441629332540423">Hãy gọi ta là Quỷ Sai đại nhân (Từ Nhị Gia Đích Miêu)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-6892725086785113101">Ta Là Phong Thuỷ Sư (Nhĩ Thị Ngã Đích Nữ Chủ Giác)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-6892724986323143694">Quỷ Văn (Giang Nam Đạo Trưởng)</a> - Linh dị / Kinh dị</li><li><a href="/?book=fanqie-6837522594468465678">Đặc Khu Thứ Chín (Ngụy Giới)</a> - Mạt thế</li><li><a href="/?book=fanqie-6833430353554705422">Mắt Phải Của Ta Là Máy Tính Cấp Thần (Vương Tự Luật)</a> - Mạt thế</li><li><a href="/?book=fanqie-6826473708392025101">Trong Cơ Thể Ta Có Một Con Quỷ (Một Kiểm Mộc Đao)</a> - Trinh thám</li></ul></div></noscript></div>
+          <div id="catalogGrid" class="catalog-grid" aria-live="polite"></div>
           <div id="catalogEmpty" class="catalog-empty" hidden>
             <img src="/library/covers/misty-pagoda.webp" alt="" aria-hidden="true" width="480" height="720" loading="lazy" decoding="async">
             <div><p class="eyebrow">Kệ sách đang chờ</p><h3>Chưa có truyện phù hợp</h3><p id="catalogEmptyText">Thử đổi bộ lọc hoặc gửi tên truyện để được cập nhật lên thư viện.</p><a id="emptyContactLink" class="text-link" href="#request">Gửi yêu cầu truyện</a></div>
@@ -1625,17 +1625,36 @@
 
     <!-- Floating Audio TTS Player Bar -->
     <div id="ttsAudioBar" class="tts-audio-bar" hidden>
-      <div class="tts-soundwave" aria-hidden="true">
-        <span></span><span></span><span></span><span></span>
+      <div class="tts-left-section">
+        <div class="tts-soundwave" aria-hidden="true">
+          <span></span><span></span><span></span><span></span>
+        </div>
+        <div class="tts-info">
+          <div class="tts-info-top">
+            <span id="ttsChapterTitle" class="tts-chapter-title">Chương hiện tại</span>
+            <span class="tts-badge">Hoài My</span>
+          </div>
+          <span id="ttsStatusText" class="tts-status">00:00 / 00:00</span>
+        </div>
       </div>
-      <div class="tts-info">
-        <span class="tts-badge">Hoài My</span>
-        <span id="ttsStatusText" class="tts-status">Đang phát...</span>
-      </div>
-      <div class="tts-controls">
-        <button id="ttsPrevParBtn" class="tts-btn" type="button" aria-label="Đoạn trước" title="Đoạn trước"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"></path></svg></button>
-        <button id="ttsPlayPauseBtn" class="tts-btn tts-btn-primary" type="button" aria-label="Tạm dừng/Phát" title="Tạm dừng / Phát"><svg class="icon tts-icon-play" aria-hidden="true" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg><svg class="icon tts-icon-pause" aria-hidden="true" viewBox="0 0 24 24" hidden><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg></button>
-        <button id="ttsNextParBtn" class="tts-btn" type="button" aria-label="Đoạn kế tiếp" title="Đoạn kế tiếp"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg></button>
+      <div class="tts-center-section">
+        <div class="tts-controls">
+          <button id="ttsPrevParBtn" class="tts-btn tts-skip-btn" type="button" aria-label="Lùi 15 giây" title="Lùi 15 giây (-15s)">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.2 3.16-1.93 5.12-1.93 3.91 0 7.15 2.8 7.85 6.5l2.45-.49C21.84 12.01 17.65 8 12.5 8z"/></svg>
+            <span class="tts-btn-sub">-15s</span>
+          </button>
+          <button id="ttsPlayPauseBtn" class="tts-btn tts-btn-primary" type="button" aria-label="Tạm dừng/Phát" title="Tạm dừng / Phát">
+            <svg class="icon tts-icon-play" aria-hidden="true" viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
+            <svg class="icon tts-icon-pause" aria-hidden="true" viewBox="0 0 24 24" hidden><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+          </button>
+          <button id="ttsNextParBtn" class="tts-btn tts-skip-btn" type="button" aria-label="Tiến 15 giây" title="Tiến 15 giây (+15s)">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M11.5 8c2.65 0 5.05.99 6.9 2.6L22 7v9h-9l3.62-3.62c-1.39-1.2-3.16-1.93-5.12-1.93-3.91 0-7.15 2.8-7.85 6.5l-2.45-.49C2.16 12.01 6.35 8 11.5 8z"/></svg>
+            <span class="tts-btn-sub">+15s</span>
+          </button>
+        </div>
+        <div class="tts-timeline-wrap">
+          <input id="ttsSeekBar" class="tts-seek-slider" type="range" min="0" max="100" value="0" step="0.1" aria-label="Tiến trình phát chương">
+        </div>
       </div>
       <div class="tts-settings">
         <select id="ttsVoiceSelect" class="tts-select tts-voice-select" title="Chọn giọng đọc"></select>
@@ -2164,41 +2183,6 @@
         </div>
       </div>
     </dialog>
-
-    <!-- Floating Mini Audio Player Bar -->
-    <div id="floatingAudioBar" class="floating-audio-bar" hidden>
-      <div class="audio-bar-info">
-        <button id="floatingAudioPlayPause" class="audio-bar-play-btn" type="button" aria-label="Phát hoặc tạm dừng">
-          <svg class="icon audio-icon-play" aria-hidden="true" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-          <svg class="icon audio-icon-pause" aria-hidden="true" viewBox="0 0 24 24" hidden><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
-        </button>
-        <div class="audio-bar-text">
-          <span id="floatingAudioTitle" class="audio-bar-title">Đang đọc giọng Hoài My</span>
-          <span id="floatingAudioProgress" class="audio-bar-progress-text">Đoạn 1</span>
-        </div>
-      </div>
-      <div class="audio-bar-controls">
-        <button id="floatingAudioPrev" class="icon-button audio-bar-btn" type="button" aria-label="Đoạn trước" title="Đoạn trước">
-          <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
-        </button>
-        <button id="floatingAudioNext" class="icon-button audio-bar-btn" type="button" aria-label="Đoạn kế" title="Đoạn kế">
-          <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
-        </button>
-        <select id="floatingAudioSpeed" class="audio-bar-speed" title="Tốc độ đọc">
-          <option value="0.8">0.8x</option>
-          <option value="1" selected>1.0x</option>
-          <option value="1.2">1.2x</option>
-          <option value="1.5">1.5x</option>
-        </select>
-        <button id="floatingAudioTimerBtn" class="audio-bar-timer-btn" type="button" title="Hẹn giờ tắt (Sleep timer)">
-          <span>⏱</span>
-          <small id="floatingAudioTimerLabel">Tắt</small>
-        </button>
-        <button id="floatingAudioClose" class="icon-button audio-bar-close" type="button" aria-label="Đóng trình phát" title="Dừng đọc">
-          <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"></path></svg>
-        </button>
-      </div>
-    </div>
 
     <!-- Video Script Editor Modal -->
     <dialog id="videoScriptDialog" class="admin-modal video-script-dialog" aria-labelledby="videoScriptModalTitle">

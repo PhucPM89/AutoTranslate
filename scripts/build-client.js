@@ -81,7 +81,7 @@ async function main() {
     publicPath: "/style.css"
   });
 
-  writeHtml({ appUrl, styleUrl });
+  writeHtml({ appUrl, styleUrl, buildVersion });
   writeHeaders();
   await writeSitemapAndRobots();
   reportReaderMode();
@@ -218,11 +218,12 @@ function cdnOrigin() {
   }
 }
 
-function writeHtml({ appUrl, styleUrl }) {
+function writeHtml({ appUrl, styleUrl, buildVersion }) {
   const template = fs.readFileSync(path.join(CLIENT_DIR, "index.html"), "utf8");
   const html = template
     .replaceAll("%APP_JS%", appUrl)
-    .replaceAll("%STYLE_CSS%", styleUrl);
+    .replaceAll("%STYLE_CSS%", styleUrl)
+    .replaceAll("%APP_VER%", buildVersion);
 
   const unresolved = html.match(/%[A-Z_]+%/g);
   if (unresolved) throw new Error(`index.html còn placeholder chưa thay: ${unresolved.join(", ")}`);
@@ -273,16 +274,13 @@ async function writeSitemapAndRobots() {
     }
   }
 
-  // Generate sitemap.xml with Vietnamese SEO slugs
   let sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
   sitemapXml += `  <url>\n    <loc>${siteUrl}/</loc>\n    <lastmod>${now}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n`;
-  sitemapXml += `  <url>\n    <loc>${siteUrl}/#catalog</loc>\n    <lastmod>${now}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>0.8</priority>\n  </url>\n`;
 
-  let urlCount = 2;
+  let urlCount = 1;
   for (const book of books) {
     if (book.id) {
-      const slug = toSlug(book.title);
-      const bookParam = slug ? `${slug}--${book.id}` : book.id;
+      const bookParam = book.id;
       const bookDate = book.updatedAt ? String(book.updatedAt).split("T")[0] : now;
 
       // Book detail page URL
