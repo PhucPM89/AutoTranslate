@@ -58,7 +58,7 @@ async function main() {
   // Also include books from Supabase
   if (db) {
     try {
-      const dbBooks = await db.listBooks({ limit: 100 });
+      const dbBooks = await db.listBooks({ limit: 1000 });
       for (const b of dbBooks || []) {
         bookIds.add(b.id);
       }
@@ -69,23 +69,31 @@ async function main() {
 
   for (const bookId of bookIds) {
     const indexKeyPath = `books/${bookId}/index.json`;
+    const r1KeyPath = `books/${bookId}/r1/index.json`;
     const index = await readJson(storage, indexKeyPath);
-    if (!index || !Array.isArray(index.chapters)) continue;
+    const r1Index = await readJson(storage, r1KeyPath);
+    const targetIndex = r1Index || index;
+    if (!targetIndex || !Array.isArray(targetIndex.chapters)) continue;
 
-    const revision = index.revision || 1;
+    const revision = targetIndex.revision || index?.revision || 1;
     const jobState = (await readJson(storage, `jobs/${bookId}/translation.json`)) || {};
     const statusMap = new Map((jobState.chapters || []).map((c) => [c.n, c.status]));
 
     let realTranslated = 0;
     const completedChapters = [];
 
-    for (const ch of index.chapters) {
+    for (const ch of targetIndex.chapters) {
       const n = Number(ch.chapterNumber || ch.number || ch.n);
       const isCompletedInJob = statusMap.get(n) === "completed";
-      
-      // Also check if status on index was completed
-      if (isCompletedInJob || ch.translationStatus === "completed") {
+      const isTranslated =
+        isCompletedInJob ||
+        (ch.translationStatus === "completed" && ch.provider !== "crawler-convert" && ch.provider !== "hachimi") ||
+        ch.provider === "antigravity-direct" ||
+        (typeof ch.model === "string" && ch.model.startsWith("direct-"));
+
+      if (isTranslated) {
         ch.translationStatus = "completed";
+        ch.status = "completed";
         realTranslated++;
         completedChapters.push({
           chapterNumber: n,
@@ -93,26 +101,47 @@ async function main() {
           translationStatus: "completed",
           characters: ch.characters || 0
         });
+      } else {
+        ch.translationStatus = "pending";
+        if (ch.status === "completed" && (ch.provider === "crawler-convert" || !ch.provider || ch.provider === "hachimi")) {
+          ch.status = "pending";
+        }
       }
     }
 
-    index.totalChapters = index.chapters.length;
-    index.translatedChapters = realTranslated;
-    index.updatedAt = new Date().toISOString();
+    const totalChapters = targetIndex.chapters.length;
+    const status = realTranslated >= totalChapters && totalChapters > 0 ? "Hoàn thành" : (targetIndex.status || "Đang cập nhật");
 
-    // Save updated index.json to R2
-    await storage.put(indexKeyPath, JSON.stringify(index), {
-      contentType: "application/json",
-      cacheControl: "no-cache"
-    });
+    if (index) {
+      index.totalChapters = totalChapters;
+      index.translatedChapters = realTranslated;
+      index.status = status;
+      index.updatedAt = new Date().toISOString();
+      await storage.put(indexKeyPath, JSON.stringify(index), {
+        contentType: "application/json",
+        cacheControl: "no-cache"
+      });
+    }
+
+    if (r1Index) {
+      r1Index.totalChapters = totalChapters;
+      r1Index.translatedChapters = realTranslated;
+      r1Index.status = status;
+      r1Index.updatedAt = new Date().toISOString();
+      await storage.put(r1KeyPath, JSON.stringify(r1Index), {
+        contentType: "application/json",
+        cacheControl: "no-cache"
+      });
+    }
 
     // Update Supabase DB
     if (db) {
       try {
         await db.updateBookProgress(bookId, {
-          totalChapters: index.totalChapters,
+          totalChapters,
           translatedChapters: realTranslated,
-          revision
+          revision,
+          status
         });
         if (completedChapters.length > 0) {
           await db.upsertChapters(bookId, revision, completedChapters);
@@ -122,7 +151,9 @@ async function main() {
       }
     }
 
-    console.log(`✓ [${index.title || bookId}] -> Đã cập nhật: ${realTranslated}/${index.totalChapters} chương`);
+    if (realTranslated > 0) {
+      console.log(`✓ [${targetIndex.title || bookId}] -> Đã cập nhật: ${realTranslated}/${totalChapters} chương (${status})`);
+    }
   }
 
   // Publish updated catalog/latest.json

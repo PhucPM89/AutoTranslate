@@ -1772,13 +1772,16 @@ async function showBookDetail(book, { updateHash = true } = {}) {
       transPctStr = `${rawPct.toFixed(2)}%`;
       fillWidthPct = Math.max(3.5, rawPct);
     }
-  } else if (book.status === "Hoàn thành") {
-    transPctStr = "100%";
-    fillWidthPct = 100;
   }
 
   if (els.bookViewTranslateProgress) {
-    els.bookViewTranslateProgress.textContent = transCh > 0 ? `${transCh.toLocaleString("vi-VN")} / ${totalCh.toLocaleString("vi-VN")} chương` : (book.status === "Hoàn thành" ? "Hoàn tất" : "Đang cập nhật");
+    if (isFullDetail) {
+      els.bookViewTranslateProgress.textContent = `${totalCh.toLocaleString("vi-VN")} / ${totalCh.toLocaleString("vi-VN")} chương (Hoàn tất)`;
+    } else if (transCh > 0) {
+      els.bookViewTranslateProgress.textContent = `${transCh.toLocaleString("vi-VN")} / ${totalCh.toLocaleString("vi-VN")} chương`;
+    } else {
+      els.bookViewTranslateProgress.textContent = "Chưa có bản dịch";
+    }
   }
   if (els.bookViewTranslatePercent) {
     els.bookViewTranslatePercent.textContent = transPctStr;
@@ -1905,15 +1908,38 @@ async function renderDetailChapters(book) {
     }
 
     const totalChapters = index.chapters.length;
-    const transCount = index.translatedChapters || index.chapters.filter((c) => c.status === "completed").length;
-    if (els.bookViewChaptersBadge) els.bookViewChaptersBadge.textContent = `${transCount.toLocaleString("vi-VN")} / ${totalChapters.toLocaleString("vi-VN")} đã dịch`;
+    const isChTranslated = (ch) => {
+      if (ch.translationStatus === "completed") return true;
+      if (ch.status === "completed") {
+        if (ch.translationStatus === "pending") return false;
+        if (ch.provider === "crawler-convert" || ch.provider === "hachimi") return false;
+        return Boolean(ch.provider || ch.translatedText || ch.words);
+      }
+      return false;
+    };
 
-    detailChaptersState.chapters = index.chapters.map((ch, idx) => ({
-      index: idx,
-      n: ch.n,
-      title: ch.title || `Chương ${ch.n}`,
-      status: ch.status || "pending"
-    }));
+    const actualCompletedCount = index.chapters.filter(isChTranslated).length;
+    // If index.translatedChapters is recorded, cross-check: if actualCompletedCount is 0, it's a phantom count and must be 0
+    let transCount = actualCompletedCount;
+    if (typeof index.translatedChapters === "number") {
+      transCount = actualCompletedCount > 0 ? index.translatedChapters : 0;
+    }
+
+    if (els.bookViewChaptersBadge) {
+      els.bookViewChaptersBadge.textContent = transCount > 0
+        ? `${transCount.toLocaleString("vi-VN")} / ${totalChapters.toLocaleString("vi-VN")} đã dịch`
+        : `0 / ${totalChapters.toLocaleString("vi-VN")} đã dịch`;
+    }
+
+    detailChaptersState.chapters = index.chapters.map((ch, idx) => {
+      const isDone = transCount > 0 && isChTranslated(ch);
+      return {
+        index: idx,
+        n: ch.n,
+        title: ch.title || `Chương ${ch.n}`,
+        status: isDone ? "completed" : "pending"
+      };
+    });
 
     updateDetailChapterView(book);
   } catch (e) {
