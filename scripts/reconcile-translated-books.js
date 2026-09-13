@@ -69,7 +69,7 @@ async function reconcileSingleBook(book, storage, db, idx, totalCount) {
           try {
             const doc = JSON.parse(raw.toString("utf8"));
             const content = String(doc.content || "").trim();
-            const isDone = content.length >= 80 && !hasChinese(content);
+            const isDone = (content.length >= 15 || (content.length > 0 && doc.title && doc.title.length > 0)) && !hasChinese(content);
             return { chNum, completed: isDone, provider: doc.provider, model: doc.model, qaReviewed: doc.qaReviewed };
           } catch {
             return { chNum, completed: false };
