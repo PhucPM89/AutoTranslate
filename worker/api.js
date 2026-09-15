@@ -420,8 +420,8 @@ async function handleCrawler({ request, env }) {
   }
   if (path.endsWith("/start") && request.method === "POST") {
     const body = await readJson(request);
-    const source = ["fanqie", "qidian"].includes(body.source) ? body.source : "fanqie";
-    const sourceId = String(body.sourceId || "").replace(/^(?:fanqie|qidian)-/, "");
+    const source = ["fanqie", "qidian", "bianhua"].includes(body.source) ? body.source : "fanqie";
+    const sourceId = String(body.sourceId || "").replace(/^(?:fanqie|qidian|bianhua)-/, "");
     if (!/^\d{5,30}$/.test(sourceId)) throw fail(400, "ID truyện không hợp lệ.");
     const bookTitle = text(body.title, 300) || `${source} ${sourceId}`;
     await state.writeConfig({ enabled: false });
@@ -480,26 +480,89 @@ async function handleCrawler({ request, env }) {
 async function searchCrawlerBooks(query) {
   const numeric = query.match(/\d{5,30}/)?.[0];
   if (numeric) {
-    const previews = await Promise.allSettled([fetchCrawlerPreview("fanqie", numeric), fetchCrawlerPreview("qidian", numeric)]);
+    const previews = await Promise.allSettled([
+      fetchCrawlerPreview("fanqie", numeric),
+      fetchCrawlerPreview("qidian", numeric),
+      fetchCrawlerPreview("bianhua", numeric)
+    ]);
     return previews.filter((item) => item.status === "fulfilled" && item.value).map((item) => item.value);
   }
-  const response = await fetch(`https://www.qidian.com/so/${encodeURIComponent(query)}.html`, { headers: { "User-Agent": "Mozilla/5.0 tram-chu-admin" }, signal: AbortSignal.timeout(12000) });
-  if (!response.ok) throw fail(502, `Nguồn tìm kiếm trả HTTP ${response.status}.`);
-  const html = await response.text();
-  const results = [];
-  const seen = new Set();
-  for (const match of html.matchAll(/(?:book\.qidian\.com\/info\/|data-bid=["'])(\d{5,30})[\s\S]{0,2500}?<h4[^>]*>([\s\S]*?)<\/h4>[\s\S]{0,2500}?(?:<p[^>]*class=["'][^"']*intro[^"']*["'][^>]*>([\s\S]*?)<\/p>)?/gi)) {
-    if (seen.has(match[1])) continue;
-    seen.add(match[1]);
-    const plain = (value) => String(value || "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
-    results.push({ source: "qidian", sourceId: match[1], title: plain(match[2]) || `Qidian ${match[1]}`, author: "", cover: "", description: plain(match[3]), sourceUrl: `https://book.qidian.com/info/${match[1]}/` });
-    if (results.length >= 12) break;
+
+  const [qidianRes, bianhuaRes] = await Promise.allSettled([
+    (async () => {
+      const response = await fetch(`https://www.qidian.com/so/${encodeURIComponent(query)}.html`, {
+        headers: { "User-Agent": "Mozilla/5.0 tram-chu-admin" },
+        signal: AbortSignal.timeout(10000)
+      });
+      if (!response.ok) return [];
+      const html = await response.text();
+      const results = [];
+      const seen = new Set();
+      for (const match of html.matchAll(/(?:book\.qidian\.com\/info\/|data-bid=["'])(\d{5,30})[\s\S]{0,2500}?<h4[^>]*>([\s\S]*?)<\/h4>[\s\S]{0,2500}?(?:<p[^>]*class=["'][^"']*intro[^"']*["'][^>]*>([\s\S]*?)<\/p>)?/gi)) {
+        if (seen.has(match[1])) continue;
+        seen.add(match[1]);
+        const plain = (value) => String(value || "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+        results.push({
+          source: "qidian",
+          sourceId: match[1],
+          title: plain(match[2]) || `Qidian ${match[1]}`,
+          author: "",
+          cover: "",
+          description: plain(match[3]),
+          sourceUrl: `https://book.qidian.com/info/${match[1]}/`
+        });
+        if (results.length >= 8) break;
+      }
+      return results;
+    })(),
+    (async () => {
+      const response = await fetch(`https://www.bianhuaxs.com/page/search.html?searchkey=${encodeURIComponent(query)}`, {
+        headers: { "User-Agent": "Mozilla/5.0 tram-chu-admin" },
+        signal: AbortSignal.timeout(10000)
+      });
+      if (!response.ok) return [];
+      const html = await response.text();
+      const results = [];
+      const seen = new Set();
+      const regex = /<a\b[^>]*href=["'](?:https:\/\/www\.bianhuaxs\.com)?\/(\d{3,20})\.html["'][^>]*>([\s\S]*?)<\/a>/gi;
+      let match;
+      const plain = (value) => String(value || "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+      while ((match = regex.exec(html)) !== null) {
+        const id = match[1];
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const title = plain(match[2]);
+        if (!title || /玄幻|仙侠|都市|穿越|网游|科幻|灵异|言情|其他|首页|目录/i.test(title)) continue;
+        results.push({
+          source: "bianhua",
+          sourceId: id,
+          title,
+          author: "",
+          cover: `https://www.bianhuaxs.com/uploads/images/${id}s.jpg`,
+          description: "",
+          sourceUrl: `https://www.bianhuaxs.com/${id}.html`
+        });
+        if (results.length >= 8) break;
+      }
+      return results;
+    })()
+  ]);
+
+  const qidianResults = qidianRes.status === "fulfilled" ? qidianRes.value : [];
+  const bianhuaResults = bianhuaRes.status === "fulfilled" ? bianhuaRes.value : [];
+  const combined = [...qidianResults, ...bianhuaResults];
+  if (!combined.length && (qidianRes.status === "rejected" && bianhuaRes.status === "rejected")) {
+    throw fail(502, "Không thể kết nối đến máy chủ tìm kiếm.");
   }
-  return results;
+  return combined.slice(0, 16);
 }
 
 async function fetchCrawlerPreview(source, sourceId) {
-  const sourceUrl = source === "qidian" ? `https://book.qidian.com/info/${sourceId}/` : `https://fanqienovel.com/page/${sourceId}`;
+  const sourceUrl = source === "qidian"
+    ? `https://book.qidian.com/info/${sourceId}/`
+    : source === "bianhua"
+      ? `https://www.bianhuaxs.com/${sourceId}.html`
+      : `https://fanqienovel.com/page/${sourceId}`;
   const response = await fetch(sourceUrl, { headers: { "User-Agent": "Mozilla/5.0 tram-chu-admin" }, signal: AbortSignal.timeout(12000) });
   if (!response.ok) return null;
   const html = await response.text();
@@ -523,11 +586,11 @@ async function fetchCrawlerPreview(source, sourceId) {
 
 async function dispatchCrawler({ source, sourceId }, env) {
   if (!env.GITHUB_DISPATCH_TOKEN || !env.GITHUB_REPOSITORY) throw fail(503, "Chưa cấu hình GitHub dispatch cho crawler.");
-  const targetBookId = source === "qidian" ? `qidian-${sourceId}` : sourceId;
+  const targetBookId = source === "qidian" ? `qidian-${sourceId}` : source === "bianhua" ? `bianhua-${sourceId}` : sourceId;
   const response = await fetch(`https://api.github.com/repos/${env.GITHUB_REPOSITORY}/actions/workflows/fanqie-crawler.yml/dispatches`, {
     method: "POST",
     headers: { Authorization: `Bearer ${env.GITHUB_DISPATCH_TOKEN}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "Content-Type": "application/json", "User-Agent": "tram-chu-admin" },
-    body: JSON.stringify({ ref: env.GITHUB_DISPATCH_REF || "main", inputs: { target_book_id: targetBookId } }),
+    body: JSON.stringify({ ref: env.GITHUB_DISPATCH_REF || "main", inputs: { target_book_id: targetBookId, source } }),
     signal: AbortSignal.timeout(15000)
   });
   if (!response.ok) {

@@ -853,11 +853,23 @@ async function searchCrawlerBooks() {
 }
 function renderCrawlerSearchResults(results) {
   if (!results.length) { els.crawlerSearchResults.innerHTML = '<p class="stats-empty">Không tìm thấy bộ phù hợp.</p>'; return; }
-  els.crawlerSearchResults.innerHTML = results.map((book) => `<article class="crawler-preview-card">
-    <div class="crawler-preview-cover">${book.cover && /^https:\/\//.test(book.cover) ? `<img src="${escapeHtml(book.cover)}" alt="Bìa ${escapeHtml(book.title)}">` : '<span>📚</span>'}</div>
-    <div><strong>${escapeHtml(book.title)}</strong><small>${escapeHtml(book.author || `${book.source} · ${book.sourceId}`)}</small><p>${escapeHtml(book.description || "Chưa có giới thiệu từ nguồn tìm kiếm.")}</p><a href="${escapeHtml(book.sourceUrl)}" target="_blank" rel="noopener noreferrer">Xem nguồn</a></div>
-    <button class="primary-action" type="button" data-crawl-source="${escapeHtml(book.source)}" data-crawl-id="${escapeHtml(book.sourceId)}" data-crawl-title="${escapeHtml(book.title)}">Chọn và cào</button>
-  </article>`).join("");
+  els.crawlerSearchResults.innerHTML = results.map((book) => {
+    const sourceTag = book.source === "bianhua" ? "Bianhuaxs" : book.source === "qidian" ? "Qidian" : "Fanqie";
+    const authorLine = book.author ? `${book.author} · ` : "";
+    return `<article class="crawler-preview-card">
+      <div class="crawler-preview-cover">${book.cover && /^https:\/\//.test(book.cover) ? `<img src="${escapeHtml(book.cover)}" alt="Bìa ${escapeHtml(book.title)}">` : '<span>📚</span>'}</div>
+      <div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+          <span style="font-size:0.75rem;padding:2px 6px;border-radius:4px;background:rgba(217,119,6,0.2);color:#f59e0b;font-weight:600;text-transform:uppercase;">${sourceTag}</span>
+          <strong style="font-size:1.05rem;">${escapeHtml(book.title)}</strong>
+        </div>
+        <small>${escapeHtml(`${authorLine}${sourceTag} ID: ${book.sourceId}`)}</small>
+        <p>${escapeHtml(book.description || "Chưa có giới thiệu từ nguồn tìm kiếm.")}</p>
+        <a href="${escapeHtml(book.sourceUrl)}" target="_blank" rel="noopener noreferrer">Xem nguồn gốc ↗</a>
+      </div>
+      <button class="primary-action" type="button" data-crawl-source="${escapeHtml(book.source)}" data-crawl-id="${escapeHtml(book.sourceId)}" data-crawl-title="${escapeHtml(book.title)}">Chọn và cào</button>
+    </article>`;
+  }).join("");
   els.crawlerSearchResults.querySelectorAll("[data-crawl-id]").forEach((button) => button.addEventListener("click", () => startSelectedCrawler(button)));
 }
 async function startSelectedCrawler(button) {

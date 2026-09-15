@@ -39,18 +39,23 @@ const MAX_DETAIL_PROBES = 12;
 
 async function main() {
   const target = String(process.env.TARGET_BOOK_ID || process.env.TARGET_SOURCE_ID || "");
-  const source = String(process.env.CRAWLER_SOURCE || (/^qidian-|^https:\/\/(?:www|book)\.qidian\.com\//.test(target) ? "qidian" : "fanqie")).toLowerCase();
-  if (source === "qidian") {
+  const source = String(
+    process.env.CRAWLER_SOURCE ||
+    (/^qidian-|^https:\/\/(?:www|book|m)\.qidian\.com\//.test(target) ? "qidian" :
+     /^bianhua-|^https:\/\/(?:www|m)\.bianhuaxs\.com\//.test(target) ? "bianhua" : "fanqie")
+  ).toLowerCase();
+  if (source === "qidian" || source === "bianhua") {
     requireEnvironment();
-    const cleanTarget = target.replace(/^qidian-/, "").trim();
+    const cleanTarget = target.replace(/^(?:qidian|bianhua)-/, "").trim();
     const startedAt = new Date().toISOString();
+    const sourceLabel = source === "bianhua" ? "Bianhuaxs" : "Qidian";
     const status = {
       state: "running",
-      message: `Đang kết nối Qidian cào truyện ID ${cleanTarget}...`,
+      message: `Đang kết nối ${sourceLabel} cào truyện ID ${cleanTarget}...`,
       startedAt,
       finishedAt: "",
       currentBookId: cleanTarget,
-      currentBookTitle: `Qidian ${cleanTarget}`,
+      currentBookTitle: `${sourceLabel} ${cleanTarget}`,
       currentChapters: 0,
       currentTotalChapters: 0,
       discovered: 0,
@@ -63,12 +68,13 @@ async function main() {
     try {
       const qidian = require("./qidian-crawler");
       const result = await qidian.crawlQidian({
-        target: cleanTarget,
-        outputDir: process.env.QIDIAN_OUTPUT_DIR || path.join(TOMATO_DATA_DIR, "qidian"),
+        target: `${source}-${cleanTarget}`,
+        source,
+        outputDir: process.env.QIDIAN_OUTPUT_DIR || path.join(TOMATO_DATA_DIR, source),
         maxChapters: Number(process.env.QIDIAN_MAX_CHAPTERS || 2000),
         allowVip: process.env.QIDIAN_ALLOW_VIP !== "false",
         onProgress: async ({ chapter, total, title, metadata }) => {
-          status.currentBookTitle = metadata?.title || `Qidian ${cleanTarget}`;
+          status.currentBookTitle = metadata?.title || `${sourceLabel} ${cleanTarget}`;
           status.currentChapters = chapter;
           status.currentTotalChapters = total;
           status.message = `Đang tải ${status.currentBookTitle}: ${chapter}/${total} chương (${title}).`;
@@ -93,20 +99,20 @@ async function main() {
         translateEnabled: false,
         epubBuffer,
         book: {
-          id: `qidian-${cleanTarget}`,
+          id: `${source}-${cleanTarget}`,
           title: translatedMetadata.title,
           author: translatedMetadata.author,
           description: translatedMetadata.description,
           genre: "Đô Thị",
           status: "Đang cập nhật",
-          source: "qidian",
+          source,
           sourceId: cleanTarget,
           sourceUrl: result.sourceUrl,
           lastCrawledAt: new Date().toISOString()
         },
         revision: 1,
         log: (event) => {
-          if (event.event === "ingest.completed") console.log(`  ingest Qidian xong: ${event.totalChapters} chương`);
+          if (event.event === "ingest.completed") console.log(`  ingest ${sourceLabel} xong: ${event.totalChapters} chương`);
         }
       });
 
@@ -127,10 +133,10 @@ async function main() {
       stopHeartbeat();
       status.state = "error";
       status.failed += 1;
-      status.message = `Cào Qidian ${cleanTarget} thất bại: ${err.message}`;
+      status.message = `Cào ${sourceLabel} ${cleanTarget} thất bại: ${err.message}`;
       status.finishedAt = new Date().toISOString();
       status.recentErrors = [
-        { sourceId: cleanTarget, title: status.currentBookTitle || `Qidian ${cleanTarget}`, error: err.message, at: new Date().toISOString() },
+        { sourceId: cleanTarget, title: status.currentBookTitle || `${sourceLabel} ${cleanTarget}`, error: err.message, at: new Date().toISOString() },
         ...(status.recentErrors || [])
       ].slice(0, 6);
       await updateStatus(status);

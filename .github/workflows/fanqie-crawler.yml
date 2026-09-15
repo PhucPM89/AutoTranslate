@@ -7,7 +7,7 @@ on:
         description: "ID bộ truyện đã được admin chọn"
         required: true
       source:
-        description: "Nguồn truyện: fanqie hoặc qidian"
+        description: "Nguồn truyện: fanqie, qidian hoặc bianhua"
         required: true
         default: "fanqie"
 
