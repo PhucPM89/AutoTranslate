@@ -6,12 +6,15 @@ const fs = require("node:fs");
 const path = require("node:path");
 const WORKFLOWS = path.join(__dirname, "..", ".github", "workflows");
 
-test("all R2 pipeline writers share one GitHub Actions concurrency group", () => {
-  for (const name of ["fanqie-crawler.yml", "ingest-book.yml", "translate-worker.yml"]) {
+test("pipeline storage writers have bounded GitHub Actions concurrency groups", () => {
+  for (const name of ["ingest-book.yml", "translate-worker.yml"]) {
     const yaml = fs.readFileSync(path.join(WORKFLOWS, name), "utf8");
     assert.match(yaml, /group:\s*novel-pipeline-storage-writes/, name);
     if (name !== "translate-worker.yml") assert.match(yaml, /cancel-in-progress:\s*false/, name);
   }
+  const crawlerYaml = fs.readFileSync(path.join(WORKFLOWS, "fanqie-crawler.yml"), "utf8");
+  assert.match(crawlerYaml, /group:\s*fanqie-crawler-pipeline/);
+  assert.match(crawlerYaml, /cancel-in-progress:\s*false/);
 });
 
 test("an admin focus dispatch is the only translation run allowed to replace active work", () => {

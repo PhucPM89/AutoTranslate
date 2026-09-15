@@ -137,7 +137,7 @@ function sanitizeCrawlerStatus(value) {
 }
 
 function allowedState(value) {
-  return ["idle", "running", "success", "error", "disabled"].includes(value) ? value : "idle";
+  return ["idle", "queued", "running", "success", "error", "paused_quota", "disabled"].includes(value) ? value : "idle";
 }
 
 function clean(value, max) {

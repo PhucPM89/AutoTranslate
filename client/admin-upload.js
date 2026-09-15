@@ -36,12 +36,32 @@ const els = {
   crawlerProgress: document.getElementById("crawlerProgress"),
   crawlerProgressFill: document.getElementById("crawlerProgressFill"),
   crawlerProgressLabel: document.getElementById("crawlerProgressLabel"),
+  crawlerAlert: document.getElementById("crawlerAlert"),
   crawlerRecent: document.getElementById("crawlerRecent"),
   crawlerRecentList: document.getElementById("crawlerRecentList"),
   crawlerErrors: document.getElementById("crawlerErrors"),
   crawlerErrorsList: document.getElementById("crawlerErrorsList"),
   crawlerWorkerWarning: document.getElementById("crawlerWorkerWarning"),
   crawlerRefresh: document.getElementById("crawlerRefresh"),
+  crawlerSearchQuery: document.getElementById("crawlerSearchQuery"),
+  crawlerSearchBtn: document.getElementById("crawlerSearchBtn"),
+  crawlerSearchResults: document.getElementById("crawlerSearchResults"),
+  audioTab: document.getElementById("adminAudioTab"),
+  audioPanel: document.getElementById("adminAudioPanel"),
+  audioForm: document.getElementById("adminAudioForm"),
+  audioBook: document.getElementById("adminAudioBook"),
+  audioCreate: document.getElementById("adminAudioCreate"),
+  audioSubmitText: document.getElementById("adminAudioSubmitText"),
+  audioBookStatusBanner: document.getElementById("audioBookStatusBanner"),
+  audioBookProgressBadge: document.getElementById("audioBookProgressBadge"),
+  audioBookProgressBar: document.getElementById("audioBookProgressBar"),
+  audioBookStatusNote: document.getElementById("audioBookStatusNote"),
+  audioForce: document.getElementById("adminAudioForce"),
+  audioStartChapter: document.getElementById("adminAudioStartChapter"),
+  audioRefresh: document.getElementById("adminAudioRefresh"),
+  audioJobs: document.getElementById("adminAudioJobs"),
+  audioActiveJobsCount: document.getElementById("audioActiveJobsCount"),
+  audioJobsBadge: document.getElementById("audioJobsBadge"),
   translateTab: document.getElementById("adminTranslateTab"),
   translatePanel: document.getElementById("adminTranslatePanel"),
   translateStartBtn: document.getElementById("adminTranslateStartBtn"),
@@ -83,22 +103,6 @@ const els = {
   transWorkerStatusBadge: document.getElementById("transWorkerStatusBadge"),
   transStopReasonTitle: document.getElementById("transStopReasonTitle"),
   transStopReasonDesc: document.getElementById("transStopReasonDesc"),
-  geminiWebStateBadge: document.getElementById("geminiWebStateBadge"),
-  geminiWebMessage: document.getElementById("geminiWebMessage"),
-  geminiWebHeadlessToggle: document.getElementById("geminiWebHeadlessToggle"),
-  geminiWebProtectiveToggle: document.getElementById("geminiWebProtectiveToggle"),
-  geminiWebLowResourceToggle: document.getElementById("geminiWebLowResourceToggle"),
-  geminiWebCurrentChapter: document.getElementById("geminiWebCurrentChapter"),
-  geminiWebProgressText: document.getElementById("geminiWebProgressText"),
-  geminiWebSessionCount: document.getElementById("geminiWebSessionCount"),
-  geminiWebLastSuccess: document.getElementById("geminiWebLastSuccess"),
-  geminiWebSpacingInput: document.getElementById("geminiWebSpacingInput"),
-  geminiWebSessionInput: document.getElementById("geminiWebSessionInput"),
-  geminiWebStartBtn: document.getElementById("geminiWebStartBtn"),
-  geminiWebPauseBtn: document.getElementById("geminiWebPauseBtn"),
-  geminiWebStopBtn: document.getElementById("geminiWebStopBtn"),
-  geminiWebSaveBtn: document.getElementById("geminiWebSaveBtn"),
-  geminiWebSlotsGrid: document.getElementById("geminiWebSlotsGrid"),
   adminQaConsole: document.getElementById("adminQaConsole"),
   adminQaSummaryBadge: document.getElementById("adminQaSummaryBadge"),
   adminQaRefreshBtn: document.getElementById("adminQaRefreshBtn"),
@@ -140,6 +144,41 @@ const els = {
   communityTab: document.getElementById("adminCommunityTab"),
   communityPanel: document.getElementById("adminCommunityPanel"),
   communityRefresh: document.getElementById("adminCommunityRefresh"),
+
+  // Video Review Generator elements
+  videoTab: document.getElementById("adminVideoTab"),
+  videoPanel: document.getElementById("adminVideoPanel"),
+  videoForm: document.getElementById("adminVideoForm"),
+  videoBookSelect: document.getElementById("videoBookSelect"),
+  videoStartChapter: document.getElementById("videoStartChapter"),
+  videoEndChapter: document.getElementById("videoEndChapter"),
+  videoMode: document.getElementById("videoMode"),
+  videoTone: document.getElementById("videoTone"),
+  videoVoice: document.getElementById("videoVoice"),
+  videoAspectRatio: document.getElementById("videoAspectRatio"),
+  videoAiVisuals: document.getElementById("videoAiVisuals"),
+  videoAutoApprove: document.getElementById("videoAutoApprove"),
+  videoAutoUploadYt: document.getElementById("videoAutoUploadYt"),
+  videoSubmitBtn: document.getElementById("videoSubmitBtn"),
+  videoDailyBudgetBadge: document.getElementById("videoDailyBudgetBadge"),
+  videoYouTubeBadge: document.getElementById("videoYouTubeBadge"),
+  videoConnectYtBtn: document.getElementById("videoConnectYtBtn"),
+  videoRefresh: document.getElementById("adminVideoRefresh"),
+  videoQueueList: document.getElementById("videoQueueList"),
+  videoScriptDialog: document.getElementById("videoScriptDialog"),
+  videoScriptClose: document.getElementById("videoScriptClose"),
+  videoScriptCancelBtn: document.getElementById("videoScriptCancelBtn"),
+  videoScriptSaveBtn: document.getElementById("videoScriptSaveBtn"),
+  videoScriptApproveBtn: document.getElementById("videoScriptApproveBtn"),
+  videoScriptEditTitle: document.getElementById("videoScriptEditTitle"),
+  videoScriptEditSummary: document.getElementById("videoScriptEditSummary"),
+  videoScriptScenesList: document.getElementById("videoScriptScenesList"),
+  videoPlayerDialog: document.getElementById("videoPlayerDialog"),
+  videoPlayerClose: document.getElementById("videoPlayerClose"),
+  videoPreviewPlayer: document.getElementById("videoPreviewPlayer"),
+  videoDownloadMp4Btn: document.getElementById("videoDownloadMp4Btn"),
+  videoDownloadSrtBtn: document.getElementById("videoDownloadSrtBtn"),
+  videoUploadYtFromModalBtn: document.getElementById("videoUploadYtFromModalBtn"),
 
   // Books Management & Bilingual QA Editor elements
   booksTab: document.getElementById("adminBooksTab"),
@@ -187,6 +226,17 @@ const els = {
   adminBilingualSaveNotice: document.getElementById("adminBilingualSaveNotice"),
   bilingualSaveBtn: document.getElementById("adminBilingualSaveBtn"),
   adminBilingualSaveBtn: document.getElementById("adminBilingualSaveBtn"),
+  bilingualDownloadEpub: document.getElementById("adminBilingualDownloadEpub"),
+  adminBilingualDownloadEpub: document.getElementById("adminBilingualDownloadEpub"),
+  exportEpubDialog: document.getElementById("adminExportEpubDialog"),
+  exportEpubClose: document.getElementById("adminExportEpubClose"),
+  exportEpubCancel: document.getElementById("adminExportEpubCancel"),
+  exportEpubBookTitle: document.getElementById("exportEpubBookTitle"),
+  exportEpubBookMeta: document.getElementById("exportEpubBookMeta"),
+  exportEpubProgressBar: document.getElementById("exportEpubProgressBar"),
+  exportEpubProgressText: document.getElementById("exportEpubProgressText"),
+  exportEpubPercentText: document.getElementById("exportEpubPercentText"),
+  exportEpubStatus: document.getElementById("exportEpubStatus"),
 
   // Edit Book Dialog Elements
   bookEditDialog: document.getElementById("adminBookEditDialog"),
@@ -346,7 +396,7 @@ export function mountAdmin(options = {}) {
     els.loginForm?.addEventListener("submit", login);
     els.studioAuthForm?.addEventListener("submit", handleStudioLogin);
     els.uploadForm?.addEventListener("submit", submitBook);
-    els.crawlerForm?.addEventListener("submit", saveCrawlerConfig);
+    els.crawlerForm?.addEventListener("submit", (event) => event.preventDefault());
     els.booksTab?.addEventListener("click", () => selectAdminTab("books"));
     els.booksSearch?.addEventListener("input", renderAdminBooksCatalog);
     els.addBookBtn?.addEventListener("click", openUploadDialog);
@@ -369,12 +419,24 @@ export function mountAdmin(options = {}) {
     els.bilingualViTextarea?.addEventListener("input", (e) => updateBilingualViCounts(e.target.value));
     els.bilingualSaveBtn?.addEventListener("click", saveBilingualChapter);
     els.bilingualAiTranslate?.addEventListener("click", aiTranslateBilingualChapter);
+    els.bilingualDownloadEpub?.addEventListener("click", () => {
+      if (bilingualState.activeBook) {
+        exportBookToEpub(bilingualState.activeBook);
+      }
+    });
+    els.exportEpubClose?.addEventListener("click", cancelEpubExport);
+    els.exportEpubCancel?.addEventListener("click", cancelEpubExport);
     els.bookEditClose?.addEventListener("click", () => els.bookEditDialog?.close());
     els.bookEditCancel?.addEventListener("click", () => els.bookEditDialog?.close());
     els.bookEditForm?.addEventListener("submit", handleBookEditSubmit);
     els.translateTab?.addEventListener("click", () => selectAdminTab("translate"));
     els.keysTab?.addEventListener("click", () => selectAdminTab("keys"));
     els.crawlerTab?.addEventListener("click", () => selectAdminTab("crawler"));
+    els.audioTab?.addEventListener("click", () => selectAdminTab("audio"));
+    els.audioForm?.addEventListener("submit", createAudioJob);
+    els.audioRefresh?.addEventListener("click", loadAudioJobs);
+    els.audioBook?.addEventListener("change", handleAudioBookSelectionChange);
+    els.audioForce?.addEventListener("change", updateAudioSubmitState);
     els.statsTab?.addEventListener("click", () => selectAdminTab("stats"));
     els.usersTab?.addEventListener("click", () => selectAdminTab("users"));
     els.communityTab?.addEventListener("click", () => selectAdminTab("community"));
@@ -387,16 +449,13 @@ export function mountAdmin(options = {}) {
     els.adminQaRefreshBtn?.addEventListener("click", () => loadAdminQa(true));
     els.adminQaConsole?.addEventListener("click", handleAdminQaClick);
     els.translateFocusSave?.addEventListener("click", saveTranslationFocus);
-    els.geminiWebStartBtn?.addEventListener("click", () => saveGeminiWebControl({ action: "gemini-web-start" }));
-    els.geminiWebPauseBtn?.addEventListener("click", () => saveGeminiWebControl({ action: "gemini-web-pause", minutes: 30 }));
-    els.geminiWebStopBtn?.addEventListener("click", () => saveGeminiWebControl({ action: "gemini-web-stop" }));
-    els.geminiWebSaveBtn?.addEventListener("click", () => saveGeminiWebControl({ action: "gemini-web-control" }));
-    els.geminiWebSlotsGrid?.addEventListener("change", handleGeminiWebSlotToggle);
     els.statsRefresh?.addEventListener("click", loadAnalytics);
     els.usersRefresh?.addEventListener("click", loadAdminUsers);
     els.usersSearch?.addEventListener("input", filterAdminUsers);
     els.usersSchoolFilter?.addEventListener("change", filterAdminUsers);
     els.crawlerRefresh?.addEventListener("click", loadCrawlerConfig);
+    els.crawlerSearchBtn?.addEventListener("click", searchCrawlerBooks);
+    els.crawlerSearchQuery?.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); searchCrawlerBooks(); } });
     els.crawlerWordCount?.addEventListener("change", describeCrawlerReach);
     els.crawlerForm?.querySelectorAll('[name="crawlerCategory"]').forEach((input) => {
       input.addEventListener("change", describeCrawlerReach);
@@ -499,6 +558,12 @@ export function mountAdmin(options = {}) {
 
 async function openAdmin(options = {}) {
   if (!els.dialog) return;
+  // Keep the modal outside any transformed/contained application ancestor.
+  // Some browsers otherwise paint the backdrop in the top layer while the
+  // dialog itself remains clipped or invisible.
+  if (els.dialog.parentElement !== document.body) {
+    document.body.appendChild(els.dialog);
+  }
   if (!els.dialog.open) {
     els.dialog.showModal();
   }
@@ -720,24 +785,36 @@ async function loadAdminCatalog() {
   renderBookOptions();
   renderTranslationFocusOptions();
   startNewBook();
+  renderAdminBooksCatalog();
 }
 
 let crawlerPollTimer = null;
+let crawlerPollIntervalMs = 15000;
 
 // Only the status is fetched on a tick - never the config - so polling can never
 // stomp on a value being edited in the form.
-function startCrawlerPolling() {
+function startCrawlerPolling(interval = null) {
+  if (typeof interval === "number") {
+    crawlerPollIntervalMs = interval;
+  }
   stopCrawlerPolling();
-  crawlerPollTimer = setInterval(async () => {
+  const poll = async () => {
     if (activeAdminTab !== "crawler" || document.hidden) return;
     try {
       const result = await requestJson("/api/admin/crawler");
       renderCrawlerStatus(result.status);
+      const isBusy = result.status && (result.status.state === "queued" || result.status.state === "running");
+      if (isBusy && crawlerPollIntervalMs !== 2500) {
+        startCrawlerPolling(2500);
+      } else if (!isBusy && crawlerPollIntervalMs === 2500) {
+        startCrawlerPolling(15000);
+      }
     } catch {
       // A failed poll is not worth interrupting the admin over; the next tick
       // either recovers or the heartbeat goes stale, which is the real signal.
     }
-  }, 15000);
+  };
+  crawlerPollTimer = setInterval(poll, crawlerPollIntervalMs);
 }
 
 function stopCrawlerPolling() {
@@ -749,7 +826,7 @@ async function loadCrawlerConfig() {
   const result = await requestJson("/api/admin/crawler");
   fillChoices(els.crawlerWordCount, result.wordCountBuckets, result.config.wordCountBucket);
   fillChoices(els.crawlerCreationStatus, result.creationStatuses, result.config.creationStatus);
-  els.crawlerEnabled.checked = Boolean(result.config.enabled);
+  els.crawlerEnabled.checked = false;
   els.crawlerMaxBooks.value = String(result.config.maxNewBooksPerRun || 2);
   if (els.crawlerMaxBacklog) els.crawlerMaxBacklog.value = String(result.config.maxPendingBooksBacklog || 5);
   els.crawlerUpdateExisting.checked = result.config.updateExisting !== false;
@@ -758,6 +835,101 @@ async function loadCrawlerConfig() {
   els.crawlerWorkerWarning.hidden = result.workerReady;
   renderCrawlerStatus(result.status);
   describeCrawlerReach();
+  if (result.status && (result.status.state === "queued" || result.status.state === "running")) {
+    startCrawlerPolling(2500);
+  }
+}
+
+async function searchCrawlerBooks() {
+  const query = String(els.crawlerSearchQuery?.value || "").trim();
+  if (!query) return setStatus("Hãy nhập tên hoặc ID truyện.", true);
+  els.crawlerSearchBtn.disabled = true;
+  els.crawlerSearchResults.innerHTML = '<p class="stats-empty">Đang tìm kiếm...</p>';
+  try {
+    const data = await requestJson(`/api/admin/crawler/search?q=${encodeURIComponent(query)}`);
+    renderCrawlerSearchResults(data.results || []);
+  } catch (error) { els.crawlerSearchResults.innerHTML = `<p class="stats-empty text-error">${escapeHtml(error.message)}</p>`; }
+  finally { els.crawlerSearchBtn.disabled = false; }
+}
+function renderCrawlerSearchResults(results) {
+  if (!results.length) { els.crawlerSearchResults.innerHTML = '<p class="stats-empty">Không tìm thấy bộ phù hợp.</p>'; return; }
+  els.crawlerSearchResults.innerHTML = results.map((book) => `<article class="crawler-preview-card">
+    <div class="crawler-preview-cover">${book.cover && /^https:\/\//.test(book.cover) ? `<img src="${escapeHtml(book.cover)}" alt="Bìa ${escapeHtml(book.title)}">` : '<span>📚</span>'}</div>
+    <div><strong>${escapeHtml(book.title)}</strong><small>${escapeHtml(book.author || `${book.source} · ${book.sourceId}`)}</small><p>${escapeHtml(book.description || "Chưa có giới thiệu từ nguồn tìm kiếm.")}</p><a href="${escapeHtml(book.sourceUrl)}" target="_blank" rel="noopener noreferrer">Xem nguồn</a></div>
+    <button class="primary-action" type="button" data-crawl-source="${escapeHtml(book.source)}" data-crawl-id="${escapeHtml(book.sourceId)}" data-crawl-title="${escapeHtml(book.title)}">Chọn và cào</button>
+  </article>`).join("");
+  els.crawlerSearchResults.querySelectorAll("[data-crawl-id]").forEach((button) => button.addEventListener("click", () => startSelectedCrawler(button)));
+}
+async function startSelectedCrawler(button) {
+  const source = button.dataset.crawlSource || "fanqie";
+  const sourceId = button.dataset.crawlId;
+  const title = button.dataset.crawlTitle || `Book ${sourceId}`;
+  const card = button.closest(".crawler-preview-card");
+
+  button.disabled = true;
+  const originalText = button.innerHTML;
+  button.innerHTML = '<span class="spinner-inline" aria-hidden="true"></span> Đang gửi lệnh...';
+  if (card) card.classList.add("is-crawling");
+
+  let inlineProg = card?.querySelector(".crawler-inline-progress");
+  if (!inlineProg && card) {
+    inlineProg = document.createElement("div");
+    inlineProg.className = "crawler-inline-progress";
+    card.appendChild(inlineProg);
+  }
+  if (inlineProg) {
+    inlineProg.innerHTML = `
+      <div class="crawler-progress-bar"><span class="is-indeterminate" style="width: 100%"></span></div>
+      <small class="crawler-inline-label">Đang kết nối và khởi chạy máy chủ cào truyện...</small>
+    `;
+  }
+
+  // Optimistic UI update so user immediately sees state and progress bar without delay
+  renderCrawlerStatus({
+    state: "queued",
+    message: `Đã xếp hàng cào ${title}. Đang gửi lệnh khởi chạy...`,
+    currentBookId: sourceId,
+    currentBookTitle: title,
+    currentChapters: 0,
+    currentTotalChapters: 0,
+    startedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  });
+
+  els.crawlerProgress?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+  try {
+    await requestJson("/api/admin/crawler/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source, sourceId, title })
+    });
+    setStatus(`Đã bắt đầu cào ${title}.`);
+    button.innerHTML = '<span class="spinner-inline" aria-hidden="true"></span> Đang cào...';
+    if (inlineProg) {
+      inlineProg.innerHTML = `
+        <div class="crawler-progress-bar"><span class="is-indeterminate" style="width: 100%"></span></div>
+        <small class="crawler-inline-label">Đang chuẩn bị tải các chương truyện...</small>
+      `;
+    }
+    startCrawlerPolling(2500);
+    await loadCrawlerConfig();
+  } catch (error) {
+    setStatus(error.message, true);
+    button.disabled = false;
+    button.innerHTML = originalText;
+    if (card) card.classList.remove("is-crawling");
+    if (inlineProg) {
+      inlineProg.innerHTML = `<small class="text-error" style="color: var(--danger, #ef4444); font-weight: 600;">Lỗi: ${escapeHtml(error.message)}</small>`;
+    }
+    renderCrawlerStatus({
+      state: "error",
+      message: `Không thể bắt đầu cào: ${error.message}`,
+      currentBookId: sourceId,
+      currentBookTitle: title,
+      finishedAt: new Date().toISOString()
+    });
+  }
 }
 
 function fillChoices(select, choices, current) {
@@ -926,7 +1098,6 @@ async function loadTranslateStatus() {
     const res = await requestJson("/api/admin/translate");
     renderTranslationFocusOptions(res.config?.focusBookId || "");
     renderTranslationFocusHint(res.config || {});
-    renderGeminiWebStatus(res.geminiWeb || {}, res.status || {});
     renderTranslateStatus(res.status);
     if (!qaLastLoadedAt || Date.now() - qaLastLoadedAt > 30000) {
       loadAdminQa().catch((err) => console.warn("Unable to load QA queue:", err));
@@ -1140,234 +1311,6 @@ async function saveTranslationFocus() {
     setStatus(`Không lưu được bộ ưu tiên: ${error.message}`, true);
   } finally {
     els.translateFocusSave.disabled = false;
-  }
-}
-
-async function saveGeminiWebControl(extra = {}) {
-  const buttons = [els.geminiWebStartBtn, els.geminiWebPauseBtn, els.geminiWebStopBtn, els.geminiWebSaveBtn].filter(Boolean);
-  buttons.forEach((button) => { button.disabled = true; });
-  try {
-    const result = await requestJson("/api/admin/translate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "gemini-web-control",
-        headless: Boolean(els.geminiWebHeadlessToggle?.checked),
-        protectiveMode: Boolean(els.geminiWebProtectiveToggle?.checked),
-        lowResourceMode: els.geminiWebLowResourceToggle ? Boolean(els.geminiWebLowResourceToggle.checked) : true,
-        spacingMs: Number(els.geminiWebSpacingInput?.value || 8000),
-        sessionMinutes: Number(els.geminiWebSessionInput?.value || 300),
-        ...extra
-      })
-    });
-    renderGeminiWebStatus(result.geminiWeb || { control: result.control });
-    setStatus(result.message || "Đã lưu cấu hình Gemini Web daemon.");
-    setTimeout(loadTranslateStatus, 2500);
-  } catch (error) {
-    setStatus(`Không lưu được Gemini Web control: ${error.message}`, true);
-  } finally {
-    buttons.forEach((button) => { button.disabled = false; });
-  }
-}
-
-function renderGeminiWebStatus(geminiWeb = {}, status = {}) {
-  const control = geminiWeb.control || {};
-  const daemon = geminiWeb.daemon || {};
-  const pausedUntil = Number(control.pauseUntilEpochMs || 0);
-  const isPaused = control.enabled === false || pausedUntil > Date.now();
-  const daemonAlive = Boolean(geminiWeb.daemonAlive);
-  const active = Boolean(geminiWeb.active);
-
-  if (els.geminiWebHeadlessToggle) els.geminiWebHeadlessToggle.checked = control.headless !== false;
-  if (els.geminiWebProtectiveToggle) els.geminiWebProtectiveToggle.checked = control.protectiveMode !== false;
-  if (els.geminiWebLowResourceToggle) els.geminiWebLowResourceToggle.checked = control.lowResourceMode !== false;
-  if (els.geminiWebSpacingInput) els.geminiWebSpacingInput.value = Number(control.spacingMs || 8000);
-  if (els.geminiWebSessionInput) els.geminiWebSessionInput.value = Number(control.sessionMinutes || 300);
-
-  if (els.geminiWebStateBadge) {
-    els.geminiWebStateBadge.className = "worker-alive-badge " + (
-      active || (daemonAlive && !isPaused) ? "is-online" : isPaused ? "is-paused" : "is-offline"
-    );
-    els.geminiWebStateBadge.textContent = active
-      ? "Gemini Web đang dịch"
-      : isPaused
-        ? "Gemini Web đang tạm dừng"
-        : daemonAlive
-          ? "Daemon đang chờ"
-          : "Daemon chưa có tín hiệu";
-  }
-
-  if (els.geminiWebMessage) {
-    const activeBeat = status.updatedAt || status.lastAttemptAt || daemon.updatedAt;
-    const beat = activeBeat ? ` · nhịp ${describeAge(activeBeat)}` : "";
-    const pauseText = pausedUntil > Date.now()
-      ? ` · tự tiếp tục ${new Date(pausedUntil).toLocaleString("vi-VN")}`
-      : "";
-    const activity = status.activityMessage || daemon.message || geminiWeb.protection?.note || "Đang chờ daemon local cập nhật trạng thái.";
-    els.geminiWebMessage.textContent = `${activity}${beat}${pauseText}`;
-  }
-
-  const total = Number(status.currentTotalChapters || 0);
-  const done = Number(status.currentCompleted || status.currentChapter || 0);
-  const currentChapter = Number(status.currentChapter || status.currentChapterNum || 0);
-  const currentBook = status.currentBookTitle || status.currentBookId || "Đang chờ";
-  const translatedThisRun = Number(status.translatedThisRun || status.sessionChaptersTranslated || 0);
-  const percent = total ? Math.min(100, Math.round((done / total) * 1000) / 10) : 0;
-  if (els.geminiWebCurrentChapter) {
-    const activityState = String(status.activityState || "");
-    const verb = activityState === "retrying" ? "Retry" : activityState === "progress" ? "Vừa lưu" : "Đang dịch";
-    els.geminiWebCurrentChapter.textContent = currentChapter
-      ? `${verb} ${currentBook} - ch ${currentChapter}`
-      : currentBook;
-  }
-  if (els.geminiWebProgressText) {
-    els.geminiWebProgressText.textContent = total
-      ? `${done.toLocaleString("vi-VN")}/${total.toLocaleString("vi-VN")} (${percent}%)`
-      : "--";
-  }
-  if (els.geminiWebSessionCount) {
-    els.geminiWebSessionCount.textContent = `+${translatedThisRun.toLocaleString("vi-VN")} chương`;
-  }
-  if (els.geminiWebLastSuccess) {
-    els.geminiWebLastSuccess.textContent = status.lastSuccessAt
-      ? `${status.lastSuccessfulChapter ? `ch ${status.lastSuccessfulChapter}` : "vừa xong"} · ${describeAge(status.lastSuccessAt)}`
-      : "chưa có trong phiên";
-  }
-
-  renderGeminiWebSlots(geminiWeb, status);
-}
-
-function renderGeminiWebSlots(geminiWeb = {}, status = {}) {
-  if (!els.geminiWebSlotsGrid) return;
-  const control = geminiWeb.control || {};
-  const controlSlots = control.slots || { "1": true, "2": false, "3": false };
-  const rawSlots = Array.isArray(status.activeSlots) ? status.activeSlots : [];
-  const queue = Array.isArray(status.queue) ? status.queue : [];
-
-  const defaultSlotIds = ["1", "2", "3"];
-  const html = defaultSlotIds.map((slotId, idx) => {
-    const isEnabled = controlSlots[slotId] !== false;
-    let slotData = rawSlots.find((s) => String(s.slotId) === slotId);
-
-    if (!slotData && queue[idx]) {
-      const qJob = queue[idx];
-      const matched = (adminCatalog.books || []).find((b) => b.id === qJob.bookId);
-      const total = Number(qJob.total || matched?.chapterCount || 0);
-      const done = Number(qJob.translated || 0);
-      slotData = {
-        slotId: Number(slotId),
-        enabled: isEnabled,
-        state: status.state === "running" ? "translating" : "idle",
-        bookId: qJob.bookId,
-        bookTitle: matched?.title || qJob.bookId,
-        completed: done,
-        total,
-        percent: total ? Math.min(100, Math.round((done / total) * 1000) / 10) : 0,
-        sessionChapters: 0
-      };
-    } else if (!slotData && idx === 0 && status.currentBookId) {
-      const matched = (adminCatalog.books || []).find((b) => b.id === status.currentBookId);
-      const total = Number(status.currentTotalChapters || matched?.chapterCount || 0);
-      const done = Number(status.currentCompleted || 0);
-      slotData = {
-        slotId: 1,
-        enabled: isEnabled,
-        state: status.state === "running" ? "translating" : "idle",
-        bookId: status.currentBookId,
-        bookTitle: status.currentBookTitle || matched?.title || status.currentBookId,
-        completed: done,
-        total,
-        percent: total ? Math.min(100, Math.round((done / total) * 1000) / 10) : 0,
-        sessionChapters: Number(status.translatedThisRun || 0)
-      };
-    }
-
-    const state = !isEnabled
-      ? "disabled"
-      : slotData?.state === "completed"
-        ? "completed"
-        : slotData?.state === "translating"
-          ? "translating"
-          : slotData?.state === "resource_paused"
-            ? "resource_paused"
-          : "idle";
-
-    const stateLabels = {
-      translating: "Đang dịch",
-      completed: "Hoàn tất",
-      idle: "Đang chờ",
-      resource_paused: "Tiết kiệm RAM",
-      disabled: "Tạm tắt"
-    };
-
-    const matchedBook = slotData?.bookId ? (adminCatalog.books || []).find((b) => b.id === slotData.bookId) : null;
-    const bookTitle = (matchedBook ? matchedBook.title : slotData?.bookTitle) || (isEnabled ? (slotData?.bookId || "Đang chờ phân bổ...") : "Slot đang tắt");
-    const ch = Number(slotData?.currentChapter || 0);
-    const completed = Number(slotData?.completed || 0);
-    const total = Number(slotData?.total || 0);
-    const percent = total ? Math.min(100, Math.round((completed / total) * 1000) / 10) : 0;
-    const sessionCount = Number(slotData?.sessionChapters || 0);
-    const speedSec = slotData?.speedMs ? Math.round(slotData.speedMs / 1000) : 0;
-    const repairedAttempts = Number(slotData?.repairedAttempts || 0);
-    const sessionLabel = repairedAttempts > 1
-      ? `cứu lỗi ${repairedAttempts} lần`
-      : `+${sessionCount} ch`;
-
-    return `
-      <div class="gemini-web-slot-card is-${state}">
-        <div class="gemini-web-slot-header">
-          <div class="gemini-web-slot-title-box">
-            <span class="gemini-web-slot-badge">Profile Slot ${slotId}</span>
-          </div>
-          <span class="gemini-web-slot-state is-${state}">${stateLabels[state] || stateLabels.idle}</span>
-        </div>
-        <h6 class="gemini-web-slot-book-name" title="${escapeHtml(bookTitle)}">${escapeHtml(bookTitle)}</h6>
-        <div class="gemini-web-slot-progress-bar-wrap">
-          <div class="gemini-web-slot-progress-fill" style="width: ${percent}%;"></div>
-        </div>
-        <div class="gemini-web-slot-meta">
-          <span>${total ? `Ch. ${ch > 0 ? ch : completed}/${total} (${percent}%)` : "--"}</span>
-          <span>${speedSec ? `${speedSec}s/ch · ` : ""}${sessionLabel}</span>
-        </div>
-        <div class="gemini-web-slot-toggle-row">
-          <label class="switch-field" title="Bật hoặc tắt riêng Profile Slot ${slotId}">
-            <input type="checkbox" class="gemini-web-slot-toggle" data-slot-id="${slotId}" ${isEnabled ? "checked" : ""}>
-            <span class="switch-track" aria-hidden="true"></span>
-            <span>Bật Profile ${slotId}</span>
-          </label>
-        </div>
-      </div>
-    `;
-  }).join("");
-
-  els.geminiWebSlotsGrid.innerHTML = html;
-}
-
-async function handleGeminiWebSlotToggle(event) {
-  const toggle = event.target.closest(".gemini-web-slot-toggle");
-  if (!toggle) return;
-  const slotId = toggle.dataset.slotId;
-  const enabled = toggle.checked;
-  toggle.disabled = true;
-
-  try {
-    const result = await requestJson("/api/admin/translate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "gemini-web-toggle-slot",
-        slotId,
-        enabled
-      })
-    });
-    setStatus(result.message || `Đã ${enabled ? "bật" : "tắt"} Profile Slot ${slotId}.`);
-    renderGeminiWebStatus(result.geminiWeb || {}, {});
-    setTimeout(loadTranslateStatus, 1500);
-  } catch (err) {
-    setStatus(`Lỗi điều khiển Profile Slot ${slotId}: ${err.message}`, true);
-    toggle.checked = !enabled;
-  } finally {
-    toggle.disabled = false;
   }
 }
 
@@ -1723,36 +1666,126 @@ function describeAge(iso) {
 }
 
 function renderCrawlerStatus(status = {}) {
-  const labels = { idle: "Chưa chạy", running: "Đang chạy", success: "Hoàn tất", error: "Có lỗi", disabled: "Đang tắt" };
-  els.crawlerStateBadge.textContent = labels[status.state] || labels.idle;
-  els.crawlerStateBadge.dataset.state = status.state || "idle";
-  els.crawlerStateMessage.textContent = status.message || "Crawler chưa chạy.";
-  // The heartbeat, not the start time. A run that began 40 minutes ago tells you
-  // nothing; a heartbeat 20 seconds old tells you it is working, and one an hour
-  // old tells you it is not.
+  const labels = {
+    idle: "Chưa chạy",
+    queued: "Đang xếp hàng",
+    running: "Đang cào truyện",
+    success: "Hoàn tất",
+    error: "Có lỗi",
+    paused_quota: "Tạm dừng (hết quota)",
+    disabled: "Đang tắt"
+  };
+  if (els.crawlerStateBadge) {
+    els.crawlerStateBadge.textContent = labels[status.state] || labels.idle;
+    els.crawlerStateBadge.dataset.state = status.state || "idle";
+  }
+  if (els.crawlerStateMessage) {
+    els.crawlerStateMessage.textContent = status.message || "Crawler chưa chạy.";
+  }
+  // The heartbeat, not the start time.
   const beat = status.updatedAt || status.finishedAt;
   const parts = [];
   if (beat) parts.push(`Cập nhật ${describeAge(beat)}`);
+  if (status.state === "queued") parts.push("Đang chuẩn bị container");
   if (status.state === "running" && status.startedAt) parts.push(`chạy từ ${describeAge(status.startedAt)}`);
   parts.push(`đã thêm ${status.published || 0}`);
   if (status.failed) parts.push(`lỗi ${status.failed}`);
-  // The heartbeat is every 45 seconds, so five minutes of silence is real.
   const stale = beat && Date.now() - new Date(beat).getTime() > 5 * 60 * 1000;
-  if (status.state === "running" && stale) parts.push("⚠ không có nhịp mới, có thể đã chết");
-  els.crawlerStateMeta.textContent = parts.join(" · ");
+  if (status.state === "running" && stale) parts.push("⚠ không có nhịp mới, có thể đã dừng");
+  if (els.crawlerStateMeta) {
+    els.crawlerStateMeta.textContent = parts.join(" · ");
+  }
+
+  // Active error or pause warning banner
+  if (els.crawlerAlert) {
+    if (status.state === "error" || status.state === "paused_quota") {
+      els.crawlerAlert.hidden = false;
+      const isQuota = status.state === "paused_quota";
+      els.crawlerAlert.className = `crawler-alert ${isQuota ? "warning" : "error"}`;
+      els.crawlerAlert.innerHTML = `
+        <div class="crawler-alert-icon">${isQuota ? "⏳" : "⚠️"}</div>
+        <div class="crawler-alert-content">
+          <strong>${isQuota ? "Tạm dừng cào do hết hạn mức API dịch" : "Tiến trình cào truyện gặp sự cố"}</strong>
+          <p>${escapeHtml(status.message || "Đã xảy ra lỗi trong quá trình cào.")}</p>
+          <small>${isQuota ? "Hệ thống tự động tạm dừng để bảo vệ kho truyện. Vui lòng nạp thêm API key hoặc chờ reset quota." : "Vui lòng kiểm tra lại kết nối hoặc log trên GitHub Actions."}</small>
+        </div>
+      `;
+    } else {
+      els.crawlerAlert.hidden = true;
+    }
+  }
 
   // Live progress on the book being downloaded.
   const total = Number(status.currentTotalChapters || 0);
   const saved = Number(status.currentChapters || 0);
-  const showProgress = status.state === "running" && total > 0;
+  const isBusy = status.state === "running" || status.state === "queued";
   if (els.crawlerProgress) {
-    els.crawlerProgress.hidden = !showProgress;
-    if (showProgress) {
-      const percent = Math.min(100, Math.round((saved / total) * 100));
-      if (els.crawlerProgressFill) els.crawlerProgressFill.style.width = `${percent}%`;
-      if (els.crawlerProgressLabel) {
-        els.crawlerProgressLabel.textContent =
-          `${status.currentBookTitle || "Đang tải"} — ${saved.toLocaleString("vi-VN")}/${total.toLocaleString("vi-VN")} chương (${percent}%)`;
+    els.crawlerProgress.hidden = !isBusy;
+    if (isBusy) {
+      if (total > 0) {
+        const percent = Math.min(100, Math.round((saved / total) * 100));
+        if (els.crawlerProgressFill) {
+          els.crawlerProgressFill.classList.remove("is-indeterminate");
+          els.crawlerProgressFill.style.width = `${percent}%`;
+        }
+        if (els.crawlerProgressLabel) {
+          els.crawlerProgressLabel.textContent =
+            `${status.currentBookTitle || "Đang tải"} — ${saved.toLocaleString("vi-VN")}/${total.toLocaleString("vi-VN")} chương (${percent}%)`;
+        }
+      } else {
+        if (els.crawlerProgressFill) {
+          els.crawlerProgressFill.classList.add("is-indeterminate");
+          els.crawlerProgressFill.style.width = "100%";
+        }
+        if (els.crawlerProgressLabel) {
+          els.crawlerProgressLabel.textContent = status.state === "queued"
+            ? `${status.currentBookTitle || "Đang xếp hàng"} — Đang khởi động máy chủ cào...`
+            : `${status.currentBookTitle || "Đang kết nối"} — ${status.message || "Đang kết nối nguồn truyện và phân tích danh sách chương..."}`;
+        }
+      }
+    }
+  }
+
+  // Also reflect status directly onto any matching search card
+  if (els.crawlerSearchResults) {
+    const currentId = String(status.currentBookId || "").replace(/^(?:fanqie|qidian)-/, "");
+    const matchingBtn = currentId ? els.crawlerSearchResults.querySelector(`[data-crawl-id="${currentId}"]`) : null;
+    if (matchingBtn) {
+      const card = matchingBtn.closest(".crawler-preview-card");
+      if (card) {
+        let inlineProg = card.querySelector(".crawler-inline-progress");
+        if (!inlineProg) {
+          inlineProg = document.createElement("div");
+          inlineProg.className = "crawler-inline-progress";
+          card.appendChild(inlineProg);
+        }
+        if (isBusy) {
+          matchingBtn.disabled = true;
+          matchingBtn.innerHTML = '<span class="spinner-inline" aria-hidden="true"></span> Đang cào...';
+          card.classList.add("is-crawling");
+          if (total > 0) {
+            const percent = Math.min(100, Math.round((saved / total) * 100));
+            inlineProg.innerHTML = `
+              <div class="crawler-progress-bar"><span style="width: ${percent}%"></span></div>
+              <small class="crawler-inline-label">${saved.toLocaleString("vi-VN")}/${total.toLocaleString("vi-VN")} chương (${percent}%)</small>
+            `;
+          } else {
+            inlineProg.innerHTML = `
+              <div class="crawler-progress-bar"><span class="is-indeterminate" style="width: 100%"></span></div>
+              <small class="crawler-inline-label">${escapeHtml(status.message || (status.state === "queued" ? "Đang xếp hàng khởi động..." : "Đang kết nối..."))}</small>
+            `;
+          }
+        } else if (status.state === "success") {
+          matchingBtn.disabled = false;
+          matchingBtn.textContent = "Cào lại";
+          card.classList.remove("is-crawling");
+          inlineProg.innerHTML = `<small class="text-success" style="color: var(--accent-strong, #10b981); font-weight: 600;">✓ Hoàn tất (${(status.currentChapters || total || 0).toLocaleString("vi-VN")} chương)</small>`;
+        } else if (status.state === "error" || status.state === "paused_quota") {
+          matchingBtn.disabled = false;
+          matchingBtn.textContent = "Thử lại";
+          card.classList.remove("is-crawling");
+          inlineProg.innerHTML = `<small class="text-error" style="color: var(--danger, #ef4444); font-weight: 600;">⚠ ${escapeHtml(status.message)}</small>`;
+        }
       }
     }
   }
@@ -1793,6 +1826,7 @@ const ADMIN_TABS = [
   { key: "translate", tab: "translateTab", panel: "translatePanel" },
   { key: "keys", tab: "keysTab", panel: "keysPanel" },
   { key: "crawler", tab: "crawlerTab", panel: "crawlerForm" },
+  { key: "audio", tab: "audioTab", panel: "audioPanel" },
   { key: "stats", tab: "statsTab", panel: "statsPanel" },
   { key: "users", tab: "usersTab", panel: "usersPanel" },
   { key: "community", tab: "communityTab", panel: "communityPanel" }
@@ -1828,8 +1862,254 @@ function selectAdminTab(tab) {
   if (activeAdminTab === "stats") loadAnalytics();
   if (activeAdminTab === "users") loadAdminUsers();
   if (activeAdminTab === "community") loadAdminCommunity();
-  if (activeAdminTab === "crawler") startCrawlerPolling();
+  if (activeAdminTab === "crawler") { loadCrawlerConfig(); startCrawlerPolling(); }
   else stopCrawlerPolling();
+  if (activeAdminTab === "audio") { renderAudioBookOptions(); startAudioPolling(); }
+  else stopAudioPolling();
+}
+
+let audioPollTimer = null;
+let currentAudioBookStatus = null;
+let audioStatusFetchSeq = 0;
+
+function renderAudioBookOptions() {
+  if (!els.audioBook) return;
+  els.audioBook.replaceChildren(...(adminCatalog.books || []).map((book) => {
+    const option = document.createElement("option");
+    option.value = book.id;
+    option.textContent = `${book.title || book.id} · ${Number(book.chapterCount || book.totalChapters || 0).toLocaleString("vi-VN")} chương`;
+    return option;
+  }));
+  handleAudioBookSelectionChange();
+}
+
+async function handleAudioBookSelectionChange() {
+  const bookId = els.audioBook?.value;
+  if (!bookId) {
+    currentAudioBookStatus = null;
+    if (els.audioBookStatusBanner) els.audioBookStatusBanner.hidden = true;
+    updateAudioSubmitState();
+    return;
+  }
+
+  const seq = ++audioStatusFetchSeq;
+  if (els.audioBookStatusBanner) {
+    els.audioBookStatusBanner.hidden = false;
+    if (els.audioBookStatusNote) els.audioBookStatusNote.textContent = "Đang kiểm tra tiến độ audio...";
+    if (els.audioBookProgressBadge) {
+      els.audioBookProgressBadge.className = "crawler-state-badge badge-status-waiting";
+      els.audioBookProgressBadge.textContent = "Đang kiểm tra...";
+    }
+  }
+
+  try {
+    const status = await requestJson(`/api/admin/audio/books/${encodeURIComponent(bookId)}/status`);
+    if (seq !== audioStatusFetchSeq) return;
+    currentAudioBookStatus = status;
+    renderAudioBookStatus(status);
+  } catch (err) {
+    if (seq !== audioStatusFetchSeq) return;
+    currentAudioBookStatus = null;
+    if (els.audioBookStatusBanner) {
+      if (els.audioBookStatusNote) els.audioBookStatusNote.textContent = `Không kiểm tra được: ${err.message}`;
+      if (els.audioBookProgressBadge) {
+        els.audioBookProgressBadge.className = "crawler-state-badge badge-status-error";
+        els.audioBookProgressBadge.textContent = "Lỗi kiểm tra";
+      }
+    }
+    updateAudioSubmitState();
+  }
+}
+
+function renderAudioBookStatus(status) {
+  if (!els.audioBookStatusBanner) return;
+  els.audioBookStatusBanner.hidden = false;
+  const total = Number(status.totalChapters || 0);
+  const done = Number(status.audioChaptersCount || 0);
+  const percent = status.percent || (total > 0 ? Math.round((done / total) * 100) : 0);
+
+  if (els.audioBookProgressBar) {
+    els.audioBookProgressBar.style.width = `${percent}%`;
+  }
+
+  if (els.audioBookProgressBadge) {
+    if (status.isFullyCreated) {
+      els.audioBookProgressBadge.className = "crawler-state-badge badge-status-completed";
+      els.audioBookProgressBadge.textContent = `✓ Đã đủ ${done}/${total} chương (100%)`;
+    } else if (done > 0) {
+      els.audioBookProgressBadge.className = "crawler-state-badge badge-status-running";
+      els.audioBookProgressBadge.textContent = `${done}/${total} chương (${percent}%)`;
+    } else {
+      els.audioBookProgressBadge.className = "crawler-state-badge badge-status-pending";
+      els.audioBookProgressBadge.textContent = `Chưa có audio (0/${total} chương)`;
+    }
+  }
+
+  if (els.audioBookStatusNote) {
+    if (status.isFullyCreated) {
+      els.audioBookStatusNote.textContent = `Toàn bộ ${total} chương của bộ truyện đã có audio sẵn sàng. Nếu muốn tạo lại, hãy chọn "Ghi đè".`;
+    } else if (done > 0) {
+      els.audioBookStatusNote.textContent = `Đã có audio cho ${done} chương. Hệ thống sẽ tự động bỏ qua và tạo tiếp từ chương ${status.firstMissingChapter}.`;
+    } else {
+      els.audioBookStatusNote.textContent = `Chưa có chương nào được tạo audio. Sẽ tạo từ chương 1 đến chương ${total}.`;
+    }
+  }
+
+  if (els.audioStartChapter && !els.audioStartChapter.value) {
+    els.audioStartChapter.placeholder = String(status.firstMissingChapter || 1);
+  }
+
+  updateAudioSubmitState();
+}
+
+function updateAudioSubmitState() {
+  const isForce = Boolean(els.audioForce?.checked);
+  const status = currentAudioBookStatus;
+  const submitText = els.audioSubmitText;
+
+  if (!status) {
+    if (submitText) submitText.textContent = "Tạo audio toàn bộ";
+    if (els.audioCreate) els.audioCreate.disabled = false;
+    return;
+  }
+
+  if (isForce) {
+    if (submitText) submitText.textContent = "⟳ Tạo lại từ đầu (Ghi đè)";
+    if (els.audioCreate) els.audioCreate.disabled = false;
+    return;
+  }
+
+  if (status.isFullyCreated) {
+    if (submitText) submitText.textContent = `✓ Đã đủ audio (${status.totalChapters}/${status.totalChapters} chương)`;
+    if (els.audioCreate) els.audioCreate.disabled = true;
+    return;
+  }
+
+  if (status.audioChaptersCount > 0) {
+    if (submitText) submitText.textContent = `▶ Tiếp tục từ chương ${status.firstMissingChapter} (còn ${status.missingChaptersCount} ch)`;
+    if (els.audioCreate) els.audioCreate.disabled = false;
+    return;
+  }
+
+  if (submitText) submitText.textContent = "▷ Tạo audio toàn bộ";
+  if (els.audioCreate) els.audioCreate.disabled = false;
+}
+
+function startAudioPolling() {
+  stopAudioPolling();
+  loadAudioJobs();
+  audioPollTimer = setInterval(() => { if (activeAdminTab === "audio" && !document.hidden) loadAudioJobs(); }, 5000);
+}
+function stopAudioPolling() { if (audioPollTimer) clearInterval(audioPollTimer); audioPollTimer = null; }
+
+async function createAudioJob(event) {
+  event.preventDefault();
+  const bookId = els.audioBook?.value;
+  if (!bookId) return setStatus("Hãy chọn bộ truyện.", true);
+  const isForce = Boolean(els.audioForce?.checked);
+  const startCh = els.audioStartChapter?.value ? parseInt(els.audioStartChapter.value, 10) : null;
+
+  els.audioCreate.disabled = true;
+  try {
+    const payload = {
+      bookId,
+      mode: isForce ? "force_all" : "missing_only",
+      forceAll: isForce
+    };
+    if (startCh && Number.isInteger(startCh) && startCh > 0) {
+      payload.startChapter = startCh;
+    }
+    const res = await requestJson("/api/admin/audio/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    setStatus(`Đã đưa bộ truyện vào hàng đợi tạo audio (${res.stageMessage || ""})`);
+    await loadAudioJobs();
+    await handleAudioBookSelectionChange();
+  } catch (error) {
+    setStatus(error.message, true);
+  } finally {
+    updateAudioSubmitState();
+  }
+}
+async function loadAudioJobs() {
+  if (!els.audioJobs) return;
+  try { renderAudioJobs((await requestJson("/api/admin/audio/jobs")).jobs || []); }
+  catch (error) { els.audioJobs.innerHTML = `<p class="stats-empty text-error">${escapeHtml(error.message)}</p>`; }
+}
+function renderAudioJobs(jobs) {
+  if (els.audioJobsBadge) {
+    els.audioJobsBadge.textContent = jobs.length ? `${jobs.length} tiến trình` : "0 tiến trình";
+  }
+  const runningCount = jobs.filter((j) => j.status === "running" || j.status === "pending" || j.status === "retrying").length;
+  if (els.audioActiveJobsCount) {
+    els.audioActiveJobsCount.textContent = runningCount > 0 ? `${runningCount} đang chạy` : "Sẵn sàng";
+  }
+
+  if (!jobs.length) {
+    els.audioJobs.innerHTML = `
+      <div class="audio-empty-state">
+        <svg class="icon audio-empty-icon" viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path></svg>
+        <p class="audio-empty-title">Chưa có job audio nào trong hàng đợi</p>
+        <span class="audio-empty-desc">Chọn bộ truyện ở phía trên và bấm "Tạo audio toàn bộ" để bắt đầu tiến trình chuyển văn bản thành giọng nói.</span>
+      </div>`;
+    return;
+  }
+
+  const statusMap = {
+    running: { label: "Đang chạy", class: "badge-status-running", pulse: true },
+    pending: { label: "Chờ xử lý", class: "badge-status-pending" },
+    retrying: { label: "Đang thử lại", class: "badge-status-retrying" },
+    waiting: { label: "Đang chờ", class: "badge-status-waiting" },
+    completed: { label: "Hoàn tất", class: "badge-status-completed" },
+    error: { label: "Lỗi", class: "badge-status-error" },
+    canceled: { label: "Đã hủy", class: "badge-status-canceled" }
+  };
+
+  els.audioJobs.innerHTML = jobs.map((job) => {
+    const progress = Math.max(0, Math.min(100, Number(job.progress || 0)));
+    const st = statusMap[job.status] || { label: job.status, class: `badge-status-${escapeHtml(job.status)}` };
+    const retryBtn = (job.status === "retrying" || job.status === "error") ? `<button class="secondary-action icon-text-btn" data-audio-retry="${escapeHtml(job.id)}" type="button" title="Thử lại tiến trình này"><svg class="icon" viewBox="0 0 24 24"><path d="M20 6v6h-6M4 18v-6h6"></path><path d="M18.49 9A7 7 0 0 0 5.64 6.64L4 9M20 15l-1.64 2.36A7 7 0 0 1 5.51 15"></path></svg><span>Thử lại</span></button>` : "";
+    const cancelBtn = (job.status === "pending" || job.status === "running") ? `<button class="ghost-action icon-text-btn" data-audio-cancel="${escapeHtml(job.id)}" type="button" title="Hủy tiến trình này"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg><span>Hủy</span></button>` : "";
+
+    return `
+      <article class="audio-job-card">
+        <div class="audio-job-head">
+          <strong class="audio-job-title">${escapeHtml(job.bookTitle || job.bookId)}</strong>
+          <div class="audio-job-actions">
+            <span class="${st.class}">${st.pulse ? '<span class="pulse-dot"></span> ' : ""}${st.label}</span>
+            ${retryBtn}
+            ${cancelBtn}
+          </div>
+        </div>
+        <div class="crawler-progress-bar">
+          <span style="width:${progress}%"></span>
+        </div>
+        <div class="audio-job-meta">
+          <span class="audio-job-meta-pill"><svg class="icon" viewBox="0 0 24 24"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path></svg>${Number(job.completedChapters || 0).toLocaleString("vi-VN")}/${Number(job.totalChapters || 0).toLocaleString("vi-VN")} chương · ${progress}%</span>
+          <small>${escapeHtml(job.stageMessage || "")}</small>
+        </div>
+        ${job.error ? `<p class="crawler-warning">${escapeHtml(job.error)}</p>` : ""}
+      </article>`;
+  }).join("");
+
+  els.audioJobs.querySelectorAll("[data-audio-retry]").forEach((button) => button.addEventListener("click", async () => {
+    button.disabled = true;
+    try {
+      await requestJson(`/api/admin/audio/jobs/${button.dataset.audioRetry}/retry`, { method: "POST" });
+      loadAudioJobs();
+    } catch (e) { setStatus(e.message, true); button.disabled = false; }
+  }));
+
+  els.audioJobs.querySelectorAll("[data-audio-cancel]").forEach((button) => button.addEventListener("click", async () => {
+    if (!confirm("Bạn có chắc chắn muốn hủy tiến trình audio này?")) return;
+    button.disabled = true;
+    try {
+      await requestJson(`/api/admin/audio/jobs/${button.dataset.audioCancel}/cancel`, { method: "POST" });
+      loadAudioJobs();
+    } catch (e) { setStatus(e.message, true); button.disabled = false; }
+  }));
 }
 
 async function loadAdminKeys() {
@@ -3392,6 +3672,15 @@ function renderAdminBooksCatalog() {
     btnBilingual.addEventListener("click", () => openBilingualEditor(book));
     tdActions.appendChild(btnBilingual);
 
+    // EPUB Download Button
+    const btnEpub = document.createElement("button");
+    btnEpub.type = "button";
+    btnEpub.className = "admin-book-btn epub-btn";
+    btnEpub.innerHTML = '<svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Tải EPUB';
+    btnEpub.title = "Tải toàn bộ bản dịch định dạng EPUB";
+    btnEpub.addEventListener("click", () => exportBookToEpub(book));
+    tdActions.appendChild(btnEpub);
+
     // Edit Metadata Button
     const btnEdit = document.createElement("button");
     btnEdit.type = "button";
@@ -3416,6 +3705,8 @@ function renderAdminBooksCatalog() {
 }
 
 async function loadAdminBooksCatalog() {
+  if (els.bilingualView) els.bilingualView.hidden = true;
+  if (els.booksListView) els.booksListView.hidden = false;
   await loadAdminCatalog();
   renderAdminBooksCatalog();
 }
@@ -3674,6 +3965,468 @@ async function aiTranslateBilingualChapter() {
   }
 }
 
+let epubExportAbort = false;
+
+function showExportEpubModal(bookTitle, metaText) {
+  epubExportAbort = false;
+  if (els.exportEpubBookTitle) els.exportEpubBookTitle.textContent = bookTitle || "Đang xuất EPUB";
+  if (els.exportEpubBookMeta) els.exportEpubBookMeta.textContent = metaText || "Đang chuẩn bị danh mục chương...";
+  if (els.exportEpubProgressBar) els.exportEpubProgressBar.style.width = "0%";
+  if (els.exportEpubProgressText) els.exportEpubProgressText.textContent = "0%";
+  if (els.exportEpubPercentText) els.exportEpubPercentText.textContent = "0%";
+  if (els.exportEpubStatus) els.exportEpubStatus.textContent = "Đang kết nối CDN máy chủ...";
+  if (els.exportEpubCancel) {
+    els.exportEpubCancel.textContent = "Hủy tải";
+    els.exportEpubCancel.disabled = false;
+  }
+  if (els.exportEpubDialog && !els.exportEpubDialog.open) {
+    els.exportEpubDialog.showModal();
+  }
+}
+
+function updateExportEpubProgress(current, total, statusText) {
+  const pct = Math.min(100, Math.max(0, Math.round((current / (total || 1)) * 100)));
+  if (els.exportEpubProgressBar) els.exportEpubProgressBar.style.width = `${pct}%`;
+  if (els.exportEpubProgressText) els.exportEpubProgressText.textContent = `${current.toLocaleString("vi-VN")} / ${total.toLocaleString("vi-VN")} chương`;
+  if (els.exportEpubPercentText) els.exportEpubPercentText.textContent = `${pct}%`;
+  if (statusText && els.exportEpubStatus) els.exportEpubStatus.textContent = statusText;
+}
+
+function closeExportEpubModal() {
+  if (els.exportEpubDialog && els.exportEpubDialog.open) {
+    els.exportEpubDialog.close();
+  }
+}
+
+function cancelEpubExport() {
+  epubExportAbort = true;
+  if (els.exportEpubStatus) els.exportEpubStatus.textContent = "Đang hủy tiến trình...";
+  setTimeout(() => {
+    closeExportEpubModal();
+  }, 300);
+}
+
+function escapeXml(unsafe) {
+  if (!unsafe) return "";
+  return String(unsafe)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function sanitizeFilename(name) {
+  return (name || "truyen")
+    .replace(/[\\/:*?"<>|]+/g, "_")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function exportBookToEpub(book) {
+  if (!book || !book.id) {
+    alert("Không xác định được thông tin truyện.");
+    return;
+  }
+
+  const cleanId = cleanBookId(book.id);
+  const bookTitle = book.title || "Truyện";
+  const bookAuthor = book.author || "Khuyết danh";
+
+  showExportEpubModal(bookTitle, `Tác giả: ${bookAuthor}`);
+
+  try {
+    // 1. Fetch index to know chapters
+    let chapters = [];
+    if (bilingualState.activeBook && cleanBookId(bilingualState.activeBook.id) === cleanId && bilingualState.chapters.length > 0) {
+      chapters = bilingualState.chapters;
+    } else {
+      updateExportEpubProgress(0, 100, "Đang tải danh mục chương từ CDN...");
+      const idx = await fetchBookIndex(cleanId);
+      chapters = Array.isArray(idx?.chapters) ? idx.chapters : [];
+    }
+
+    if (!chapters || chapters.length === 0) {
+      throw new Error("Không tìm thấy danh sách chương của bộ truyện này trên hệ thống.");
+    }
+
+    // Determine target chapters to download
+    // Prefer completed chapters if marked
+    const hasCompletedFlag = chapters.some((c) => c.status === "completed");
+    let targetList = hasCompletedFlag ? chapters.filter((c) => c.status === "completed") : chapters;
+    if (targetList.length === 0) targetList = chapters;
+
+    // Sort by chapter number
+    targetList.sort((a, b) => (Number(a.n) || 0) - (Number(b.n) || 0));
+    const totalChapters = targetList.length;
+
+    updateExportEpubProgress(0, totalChapters, `Bắt đầu tải ${totalChapters} chương bản dịch...`);
+
+    // 2. Concurrently fetch chapter JSONs
+    const concurrency = 15;
+    const downloadedChapters = new Array(totalChapters);
+    let nextIndex = 0;
+    let completedCount = 0;
+
+    async function downloadWorker() {
+      while (nextIndex < totalChapters && !epubExportAbort) {
+        const i = nextIndex++;
+        const chItem = targetList[i];
+        const chNum = chItem.n || (i + 1);
+        const url = `${CDN_BASE}/books/${encodeURIComponent(cleanId)}/r1/ch/${chNum}.json?_v=${Date.now()}`;
+
+        try {
+          const res = await fetchCdnOrProxy(url);
+          if (res && res.ok) {
+            const data = await res.json().catch(() => null);
+            const content = data?.content || data?.text || "";
+            if (content.trim()) {
+              downloadedChapters[i] = {
+                n: chNum,
+                title: data.title || chItem.title || `Chương ${chNum}`,
+                content: content.trim()
+              };
+            }
+          }
+        } catch (err) {
+          console.warn(`Lỗi tải dữ liệu chương ${chNum}:`, err);
+        }
+
+        completedCount++;
+        if (completedCount % 5 === 0 || completedCount === totalChapters) {
+          updateExportEpubProgress(completedCount, totalChapters, `Đang tải nội dung chương ${chNum} (${completedCount}/${totalChapters})...`);
+        }
+      }
+    }
+
+    const workers = Array.from({ length: Math.min(concurrency, totalChapters) }, () => downloadWorker());
+    await Promise.all(workers);
+
+    if (epubExportAbort) return;
+
+    // Filter valid chapters
+    const validChapters = downloadedChapters.filter(Boolean);
+    if (validChapters.length === 0) {
+      throw new Error("Không có chương nào có nội dung bản dịch hợp lệ để xuất file EPUB.");
+    }
+
+    updateExportEpubProgress(totalChapters, totalChapters, "Đang nạp công cụ đóng gói EPUB...");
+
+    // 3. Load JSZip
+    const JSZip = await getJsZipModule();
+    const zip = new JSZip();
+
+    // EPUB specification: mimetype MUST be uncompressed STORE and first
+    zip.file("mimetype", "application/epub+zip", { compression: "STORE" });
+
+    // META-INF/container.xml
+    zip.file(
+      "META-INF/container.xml",
+      `<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>`
+    );
+
+    // OEBPS/style.css
+    const cssContent = `@charset "utf-8";
+body {
+  font-family: "Times New Roman", Times, Georgia, serif;
+  line-height: 1.68;
+  margin: 5%;
+  text-align: justify;
+  color: #111827;
+}
+h1.book-title {
+  text-align: center;
+  margin-top: 20%;
+  margin-bottom: 0.5em;
+  font-size: 2.2em;
+  font-weight: bold;
+}
+p.book-author {
+  text-align: center;
+  font-size: 1.25em;
+  color: #374151;
+  margin-bottom: 2em;
+}
+p.book-meta {
+  text-align: center;
+  font-size: 0.92em;
+  color: #6b7280;
+  margin-top: 2em;
+}
+h2.chapter-title {
+  text-align: center;
+  margin-top: 1.5em;
+  margin-bottom: 1.2em;
+  font-size: 1.45em;
+  font-weight: bold;
+  page-break-before: always;
+}
+p.chapter-paragraph {
+  text-indent: 1.8em;
+  margin-top: 0;
+  margin-bottom: 0.85em;
+  text-align: justify;
+}
+.cover-container {
+  text-align: center;
+  margin: 0;
+  padding: 0;
+}
+.cover-container img {
+  max-width: 100%;
+  max-height: 100vh;
+  object-fit: contain;
+}
+`;
+    zip.file("OEBPS/style.css", cssContent);
+
+    // Cover image handling
+    let hasCover = false;
+    let coverExt = "jpg";
+    let coverMediaType = "image/jpeg";
+    if (book.cover) {
+      updateExportEpubProgress(totalChapters, totalChapters, "Đang tải ảnh bìa truyện...");
+      try {
+        const coverRes = await fetch(readerContentUrl(book.cover));
+        if (coverRes && coverRes.ok) {
+          const coverBuf = await coverRes.arrayBuffer();
+          if (coverBuf && coverBuf.byteLength > 0) {
+            const ct = coverRes.headers.get("content-type") || "";
+            if (ct.includes("png")) {
+              coverExt = "png";
+              coverMediaType = "image/png";
+            } else if (ct.includes("webp")) {
+              coverExt = "webp";
+              coverMediaType = "image/webp";
+            }
+            zip.file(`OEBPS/cover.${coverExt}`, coverBuf);
+            hasCover = true;
+          }
+        }
+      } catch (e) {
+        console.warn("Không tải được ảnh bìa:", e);
+      }
+    }
+
+    // Cover page (if cover image exists)
+    if (hasCover) {
+      zip.file(
+        "OEBPS/cover.xhtml",
+        `<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="vi" xml:lang="vi">
+<head>
+  <title>Bìa sách</title>
+  <link rel="stylesheet" type="text/css" href="style.css"/>
+</head>
+<body style="margin:0;padding:0;text-align:center;">
+  <div class="cover-container">
+    <img src="cover.${coverExt}" alt="Bìa sách" />
+  </div>
+</body>
+</html>`
+      );
+    }
+
+    // Title page
+    const dateStr = new Date().toLocaleDateString("vi-VN");
+    zip.file(
+      "OEBPS/titlepage.xhtml",
+      `<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="vi" xml:lang="vi">
+<head>
+  <title>${escapeXml(bookTitle)}</title>
+  <link rel="stylesheet" type="text/css" href="style.css"/>
+</head>
+<body>
+  <h1 class="book-title">${escapeXml(bookTitle)}</h1>
+  <p class="book-author">Tác giả: ${escapeXml(bookAuthor)}</p>
+  <p class="book-meta">Dịch &amp; Biên tập bởi Trạm Chữ (tram-chu.online)</p>
+  <p class="book-meta">Quy mô: ${validChapters.length.toLocaleString("vi-VN")} chương dịch</p>
+  <p class="book-meta" style="font-size:0.82em;margin-top:4em;">Thời gian xuất bản: ${escapeXml(dateStr)}</p>
+</body>
+</html>`
+    );
+
+    // 4. Chapter XHTML files
+    updateExportEpubProgress(totalChapters, totalChapters, "Đang định dạng các chương XHTML...");
+
+    validChapters.forEach((ch, idx) => {
+      const paras = ch.content.split(/\r?\n+/);
+      const parasHtml = paras
+        .map((p) => p.trim())
+        .filter(Boolean)
+        .map((p) => `  <p class="chapter-paragraph">${escapeXml(p)}</p>`)
+        .join("\n");
+
+      const chXhtml = `<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="vi" xml:lang="vi">
+<head>
+  <title>${escapeXml(ch.title)}</title>
+  <link rel="stylesheet" type="text/css" href="style.css"/>
+</head>
+<body>
+  <h2 class="chapter-title">${escapeXml(ch.title)}</h2>
+${parasHtml}
+</body>
+</html>`;
+      zip.file(`OEBPS/chap-${idx + 1}.xhtml`, chXhtml);
+    });
+
+    // 5. Navigation: nav.xhtml (EPUB 3) & toc.ncx (EPUB 2)
+    const navOl = validChapters
+      .map((ch, idx) => `      <li><a href="chap-${idx + 1}.xhtml">${escapeXml(ch.title)}</a></li>`)
+      .join("\n");
+
+    zip.file(
+      "OEBPS/nav.xhtml",
+      `<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="vi" xml:lang="vi">
+<head>
+  <title>Mục lục</title>
+  <link rel="stylesheet" type="text/css" href="style.css"/>
+</head>
+<body>
+  <nav epub:type="toc" id="toc">
+    <h1>Mục lục</h1>
+    <ol>
+${navOl}
+    </ol>
+  </nav>
+</body>
+</html>`
+    );
+
+    const ncxPoints = validChapters
+      .map(
+        (ch, idx) => `    <navPoint id="navpoint-${idx + 1}" playOrder="${idx + 1}">
+      <navLabel><text>${escapeXml(ch.title)}</text></navLabel>
+      <content src="chap-${idx + 1}.xhtml"/>
+    </navPoint>`
+      )
+      .join("\n");
+
+    zip.file(
+      "OEBPS/toc.ncx",
+      `<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head>
+    <meta name="dtb:uid" content="urn:tramchu:book:${escapeXml(cleanId)}"/>
+    <meta name="dtb:depth" content="1"/>
+    <meta name="dtb:totalPageCount" content="0"/>
+    <meta name="dtb:maxPageNumber" content="0"/>
+  </head>
+  <docTitle>
+    <text>${escapeXml(bookTitle)}</text>
+  </docTitle>
+  <navMap>
+${ncxPoints}
+  </navMap>
+</ncx>`
+    );
+
+    // 6. content.opf
+    const manifestItems = [
+      `    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>`,
+      `    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`,
+      `    <item id="style" href="style.css" media-type="text/css"/>`,
+      `    <item id="titlepage" href="titlepage.xhtml" media-type="application/xhtml+xml"/>`
+    ];
+
+    if (hasCover) {
+      manifestItems.push(`    <item id="cover-page" href="cover.xhtml" media-type="application/xhtml+xml"/>`);
+      manifestItems.push(`    <item id="cover-image" href="cover.${coverExt}" media-type="${coverMediaType}" properties="cover-image"/>`);
+    }
+
+    validChapters.forEach((_, idx) => {
+      manifestItems.push(`    <item id="chap-${idx + 1}" href="chap-${idx + 1}.xhtml" media-type="application/xhtml+xml"/>`);
+    });
+
+    const spineItems = [];
+    if (hasCover) {
+      spineItems.push(`    <itemref idref="cover-page"/>`);
+    }
+    spineItems.push(`    <itemref idref="titlepage"/>`);
+    validChapters.forEach((_, idx) => {
+      spineItems.push(`    <itemref idref="chap-${idx + 1}"/>`);
+    });
+
+    const nowIso = new Date().toISOString();
+    const opfXml = `<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="BookId" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
+    <dc:identifier id="BookId">urn:tramchu:book:${escapeXml(cleanId)}</dc:identifier>
+    <dc:title>${escapeXml(bookTitle)}</dc:title>
+    <dc:language>vi</dc:language>
+    <dc:creator>${escapeXml(bookAuthor)}</dc:creator>
+    <dc:publisher>Trạm Chữ (tram-chu.online)</dc:publisher>
+    <meta property="dcterms:modified">${nowIso}</meta>
+    ${hasCover ? '<meta name="cover" content="cover-image"/>' : ""}
+  </metadata>
+  <manifest>
+${manifestItems.join("\n")}
+  </manifest>
+  <spine toc="ncx">
+${spineItems.join("\n")}
+  </spine>
+</package>`;
+
+    zip.file("OEBPS/content.opf", opfXml);
+
+    // 7. Generate EPUB Zip Blob
+    updateExportEpubProgress(totalChapters, totalChapters, "Đang nén toàn bộ ebook thành file EPUB...");
+    if (els.exportEpubCancel) els.exportEpubCancel.disabled = true;
+
+    const blob = await zip.generateAsync(
+      {
+        type: "blob",
+        mimeType: "application/epub+zip",
+        compression: "DEFLATE",
+        compressionOptions: { level: 6 }
+      },
+      (meta) => {
+        if (meta && typeof meta.percent === "number") {
+          const zipPct = Math.round(meta.percent);
+          if (els.exportEpubPercentText) els.exportEpubPercentText.textContent = `${zipPct}%`;
+          if (els.exportEpubProgressBar) els.exportEpubProgressBar.style.width = `${zipPct}%`;
+          if (els.exportEpubStatus) els.exportEpubStatus.textContent = `Đang nén dữ liệu (${zipPct}%)...`;
+        }
+      }
+    );
+
+    updateExportEpubProgress(totalChapters, totalChapters, "✅ Hoàn tất! Trình duyệt đang tải file về...");
+    if (els.exportEpubProgressBar) els.exportEpubProgressBar.style.width = "100%";
+    if (els.exportEpubPercentText) els.exportEpubPercentText.textContent = "100%";
+
+    // Trigger download
+    const cleanFileName = sanitizeFilename(bookTitle);
+    const downloadUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = `${cleanFileName}.epub`;
+    document.body.appendChild(a);
+    a.click();
+
+    setTimeout(() => {
+      URL.revokeObjectURL(downloadUrl);
+      a.remove();
+      closeExportEpubModal();
+    }, 1600);
+  } catch (err) {
+    console.error("exportBookToEpub error:", err);
+    alert("Lỗi xuất file EPUB: " + (err?.message || err));
+    closeExportEpubModal();
+  }
+}
+
 function openEditBookDialog(book) {
   if (!els.bookEditDialog || !els.bookEditForm) return;
   els.editBookId.value = book.id || "";
@@ -3749,8 +4502,438 @@ async function deleteBookPrompt(book) {
       body: JSON.stringify({ id: book.id })
     });
     await loadAdminBooksCatalog();
+    if (!els.dialog.open) els.dialog.showModal();
+    els.dialog.classList.add("is-authenticated");
+    selectAdminTab("books");
     setStatus('Đã xóa bộ truyện "' + book.title + '".');
   } catch (err) {
     alert("Không thể xóa truyện: " + err.message);
+  } finally {
+    // Native confirm can desynchronise Chromium's modal top-layer on mobile.
+    // Reassert the dashboard state so no orphan backdrop can cover the UI.
+    requestAnimationFrame(() => {
+      if (els.dialog?.open) {
+        els.dialog.classList.add("is-authenticated");
+        els.dialog.style.removeProperty("display");
+      }
+      document.body.classList.toggle("dialog-open", Boolean(document.querySelector("dialog[open]")));
+      document.documentElement.classList.toggle("dialog-open", Boolean(document.querySelector("dialog[open]")));
+    });
   }
 }
+
+// ============================================================================
+// 8. Automated Video Review Generator UI & Queue Manager
+// ============================================================================
+
+let videoJobsData = [];
+let videoPollingTimer = null;
+let currentEditingJobId = null;
+
+function bindVideoReviewEvents() {
+  els.videoRefresh?.addEventListener("click", () => loadAdminVideoData());
+  els.videoForm?.addEventListener("submit", handleVideoFormSubmit);
+  els.videoBookSelect?.addEventListener("change", handleVideoBookSelectChange);
+  els.videoScriptClose?.addEventListener("click", () => els.videoScriptDialog?.close());
+  els.videoScriptCancelBtn?.addEventListener("click", () => els.videoScriptDialog?.close());
+  els.videoScriptSaveBtn?.addEventListener("click", handleVideoScriptSave);
+  els.videoScriptApproveBtn?.addEventListener("click", handleVideoScriptApprove);
+  els.videoPlayerClose?.addEventListener("click", () => {
+    if (els.videoPreviewPlayer) {
+      els.videoPreviewPlayer.pause();
+      els.videoPreviewPlayer.src = "";
+    }
+    els.videoPlayerDialog?.close();
+  });
+}
+
+function startVideoPolling() {
+  if (videoPollingTimer) return;
+  videoPollingTimer = setInterval(async () => {
+    if (activeAdminTab !== "video") {
+      stopVideoPolling();
+      return;
+    }
+    await loadAdminVideoData(true);
+  }, 4000);
+}
+
+function stopVideoPolling() {
+  if (videoPollingTimer) {
+    clearInterval(videoPollingTimer);
+    videoPollingTimer = null;
+  }
+}
+
+async function loadAdminVideoData(isPoll = false) {
+  try {
+    if (!isPoll && adminBooksList.length === 0) {
+      await loadAdminBooksCatalog();
+    }
+    populateVideoBookSelect();
+
+    // Fetch jobs & budget
+    const data = await requestJson("/api/admin/video/jobs");
+    videoJobsData = data.jobs || [];
+
+    // Render budget
+    if (data.budget && els.videoDailyBudgetBadge) {
+      const b = data.budget;
+      els.videoDailyBudgetBadge.textContent = `Hạn mức hôm nay: ${b.count}/${b.maxPerDay} video (còn ${b.remaining})`;
+      els.videoDailyBudgetBadge.className = b.remaining > 0 ? "badge badge-info" : "badge badge-warning";
+    }
+
+    // Check YouTube connection status
+    try {
+      const ytData = await requestJson("/api/admin/video/youtube-auth");
+      if (els.videoYouTubeBadge) {
+        if (ytData.hasToken) {
+          els.videoYouTubeBadge.textContent = "YouTube: Đã kết nối";
+          els.videoYouTubeBadge.className = "badge badge-success";
+          if (els.videoConnectYtBtn) els.videoConnectYtBtn.style.display = "none";
+        } else if (ytData.isConfigured && ytData.authUrl) {
+          els.videoYouTubeBadge.textContent = "YouTube: Chưa xác thực";
+          els.videoYouTubeBadge.className = "badge badge-warning";
+          if (els.videoConnectYtBtn) {
+            els.videoConnectYtBtn.style.display = "inline-flex";
+            els.videoConnectYtBtn.onclick = () => window.open(ytData.authUrl, "_blank");
+          }
+        } else {
+          els.videoYouTubeBadge.textContent = "YouTube: Chưa cấu hình";
+          els.videoYouTubeBadge.className = "badge badge-secondary";
+          if (els.videoConnectYtBtn) els.videoConnectYtBtn.style.display = "none";
+        }
+      }
+    } catch (_) {}
+
+    renderVideoQueue(videoJobsData);
+
+    // Auto-poll if any job is active
+    const hasActive = videoJobsData.some(j =>
+      ["pending", "fetching_content", "generating_script", "generating_media", "rendering", "uploading"].includes(j.status)
+    );
+    if (hasActive) {
+      startVideoPolling();
+    } else {
+      stopVideoPolling();
+    }
+  } catch (err) {
+    if (!isPoll) console.error("Không thể tải danh sách video review:", err.message);
+  }
+}
+
+function populateVideoBookSelect() {
+  if (!els.videoBookSelect) return;
+  const currentVal = els.videoBookSelect.value;
+  const options = ['<option value="">-- Chọn một truyện trong thư viện --</option>'];
+  adminBooksList.forEach(b => {
+    options.push(`<option value="${escapeHtml(b.id)}">${escapeHtml(b.title)} (${escapeHtml(b.author || "Khuyết danh")})</option>`);
+  });
+  els.videoBookSelect.innerHTML = options.join("");
+  if (currentVal) els.videoBookSelect.value = currentVal;
+}
+
+function handleVideoBookSelectChange() {
+  const bookId = els.videoBookSelect?.value;
+  if (!bookId) return;
+  const book = adminBooksList.find(b => b.id === bookId);
+  if (book && els.videoStartChapter && els.videoEndChapter) {
+    els.videoStartChapter.value = 1;
+    const maxCh = book.totalChapters || 5;
+    els.videoEndChapter.value = Math.min(maxCh, 5);
+  }
+}
+
+async function handleVideoFormSubmit(e) {
+  e.preventDefault();
+  const bookId = els.videoBookSelect.value;
+  if (!bookId) {
+    alert("Vui lòng chọn một tác phẩm truyện.");
+    return;
+  }
+
+  const payload = {
+    bookId,
+    startChapter: Number(els.videoStartChapter.value) || 1,
+    endChapter: Number(els.videoEndChapter.value) || 5,
+    mode: els.videoMode.value,
+    tone: els.videoTone.value,
+    voice: els.videoVoice.value,
+    aspectRatio: els.videoAspectRatio?.value || "9:16",
+    enableAiVisuals: Boolean(els.videoAiVisuals?.checked),
+    autoApprove: Boolean(els.videoAutoApprove?.checked),
+    autoUploadYouTube: Boolean(els.videoAutoUploadYt?.checked)
+  };
+
+  els.videoSubmitBtn.disabled = true;
+  els.videoSubmitBtn.textContent = "⏳ Đang khởi tạo...";
+
+  try {
+    const job = await requestJson("/api/admin/video/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    setStatus(`Đã tạo yêu cầu Video Review (${job.id}) thành công!`);
+    await loadAdminVideoData();
+  } catch (err) {
+    alert("Lỗi tạo video review: " + err.message);
+  } finally {
+    els.videoSubmitBtn.disabled = false;
+    els.videoSubmitBtn.textContent = "🚀 Bắt đầu tạo Video Review";
+  }
+}
+
+function renderVideoQueue(jobs) {
+  if (!els.videoQueueList) return;
+  if (!jobs || jobs.length === 0) {
+    els.videoQueueList.innerHTML = '<p class="empty-hint">Chưa có job tạo video nào. Hãy tạo video đầu tiên từ cột bên trái!</p>';
+    return;
+  }
+
+  const statusMap = {
+    pending: { label: "Đang chờ", class: "badge-status-pending" },
+    fetching_content: { label: "Nạp dữ liệu", class: "badge-status-rendering" },
+    generating_script: { label: "Viết kịch bản", class: "badge-status-rendering" },
+    waiting_approval: { label: "Chờ duyệt kịch bản", class: "badge-status-waiting" },
+    generating_media: { label: "Thu âm & Hình ảnh", class: "badge-status-rendering" },
+    rendering: { label: "Render MP4", class: "badge-status-rendering" },
+    ready: { label: "Đã xong (MP4)", class: "badge-status-ready" },
+    uploading: { label: "Upload YouTube", class: "badge-status-rendering" },
+    completed: { label: "Hoàn tất", class: "badge-status-completed" },
+    error: { label: "Lỗi", class: "badge-status-error" },
+    canceled: { label: "Đã hủy", class: "badge-status-error" }
+  };
+
+  const html = jobs.map(j => {
+    const st = statusMap[j.status] || { label: j.status, class: "badge-status-pending" };
+    const pct = j.progress || 0;
+    const book = adminBooksList.find(b => b.id === j.bookId);
+    const bookTitle = book?.title || j.bookId;
+    const chRange = `Chương ${j.chapterRange?.start || 1} - ${j.chapterRange?.end || 5}`;
+
+    let actions = "";
+    actions += `<button class="secondary-action btn-sm" onclick="openScriptEditorModal('${escapeHtml(j.id)}')">📝 Xem/Sửa kịch bản</button>`;
+
+    if (j.status === "waiting_approval") {
+      actions += `<button class="primary-action btn-sm highlight-btn" onclick="handleVideoApproveJob('${escapeHtml(j.id)}')">✓ Duyệt render</button>`;
+    }
+
+    if (j.status === "ready" || j.status === "completed" || j.assets?.videoUrl) {
+      actions += `<button class="primary-action btn-sm" onclick="openVideoPlayerModal('${escapeHtml(j.id)}')">▶ Xem Video</button>`;
+      if (j.assets?.videoUrl) {
+        actions += `<a class="secondary-action btn-sm" href="${escapeHtml(j.assets.videoUrl)}" download>⬇ MP4</a>`;
+      }
+      if (j.assets?.subtitlesUrl) {
+        actions += `<a class="secondary-action btn-sm" href="${escapeHtml(j.assets.subtitlesUrl)}" download>⬇ SRT</a>`;
+      }
+      if (!j.youtube?.videoId) {
+        actions += `<button class="secondary-action btn-sm" onclick="handleVideoUploadToYouTube('${escapeHtml(j.id)}')">↗ YouTube (Private)</button>`;
+      }
+    }
+
+    if (j.youtube?.videoId) {
+      actions += `<a class="secondary-action btn-sm" href="https://www.youtube.com/watch?v=${escapeHtml(j.youtube.videoId)}" target="_blank">📺 Xem trên YouTube</a>`;
+    }
+
+    if (j.status === "error") {
+      actions += `<button class="secondary-action btn-sm" onclick="handleVideoRetryJob('${escapeHtml(j.id)}')">↻ Thử lại</button>`;
+    }
+
+    if (["pending", "waiting_approval", "error"].includes(j.status)) {
+      actions += `<button class="secondary-action btn-sm" style="color:#f87171" onclick="handleVideoCancelJob('${escapeHtml(j.id)}')">✕ Hủy</button>`;
+    }
+
+    return `
+      <div class="video-job-item">
+        <div class="video-job-header">
+          <div>
+            <div class="video-job-title">${escapeHtml(bookTitle)}</div>
+            <div class="video-job-meta">
+              <span>${escapeHtml(chRange)}</span>
+              <span>•</span>
+              <span>${j.options?.mode === "teaser" ? "Teaser" : "Summary Review"}</span>
+              <span>•</span>
+              <span>Giọng ${j.options?.voice === "male" ? "Nam" : "Nữ"}</span>
+            </div>
+          </div>
+          <span class="badge ${st.class}">${escapeHtml(st.label)}</span>
+        </div>
+
+        <div class="video-job-progress">
+          <div class="video-job-progress-fill" style="width: ${pct}%"></div>
+        </div>
+
+        <div style="font-size:0.8rem;color:var(--text-muted);display:flex;justify-content:space-between;">
+          <span>${escapeHtml(j.stageMessage || "")}</span>
+          <span>${pct}%</span>
+        </div>
+
+        <div class="video-job-actions">
+          ${actions}
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  els.videoQueueList.innerHTML = html;
+}
+
+window.openScriptEditorModal = async function(jobId) {
+  currentEditingJobId = jobId;
+  try {
+    const job = await requestJson(`/api/admin/video/jobs/${encodeURIComponent(jobId)}`);
+    if (!job) return;
+
+    const script = job.script || { title: "", summary: "", scenes: [] };
+    if (els.videoScriptEditTitle) els.videoScriptEditTitle.value = script.title || "";
+    if (els.videoScriptEditSummary) els.videoScriptEditSummary.value = script.summary || "";
+
+    if (els.videoScriptScenesList) {
+      if (!script.scenes || script.scenes.length === 0) {
+        els.videoScriptScenesList.innerHTML = '<p class="empty-hint">Kịch bản chưa được tạo. Khi worker chạy xong giai đoạn viết kịch bản, các phân cảnh sẽ hiển thị tại đây.</p>';
+      } else {
+        els.videoScriptScenesList.innerHTML = script.scenes.map((sc, i) => `
+          <div class="video-scene-item" data-scene-index="${i}">
+            <div class="video-scene-header">
+              <span>Cảnh ${i + 1}: ${escapeHtml(sc.section || sc.type || "")} (${escapeHtml(sc.badge || "")})</span>
+              <span style="font-size:0.75rem;color:var(--text-muted);">${escapeHtml(sc.visualKeyword || "")}</span>
+            </div>
+            <label class="admin-field" style="margin-bottom:6px;">
+              <span style="font-size:0.75rem;">Lời bình thu âm (Narration)</span>
+              <textarea class="admin-textarea scene-text-input" rows="3">${escapeHtml(sc.text || "")}</textarea>
+            </label>
+            <label class="admin-field">
+              <span style="font-size:0.75rem;">Prompt hình ảnh (Visual description)</span>
+              <input type="text" class="admin-input scene-prompt-input" value="${escapeHtml(sc.visualPrompt || "")}">
+            </label>
+          </div>
+        `).join("");
+      }
+    }
+
+    els.videoScriptDialog?.showModal();
+  } catch (err) {
+    alert("Không thể tải kịch bản: " + err.message);
+  }
+};
+
+async function handleVideoScriptSave() {
+  if (!currentEditingJobId) return;
+  const job = await requestJson(`/api/admin/video/jobs/${encodeURIComponent(currentEditingJobId)}`);
+  if (!job) return;
+
+  const script = job.script || { scenes: [] };
+  script.title = els.videoScriptEditTitle?.value || script.title;
+  script.summary = els.videoScriptEditSummary?.value || script.summary;
+
+  const sceneItems = els.videoScriptScenesList?.querySelectorAll(".video-scene-item") || [];
+  sceneItems.forEach((item, idx) => {
+    const text = item.querySelector(".scene-text-input")?.value;
+    const prompt = item.querySelector(".scene-prompt-input")?.value;
+    if (script.scenes[idx]) {
+      if (text !== undefined) script.scenes[idx].text = text;
+      if (prompt !== undefined) script.scenes[idx].visualPrompt = prompt;
+    }
+  });
+
+  try {
+    await requestJson(`/api/admin/video/jobs/${encodeURIComponent(currentEditingJobId)}/script`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ script })
+    });
+    alert("Đã lưu kịch bản thành công!");
+    els.videoScriptDialog?.close();
+    await loadAdminVideoData();
+  } catch (err) {
+    alert("Lỗi khi lưu kịch bản: " + err.message);
+  }
+}
+
+async function handleVideoScriptApprove() {
+  if (!currentEditingJobId) return;
+  await handleVideoScriptSave();
+  await handleVideoApproveJob(currentEditingJobId);
+  els.videoScriptDialog?.close();
+}
+
+window.handleVideoApproveJob = async function(jobId) {
+  try {
+    await requestJson(`/api/admin/video/jobs/${encodeURIComponent(jobId)}/approve`, {
+      method: "POST"
+    });
+    setStatus("Đã duyệt kịch bản, đưa job vào hàng đợi render.");
+    await loadAdminVideoData();
+  } catch (err) {
+    alert("Lỗi khi duyệt job: " + err.message);
+  }
+};
+
+window.handleVideoRetryJob = async function(jobId) {
+  try {
+    await requestJson(`/api/admin/video/jobs/${encodeURIComponent(jobId)}/retry`, {
+      method: "POST"
+    });
+    setStatus("Đã đặt lại job để thử render lại.");
+    await loadAdminVideoData();
+  } catch (err) {
+    alert("Lỗi khi thử lại job: " + err.message);
+  }
+};
+
+window.handleVideoCancelJob = async function(jobId) {
+  if (!confirm("Bạn có chắc muốn hủy job này không?")) return;
+  try {
+    await requestJson(`/api/admin/video/jobs/${encodeURIComponent(jobId)}`, {
+      method: "DELETE"
+    });
+    setStatus("Đã hủy job.");
+    await loadAdminVideoData();
+  } catch (err) {
+    alert("Lỗi khi hủy job: " + err.message);
+  }
+};
+
+window.openVideoPlayerModal = async function(jobId) {
+  const job = videoJobsData.find(j => j.id === jobId) || await requestJson(`/api/admin/video/jobs/${encodeURIComponent(jobId)}`);
+  if (!job) return;
+
+  const videoUrl = job.assets?.videoUrl;
+  const subtitlesUrl = job.assets?.subtitlesUrl;
+
+  if (els.videoPreviewPlayer && videoUrl) {
+    els.videoPreviewPlayer.src = videoUrl;
+    els.videoPreviewPlayer.load();
+  }
+
+  if (els.videoDownloadMp4Btn) {
+    els.videoDownloadMp4Btn.href = videoUrl || "#";
+    els.videoDownloadMp4Btn.style.display = videoUrl ? "inline-flex" : "none";
+  }
+
+  if (els.videoDownloadSrtBtn) {
+    els.videoDownloadSrtBtn.href = subtitlesUrl || "#";
+    els.videoDownloadSrtBtn.style.display = subtitlesUrl ? "inline-flex" : "none";
+  }
+
+  if (els.videoUploadYtFromModalBtn) {
+    els.videoUploadYtFromModalBtn.onclick = () => handleVideoUploadToYouTube(job.id);
+  }
+
+  els.videoPlayerDialog?.showModal();
+};
+
+window.handleVideoUploadToYouTube = async function(jobId) {
+  if (!confirm("Tải video này lên kênh YouTube ở chế độ Riêng tư (Private)?")) return;
+  try {
+    const res = await requestJson(`/api/admin/video/jobs/${encodeURIComponent(jobId)}/upload-youtube`, {
+      method: "POST"
+    });
+    alert(res.message || "Đã gửi yêu cầu upload YouTube!");
+    await loadAdminVideoData();
+  } catch (err) {
+    alert("Lỗi upload YouTube: " + err.message);
+  }
+};

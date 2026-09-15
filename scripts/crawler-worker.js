@@ -38,6 +38,106 @@ const AVERAGE_CHARS_PER_CHAPTER = 2200;
 const MAX_DETAIL_PROBES = 12;
 
 async function main() {
+  const target = String(process.env.TARGET_BOOK_ID || process.env.TARGET_SOURCE_ID || "");
+  const source = String(process.env.CRAWLER_SOURCE || (/^qidian-|^https:\/\/(?:www|book)\.qidian\.com\//.test(target) ? "qidian" : "fanqie")).toLowerCase();
+  if (source === "qidian") {
+    requireEnvironment();
+    const cleanTarget = target.replace(/^qidian-/, "").trim();
+    const startedAt = new Date().toISOString();
+    const status = {
+      state: "running",
+      message: `Đang kết nối Qidian cào truyện ID ${cleanTarget}...`,
+      startedAt,
+      finishedAt: "",
+      currentBookId: cleanTarget,
+      currentBookTitle: `Qidian ${cleanTarget}`,
+      currentChapters: 0,
+      currentTotalChapters: 0,
+      discovered: 0,
+      published: 0,
+      failed: 0
+    };
+    await updateStatus(status);
+    startHeartbeat(status);
+
+    try {
+      const qidian = require("./qidian-crawler");
+      const result = await qidian.crawlQidian({
+        target: cleanTarget,
+        outputDir: process.env.QIDIAN_OUTPUT_DIR || path.join(TOMATO_DATA_DIR, "qidian"),
+        maxChapters: Number(process.env.QIDIAN_MAX_CHAPTERS || 2000),
+        allowVip: process.env.QIDIAN_ALLOW_VIP !== "false",
+        onProgress: async ({ chapter, total, title, metadata }) => {
+          status.currentBookTitle = metadata?.title || `Qidian ${cleanTarget}`;
+          status.currentChapters = chapter;
+          status.currentTotalChapters = total;
+          status.message = `Đang tải ${status.currentBookTitle}: ${chapter}/${total} chương (${title}).`;
+          await updateStatus(status);
+        }
+      });
+
+      status.message = `Đang dịch thông tin truyện ${result.title}...`;
+      await updateStatus(status);
+
+      const translatedMetadata = await translateBookMetadata({
+        title: result.title,
+        author: result.author,
+        description: result.description
+      });
+
+      status.message = `Đang lưu và tách ${result.downloadedChapters} chương cho ${translatedMetadata.title}...`;
+      await updateStatus(status);
+
+      const epubBuffer = fs.readFileSync(result.epubPath);
+      const ingestResult = await runIngest({
+        translateEnabled: false,
+        epubBuffer,
+        book: {
+          id: `qidian-${cleanTarget}`,
+          title: translatedMetadata.title,
+          author: translatedMetadata.author,
+          description: translatedMetadata.description,
+          genre: "Đô Thị",
+          status: "Đang cập nhật",
+          source: "qidian",
+          sourceId: cleanTarget,
+          sourceUrl: result.sourceUrl,
+          lastCrawledAt: new Date().toISOString()
+        },
+        revision: 1,
+        log: (event) => {
+          if (event.event === "ingest.completed") console.log(`  ingest Qidian xong: ${event.totalChapters} chương`);
+        }
+      });
+
+      stopHeartbeat();
+      status.state = "success";
+      status.published += 1;
+      status.currentChapters = ingestResult.totalChapters;
+      status.currentTotalChapters = ingestResult.totalChapters;
+      status.message = `Đã thêm thành công ${translatedMetadata.title} (${ingestResult.totalChapters} chương).`;
+      status.recent = [
+        { title: translatedMetadata.title, chapters: ingestResult.totalChapters, at: new Date().toISOString(), sourceId: cleanTarget },
+        ...(status.recent || [])
+      ].slice(0, 8);
+      status.finishedAt = new Date().toISOString();
+      await updateStatus(status);
+      return result;
+    } catch (err) {
+      stopHeartbeat();
+      status.state = "error";
+      status.failed += 1;
+      status.message = `Cào Qidian ${cleanTarget} thất bại: ${err.message}`;
+      status.finishedAt = new Date().toISOString();
+      status.recentErrors = [
+        { sourceId: cleanTarget, title: status.currentBookTitle || `Qidian ${cleanTarget}`, error: err.message, at: new Date().toISOString() },
+        ...(status.recentErrors || [])
+      ].slice(0, 6);
+      await updateStatus(status);
+      throw err;
+    }
+  }
+  if (source !== "fanqie") throw new Error(`Nguồn crawler không được hỗ trợ: ${source}`);
   requireEnvironment();
   // Config, status and the crawled-book list come straight from R2 and Supabase.
   // Going through the site for its own state is what made every run fail once
@@ -45,38 +145,41 @@ async function main() {
   const state = createCrawlerState(crawlerStateOptions());
   const control = await state.readControl();
   const { config, categories, catalog, status: previousStatus } = control;
-  if (!config.enabled) {
+  if (!config.enabled && !target) {
     await updateStatus({ state: "disabled", message: "Crawler đang tắt trong trang quản trị.", finishedAt: new Date().toISOString() });
     return;
   }
 
   const storage = createStorage();
 
-  // Pre-flight check: If translation worker is paused due to quota, halt crawler immediately!
-  try {
-    const rawTransStatus = await storage.get("jobs/translate-status.json");
-    if (rawTransStatus) {
-      const transStatus = JSON.parse(rawTransStatus.toString("utf8"));
-      if (transStatus.state === "paused_quota") {
-        await updateStatus({
-          state: "paused_quota",
-          message: "API keys dịch đang tạm hết hạn mức (Quota/Rate Limit). Tạm dừng cào sách mới để tránh upload truyện chưa dịch.",
-          finishedAt: new Date().toISOString()
-        });
-        console.warn("[CRAWLER] Translation worker is paused for quota. Halting crawler to protect library integrity.");
-        return;
+  // Pre-flight check: If translation worker is paused due to quota, halt crawler immediately (unless targeted crawl)!
+  if (!target) {
+    try {
+      const rawTransStatus = await storage.get("jobs/translate-status.json");
+      if (rawTransStatus) {
+        const transStatus = JSON.parse(rawTransStatus.toString("utf8"));
+        if (transStatus.state === "paused_quota") {
+          await updateStatus({
+            state: "paused_quota",
+            message: "API keys dịch đang tạm hết hạn mức (Quota/Rate Limit). Tạm dừng cào sách mới để tránh upload truyện chưa dịch.",
+            finishedAt: new Date().toISOString()
+          });
+          console.warn("[CRAWLER] Translation worker is paused for quota. Halting crawler to protect library integrity.");
+          return;
+        }
       }
-    }
-  } catch {}
+    } catch {}
+  }
 
   const startedAt = new Date().toISOString();
   const resumeJob = selectResumeJob(previousStatus, catalog);
+  const targetClean = target.replace(/^(?:fanqie|qidian)-/, "").trim();
   const status = {
     state: "running",
-    message: "Đang chuẩn bị...",
+    message: targetClean ? `Đang chuẩn bị cào truyện ${targetClean}...` : "Đang chuẩn bị...",
     startedAt,
     finishedAt: "",
-    currentBookId: resumeJob?.sourceId || "",
+    currentBookId: targetClean || resumeJob?.sourceId || "",
     resumeAttempts: resumeJob ? resumeJob.attempts : 0,
     discovered: 0,
     published: 0,
@@ -179,7 +282,8 @@ async function main() {
     const targetSourceId = String(process.env.TARGET_BOOK_ID || process.env.TARGET_SOURCE_ID || "").replace(/^fanqie-/, "").trim();
     if (targetSourceId) {
       console.log(`[CRAWLER TARGET] Yêu cầu cào/bổ sung đích danh bộ Fanqie ID: ${targetSourceId}`);
-      status.message = `Đang cào lại và bổ sung chương cho Fanqie book ${targetSourceId}...`;
+      status.currentBookId = targetSourceId;
+      status.message = `Đang chuẩn bị cào bộ Fanqie ID ${targetSourceId}...`;
       await updateStatus(status);
       const targetJob = {
         sourceId: targetSourceId,
@@ -189,9 +293,12 @@ async function main() {
         isTarget: true
       };
       await runJobs([targetJob]);
-      status.message = `Hoàn tất cào lại và bổ sung chương cho Fanqie book ${targetSourceId}.`;
-      status.finishedAt = new Date().toISOString();
-      await updateStatus(status);
+      if (status.state === "running") {
+        status.state = "success";
+        status.message = status.message || `Hoàn tất cào bộ Fanqie ID ${targetSourceId}.`;
+        status.finishedAt = new Date().toISOString();
+        await updateStatus(status);
+      }
       return;
     }
 
@@ -857,10 +964,12 @@ async function waitForJob(jobId, status) {
     // as prose so the admin can draw a bar rather than parse a sentence.
     const saved = Number(job.progress?.saved_chapters || 0);
     const total = Number(job.progress?.chapter_total || 0);
+    const changed = status.currentChapters !== saved || status.currentTotalChapters !== total;
     status.currentBookTitle = job.title || String(job.book_id || "");
     status.currentChapters = saved;
     status.currentTotalChapters = total;
     status.message = `Đang tải ${status.currentBookTitle}: ${job.progress ? `${saved}/${total} chương` : "đang chuẩn bị"}.`;
+    if (changed) await updateStatus(status);
     await sleep(POLL_INTERVAL_MS);
   }
   throw new Error(`Tomato không hoàn tất sau ${Math.round(JOB_TIMEOUT_MS / 60000)} phút.`);

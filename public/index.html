@@ -60,7 +60,7 @@
     <link rel="preload" href="/library/covers/misty-pagoda-hero.webp" as="image" fetchpriority="high">
     <script>
       (function() {
-        var APP_VER = "mtzm9rkl-b9a68d";
+        var APP_VER = "mu2ah6xu-8b72c4";
         if (typeof window !== "undefined" && window.localStorage) {
           if (localStorage.getItem("tramchu_app_ver") !== APP_VER) {
             localStorage.setItem("tramchu_app_ver", APP_VER);
@@ -82,8 +82,8 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/style.css?v=17ed223dea0c">
-    <script src="/app.js?v=0e9dc941bded" defer></script>
+    <link rel="stylesheet" href="/style.css?v=44752220e84c">
+    <script src="/app.js?v=b641fd036879" defer></script>
   </head>
   <body class="dark">
     <section id="libraryView" class="library-view">
@@ -699,9 +699,9 @@
         <button id="adminTranslateTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminTranslatePanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>Tiến trình AI</button>
         <button id="adminKeysTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminKeysPanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg><span id="adminKeysTabTitle">Sức khỏe API Keys</span></button>
         <button id="adminCrawlerTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminCrawlerForm"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path><circle cx="12" cy="12" r="4"></circle></svg>Crawler Fanqie</button>
+        <button id="adminAudioTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminAudioPanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path></svg>Audio truyện</button>
         <button id="adminStatsTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminStatsPanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 3v18h18"></path><path d="M7 15v3M12 9v9M17 12v6"></path></svg>Số liệu độc giả</button>
         <button id="adminUsersTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminUsersPanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Người dùng</button>
-        <button id="adminVideoTab" class="admin-tab" type="button" role="tab" aria-selected="false" aria-controls="adminVideoPanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>Video review</button>
       </div>
 
       <form id="adminLoginForm" class="admin-login-form" method="post">
@@ -1017,16 +1017,115 @@
         </div>
       </section>
 
+      <section id="adminAudioPanel" class="admin-audio-panel" hidden aria-labelledby="adminAudioTitle">
+        <div class="crawler-overview">
+          <div><p class="eyebrow">Edge‑TTS · Google Drive · Cloudflare R2</p><h3 id="adminAudioTitle">Tạo audio theo bộ truyện</h3></div>
+          <button id="adminAudioRefresh" class="secondary-action icon-text-btn" type="button" title="Làm mới trạng thái hàng đợi audio">
+            <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v6h-6M4 18v-6h6"></path><path d="M18.49 9A7 7 0 0 0 5.64 6.64L4 9M20 15l-1.64 2.36A7 7 0 0 1 5.51 15"></path></svg>
+            <span>Làm mới</span>
+          </button>
+        </div>
+
+        <div class="audio-summary-card">
+          <div class="audio-summary-item">
+            <span>Giọng đọc AI</span>
+            <strong>Edge-TTS Neural (VN)</strong>
+          </div>
+          <div class="audio-summary-item">
+            <span>Lưu trữ &amp; Phân phối</span>
+            <strong>Google Drive / R2 Stream</strong>
+          </div>
+          <div class="audio-summary-item">
+            <span>Trạng thái hàng đợi</span>
+            <strong id="audioActiveJobsCount" class="text-accent">Sẵn sàng</strong>
+          </div>
+        </div>
+
+        <div class="audio-action-card">
+          <div class="audio-action-header">
+            <div class="audio-action-title">
+              <svg class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+              <span>Khởi tạo tiến trình tổng hợp Audio</span>
+            </div>
+            <span class="audio-action-hint">Chuyển toàn bộ chương sách sang file nghe MP3</span>
+          </div>
+
+          <form id="adminAudioForm" class="audio-create-form">
+            <div class="audio-form-main-row">
+              <label class="admin-field audio-book-field">
+                <span>Chọn bộ truyện</span>
+                <select id="adminAudioBook" required></select>
+              </label>
+              <button id="adminAudioCreate" class="primary-action audio-submit-btn" type="submit">
+                <svg class="icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                <span id="adminAudioSubmitText">Tạo audio toàn bộ</span>
+              </button>
+            </div>
+
+            <div id="audioBookStatusBanner" class="audio-book-status-banner" hidden>
+              <div class="audio-status-banner-top">
+                <div class="audio-status-banner-info">
+                  <div class="audio-status-label-row">
+                    <span class="audio-status-title">Trạng thái audio hiện có:</span>
+                    <span id="audioBookProgressBadge" class="crawler-state-badge badge-status-completed">0 / 0 chương (0%)</span>
+                  </div>
+                  <div class="audio-status-mini-bar">
+                    <span id="audioBookProgressBar" style="width: 0%"></span>
+                  </div>
+                  <p id="audioBookStatusNote" class="audio-status-note">Đang kiểm tra tiến trình...</p>
+                </div>
+              </div>
+
+              <div class="audio-advanced-options">
+                <label class="audio-checkbox-label">
+                  <input type="checkbox" id="adminAudioForce">
+                  <span>Tạo lại toàn bộ (Ghi đè audio cũ)</span>
+                </label>
+                <label class="audio-start-ch-label" id="adminAudioStartChWrapper">
+                  <span>Từ chương:</span>
+                  <input type="number" id="adminAudioStartChapter" min="1" step="1" placeholder="Tự động">
+                </label>
+              </div>
+            </div>
+          </form>
+
+          <div class="audio-info-callout">
+            <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            <span>Audio chỉ được gắn vào chương sau khi đã kiểm tra thời lượng, dung lượng và khả năng phát công khai từng <strong>byte-range</strong> trực tiếp trên trình đọc.</span>
+          </div>
+        </div>
+
+        <div class="audio-jobs-section">
+          <div class="audio-jobs-header">
+            <h4>Tiến trình &amp; Hàng đợi Audio</h4>
+            <span id="audioJobsBadge" class="crawler-state-badge">Tất cả</span>
+          </div>
+          <div id="adminAudioJobs" class="audio-job-list">
+            <div class="audio-empty-state">
+              <svg class="icon audio-empty-icon" viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path></svg>
+              <p class="audio-empty-title">Chưa có job audio nào trong hàng đợi</p>
+              <span class="audio-empty-desc">Chọn bộ truyện ở phía trên và bấm "Tạo audio toàn bộ" để bắt đầu tiến trình chuyển văn bản thành giọng nói.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <form id="adminCrawlerForm" class="admin-crawler-form" hidden>
         <div class="crawler-overview">
-          <div><p class="eyebrow">Tự động khám phá</p><h3>Fanqie Discovery</h3></div>
-          <label class="switch-field"><input id="crawlerEnabled" type="checkbox"><span class="switch-track" aria-hidden="true"></span><span>Tự động</span></label>
+          <div><p class="eyebrow">Admin chủ động lựa chọn</p><h3>Tìm và cào truyện</h3></div>
         </div>
+        <div class="crawler-manual-search">
+          <label class="admin-field"><span>Tên hoặc ID bộ truyện</span><input id="crawlerSearchQuery" type="search" placeholder="Ví dụ: 黄昏分界 hoặc 1036575193"></label>
+          <button id="crawlerSearchBtn" class="primary-action" type="button">Tìm kiếm</button>
+        </div>
+        <div id="crawlerSearchResults" class="crawler-search-results"><p class="stats-empty">Nhập tên hoặc ID để xem ảnh bìa, tác giả và giới thiệu trước khi chọn cào.</p></div>
+        <input id="crawlerEnabled" type="checkbox" hidden>
         <div class="crawler-state" aria-live="polite">
           <span id="crawlerStateBadge" class="crawler-state-badge">Chưa chạy</span>
           <div class="crawler-state-body">
             <strong id="crawlerStateMessage">Đang tải trạng thái...</strong>
             <small id="crawlerStateMeta"></small>
+            <div id="crawlerAlert" class="crawler-alert" hidden></div>
             <div id="crawlerProgress" class="crawler-progress" hidden>
               <div class="crawler-progress-bar"><span id="crawlerProgressFill"></span></div>
               <small id="crawlerProgressLabel"></small>
@@ -1041,7 +1140,7 @@
             </div>
           </div>
         </div>
-        <fieldset class="crawler-categories">
+        <fieldset class="crawler-categories crawler-legacy-auto" hidden>
           <legend>Thể loại theo dõi</legend>
           <label><input type="checkbox" name="crawlerCategory" value="fantasy"><span>Huyền huyễn</span></label>
           <label><input type="checkbox" name="crawlerCategory" value="horror"><span>Linh dị / Kinh dị</span></label>
@@ -1049,7 +1148,7 @@
           <label><input type="checkbox" name="crawlerCategory" value="detective"><span>Trinh thám</span></label>
           <label><input type="checkbox" name="crawlerCategory" value="xianxia"><span>Tiên hiệp</span></label>
         </fieldset>
-        <div class="crawler-settings">
+        <div class="crawler-settings crawler-legacy-auto" hidden>
           <label class="admin-field"><span>Độ dài truyện</span><select id="crawlerWordCount" aria-describedby="crawlerWordCountHint"></select><small id="crawlerWordCountHint">Dùng đúng bộ lọc số chữ của Fanqie nên chỉ cần 1 request mỗi thể loại</small></label>
           <label class="admin-field"><span>Tình trạng</span><select id="crawlerCreationStatus"></select></label>
           <label class="admin-field"><span>Truyện mới mỗi lượt</span><select id="crawlerMaxBooks"><option value="1">1 truyện</option><option value="2">2 truyện</option><option value="3">3 truyện</option><option value="5">5 truyện</option><option value="10">10 truyện</option></select></label>
@@ -1058,7 +1157,7 @@
         </div>
         <p id="crawlerReach" class="crawler-reach" aria-live="polite"></p>
         <p id="crawlerWorkerWarning" class="crawler-warning" hidden>Worker chưa được cấp secret trên Vercel.</p>
-        <div class="admin-form-actions"><button id="crawlerRefresh" class="secondary-action" type="button"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v6h-6M4 18v-6h6"></path><path d="M18.49 9A7 7 0 0 0 5.64 6.64L4 9M20 15l-1.64 2.36A7 7 0 0 1 5.51 15"></path></svg>Làm mới</button><button id="crawlerSave" class="primary-action" type="submit">Lưu cấu hình</button></div>
+        <div class="admin-form-actions"><button id="crawlerRefresh" class="secondary-action" type="button"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v6h-6M4 18v-6h6"></path><path d="M18.49 9A7 7 0 0 0 5.64 6.64L4 9M20 15l-1.64 2.36A7 7 0 0 1 5.51 15"></path></svg>Làm mới trạng thái</button></div>
       </form>
 
       <section id="adminStatsPanel" class="admin-stats" hidden aria-labelledby="adminStatsTitle">
@@ -1141,112 +1240,6 @@
           <div id="adminUsersLoading" class="users-loading-state" hidden>
             <span class="spinner"></span>
             <p>Đang tải danh sách người dùng...</p>
-          </div>
-        </div>
-      </section>
-
-      <!-- 7. Video Review Tự Động (Automated Novel Review Video Generator) -->
-      <section id="adminVideoPanel" class="admin-video-panel" hidden aria-labelledby="adminVideoTitle">
-        <div class="crawler-overview">
-          <div>
-            <p class="eyebrow">Tự động hóa Video YouTube</p>
-            <h3 id="adminVideoTitle">Tạo Video Review &amp; Tóm Tắt Tự Động</h3>
-          </div>
-          <div class="admin-video-header-actions">
-            <span id="videoDailyBudgetBadge" class="badge badge-info" title="Giới hạn tạo video trong ngày">Hạn mức hôm nay: ...</span>
-            <span id="videoYouTubeBadge" class="badge badge-secondary" title="Trạng thái kết nối kênh YouTube">YouTube: Đang kiểm tra...</span>
-            <button id="videoConnectYtBtn" class="secondary-action" type="button" style="display:none;">Kết nối YouTube</button>
-            <button id="adminVideoRefresh" class="secondary-action" type="button"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v6h-6M4 18v-6h6"></path><path d="M18.49 9A7 7 0 0 0 5.64 6.64L4 9M20 15l-1.64 2.36A7 7 0 0 1 5.51 15"></path></svg>Làm mới</button>
-          </div>
-        </div>
-
-        <div class="admin-video-grid">
-          <!-- Cột Trái: Form tạo video -->
-          <div class="admin-video-create-card">
-            <h4 class="video-card-title">🎬 Cấu Hình Video Mới</h4>
-            <form id="adminVideoForm" class="admin-video-form">
-              <label class="admin-field">
-                <span>Chọn tác phẩm truyện</span>
-                <select id="videoBookSelect" required class="admin-select">
-                  <option value="">-- Đang nạp danh mục truyện... --</option>
-                </select>
-              </label>
-
-              <div class="video-form-row">
-                <label class="admin-field">
-                  <span>Chương bắt đầu</span>
-                  <input id="videoStartChapter" type="number" min="1" value="1" required class="admin-input">
-                </label>
-                <label class="admin-field">
-                  <span>Chương kết thúc</span>
-                  <input id="videoEndChapter" type="number" min="1" value="5" required class="admin-input">
-                </label>
-              </div>
-
-              <div class="video-form-row">
-                <label class="admin-field">
-                  <span>Chế độ nội dung</span>
-                  <select id="videoMode" class="admin-select">
-                    <option value="teaser" selected>Giới thiệu ít spoil (Teaser &amp; World)</option>
-                    <option value="summary_review">Tóm tắt &amp; Bình luận sâu (Summary &amp; Critique)</option>
-                  </select>
-                </label>
-                <label class="admin-field">
-                  <span>Tông giọng kể</span>
-                  <select id="videoTone" class="admin-select">
-                    <option value="suspense" selected>Hồi hộp, ly kỳ (Suspense)</option>
-                    <option value="dramatic">Hào hùng, cao trào (Dramatic)</option>
-                    <option value="philosophical">Chiêm nghiệm, sâu lắng (Philosophical)</option>
-                    <option value="engaging">Sôi nổi, cuốn hút (Engaging)</option>
-                  </select>
-                </label>
-              </div>
-
-              <div class="video-form-row">
-                <label class="admin-field">
-                  <span>Giọng đọc AI (Edge-TTS)</span>
-                  <span>Tỉ lệ khung hình (Khuyên dùng 9:16)</span>
-                  <select id="videoAspectRatio" class="admin-select">
-                    <option value="9:16" selected>📱 9:16 Dọc (TikTok / Reels / Shorts - Chuẩn viral)</option>
-                    <option value="16:9">🖥️ 16:9 Ngang (YouTube Video chuẩn)</option>
-                  </select>
-                </label>
-                <label class="admin-field">
-                  <span>Giọng đọc AI (Edge-TTS +12%)</span>
-                  <select id="videoVoice" class="admin-select">
-                    <option value="female" selected>Nữ - Hoài My (Truyền cảm, rõ chữ)</option>
-                    <option value="male">Nam - Nam Minh (Trầm ấm, nội lực)</option>
-                  </select>
-                </label>
-              </div>
-
-              <div class="video-checkbox-group">
-                <label class="checkbox-label">
-                  <input id="videoAiVisuals" type="checkbox" checked>
-                  <span>Minh họa AI mỹ thuật kết hợp Thẻ đồ họa Bìa sách</span>
-                </label>
-                <label class="checkbox-label">
-                  <input id="videoAutoApprove" type="checkbox" checked>
-                  <span>Tự động render video sau khi AI viết kịch bản</span>
-                </label>
-                <label class="checkbox-label">
-                  <input id="videoAutoUploadYt" type="checkbox">
-                  <span>Tự động tải lên YouTube khi render xong (Chế độ Riêng tư/Private)</span>
-                </label>
-              </div>
-
-              <button id="videoSubmitBtn" type="submit" class="primary-action" style="width:100%;margin-top:12px;">
-                🚀 Bắt đầu tạo Video Review
-              </button>
-            </form>
-          </div>
-
-          <!-- Cột Phải: Danh sách hàng đợi & kết quả -->
-          <div class="admin-video-queue-card">
-            <h4 class="video-card-title">📋 Hàng Đợi &amp; Video Đã Render</h4>
-            <div id="videoQueueList" class="admin-video-queue-list">
-              <p class="empty-hint">Chưa có job tạo video nào. Hãy tạo video đầu tiên từ cột bên trái!</p>
-            </div>
           </div>
         </div>
       </section>
@@ -1522,9 +1515,9 @@
                      settings popover below so the reading bar stays calm. -->
                 <div class="reader-quick-actions">
                   <button id="readerSettingsBtn" class="tool-button reader-quick-btn reader-settings-trigger" type="button" aria-label="Tùy chỉnh hiển thị" title="Cỡ chữ · phông · chủ đề · khung đọc" aria-expanded="false" aria-controls="readerSettingsPanel"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M5 20V7M5 7l3.5 8M8.5 15H1.5M13 20V9a3.5 3.5 0 0 1 7 0v11M13 15h7"></path></svg><span>Aa</span></button>
-                  <button id="ttsToggleBtn" class="tool-button reader-quick-btn tts-toggle-button" type="button" aria-label="Nghe đọc bằng giọng Hoài My" title="Nghe đọc bằng giọng Hoài My (Edge TTS)">
+                  <button id="ttsToggleBtn" class="tool-button reader-quick-btn tts-toggle-button" type="button" aria-label="Nghe đọc Audio truyện" title="Nghe đọc Audio truyện (Google Drive)">
                     <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path></svg>
-                    <span id="ttsToggleLabel">Hoài My</span>
+                    <span id="ttsToggleLabel">Audio</span>
                   </button>
                   <button id="zenModeBtn" class="tool-button reader-quick-btn zen-mode-button" type="button" aria-label="Chế độ đọc tập trung (Zen Mode)" title="Đọc tập trung (Phím Z hoặc F)">
                     <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
@@ -1657,7 +1650,9 @@
         </div>
       </div>
       <div class="tts-settings">
-        <select id="ttsVoiceSelect" class="tts-select tts-voice-select" title="Chọn giọng đọc"></select>
+        <select id="ttsVoiceSelect" class="tts-select tts-voice-select" title="Nguồn âm thanh: Google Drive" disabled>
+          <option value="drive" selected>🎙️ Audio Drive</option>
+        </select>
         <select id="ttsSpeedSelect" class="tts-select" title="Tốc độ đọc">
           <option value="0.75">0.75x</option>
           <option value="1.0" selected>1.0x</option>

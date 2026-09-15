@@ -31,7 +31,7 @@ import {
   CREATION_STATUSES
 } from "../server/crawler-store.js";
 import { createR2BindingStorage } from "./r2-storage.js";
-import { handleAdminVideo } from "../server/video/admin-router.js";
+import { handleAdminAudio } from "../server/audio/admin-router.js";
 import { synthesizeEdgeSpeech, synthesizeFullChapterSpeech } from "../server/edge-tts.js";
 
 const COOKIE_NAME = "tangthu_admin";
@@ -64,6 +64,7 @@ const ROUTES = {
   "/api/reader/report-issue": handleReaderIssueReport,
   "/api/reader/term-feedback": handleTermFeedback,
   "/api/reader/tts": handleReaderTts,
+  "/api/reader/audio": handleReaderAudioStream,
   "/api/admin/keys": handleAdminKeys,
   "/api/admin/session": handleSession,
   "/api/admin/login": handleLogin,
@@ -86,14 +87,22 @@ export async function handleApiRequest({ request, env }) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/$/, "");
 
-  if (path.startsWith("/api/admin/video")) {
+  if (path.startsWith("/api/admin/audio")) {
     try {
-      const res = await handleAdminVideo({ request, env, url, path, requireAdmin, readJson });
-      return withSecurityHeaders(res, env);
+      return withSecurityHeaders(await handleAdminAudio({ request, env, url, path, requireAdmin, readJson }), env);
     } catch (error) {
       const status = error.status || 500;
       if (status >= 500) console.error(`${url.pathname} lỗi:`, error.message);
-      const message = error.publicMessage || (status < 500 ? error.message : "Hệ thống đang gặp lỗi. Vui lòng thử lại sau.");
+      return withSecurityHeaders(json({ error: status < 500 ? error.message : "Hệ thống đang gặp lỗi." }, status), env);
+    }
+  }
+  if (path.startsWith("/api/admin/crawler/")) {
+    try {
+      return withSecurityHeaders(await handleCrawler({ request, env, url, path }), env);
+    } catch (error) {
+      const status = error.status || 500;
+      if (status >= 500) console.error(`${url.pathname} lỗi:`, error.message);
+      const message = error.publicMessage || error.message || "Không thể xử lý crawler.";
       return withSecurityHeaders(json({ error: message }, status), env);
     }
   }
@@ -119,7 +128,7 @@ async function handleReaderTts({ request, env }) {
   const fullChapter = Boolean(body?.fullChapter);
 
   let audio;
-  if (fullChapter || text.length > 2500) {
+  if (fullChapter || text.length > 700) {
     audio = await synthesizeFullChapterSpeech(text);
   } else {
     audio = await synthesizeEdgeSpeech(text);
@@ -133,6 +142,53 @@ async function handleReaderTts({ request, env }) {
       "X-TTS-Voice": "vi-VN-HoaiMyNeural"
     }
   });
+}
+
+// ---- reader audio stream proxy (Google Drive MP3) -------------------------
+async function handleReaderAudioStream({ request }) {
+  if (request.method !== "GET" && request.method !== "HEAD") return methodNotAllowed("GET, HEAD");
+  const url = new URL(request.url);
+  const fileId = url.searchParams.get("fileId") || "";
+  const rawUrl = url.searchParams.get("url") || "";
+  const range = request.headers.get("range");
+
+  let driveUrl = "";
+  if (fileId && /^[A-Za-z0-9_-]{10,100}$/.test(fileId)) {
+    driveUrl = `https://drive.google.com/uc?export=download&id=${encodeURIComponent(fileId)}`;
+  } else if (rawUrl && /^https:\/\/(drive\.google\.com|drive\.usercontent\.google\.com)/.test(rawUrl)) {
+    driveUrl = rawUrl;
+  } else {
+    return json({ error: "Tham số audio không hợp lệ." }, 400);
+  }
+
+  try {
+    const driveRes = await fetch(driveUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        ...(range ? { Range: range } : {})
+      }
+    });
+
+    const headers = new Headers();
+    headers.set("Content-Type", "audio/mpeg");
+    headers.set("Access-Control-Allow-Origin", "*");
+    headers.set("Accept-Ranges", "bytes");
+    headers.set("Cache-Control", "public, max-age=31536000, immutable");
+
+    if (driveRes.headers.get("content-range")) {
+      headers.set("Content-Range", driveRes.headers.get("content-range"));
+    }
+    if (driveRes.headers.get("content-length")) {
+      headers.set("Content-Length", driveRes.headers.get("content-length"));
+    }
+
+    return new Response(driveRes.body, {
+      status: driveRes.status === 206 ? 206 : 200,
+      headers
+    });
+  } catch (err) {
+    return json({ error: "Không thể phát audio từ Google Drive: " + err.message }, 502);
+  }
 }
 
 // ---- public catalog --------------------------------------------------------
@@ -355,6 +411,48 @@ async function dispatchIngest(body, env) {
 async function handleCrawler({ request, env }) {
   await requireAdmin(request, env);
   const state = crawlerState(env);
+  const path = new URL(request.url).pathname.replace(/\/$/, "");
+
+  if (path.endsWith("/search") && request.method === "GET") {
+    const query = text(new URL(request.url).searchParams.get("q"), 200);
+    if (!query) throw fail(400, "Hãy nhập tên hoặc ID truyện.");
+    return json({ results: await searchCrawlerBooks(query) });
+  }
+  if (path.endsWith("/start") && request.method === "POST") {
+    const body = await readJson(request);
+    const source = ["fanqie", "qidian"].includes(body.source) ? body.source : "fanqie";
+    const sourceId = String(body.sourceId || "").replace(/^(?:fanqie|qidian)-/, "");
+    if (!/^\d{5,30}$/.test(sourceId)) throw fail(400, "ID truyện không hợp lệ.");
+    const bookTitle = text(body.title, 300) || `${source} ${sourceId}`;
+    await state.writeConfig({ enabled: false });
+    await state.writeStatus({
+      state: "queued",
+      message: `Đã xếp hàng cào ${bookTitle}. Đang khởi chạy máy chủ...`,
+      currentBookId: sourceId,
+      currentBookTitle: bookTitle,
+      currentChapters: 0,
+      currentTotalChapters: 0,
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    try {
+      await dispatchCrawler({ source, sourceId }, env);
+    } catch (dispatchError) {
+      await state.writeStatus({
+        state: "error",
+        message: `Lỗi khởi chạy crawler: ${dispatchError.message}`,
+        currentBookId: sourceId,
+        currentBookTitle: bookTitle,
+        finishedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        recentErrors: [
+          { sourceId, title: bookTitle, error: dispatchError.message, at: new Date().toISOString() }
+        ]
+      });
+      throw dispatchError;
+    }
+    return json({ queued: true, source, sourceId, title: bookTitle });
+  }
 
   if (request.method === "POST") {
     const body = await readJson(request);
@@ -377,6 +475,65 @@ async function handleCrawler({ request, env }) {
     creationStatuses: CREATION_STATUSES,
     workerReady: true
   });
+}
+
+async function searchCrawlerBooks(query) {
+  const numeric = query.match(/\d{5,30}/)?.[0];
+  if (numeric) {
+    const previews = await Promise.allSettled([fetchCrawlerPreview("fanqie", numeric), fetchCrawlerPreview("qidian", numeric)]);
+    return previews.filter((item) => item.status === "fulfilled" && item.value).map((item) => item.value);
+  }
+  const response = await fetch(`https://www.qidian.com/so/${encodeURIComponent(query)}.html`, { headers: { "User-Agent": "Mozilla/5.0 tram-chu-admin" }, signal: AbortSignal.timeout(12000) });
+  if (!response.ok) throw fail(502, `Nguồn tìm kiếm trả HTTP ${response.status}.`);
+  const html = await response.text();
+  const results = [];
+  const seen = new Set();
+  for (const match of html.matchAll(/(?:book\.qidian\.com\/info\/|data-bid=["'])(\d{5,30})[\s\S]{0,2500}?<h4[^>]*>([\s\S]*?)<\/h4>[\s\S]{0,2500}?(?:<p[^>]*class=["'][^"']*intro[^"']*["'][^>]*>([\s\S]*?)<\/p>)?/gi)) {
+    if (seen.has(match[1])) continue;
+    seen.add(match[1]);
+    const plain = (value) => String(value || "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+    results.push({ source: "qidian", sourceId: match[1], title: plain(match[2]) || `Qidian ${match[1]}`, author: "", cover: "", description: plain(match[3]), sourceUrl: `https://book.qidian.com/info/${match[1]}/` });
+    if (results.length >= 12) break;
+  }
+  return results;
+}
+
+async function fetchCrawlerPreview(source, sourceId) {
+  const sourceUrl = source === "qidian" ? `https://book.qidian.com/info/${sourceId}/` : `https://fanqienovel.com/page/${sourceId}`;
+  const response = await fetch(sourceUrl, { headers: { "User-Agent": "Mozilla/5.0 tram-chu-admin" }, signal: AbortSignal.timeout(12000) });
+  if (!response.ok) return null;
+  const html = await response.text();
+  const decode = (value) => String(value || "").replace(/\\u([0-9a-f]{4})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16))).replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  const meta = (names) => {
+    for (const name of names) {
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const match = html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${escaped}["'][^>]+content=["']([^"']+)["']`, "i")) || html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${escaped}["']`, "i"));
+      if (match) return decode(match[1]);
+    }
+    return "";
+  };
+  const jsonValue = (keys) => {
+    for (const key of keys) { const match = html.match(new RegExp(`"${key}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"`, "i")); if (match) return decode(match[1]); }
+    return "";
+  };
+  const title = meta(["og:novel:book_name", "og:title"]) || jsonValue(["bookName", "book_name", "title"]);
+  if (!title) return null;
+  return { source, sourceId, title, author: meta(["og:novel:author"]) || jsonValue(["author", "authorName"]), cover: meta(["og:image"]) || jsonValue(["thumbUrl", "coverUrl", "cover"]), description: meta(["description", "og:description"]) || jsonValue(["abstract", "description"]), sourceUrl };
+}
+
+async function dispatchCrawler({ source, sourceId }, env) {
+  if (!env.GITHUB_DISPATCH_TOKEN || !env.GITHUB_REPOSITORY) throw fail(503, "Chưa cấu hình GitHub dispatch cho crawler.");
+  const targetBookId = source === "qidian" ? `qidian-${sourceId}` : sourceId;
+  const response = await fetch(`https://api.github.com/repos/${env.GITHUB_REPOSITORY}/actions/workflows/fanqie-crawler.yml/dispatches`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${env.GITHUB_DISPATCH_TOKEN}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "Content-Type": "application/json", "User-Agent": "tram-chu-admin" },
+    body: JSON.stringify({ ref: env.GITHUB_DISPATCH_REF || "main", inputs: { target_book_id: targetBookId } }),
+    signal: AbortSignal.timeout(15000)
+  });
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    throw fail(502, `Không khởi chạy được crawler (GitHub HTTP ${response.status}: ${errorText || "lỗi không xác định"}).`);
+  }
 }
 
 // ---- catalogue -------------------------------------------------------------
