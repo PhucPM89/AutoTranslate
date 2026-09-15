@@ -857,7 +857,7 @@ function renderCrawlerSearchResults(results) {
     const sourceTag = book.source === "bianhua" ? "Bianhuaxs" : book.source === "qidian" ? "Qidian" : "Fanqie";
     const authorLine = book.author ? `${book.author} · ` : "";
     return `<article class="crawler-preview-card">
-      <div class="crawler-preview-cover">${book.cover && /^https:\/\//.test(book.cover) ? `<img src="${escapeHtml(book.cover)}" alt="Bìa ${escapeHtml(book.title)}">` : '<span>📚</span>'}</div>
+      <div class="crawler-preview-cover">${book.cover && /^https:\/\//.test(book.cover) ? `<img src="${escapeHtml(book.cover)}" alt="Bìa ${escapeHtml(book.title)}" referrerpolicy="no-referrer" loading="lazy" onerror="this.onerror=null;this.parentElement.innerHTML='<span>📚</span>';">` : '<span>📚</span>'}</div>
       <div>
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
           <span style="font-size:0.75rem;padding:2px 6px;border-radius:4px;background:rgba(217,119,6,0.2);color:#f59e0b;font-weight:600;text-transform:uppercase;">${sourceTag}</span>

@@ -2532,7 +2532,7 @@ function contentSecurityPolicy(env) {
   }
   return [
     "default-src 'self'",
-    `img-src 'self' data:${cdn ? ` ${cdn}` : ""}`,
+    `img-src 'self' data:${cdn ? ` ${cdn}` : ""} https://*.byteimg.com https://*.googleusercontent.com https://lh3.googleusercontent.com https://*.yuewen.com https://*.qidian.com https://*.bianhuaxs.com https://imgservices-*.image.myqcloud.com`,
     "script-src 'self'",
     "style-src 'self'",
     // The CDN for chapters, Supabase for analytics, R2 S3 endpoint, and Gemini API.
