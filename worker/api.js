@@ -490,26 +490,41 @@ async function searchCrawlerBooks(query) {
 
   const [qidianRes, bianhuaRes] = await Promise.allSettled([
     (async () => {
-      const response = await fetch(`https://www.qidian.com/so/${encodeURIComponent(query)}.html`, {
-        headers: { "User-Agent": "Mozilla/5.0 tram-chu-admin" },
+      const response = await fetch(`https://m.qidian.com/search?kw=${encodeURIComponent(query)}`, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        },
         signal: AbortSignal.timeout(10000)
       });
       if (!response.ok) return [];
       const html = await response.text();
       const results = [];
       const seen = new Set();
-      for (const match of html.matchAll(/(?:book\.qidian\.com\/info\/|data-bid=["'])(\d{5,30})[\s\S]{0,2500}?<h4[^>]*>([\s\S]*?)<\/h4>[\s\S]{0,2500}?(?:<p[^>]*class=["'][^"']*intro[^"']*["'][^>]*>([\s\S]*?)<\/p>)?/gi)) {
-        if (seen.has(match[1])) continue;
-        seen.add(match[1]);
-        const plain = (value) => String(value || "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+      const plain = (value) => String(value || "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+      const itemRegex = /<a\b[^>]*data-bid=["'](\d+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+      let match;
+      while ((match = itemRegex.exec(html)) !== null) {
+        const bid = match[1];
+        if (seen.has(bid)) continue;
+        seen.add(bid);
+        const block = match[2];
+        const nameMatch = block.match(/<h2[^>]*>([\s\S]*?)<\/h2>/i);
+        const descMatch = block.match(/<p[^>]*class=["'][^"']*searchBookDesc[^"']*["'][^>]*>([\s\S]*?)<\/p>/i);
+        const authorMatch = block.match(/<p[^>]*class=["'][^"']*searchBookAuthor[^"']*["'][^>]*>([\s\S]*?)<\/p>/i);
+        const coverMatch = block.match(/data-src=["']([^"']+)["']/i) || block.match(/src=["']([^"']+)["']/i);
+
+        let cover = coverMatch ? coverMatch[1] : "";
+        if (cover.startsWith("//")) cover = "https:" + cover;
+
         results.push({
           source: "qidian",
-          sourceId: match[1],
-          title: plain(match[2]) || `Qidian ${match[1]}`,
-          author: "",
-          cover: "",
-          description: plain(match[3]),
-          sourceUrl: `https://book.qidian.com/info/${match[1]}/`
+          sourceId: bid,
+          title: plain(nameMatch ? nameMatch[1] : `Qidian ${bid}`),
+          author: plain(authorMatch ? authorMatch[1] : ""),
+          cover,
+          description: plain(descMatch ? descMatch[1] : ""),
+          sourceUrl: `https://book.qidian.com/info/${bid}/`
         });
         if (results.length >= 8) break;
       }
@@ -517,29 +532,42 @@ async function searchCrawlerBooks(query) {
     })(),
     (async () => {
       const response = await fetch(`https://www.bianhuaxs.com/page/search.html?searchkey=${encodeURIComponent(query)}`, {
-        headers: { "User-Agent": "Mozilla/5.0 tram-chu-admin" },
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" },
         signal: AbortSignal.timeout(10000)
       });
       if (!response.ok) return [];
       const html = await response.text();
       const results = [];
       const seen = new Set();
-      const regex = /<a\b[^>]*href=["'](?:https:\/\/www\.bianhuaxs\.com)?\/(\d{3,20})\.html["'][^>]*>([\s\S]*?)<\/a>/gi;
-      let match;
       const plain = (value) => String(value || "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
-      while ((match = regex.exec(html)) !== null) {
-        const id = match[1];
+      const boxRegex = /<div class=["']sitebox["']>[\s\S]*?<dl>([\s\S]*?)<\/dl>/gi;
+      let match;
+      while ((match = boxRegex.exec(html)) !== null) {
+        const block = match[1];
+        const idMatch = block.match(/href=["'](?:\/|https:\/\/www\.bianhuaxs\.com\/)(\d+)\.html["']/i);
+        if (!idMatch) continue;
+        const id = idMatch[1];
         if (seen.has(id)) continue;
         seen.add(id);
-        const title = plain(match[2]);
+
+        const titleMatch = block.match(/<h3>[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/i) || block.match(/alt=["']([^"']+)["']/i);
+        const authorMatch = block.match(/作者：<span>([\s\S]*?)<\/span>/i);
+        const descMatch = block.match(/<dd class=["']book_des["']>([\s\S]*?)<\/dd>/i);
+        const coverMatch = block.match(/<img\b[^>]*?\bsrc=["']([^"']+)["']/i);
+
+        let cover = coverMatch ? coverMatch[1] : "";
+        if (cover.startsWith("/")) cover = "https://www.bianhuaxs.com" + cover;
+
+        const title = plain(titleMatch ? titleMatch[1] : `Bianhua ${id}`);
         if (!title || /玄幻|仙侠|都市|穿越|网游|科幻|灵异|言情|其他|首页|目录/i.test(title)) continue;
+
         results.push({
           source: "bianhua",
           sourceId: id,
           title,
-          author: "",
-          cover: `https://www.bianhuaxs.com/uploads/images/${id}s.jpg`,
-          description: "",
+          author: plain(authorMatch ? authorMatch[1] : ""),
+          cover,
+          description: plain(descMatch ? descMatch[1] : ""),
           sourceUrl: `https://www.bianhuaxs.com/${id}.html`
         });
         if (results.length >= 8) break;
