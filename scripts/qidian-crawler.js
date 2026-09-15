@@ -2,7 +2,8 @@
 
 const fs = require("node:fs/promises");
 const path = require("node:path");
-const iconv = require("iconv-lite");
+let iconv;
+try { iconv = require("iconv-lite"); } catch { iconv = null; }
 const JSZip = require("jszip");
 
 function bookId(input) {
@@ -33,8 +34,11 @@ function xml(value) {
 }
 
 function gbkEncodeUriComponent(str) {
-  const buf = iconv.encode(String(str || ""), "gbk");
-  return Array.from(buf).map(b => "%" + b.toString(16).toUpperCase().padStart(2, "0")).join("");
+  if (iconv) {
+    const buf = iconv.encode(String(str || ""), "gbk");
+    return Array.from(buf).map(b => "%" + b.toString(16).toUpperCase().padStart(2, "0")).join("");
+  }
+  return encodeURIComponent(str || "");
 }
 
 function parseMetadata(html) {
@@ -140,7 +144,8 @@ function createMirrorClient({ fetchImpl = fetch, spacingMs = 300, sleep = ms => 
     });
     if (response.status !== 200) throw new Error(`Mirror HTTP ${response.status}: không thể tải trang từ mirror.`);
     const buf = await response.arrayBuffer();
-    return iconv.decode(Buffer.from(buf), "gbk");
+    if (iconv) return iconv.decode(Buffer.from(buf), "gbk");
+    return new TextDecoder("gbk").decode(buf);
   };
 }
 
