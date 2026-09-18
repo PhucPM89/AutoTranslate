@@ -8,6 +8,7 @@ const { createStorage } = require("../server/storage");
 const { nextAudioJob, updateAudioJob, updateAudioManifest } = require("../server/audio/job-queue");
 const { generate } = require("./generate-drive-audio");
 const { storeChapterAudio, publicDownloadUrl, findChapterAudioOnDrive } = require("../server/audio/drive-storage");
+const { resolveGenreVoice } = require("../server/audio/genre-voice-map");
 
 function loadEnv(file) {
   if (!fs.existsSync(file)) return;
@@ -114,16 +115,24 @@ async function processJob(job, storage) {
       }
     }
 
-    // 3. Tiến hành tổng hợp audio bằng Edge-TTS nếu chưa có
+    // 3. Tiến hành tổng hợp audio với giọng đọc tối ưu theo thể loại truyện
     const workDir = path.resolve("scratch", "audio-cache", `${job.bookId}-chapter-${chapterNumber}-${sourceSha256.slice(0, 16)}`);
     fs.mkdirSync(workDir, { recursive: true });
     const output = path.join(workDir, `${job.bookId}-chapter-${String(chapterNumber).padStart(4, "0")}.mp3`);
-    await updateAudioJob(job.id, { currentChapter: chapterNumber, stageMessage: `Đang tạo audio chương ${chapterNumber}/${job.totalChapters}...` }, storage);
-    const generated = await generate(text, output, workDir, { onProgress: async ({ completed, total }) => {
-      const chapterBase = (chapterNumber - 1) / job.totalChapters;
-      const within = completed / total / job.totalChapters;
-      await updateAudioJob(job.id, { progress: Math.min(99, Math.round((chapterBase + within) * 100)), stageMessage: `Chương ${chapterNumber}: đoạn ${completed}/${total}` }, storage);
-    }});
+    
+    // Tự động nhận diện thể loại và chọn phong cách giọng đọc phù hợp nhất
+    const voiceConfig = resolveGenreVoice(job.genre || "", job.bookTitle || "");
+    console.log(`[AUDIO-WORKER] Bộ truyện "${job.bookTitle}" (Thể loại: ${voiceConfig.genreName}) => Sử dụng giọng: [${voiceConfig.voiceName}]`);
+
+    await updateAudioJob(job.id, { currentChapter: chapterNumber, stageMessage: `Đang tạo audio chương ${chapterNumber}/${job.totalChapters} [Giọng: ${voiceConfig.voiceName}]...` }, storage);
+    const generated = await generate(text, output, workDir, {
+      voiceConfig,
+      onProgress: async ({ completed, total }) => {
+        const chapterBase = (chapterNumber - 1) / job.totalChapters;
+        const within = completed / total / job.totalChapters;
+        await updateAudioJob(job.id, { progress: Math.min(99, Math.round((chapterBase + within) * 100)), stageMessage: `Chương ${chapterNumber} [${voiceConfig.voiceName}]: đoạn ${completed}/${total}` }, storage);
+      }
+    });
     const qa = await inspectAudio(output, text);
     const stored = await storeChapterAudio({ bookId: job.bookId, bookName: job.bookTitle, chapterNumber, sourceSha256, durationSeconds: qa.durationSeconds, filePath: output });
     const url = publicDownloadUrl(stored.file.id);

@@ -1,0 +1,65 @@
+name: Audio TTS Worker (Multi-Genre & Google Drive Sync)
+
+on:
+  schedule:
+    # Tự động kích hoạt định kỳ mỗi giờ (hoặc 2 giờ một lần) trên hạ tầng Cloud
+    - cron: "0 */2 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Chế độ chạy (missing_only = chỉ bù chương thiếu | force_all = tạo lại toàn bộ)"
+        required: false
+        default: "missing_only"
+
+concurrency:
+  group: audio-pipeline-storage-writes
+  cancel-in-progress: false
+
+jobs:
+  audio-worker:
+    name: Auto Audio TTS Generator & Drive Sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    env:
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_ARCHIVE_BUCKET: ${{ secrets.R2_ARCHIVE_BUCKET }}
+      R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      GOOGLE_DRIVE_CLIENT_ID: ${{ secrets.GOOGLE_DRIVE_CLIENT_ID }}
+      GOOGLE_DRIVE_CLIENT_SECRET: ${{ secrets.GOOGLE_DRIVE_CLIENT_SECRET }}
+      GOOGLE_DRIVE_AUDIO_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_AUDIO_FOLDER_ID }}
+      GOOGLE_DRIVE_REFRESH_TOKEN: ${{ secrets.GOOGLE_DRIVE_REFRESH_TOKEN }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install System Dependencies (ffmpeg, ffprobe)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Setup Python for Edge-TTS
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install edge-tts
+        run: pip install edge-tts
+
+      - name: Install Node.js Dependencies
+        run: npm ci
+
+      - name: Run Audio Worker (Multi-Genre TTS & Google Drive Sync)
+        run: node scripts/audio-worker.js

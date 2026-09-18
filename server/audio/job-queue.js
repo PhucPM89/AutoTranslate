@@ -141,7 +141,7 @@ async function updateAudioManifest(bookId, chapterNumber, audioMeta, storage) {
   await storage.put(manifestKey(bookId), Buffer.from(JSON.stringify(manifest, null, 2)), { contentType: "application/json" }).catch(() => {});
 }
 
-async function createAudioJob({ bookId, bookTitle, revision = 1, totalChapters, mode = "missing_only", startChapter = null, forceAll = false }, storage) {
+async function createAudioJob({ bookId, bookTitle, genre = "", revision = 1, totalChapters, mode = "missing_only", startChapter = null, forceAll = false }, storage) {
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(String(bookId || ""))) throw new Error("bookId không hợp lệ.");
   const total = Number(totalChapters);
   if (!Number.isInteger(total) || total < 1) throw new Error("Bộ truyện chưa có chương để tạo audio.");
@@ -194,6 +194,7 @@ async function createAudioJob({ bookId, bookTitle, revision = 1, totalChapters, 
     id,
     bookId,
     bookTitle: String(bookTitle || bookId),
+    genre: String(genre || ""),
     revision: Number(revision) || 1,
     status: "pending",
     progress,
