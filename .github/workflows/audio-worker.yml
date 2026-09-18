@@ -61,8 +61,21 @@ jobs:
 
       - name: Start Dedicated Nguyen Ngoc Ngan AI Voice Engine (VieNeu-TTS Turbo)
         run: |
-          python server/audio/nguyen_ngoc_ngan_server.py &
-          sleep 5
+          python server/audio/nguyen_ngoc_ngan_server.py > /tmp/ai_engine.log 2>&1 &
+          echo "Waiting for Nguyen Ngoc Ngan AI Voice Engine to initialize..."
+          for i in {1..60}; do
+            if curl -s http://127.0.0.1:8989/health | grep -q "ok"; then
+              echo ">>> AI Voice Engine is ONLINE & READY! <<<"
+              break
+            fi
+            echo "Waiting for AI Voice Engine model loading ($i/60)..."
+            sleep 2
+          done
+          if ! curl -s http://127.0.0.1:8989/health | grep -q "ok"; then
+            echo "=== AI ENGINE FAILED TO START ==="
+            cat /tmp/ai_engine.log
+            exit 1
+          fi
 
       - name: Install Node.js Dependencies
         run: npm ci

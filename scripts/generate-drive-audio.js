@@ -89,7 +89,7 @@ async function generate(text, output, workDir, { onProgress = null, voiceConfig 
       try {
         if (voiceConfig?.engine === "nguyen-ngoc-ngan-ai" || voiceConfig?.engine === "vieneu-ai") {
           try {
-            // Gửi request trực tiếp đến AI Voice Engine nếu server đang bật
+            // Gửi request trực tiếp đến AI Voice Engine nếu server đang bật (timeout 120s cho mô hình Neural inference)
             const resp = await fetch("http://127.0.0.1:8989/synthesize", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -99,7 +99,7 @@ async function generate(text, output, workDir, { onProgress = null, voiceConfig 
                 genre_key: voiceConfig?.engine === "nguyen-ngoc-ngan-ai" ? "linh-di" : "other",
                 preset_voice: voiceConfig?.presetVoice
               }),
-              signal: AbortSignal.timeout(15000)
+              signal: AbortSignal.timeout(120000)
             });
             if (resp.ok) {
               const buf = Buffer.from(await resp.arrayBuffer());
@@ -112,10 +112,16 @@ async function generate(text, output, workDir, { onProgress = null, voiceConfig 
                 break;
               }
             } else {
-              console.warn(`[AUDIO] AI Engine HTTP ${resp.status}, tự động fallback sang edge-tts...`);
+              const errText = await resp.text();
+              throw new Error(`AI Engine trả về mã lỗi HTTP ${resp.status}: ${errText}`);
             }
           } catch (aiErr) {
-            console.warn(`[AUDIO] AI Engine không phản hồi (${aiErr.message}), tự động chuyển sang Neural edge-tts...`);
+            console.warn(`[AUDIO] Thử lần ${attempt}: AI Voice Engine gặp lỗi (${aiErr.message})`);
+            if (voiceConfig?.engine === "nguyen-ngoc-ngan-ai") {
+              // Bắt buộc giữ chất giọng Nguyễn Ngọc Ngạn, không tự ý chuyển sang giọng đọc máy Edge-TTS
+              throw aiErr;
+            }
+            console.warn(`[AUDIO] Tự động chuyển dự phòng sang Neural edge-tts...`);
           }
         }
 
