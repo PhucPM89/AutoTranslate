@@ -60,6 +60,8 @@ jobs:
           pip install --no-cache-dir edge-tts vieneu fastapi uvicorn soundfile
 
       - name: Start Dedicated Nguyen Ngoc Ngan AI Voice Engine (VieNeu-TTS Turbo)
+        env:
+          HF_HUB_DISABLE_SYMLINKS: "1"
         run: |
           python server/audio/nguyen_ngoc_ngan_server.py > /tmp/ai_engine.log 2>&1 &
           echo "Waiting for Nguyen Ngoc Ngan AI Voice Engine to initialize..."

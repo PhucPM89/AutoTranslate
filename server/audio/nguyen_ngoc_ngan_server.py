@@ -1,4 +1,5 @@
 import os
+os.environ["HF_HUB_DISABLE_SYMLINKS"] = "1"
 import sys
 import tempfile
 from pathlib import Path
