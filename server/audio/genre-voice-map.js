@@ -56,7 +56,7 @@ const GENRE_VOICE_CONFIG = {
 function resolveGenreVoice(genreStr = "", titleStr = "") {
   const text = `${genreStr} ${titleStr}`.toLowerCase();
   
-  if (/quỷ|ma|thi thể|kinh dị|linh dị|mộ|cấm kỵ|âm phủ|hoàng hôn|luật lệnh/.test(text)) {
+  if (/quỷ|ma|thi thể|vớt thi|vớt xác|xác|kinh dị|linh dị|mộ|cấm kỵ|âm phủ|hoàng hôn|luật lệnh|lao thể/.test(text)) {
     return GENRE_VOICE_CONFIG["linh-di"];
   }
   if (/tiên hiệp|tu tiên|kiếm hiệp|trường sinh|huyền huyễn/.test(text)) {
