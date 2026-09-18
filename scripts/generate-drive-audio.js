@@ -87,12 +87,17 @@ async function generate(text, output, workDir, { onProgress = null, voiceConfig 
     let lastError = null;
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
-        if (voiceConfig?.engine === "nguyen-ngoc-ngan-ai") {
-          // Gửi request trực tiếp đến AI Voice Engine (VieNeu-TTS Chú Nguyễn Ngọc Ngạn)
+        if (voiceConfig?.engine === "nguyen-ngoc-ngan-ai" || voiceConfig?.engine === "vieneu-ai") {
+          // Gửi request trực tiếp đến AI Voice Engine (VieNeu-TTS v3 Turbo với giọng tối ưu theo thể loại)
           const resp = await fetch("http://127.0.0.1:8989/synthesize", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: chunks[i], seed_index: i })
+            body: JSON.stringify({
+              text: chunks[i],
+              seed_index: i,
+              genre_key: voiceConfig?.engine === "nguyen-ngoc-ngan-ai" ? "linh-di" : "other",
+              preset_voice: voiceConfig?.presetVoice
+            })
           });
           if (resp.ok) {
             const buf = Buffer.from(await resp.arrayBuffer());
@@ -105,7 +110,7 @@ async function generate(text, output, workDir, { onProgress = null, voiceConfig 
               break;
             }
           } else {
-            console.warn(`[AUDIO] Engine Nguyễn Ngọc Ngạn HTTP ${resp.status}, thử fallback sang edge-tts...`);
+            console.warn(`[AUDIO] AI Engine HTTP ${resp.status}, thử fallback sang edge-tts...`);
           }
         }
 

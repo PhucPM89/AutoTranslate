@@ -137,7 +137,7 @@ async function processJob(job, storage) {
     const stored = await storeChapterAudio({ bookId: job.bookId, bookName: job.bookTitle, chapterNumber, sourceSha256, durationSeconds: qa.durationSeconds, filePath: output });
     const url = publicDownloadUrl(stored.file.id);
     await validatePublicAudio(url, qa.bytes);
-    const providerName = voiceConfig?.engine === "nguyen-ngoc-ngan-ai" ? "nguyen-ngoc-ngan-ai" : "edge-tts";
+    const providerName = voiceConfig?.engine || "edge-tts";
     chapter.audio = { status: "ready", provider: providerName, url, fileId: stored.file.id, sourceSha256, durationSeconds: qa.durationSeconds, bytes: qa.bytes, verifiedAt: new Date().toISOString() };
     await storage.put(key, Buffer.from(JSON.stringify(chapter, null, 2)), { contentType: "application/json; charset=utf-8" });
     await updateAudioManifest(job.bookId, chapterNumber, { ready: true, url, fileId: stored.file.id, durationSeconds: qa.durationSeconds }, storage);
