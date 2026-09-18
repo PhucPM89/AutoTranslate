@@ -229,7 +229,17 @@ async function updateAudioJob(id, patch, storage) {
 async function nextAudioJob(storage) {
   const jobs = await listAudioJobs(storage);
   const now = Date.now();
-  const item = jobs.find((job) => job.status === "pending" || (job.status === "retrying" && (!job.retryAt || new Date(job.retryAt).getTime() <= now)));
+  const STALE_RUNNING_THRESHOLD_MS = 10 * 60 * 1000; // 10 phút không có cập nhật từ Kaggle/Worker khác coi như đã dừng
+  const item = jobs.find((job) => {
+    if (job.status === "pending") return true;
+    if (job.status === "retrying" && (!job.retryAt || new Date(job.retryAt).getTime() <= now)) return true;
+    // Tự động nhận diện khi Kaggle hết quota hoặc worker cũ bị tắt:
+    if (job.status === "running" && job.updatedAt && (now - new Date(job.updatedAt).getTime() > STALE_RUNNING_THRESHOLD_MS)) {
+      console.log(`[JOB-QUEUE] Phát hiện job ${job.id} bị treo/stale (> 10 phút không cập nhật). Tự động phục hồi để tiếp tục tạo.`);
+      return true;
+    }
+    return false;
+  });
   return item ? getAudioJob(item.id, storage) : null;
 }
 
