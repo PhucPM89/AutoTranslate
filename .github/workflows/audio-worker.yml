@@ -50,13 +50,19 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
-      - name: Setup Python for Edge-TTS
+      - name: Setup Python for AI Voice Engine
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install edge-tts
-        run: pip install edge-tts
+      - name: Install AI TTS Dependencies (VieNeu-TTS & edge-tts)
+        run: |
+          pip install --no-cache-dir edge-tts vieneu fastapi uvicorn soundfile
+
+      - name: Start Dedicated Nguyen Ngoc Ngan AI Voice Engine (VieNeu-TTS Turbo)
+        run: |
+          python server/audio/nguyen_ngoc_ngan_server.py &
+          sleep 5
 
       - name: Install Node.js Dependencies
         run: npm ci

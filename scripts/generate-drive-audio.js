@@ -87,12 +87,34 @@ async function generate(text, output, workDir, { onProgress = null, voiceConfig 
     let lastError = null;
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
+        if (voiceConfig?.engine === "nguyen-ngoc-ngan-ai") {
+          // Gửi request trực tiếp đến AI Voice Engine (VieNeu-TTS Chú Nguyễn Ngọc Ngạn)
+          const resp = await fetch("http://127.0.0.1:8989/synthesize", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: chunks[i], seed_index: i })
+          });
+          if (resp.ok) {
+            const buf = Buffer.from(await resp.arrayBuffer());
+            const tempWav = path.join(workDir, `part-${String(i + 1).padStart(3, "0")}.wav`);
+            fs.writeFileSync(tempWav, buf);
+            await exec("ffmpeg", ["-y", "-i", tempWav, "-c:a", "libmp3lame", "-b:a", "128k", part]);
+            fs.rmSync(tempWav, { force: true });
+            if (fs.existsSync(part) && fs.statSync(part).size > 0) {
+              lastError = null;
+              break;
+            }
+          } else {
+            console.warn(`[AUDIO] Engine Nguyễn Ngọc Ngạn HTTP ${resp.status}, thử fallback sang edge-tts...`);
+          }
+        }
+
         await exec("edge-tts", ["--voice", voice, `--rate=${rate}`, `--pitch=${pitch}`, "--file", textFile, "--write-media", part], { timeout: 90000 });
         if (fs.existsSync(part) && fs.statSync(part).size > 0) {
           lastError = null;
           break;
         }
-        throw new Error("Edge-TTS trả về file rỗng.");
+        throw new Error("TTS trả về file rỗng.");
       } catch (error) {
         lastError = error;
         if (fs.existsSync(part)) fs.rmSync(part, { force: true });

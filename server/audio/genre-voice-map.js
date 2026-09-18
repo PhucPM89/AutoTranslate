@@ -14,10 +14,11 @@ const GENRE_VOICE_CONFIG = {
   "linh-di": {
     genreName: "Linh dị / Kinh dị",
     voiceName: "Nguyễn Ngọc Ngạn (Kể chuyện ma, rùng rợn, ngắt nghỉ)",
+    engine: "nguyen-ngoc-ngan-ai",
     edgeVoice: "vi-VN-NamMinhNeural",
     rate: "-6%",
     pitch: "-2Hz",
-    description: "Giọng nam trầm ấm, tiết tấu chậm rãi, khoảng lặng dài tạo cảm giác rùng rợn nghẹt thở."
+    description: "Giọng AI Nguyễn Ngọc Ngạn chân thực qua VieNeu-TTS Voice Cloning (kể chuyện ma, trầm, rùng rợn)."
   },
   "tien-hiep": {
     genreName: "Tiên hiệp / Kiếm hiệp",
