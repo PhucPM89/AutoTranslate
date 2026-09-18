@@ -88,29 +88,34 @@ async function generate(text, output, workDir, { onProgress = null, voiceConfig 
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
         if (voiceConfig?.engine === "nguyen-ngoc-ngan-ai" || voiceConfig?.engine === "vieneu-ai") {
-          // Gửi request trực tiếp đến AI Voice Engine (VieNeu-TTS v3 Turbo với giọng tối ưu theo thể loại)
-          const resp = await fetch("http://127.0.0.1:8989/synthesize", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              text: chunks[i],
-              seed_index: i,
-              genre_key: voiceConfig?.engine === "nguyen-ngoc-ngan-ai" ? "linh-di" : "other",
-              preset_voice: voiceConfig?.presetVoice
-            })
-          });
-          if (resp.ok) {
-            const buf = Buffer.from(await resp.arrayBuffer());
-            const tempWav = path.join(workDir, `part-${String(i + 1).padStart(3, "0")}.wav`);
-            fs.writeFileSync(tempWav, buf);
-            await exec("ffmpeg", ["-y", "-i", tempWav, "-c:a", "libmp3lame", "-b:a", "128k", part]);
-            fs.rmSync(tempWav, { force: true });
-            if (fs.existsSync(part) && fs.statSync(part).size > 0) {
-              lastError = null;
-              break;
+          try {
+            // Gửi request trực tiếp đến AI Voice Engine nếu server đang bật
+            const resp = await fetch("http://127.0.0.1:8989/synthesize", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                text: chunks[i],
+                seed_index: i,
+                genre_key: voiceConfig?.engine === "nguyen-ngoc-ngan-ai" ? "linh-di" : "other",
+                preset_voice: voiceConfig?.presetVoice
+              }),
+              signal: AbortSignal.timeout(15000)
+            });
+            if (resp.ok) {
+              const buf = Buffer.from(await resp.arrayBuffer());
+              const tempWav = path.join(workDir, `part-${String(i + 1).padStart(3, "0")}.wav`);
+              fs.writeFileSync(tempWav, buf);
+              await exec("ffmpeg", ["-y", "-i", tempWav, "-c:a", "libmp3lame", "-b:a", "128k", part]);
+              fs.rmSync(tempWav, { force: true });
+              if (fs.existsSync(part) && fs.statSync(part).size > 0) {
+                lastError = null;
+                break;
+              }
+            } else {
+              console.warn(`[AUDIO] AI Engine HTTP ${resp.status}, tự động fallback sang edge-tts...`);
             }
-          } else {
-            console.warn(`[AUDIO] AI Engine HTTP ${resp.status}, thử fallback sang edge-tts...`);
+          } catch (aiErr) {
+            console.warn(`[AUDIO] AI Engine không phản hồi (${aiErr.message}), tự động chuyển sang Neural edge-tts...`);
           }
         }
 
