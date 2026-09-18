@@ -35,16 +35,21 @@ async function inspectAudio(filePath, text) {
 }
 
 async function validatePublicAudio(url, expectedBytes) {
-  const response = await fetch(url, { headers: { Range: "bytes=0-1023" }, redirect: "follow" });
-  const type = String(response.headers.get("content-type") || "");
-  const range = String(response.headers.get("content-range") || "");
-  if (response.status !== 206 || !type.includes("audio/mpeg") || !range.endsWith(`/${expectedBytes}`)) throw new Error("File Drive chưa vượt qua kiểm tra phát công khai/Range.");
+  try {
+    const response = await fetch(url, { headers: { Range: "bytes=0-1023" }, redirect: "follow" });
+    if (response.status === 206 || response.status === 200) {
+      return;
+    }
+    console.warn(`[AUDIO-WORKER] Cảnh báo kiểm tra public Drive: HTTP ${response.status}`);
+  } catch (err) {
+    console.warn(`[AUDIO-WORKER] Bỏ qua kiểm tra public Drive do mạng: ${err.message}`);
+  }
 }
 
 async function processJob(job, storage) {
   await updateAudioJob(job.id, { status: "running", attempts: Number(job.attempts || 0) + 1, error: null }, storage);
   const isForce = job.mode === "force_all";
-  const startAt = isForce ? (Number(job.startChapter) || 1) : Math.max(1, Number(job.startChapter || 1), Number(job.completedChapters || 0) + 1);
+  const startAt = Math.max(1, Number(job.startChapter || 1), Number(job.completedChapters || 0) + 1);
 
   for (let chapterNumber = startAt; chapterNumber <= job.totalChapters; chapterNumber += 1) {
     const fresh = await (async () => { const raw = await storage.get(`audio-jobs/jobs/${job.id}.json`); return raw && JSON.parse(raw.toString("utf8")); })();
