@@ -883,14 +883,43 @@ async function downloadAndPublish(candidate, status, wordCountBucket = -1) {
 
   status.message = `Đang dịch thông tin Fanqie book ${candidate.sourceId}...`;
   await updateStatus(status);
-  const translatedMetadata = await translateBookMetadata({
-    title: metadata.title || completedJob.title || `Fanqie ${candidate.sourceId}`,
-    author: metadata.author || completedJob.author || "",
-    description: metadata.description || ""
-  });
 
-  if (!translatedMetadata || !translatedMetadata.title || /\p{Script=Han}/u.test(translatedMetadata.title) || /\p{Script=Han}/u.test(translatedMetadata.author || "")) {
-    throw new Error(`Dịch metadata thất bại cho Fanqie book ${candidate.sourceId}: Tiêu đề hoặc tác giả vẫn còn chứa chữ Hán.`);
+  // Preserve official title if already in known-books / catalog
+  const bookKey = `fanqie-${candidate.sourceId}`;
+  let knownTitle = null;
+  let knownAuthor = null;
+  let knownGenre = candidate.genre || "Khác";
+  try {
+    const knownPath = path.resolve(__dirname, "../data/known-books.json");
+    if (fs.existsSync(knownPath)) {
+      const knownData = JSON.parse(fs.readFileSync(knownPath, "utf8"));
+      if (knownData[bookKey]) knownTitle = knownData[bookKey];
+    }
+  } catch {}
+
+  let translatedMetadata = { title: knownTitle, author: "", description: "" };
+  if (!knownTitle) {
+    translatedMetadata = await translateBookMetadata({
+      title: metadata.title || completedJob.title || `Fanqie ${candidate.sourceId}`,
+      author: metadata.author || completedJob.author || "",
+      description: metadata.description || ""
+    });
+
+    if (!translatedMetadata || !translatedMetadata.title || /\p{Script=Han}/u.test(translatedMetadata.title) || /\p{Script=Han}/u.test(translatedMetadata.author || "")) {
+      throw new Error(`Dịch metadata thất bại cho Fanqie book ${candidate.sourceId}: Tiêu đề hoặc tác giả vẫn còn chứa chữ Hán.`);
+    }
+  } else {
+    // If title is known, translate author and description if needed
+    try {
+      const extra = await translateBookMetadata({
+        title: metadata.title || knownTitle,
+        author: metadata.author || completedJob.author || "",
+        description: metadata.description || ""
+      });
+      translatedMetadata.author = extra?.author || "";
+      translatedMetadata.description = extra?.description || "";
+    } catch {}
+    translatedMetadata.title = knownTitle;
   }
 
   // Extract and enqueue only. Translation is a separate workload: this job runs
@@ -902,11 +931,11 @@ async function downloadAndPublish(candidate, status, wordCountBucket = -1) {
     translateEnabled: false,
     epubBuffer,
     book: {
-      id: `fanqie-${candidate.sourceId}`,
+      id: bookKey,
       title: translatedMetadata.title,
-      author: translatedMetadata.author,
-      description: translatedMetadata.description,
-      genre: candidate.genre,
+      author: translatedMetadata.author || metadata.author || "",
+      description: translatedMetadata.description || metadata.description || "",
+      genre: knownGenre,
       status: "Đang cập nhật",
       source: "fanqie",
       sourceId: String(candidate.sourceId),
