@@ -74,36 +74,48 @@ function createDriveStorage(env = process.env) {
     return cachedToken;
   }
 
+  const folderPromises = new Map();
+
   async function getOrCreateFolder(parentFolderId, folderName) {
     const cacheKey = `${parentFolderId}::${folderName}`;
     if (folderCache.has(cacheKey)) return folderCache.get(cacheKey);
+    if (folderPromises.has(cacheKey)) return folderPromises.get(cacheKey);
 
-    const token = await getAccessToken();
-    const q = `'${escapeDriveQuery(parentFolderId)}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false and name = '${escapeDriveQuery(folderName)}'`;
-    const findUrl = new URL(DRIVE_FILES_URL);
-    findUrl.searchParams.set("q", q);
-    findUrl.searchParams.set("fields", "files(id,name)");
-    findUrl.searchParams.set("pageSize", "1");
+    const promise = (async () => {
+      try {
+        const token = await getAccessToken();
+        const q = `'${escapeDriveQuery(parentFolderId)}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false and name = '${escapeDriveQuery(folderName)}'`;
+        const findUrl = new URL(DRIVE_FILES_URL);
+        findUrl.searchParams.set("q", q);
+        findUrl.searchParams.set("fields", "files(id,name)");
+        findUrl.searchParams.set("pageSize", "1");
 
-    const findRes = await fetch(findUrl, { headers: { Authorization: `Bearer ${token}` } });
-    const findData = await findRes.json();
-    if (findData.files?.[0]) {
-      folderCache.set(cacheKey, findData.files[0].id);
-      return findData.files[0].id;
-    }
+        const findRes = await fetch(findUrl, { headers: { Authorization: `Bearer ${token}` } });
+        const findData = await findRes.json();
+        if (findData.files?.[0]) {
+          folderCache.set(cacheKey, findData.files[0].id);
+          return findData.files[0].id;
+        }
 
-    const createRes = await fetch(`${DRIVE_FILES_URL}?fields=id,name`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: folderName,
-        mimeType: "application/vnd.google-apps.folder",
-        parents: [parentFolderId]
-      })
-    });
-    const folder = await createRes.json();
-    folderCache.set(cacheKey, folder.id);
-    return folder.id;
+        const createRes = await fetch(`${DRIVE_FILES_URL}?fields=id,name`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: folderName,
+            mimeType: "application/vnd.google-apps.folder",
+            parents: [parentFolderId]
+          })
+        });
+        const folder = await createRes.json();
+        folderCache.set(cacheKey, folder.id);
+        return folder.id;
+      } finally {
+        folderPromises.delete(cacheKey);
+      }
+    })();
+
+    folderPromises.set(cacheKey, promise);
+    return promise;
   }
 
   async function resolveFolderAndName(key, options = {}) {

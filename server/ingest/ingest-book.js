@@ -77,7 +77,9 @@ async function ingestBook({
   //    without re-parsing the EPUB.
   const chapterList = [];
   const sourceWrites = [];
+  const sourceChaptersMap = new Map();
   for await (const chapter of extractChapters(epub)) {
+    sourceChaptersMap.set(chapter.chapterNumber, chapter);
     sourceWrites.push(() =>
       storage.put(
         originalKey(book.id, rev, chapter.chapterNumber),
@@ -121,7 +123,10 @@ async function ingestBook({
         if (published?.translationStatus === "convert") entry.convertVersion = published.convertVersion;
         return;
       }
-      const source = await readJson(storage, originalKey(book.id, rev, entry.chapterNumber));
+      let source = sourceChaptersMap.get(entry.chapterNumber);
+      if (!source) {
+        source = await readJson(storage, originalKey(book.id, rev, entry.chapterNumber));
+      }
       if (!source) return;
       // Convert makes the chapter readable immediately; without it the chapter
       // is published as raw source (pending) exactly as before.
