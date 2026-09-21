@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { TTSEngine, TTS_VOICE, splitLongParagraph } = require("./tts.js");
+const { TTSEngine, TTS_VOICE, splitLongParagraph, splitChapterForAudio, mergeMp3Blobs } = require("./tts.js");
 
 test("TTSEngine: exposes only the shared Hoai My Edge voice", () => {
   const tts = new TTSEngine();
@@ -102,6 +102,60 @@ test("TTSEngine: reuses locally cached audio instead of synthesizing twice", asy
   }
 });
 
+test("TTSEngine: full-chapter cache changes when chapter text changes", async () => {
+  const originalFetch = global.fetch;
+  const originalCaches = global.caches;
+  let requests = 0;
+  global.caches = undefined;
+  global.fetch = async () => {
+    requests += 1;
+    return new Response(new Uint8Array([requests]), { status: 200, headers: { "Content-Type": "audio/mpeg" } });
+  };
+  try {
+    const tts = new TTSEngine();
+    const options = { fullChapter: true, bookId: "book", chapterNumber: 1 };
+    await tts.getAudioBlob("Nội dung cũ", options);
+    await tts.getAudioBlob("Nội dung mới", options);
+    assert.equal(requests, 2);
+  } finally {
+    global.fetch = originalFetch;
+    global.caches = originalCaches;
+  }
+});
+
+test("TTSEngine: builds long chapters in the browser and returns one MP3 blob", async () => {
+  const originalFetch = global.fetch;
+  const originalCaches = global.caches;
+  const calls = [];
+  global.caches = undefined;
+  global.fetch = async (_url, init) => {
+    const payload = JSON.parse(init.body);
+    calls.push(payload);
+    const id3 = [0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 0];
+    return new Response(Uint8Array.from([...id3, calls.length, 0xff, 0xfb]), { status: 200, headers: { "Content-Type": "audio/mpeg" } });
+  };
+  try {
+    const tts = new TTSEngine();
+    const text = Array.from({ length: 80 }, (_, i) => `Đoạn ${i}: ${"nội dung ".repeat(8)}`).join("\n\n");
+    assert.ok(splitChapterForAudio(text).length > 1);
+    const blob = await tts.fetchAudioBlob(text, { fullChapter: true, bookId: "book", chapterNumber: 2 });
+    const bytes = Buffer.from(await blob.arrayBuffer());
+    assert.ok(calls.length > 1);
+    assert.ok(calls.every((call) => call.fullChapter === false));
+    assert.equal((bytes.toString("latin1").match(/ID3/g) || []).length, 1);
+    assert.equal(blob.type, "audio/mpeg");
+  } finally {
+    global.fetch = originalFetch;
+    global.caches = originalCaches;
+  }
+});
+
+test("mergeMp3Blobs removes metadata between independently generated parts", async () => {
+  const tag = Uint8Array.from([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 0]);
+  const merged = await mergeMp3Blobs([new Blob([tag, Uint8Array.from([1, 2])]), new Blob([tag, Uint8Array.from([3, 4])])]);
+  assert.deepEqual(Array.from(new Uint8Array(await merged.arrayBuffer())), [...tag, 1, 2, 3, 4]);
+});
+
 test("TTSEngine: retries transient Edge-TTS failures before giving up", async () => {
   const originalFetch = global.fetch;
   const originalCaches = global.caches;
@@ -161,33 +215,34 @@ test("TTSEngine: loadChapter configures offsets and calculates paragraph timesta
   assert.equal(tts.getParagraphIndexFromTime(99), 2);
 });
 
-test("TTSEngine: zero-failure fallback switches mode to speechSynthesis on audio error", () => {
-  const origUtterance = global.SpeechSynthesisUtterance;
-  global.SpeechSynthesisUtterance = class {
-    constructor(text) {
-      this.text = text;
-    }
-  };
-  try {
-    const tts = new TTSEngine();
-    tts.synth = {
-      cancel() {},
-      speak() {},
-      getVoices() { return []; }
-    };
-    tts.loadText("Đoạn văn bản kiểm thử fallback.");
+test("TTSEngine: halts and reports error on audio failure without falling back to device speechSynthesis", () => {
+  const tts = new TTSEngine();
+  tts.loadText("Đoạn văn bản kiểm thử.");
 
-    let notice = "";
-    tts.onError = (msg) => { notice = msg; };
+  let notice = "";
+  tts.onError = (msg) => { notice = msg; };
 
-    tts.fallbackToSpeechSynthesis("Lỗi phát audio");
+  tts.fallbackToSpeechSynthesis("Lỗi phát audio từ Google Drive.");
 
-    assert.equal(tts.mode, "speechSynthesis");
-    assert.equal(notice, "Lỗi phát audio");
-    assert.equal(tts.audio, null);
-  } finally {
-    global.SpeechSynthesisUtterance = origUtterance;
-  }
+  assert.notEqual(tts.mode, "speechSynthesis");
+  assert.equal(tts.mode, "drive");
+  assert.equal(notice, "Lỗi phát audio từ Google Drive.");
+  assert.equal(tts.audio, null);
+  assert.equal(tts.isPlaying, false);
 });
+
+test("TTSEngine: play() rejects and informs user if chapter has no Google Drive audio", () => {
+  const tts = new TTSEngine();
+  tts.loadChapter({ text: "Nội dung chương chưa có audio.", audioUrl: "" });
+
+  let errorMessage = "";
+  tts.onError = (msg) => { errorMessage = msg; };
+
+  const started = tts.play(0);
+  assert.equal(started, false);
+  assert.equal(tts.isPlaying, false);
+  assert.ok(errorMessage.includes("Google Drive"));
+});
+
 
 

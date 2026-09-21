@@ -1,5 +1,7 @@
 // Cloudflare Pages Function: High-performance Same-Origin Cover Proxy
-// Serves book covers directly under /covers/* from R2 / CDN with immutable edge caching.
+// Serves book covers directly under /covers/* from Google Drive / R2 with immutable edge caching.
+
+import { serveDriveFile } from "../_drive.js";
 
 const CDN_BASE = "https://cdn.tram-chu.online";
 
@@ -12,8 +14,8 @@ export async function onRequest(context) {
     return new Response("Not found", { status: 404 });
   }
 
-  // 1. Direct R2 binding if configured on Cloudflare Pages
-  if (env && env.NOVEL_STORAGE) {
+  // 1. Direct R2 binding if configured and active
+  if (env && env.NOVEL_STORAGE && env.STORAGE_DRIVER !== "drive") {
     try {
       const object = await env.NOVEL_STORAGE.get(`covers/${filename}`);
       if (object) {
@@ -30,7 +32,18 @@ export async function onRequest(context) {
     } catch {}
   }
 
-  // 2. Fast CDN proxy with Cloudflare Edge Caching
+  // 2. Serve from Google Drive via Edge Proxy (includes live Fanqie/Qidian fallbacks)
+  if (env && (env.STORAGE_DRIVER === "drive" || env.GOOGLE_DRIVE_REFRESH_TOKEN)) {
+    try {
+      const defaultMime = filename.endsWith(".png") ? "image/png" : filename.endsWith(".webp") ? "image/webp" : "image/jpeg";
+      const driveRes = await serveDriveFile(context, `covers/${filename}`, defaultMime);
+      if (driveRes && driveRes.status === 200) return driveRes;
+    } catch (err) {
+      console.warn("Drive cover fetch failed:", err.message);
+    }
+  }
+
+  // 3. Fallback CDN proxy (legacy)
   const cdnUrl = `${CDN_BASE}/covers/${filename}`;
   try {
     const cdnRes = await fetch(cdnUrl, {
@@ -53,5 +66,6 @@ export async function onRequest(context) {
     console.warn("Cover proxy fetch failed:", err.message);
   }
 
-  return new Response("Cover not found", { status: 404 });
+  // 4. Safe redirect to default asset so image NEVER breaks on UI
+  return Response.redirect("https://tram-chu.online/library/covers/misty-pagoda.webp", 302);
 }

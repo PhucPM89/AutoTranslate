@@ -29,7 +29,13 @@ loadEnvFile(path.join(__dirname, "..", ".env.local"));
 
 const { createStorage } = require("../server/storage");
 const { originalKey, chapterKey } = require("../server/ingest/documents");
-const { buildTM } = require("../server/convert/tm-extract");
+let buildTM = null;
+try {
+  buildTM = require("../server/convert/tm-extract").buildTM;
+} catch (err) {
+  console.log("[BUILD-TM] TM extraction is deprecated/disabled in current Gemini AI architecture.");
+  process.exit(0);
+}
 
 function flagValue(name, fallback) {
   const i = process.argv.indexOf(name);

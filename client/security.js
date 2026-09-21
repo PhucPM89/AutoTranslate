@@ -198,16 +198,43 @@ function initSecurityGuards(containerEl = (typeof document !== "undefined" ? doc
     }
   };
 
-  // 1. Completely disable copy event on non-editable text
+  // 1. Smart copy protection: allows short quote with watermark, blocks bulk copying
   containerEl.addEventListener("copy", (event) => {
     if (isEditableElement(event.target)) return;
 
+    let selectedText = "";
+    if (typeof window !== "undefined" && typeof window.getSelection === "function") {
+      selectedText = String(window.getSelection()?.toString() || "").trim();
+    }
+
+    // Case 1: Bulk copying (> 250 chars) -> Block completely!
+    if (selectedText.length > 250) {
+      event.preventDefault();
+      if (event.clipboardData) {
+        event.clipboardData.setData("text/plain", "");
+      }
+      if (typeof window !== "undefined" && typeof window.getSelection === "function") {
+        window.getSelection()?.removeAllRanges();
+      }
+      notify("⚠️ Nhằm bảo vệ bản quyền, Trạm Chữ không hỗ trợ sao chép đoạn văn dài. Vui lòng dùng tính năng 'Tạo Ảnh Trích Dẫn 9:16' hoặc 'Báo Lỗi'!");
+      return;
+    }
+
+    // Case 2: Short quote (1 - 250 chars) -> Allow with Trạm Chữ source attribution watermark
+    if (selectedText.length > 0) {
+      event.preventDefault();
+      const withWatermark = formatCopyWithAttribution(selectedText);
+      if (event.clipboardData) {
+        event.clipboardData.setData("text/plain", withWatermark);
+      }
+      notify("✓ Đã sao chép trích dẫn kèm nguồn Trạm Chữ.");
+      return;
+    }
+
+    // Fallback: block empty or non-editable copy
     event.preventDefault();
     if (event.clipboardData) {
       event.clipboardData.setData("text/plain", "");
-    }
-    if (typeof window !== "undefined" && typeof window.getSelection === "function") {
-      window.getSelection()?.removeAllRanges();
     }
     notify(MSG_COPY_BLOCKED);
   });
@@ -232,36 +259,88 @@ function initSecurityGuards(containerEl = (typeof document !== "undefined" ? doc
     event.preventDefault();
   });
 
-  // 5. Disable text selection start on reader text & covers
+  // 5. Disable text selection start on UI chrome & controls (allow reading text for quote card & report)
   containerEl.addEventListener("selectstart", (event) => {
     if (isEditableElement(event.target)) return;
+    // Allow selection on reader text: .document-text, #chapterView, .tts-paragraph-highlight
     if (
       event.target.closest?.(".document-text") ||
-      event.target.closest?.(".reader-container") ||
       event.target.closest?.("#chapterView") ||
+      event.target.closest?.(".tts-paragraph-highlight")
+    ) {
+      return;
+    }
+    if (
+      event.target.closest?.(".reader-container") ||
       event.target.closest?.(".book-view-desc") ||
-      event.target.closest?.(".studio-document-text")
+      event.target.closest?.(".studio-document-text") ||
+      event.target.closest?.(".reader-topbar") ||
+      event.target.closest?.(".reader-bottom-nav")
     ) {
       event.preventDefault();
     }
   });
 
-  // 6. Block restricted hotkeys (F12, DevTools, Ctrl+U, Ctrl+S, Ctrl+P, Ctrl+C outside inputs)
+  // 6. Block restricted hotkeys (F12, DevTools, Ctrl+U, Ctrl+S, Ctrl+P, Ctrl+A outside inputs)
   containerEl.addEventListener("keydown", (event) => {
     const check = checkRestrictedShortcut(event);
     if (!check.restricted) return;
 
-    event.preventDefault();
-    event.stopPropagation();
-
     if (check.type === "devtools") {
+      event.preventDefault();
+      event.stopPropagation();
       notify(MSG_DEVTOOLS_BLOCKED);
       renderConsoleBanner();
-    } else if (check.type === "copy") {
-      notify(MSG_COPY_BLOCKED);
-    } else {
-      notify(MSG_COPY_BLOCKED);
+      return;
     }
+
+    const key = String(event.key || "").toLowerCase();
+    const keyCode = event.keyCode || event.which || 0;
+    const isSelectAll = key === "a" || keyCode === 65;
+    const isCopy = key === "c" || keyCode === 67;
+
+    if (isSelectAll) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof window !== "undefined" && typeof window.getSelection === "function") {
+        window.getSelection()?.removeAllRanges();
+      }
+      notify("⚠️ Không thể chọn toàn bộ văn bản để bảo vệ bản quyền.");
+      return;
+    }
+
+    if (isCopy) {
+      let selectedText = "";
+      if (typeof window !== "undefined" && typeof window.getSelection === "function") {
+        selectedText = String(window.getSelection()?.toString() || "").trim();
+      }
+
+      // If text is too long (> 250 characters), block it!
+      if (selectedText.length > 250) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof window !== "undefined" && typeof window.getSelection === "function") {
+          window.getSelection()?.removeAllRanges();
+        }
+        notify("⚠️ Nhằm bảo vệ bản quyền, Trạm Chữ không hỗ trợ sao chép đoạn văn dài. Vui lòng dùng tính năng 'Tạo Ảnh Trích Dẫn 9:16' hoặc 'Báo Lỗi'!");
+        return;
+      }
+
+      // If text is <= 250 characters and non-empty, do NOT preventDefault on keydown, allow copy event to run and attach watermark!
+      if (selectedText.length > 0) {
+        return;
+      }
+
+      // If no text selected at all, block it
+      event.preventDefault();
+      event.stopPropagation();
+      notify(MSG_COPY_BLOCKED);
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    notify(MSG_COPY_BLOCKED);
   });
 
   // 7. Activate DevTools traps and console branding

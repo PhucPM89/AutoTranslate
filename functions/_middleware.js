@@ -27,6 +27,38 @@ const SITE_NAME = "Trạm Chữ";
 const SITE_URL = "https://tram-chu.online";
 const DEFAULT_COVER = "https://tram-chu.online/library/covers/misty-pagoda-hero.webp";
 
+// Known aliases for novels with multiple titles / historical translations / original titles
+const BOOK_ALIASES = {
+  "fanqie-7027679289931729920": [
+    "Ác Mộng Cầu Sinh",
+    "Ác Mộng Cầu Sinh: Từ Tiểu Mộc Ốc Khởi Xây",
+    "Tại Ác Mộng Thế Giới Kinh Sủng Cầu Sinh",
+    "Trong Thế Giới Ác Mộng Sinh Tồn Kinh Hoàng",
+    "在恶梦世界惊悚求生"
+  ]
+};
+
+function toSlug(text) {
+  if (!text) return "";
+  return String(text)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[đĐ]/g, "d")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function getCanonicalBookSlug(book, fallbackId = "") {
+  if (!book) return fallbackId;
+  const id = typeof book === "string" ? book : (book.id || book.bookId || fallbackId);
+  const title = typeof book === "object" ? (book.title || "") : "";
+  const match = String(id).replace(/^(cdn|library):/, "").split(":")[0].match(/--([A-Za-z0-9._-]+)$/);
+  const cleanId = match ? match[1] : String(id).replace(/^(cdn|library):/, "").split(":")[0];
+  const slug = toSlug(title);
+  return slug && cleanId ? `${slug}--${cleanId}` : (cleanId || id);
+}
+
 function escapeHtmlAttribute(value) {
   return String(value == null ? "" : value)
     .replace(/&/g, "&amp;")
@@ -56,6 +88,38 @@ export async function onRequest(context) {
   const isCrawler = BOT_USER_AGENTS.some((bot) => userAgent.includes(bot));
   const rawBookParam = url.searchParams.get("book");
   const chapterParam = url.searchParams.get("chapter") || url.searchParams.get("ch");
+
+  // If crawler hits the homepage without book param, inject crawlable book catalog so crawlers discover every book
+  if (isCrawler && !rawBookParam) {
+    try {
+      const catRes = await fetch(`${CDN_BASE}/catalog/latest.json`, {
+        headers: { "Accept": "application/json" },
+        cf: { cacheTtl: 1800, cacheEverything: true }
+      });
+      if (catRes.ok) {
+        const cat = await catRes.json();
+        const books = Array.isArray(cat.books) ? cat.books : [];
+        const topBooks = books.slice(0, 100);
+        const linksHtml = `<section id="crawlerCatalog" style="display:none" aria-hidden="true"><h2>Danh sách truyện dịch Trạm Chữ</h2><ul>` +
+          topBooks.map(b => `<li><a href="/?book=${encodeURIComponent(getCanonicalBookSlug(b))}">${escapeHtmlAttribute(b.title)} - ${escapeHtmlAttribute(b.author || "Khuyết danh")}</a></li>`).join("") +
+          `</ul></section>`;
+        const response = await next();
+        const contentType = response.headers.get("content-type") || "";
+        if (contentType.includes("text/html")) {
+          return new HTMLRewriter()
+            .on("body", {
+              element(e) {
+                e.append(linksHtml, { html: true });
+              }
+            })
+            .transform(response);
+        }
+      }
+    } catch {
+      // pass through
+    }
+    return next();
+  }
 
   // If not a crawler or no book specified, pass through to normal static handling
   if (!isCrawler || !rawBookParam) {
@@ -103,23 +167,38 @@ export async function onRequest(context) {
   const chapterNum = parseInt(chapterParam, 10);
   const isChapterView = Number.isInteger(chapterNum) && chapterNum > 0;
 
+  // Canonical slug & URL
+  const canonicalSlug = getCanonicalBookSlug(book, bookId);
+  const canonicalUrl = isChapterView
+    ? `${SITE_URL}/?book=${encodeURIComponent(canonicalSlug)}&ch=${chapterNum}`
+    : `${SITE_URL}/?book=${encodeURIComponent(canonicalSlug)}`;
+
+  // Alternate names for SEO & search queries
+  const aliases = [
+    ...(BOOK_ALIASES[bookId] || []),
+    ...(Array.isArray(book.aliases) ? book.aliases : []),
+    ...(book.alternateName ? (Array.isArray(book.alternateName) ? book.alternateName : [book.alternateName]) : [])
+  ];
+
+  const aliasText = aliases.length > 0 ? ` (Tên khác: ${aliases.slice(0, 2).join(", ")})` : "";
   const pageTitle = isChapterView
     ? `Chương ${chapterNum} - ${book.title} | ${SITE_NAME}`
-    : `Đọc truyện ${book.title} (${book.author || "Khuyết danh"}) - Bản Dịch Chuẩn | ${SITE_NAME}`;
+    : `Đọc truyện ${book.title}${aliasText} (${book.author || "Khuyết danh"}) - Bản Dịch Chuẩn | ${SITE_NAME}`;
 
   const desc = cleanDescription(
     isChapterView
       ? `Đọc truyện ${book.title} Chương ${chapterNum} bản dịch tiếng Việt mượt mà, định dạng chuẩn đọc đêm không quảng cáo tại Trạm Chữ.`
-      : (book.description || `Đọc truyện ${book.title} của tác giả ${book.author || "Khuyết danh"} trên Trạm Chữ. Thư viện truyện dịch AI chất lượng cao, cập nhật liên tục.`)
+      : (book.description
+          ? `${book.description}${aliases.length > 0 ? ` [Tên khác: ${aliases.join(", ")}]` : ""}`
+          : `Đọc truyện ${book.title}${aliasText} của tác giả ${book.author || "Khuyết danh"} trên Trạm Chữ. Thư viện truyện dịch AI chất lượng cao, cập nhật liên tục.`)
   );
 
   const coverUrl = normalizeCoverUrl(book.cover);
-  const canonicalUrl = isChapterView
-    ? `${SITE_URL}/?book=${encodeURIComponent(rawBookParam)}&ch=${chapterNum}`
-    : `${SITE_URL}/?book=${encodeURIComponent(rawBookParam)}`;
 
   const keywords = [
     book.title,
+    ...aliases,
+    ...aliases.map((a) => `đọc truyện ${a}`),
     `đọc truyện ${book.title}`,
     `${book.title} chương ${chapterNum || 1}`,
     `${book.title} tiếng việt`,
@@ -141,6 +220,7 @@ export async function onRequest(context) {
         "@id": `${SITE_URL}/#website`,
         "url": SITE_URL,
         "name": SITE_NAME,
+        "alternateName": ["Tram Chu", "TramChu", "Trạm Chữ Online", "tram-chu.online"],
         "description": "Tủ truyện dịch AI tự động chất lượng cao, giao diện đọc đêm cao cấp",
         "inLanguage": "vi-VN"
       },
@@ -158,7 +238,7 @@ export async function onRequest(context) {
             "@type": "ListItem",
             "position": 2,
             "name": book.title,
-            "item": `${SITE_URL}/?book=${encodeURIComponent(rawBookParam)}`
+            "item": `${SITE_URL}/?book=${encodeURIComponent(canonicalSlug)}`
           },
           ...(isChapterView ? [{
             "@type": "ListItem",
@@ -172,6 +252,7 @@ export async function onRequest(context) {
         "@type": isChapterView ? "Chapter" : "Book",
         "@id": `${canonicalUrl}#primary`,
         "name": isChapterView ? `${book.title} - Chương ${chapterNum}` : book.title,
+        ...(aliases.length > 0 ? { "alternateName": aliases } : {}),
         "headline": pageTitle,
         "description": desc,
         "image": coverUrl,
@@ -190,7 +271,7 @@ export async function onRequest(context) {
           "isPartOf": {
             "@type": "Book",
             "name": book.title,
-            "url": `${SITE_URL}/?book=${encodeURIComponent(rawBookParam)}`
+            "url": `${SITE_URL}/?book=${encodeURIComponent(canonicalSlug)}`
           },
           "position": String(chapterNum)
         } : {
@@ -270,9 +351,13 @@ export async function onRequest(context) {
         e.setAttribute("content", coverUrl);
       }
     })
+    .on('meta[name="keywords"]', {
+      element(e) {
+        e.setAttribute("content", keywords);
+      }
+    })
     .on("head", {
       element(e) {
-        e.append(`<meta name="keywords" content="${escapeHtmlAttribute(keywords)}">`, { html: true });
         e.append(`<script type="application/ld+json">${jsonLdString}</script>`, { html: true });
       }
     })

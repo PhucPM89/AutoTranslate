@@ -7,7 +7,7 @@ const EDGE_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
 const EDGE_VERSION = "1-143.0.3650.75";
 const EDGE_URL = "https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1";
 const VOICE = "vi-VN-HoaiMyNeural";
-const MAX_TEXT_LENGTH = 3000;
+const MAX_TEXT_LENGTH = 850;
 
 function escapeXml(value) {
   return String(value)
@@ -138,7 +138,7 @@ export async function synthesizeEdgeSpeech(text) {
   });
 }
 
-export function splitTextIntoSpeechChunks(text, maxChunkLen = 2200) {
+export function splitTextIntoSpeechChunks(text, maxChunkLen = 650) {
   const clean = String(text || "").trim();
   if (!clean) return [];
   if (clean.length <= maxChunkLen) return [clean];
@@ -192,27 +192,67 @@ async function synthesizeChunkWithRetry(chunk, index, totalChunks, maxRetries = 
   throw new Error(`Lỗi tạo âm thanh cho phân đoạn ${index + 1}/${totalChunks}: ${lastErr?.message || "Không có âm thanh"}`);
 }
 
-export async function synthesizeFullChapterSpeech(text, { maxRetries = 2 } = {}) {
-  const chunks = splitTextIntoSpeechChunks(text, 2600);
-  if (!chunks.length) throw new Error("Nội dung chương trống.");
+function synchsafeToInt(bytes, offset) {
+  return ((bytes[offset] & 0x7f) << 21) |
+    ((bytes[offset + 1] & 0x7f) << 14) |
+    ((bytes[offset + 2] & 0x7f) << 7) |
+    (bytes[offset + 3] & 0x7f);
+}
 
-  const audioParts = await Promise.all(
-    chunks.map((chunk, i) => synthesizeChunkWithRetry(chunk, i, chunks.length, maxRetries))
-  );
-
-  let totalLength = 0;
-  for (const part of audioParts) {
-    totalLength += part.length;
+// Every Edge request returns a standalone MP3. Concatenating those files byte for
+// byte leaves ID3 tags between MPEG frames; several browsers then stop at the
+// first tag or report only the first part's duration. Keep at most the first
+// leading tag and remove all boundary/trailing tags before joining the frame data.
+export function stripMp3ContainerTags(input, { keepLeadingId3 = false } = {}) {
+  const bytes = input instanceof Uint8Array ? input : new Uint8Array(input || 0);
+  let start = 0;
+  let end = bytes.length;
+  if (bytes.length >= 10 && bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) {
+    const tagSize = 10 + synchsafeToInt(bytes, 6) + ((bytes[5] & 0x10) ? 10 : 0);
+    if (!keepLeadingId3) start = Math.min(tagSize, bytes.length);
   }
+  if (end - start >= 128 && bytes[end - 128] === 0x54 && bytes[end - 127] === 0x41 && bytes[end - 126] === 0x47) {
+    end -= 128;
+  }
+  return bytes.slice(start, end);
+}
 
-  const concatenated = new Uint8Array(totalLength);
+export function mergeMp3AudioParts(parts) {
+  const cleaned = (parts || [])
+    .map((part, index) => stripMp3ContainerTags(part, { keepLeadingId3: index === 0 }))
+    .filter((part) => part.length > 0);
+  const totalLength = cleaned.reduce((sum, part) => sum + part.length, 0);
+  const output = new Uint8Array(totalLength);
   let offset = 0;
-  for (const part of audioParts) {
-    concatenated.set(part, offset);
+  for (const part of cleaned) {
+    output.set(part, offset);
     offset += part.length;
   }
+  return output;
+}
 
-  return concatenated;
+export async function synthesizeSpeechChunks(chunks, { maxRetries = 2, concurrency = 3 } = {}) {
+  const results = new Array(chunks.length);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < chunks.length) {
+      const index = cursor++;
+      results[index] = await synthesizeChunkWithRetry(chunks[index], index, chunks.length, maxRetries);
+    }
+  }
+  const workerCount = Math.max(1, Math.min(Number(concurrency) || 1, chunks.length));
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
+}
+
+export async function synthesizeFullChapterSpeech(text, { maxRetries = 2, concurrency = 3 } = {}) {
+  const chunks = splitTextIntoSpeechChunks(text, 650);
+  if (!chunks.length) throw new Error("Nội dung chương trống.");
+
+  // A small pool finishes within the Pages request window without opening every
+  // Edge WebSocket at once (which is prone to throttling and partial chapters).
+  const audioParts = await synthesizeSpeechChunks(chunks, { maxRetries, concurrency });
+  return mergeMp3AudioParts(audioParts);
 }
 
 

@@ -1199,11 +1199,16 @@ async function updateStatus(status) {
     return null;
   }
 }
-
 function requireEnvironment() {
-  // The worker no longer talks to the site for its own state, so a site token is
-  // not a precondition any more - only the storage it actually writes to is.
-  // Site auth is checked lazily, and only if the metadata fallback fires.
+  if (process.env.STORAGE_DRIVER === "drive" || (process.env.GOOGLE_DRIVE_CLIENT_ID && !process.env.R2_BUCKET)) {
+    const missing = ["GOOGLE_DRIVE_CLIENT_ID", "GOOGLE_DRIVE_CLIENT_SECRET", "GOOGLE_DRIVE_REFRESH_TOKEN"].filter(
+      (name) => !process.env[name]
+    );
+    if (missing.length) {
+      throw new Error(`Thiếu biến Google Drive cho crawler: ${missing.join(", ")}.`);
+    }
+    return;
+  }
   const missing = ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET"].filter(
     (name) => !process.env[name]
   );

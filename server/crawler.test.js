@@ -108,6 +108,8 @@ test("sanitizes crawler status before it is persisted", () => {
   assert.equal(status.currentBookId, "1234567890123");
   assert.equal(status.discovered, 0);
   assert.equal(status.published, 2);
+  assert.equal(sanitizeCrawlerStatus({ state: "queued" }).state, "queued");
+  assert.equal(sanitizeCrawlerStatus({ state: "paused_quota" }).state, "paused_quota");
 });
 
 test("extracts unique Fanqie book IDs and interleaves genres", () => {

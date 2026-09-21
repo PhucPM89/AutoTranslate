@@ -164,7 +164,7 @@ test("reader content proxy serves only public book JSON paths", async () => {
     environment
   );
   assert.equal(chapterResponse.status, 200);
-  assert.match(chapterResponse.headers.get("cache-control"), /immutable/);
+  assert.equal(chapterResponse.headers.get("cache-control"), "no-store");
 
   const privateResponse = await call(
     "/api/reader/content?key=private%2Fapi-keys.json",
@@ -434,53 +434,20 @@ test("translation focus refuses a book outside the published catalog", async () 
   assert.equal(response.status, 400);
 });
 
-test("Gemini Web daemon control is persisted with dashboard status", async () => {
+test("Gemini Web dashboard control has been removed", async () => {
   const environment = env();
   const response = await call(
     "/api/admin/translate",
-    {
-      method: "POST",
-      cookie: cookie(),
-      body: {
-        action: "gemini-web-pause",
-        minutes: 30,
-        headless: true,
-        protectiveMode: true,
-        lowResourceMode: true,
-        spacingMs: 4500,
-        sessionMinutes: 180
-      }
-    },
+    { method: "POST", cookie: cookie(), body: { action: "gemini-web-start" } },
     environment
   );
-  assert.equal(response.status, 200);
-  assert.ok(environment.NOVEL_STORAGE.objects.has("jobs/gemini-web-control.json"));
-  const saved = JSON.parse(environment.NOVEL_STORAGE.objects.get("jobs/gemini-web-control.json").toString("utf8"));
-  assert.equal(saved.headless, true);
-  assert.equal(saved.protectiveMode, true);
-  assert.equal(saved.lowResourceMode, true);
-  assert.equal(saved.spacingMs, 4500);
-  assert.equal(saved.sessionMinutes, 180);
-  assert.deepEqual(saved.slots, { "1": true, "2": false, "3": false });
-  assert.ok(saved.pauseUntilEpochMs > Date.now());
+  assert.equal(response.status, 410);
+  assert.equal(environment.NOVEL_STORAGE.objects.has("jobs/gemini-web-control.json"), false);
 
-  environment.NOVEL_STORAGE.objects.set(
-    "jobs/gemini-web-daemon-status.json",
-    Buffer.from(JSON.stringify({ state: "paused_until", updatedAt: new Date().toISOString() }))
-  );
-  environment.NOVEL_STORAGE.objects.set(
-    "jobs/gemini-web-active.json",
-    Buffer.from(JSON.stringify({ provider: "gemini-web", expiresAtEpochMs: Date.now() + 60000 }))
-  );
   const loaded = await call("/api/admin/translate", { cookie: cookie() }, environment);
   const body = await loaded.json();
-  assert.equal(body.geminiWeb.control.spacingMs, 4500);
-  assert.equal(body.geminiWeb.active, true);
-  assert.equal(body.geminiWeb.daemonAlive, true);
-  assert.equal(body.geminiWeb.paused, true);
-  assert.equal("issues" in body.geminiWeb, false);
+  assert.equal("geminiWeb" in body, false);
 });
-
 test("saving translation focus dispatches an immediate replacement run", async () => {
   const environment = env({
     GITHUB_DISPATCH_TOKEN: "github-test-token"

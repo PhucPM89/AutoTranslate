@@ -4,6 +4,36 @@ const crypto = require("node:crypto");
 const { evaluateTranslationQuality } = require("./translation-quality");
 
 const REVIEW_VERSION = "semantic-v2";
+const SEMANTIC_REVIEW_SCHEMA = {
+  type: "object",
+  properties: {
+    decision: { type: "string", enum: ["pass", "repair", "retranslate"] },
+    scores: {
+      type: "object",
+      properties: {
+        accuracy: { type: "number" }, completeness: { type: "number" },
+        fluency: { type: "number" }, terminology: { type: "number" }
+      },
+      required: ["accuracy", "completeness", "fluency", "terminology"],
+      additionalProperties: false
+    },
+    issues: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          type: { type: "string" }, severity: { type: "string", enum: ["minor", "major", "critical"] },
+          sourceQuote: { type: "string" }, draftQuote: { type: "string" },
+          suggestedTranslation: { type: "string" }, explanation: { type: "string" }
+        },
+        required: ["type", "severity", "sourceQuote", "draftQuote", "suggestedTranslation", "explanation"],
+        additionalProperties: false
+      }
+    }
+  },
+  required: ["decision", "scores", "issues"],
+  additionalProperties: false
+};
 const REVIEW_STATES = new Set(["pending", "processing", "batch_processing", "retrying", "approved", "failed", "skipped_gemini"]);
 
 function reviewQueueKey(bookId) {
@@ -133,21 +163,22 @@ function buildSemanticReviewPrompt({ bookTitle, chapterNumber, sourceTitle = "",
   );
   return [
     "Bạn là tổng biên tập bản dịch tiểu thuyết Trung Quốc sang tiếng Việt.",
+    "Nhiệm vụ của bạn là tìm lỗi để ngăn bản dịch chưa đạt chuẩn xuất bản lọt qua, không phải xác nhận cho xong. Không mặc định bản nháp đúng chỉ vì đọc trôi chảy ở mức tổng thể.",
     "Hãy đối chiếu BẢN GỐC với BẢN NHÁP theo nghĩa từng câu, không chỉ kiểm tra văn phong.",
     "Kiểm tra cả TIÊU ĐỀ và nội dung: đủ ý, đúng chủ thể/hành động/phủ định/số lượng, xưng hô, giới tính, tên riêng và thuật ngữ.",
     "Không được đánh pass nếu bản nháp đảo nhân vật, gán nhầm lời thoại, lược ý hoặc thêm ý.",
-    "Đây chỉ là lượt đánh giá. Luôn để correctedTranslation rỗng; hệ thống sẽ gọi lượt sửa văn bản riêng nếu cần.",
-    "Chỉ trả về JSON thuần theo schema:",
+    "Tuyệt đối không tự sửa lỗi logic, phương vị hay mâu thuẫn vốn có của tác giả. Nếu bản nháp dịch đúng câu gốc (ví dụ 身后 là 'phía sau') thì không được bắt đổi thành ý khác chỉ để hợp logic với câu bên cạnh; chỉ có thể ghi chú biên tập ngoài bản dịch.",
+    "Rà tuần tự từ đầu đến cuối, đối chiếu từng đoạn trước khi kết luận. Đặc biệt tìm: sai chủ thể/tân ngữ, đảo phủ định, sai số lượng, sai nghĩa động từ/thành ngữ, từ Hán-Việt dùng sai, câu dịch từng chữ khó hiểu, lỗi chính tả và chi tiết bị thêm hoặc bỏ.",
+    "Văn phong trôi chảy tổng thể không bù được một câu sai nghĩa. Một từ chọn sai làm người đọc hiểu sai sự việc phải là major, không phải minor.",
+    "Về tiếng Việt, phải bắt các kết hợp từ và trật tự câu dịch máy như 'hét lớn hướng về', 'nghi vấn lên tiếng', 'não ngơ ra', lặp chủ ngữ, dùng từ sai sắc thái hoặc câu đọc lên không giống văn xuôi Việt tự nhiên. Chỉ pass khi không còn câu khó hiểu hay gượng đáng sửa.",
+    "Mỗi issue phải có sourceQuote và draftQuote ngắn, chép nguyên văn chính xác từ hai văn bản, cùng suggestedTranslation và explanation theo đúng ngữ cảnh. Không được bịa trích dẫn.",
+    "Chỉ trả về JSON thuần theo đúng schema sau:",
     JSON.stringify({
       decision: "pass|repair|retranslate",
       scores: { accuracy: 0, completeness: 0, fluency: 0, terminology: 0 },
-      issues: [{ type: "", severity: "minor|major|critical", explanation: "" }],
-      correctedTranslation: "",
-      chapterSummary: "Tóm tắt sự kiện/chủ thể quan trọng trong tối đa 120 từ",
-      storyBibleUpdates: { characters: [{ name: "", aliases: [], gender: "male|female|unknown", role: "", relationships: [], notes: "" }], worldTerms: [{ term: "", meaning: "" }] },
-      translationMemoryUpdates: [{ zh: "cụm từ có thật trong bản gốc", vi: "cụm tương ứng có thật trong bản dịch" }]
+      issues: [{ type: "", severity: "minor|major|critical", sourceQuote: "", draftQuote: "", suggestedTranslation: "", explanation: "" }]
     }),
-    "Ngưỡng pass: accuracy >= 9, completeness >= 9, terminology >= 9, không có lỗi major/critical.",
+    "Ngưỡng pass: cả bốn điểm >= 9.0 và issues phải rỗng. Chỉ nêu tối đa 3-4 issue quan trọng nhất thực sự đáng sửa; không hạ điểm vì sở thích văn phong cá nhân. Mỗi issue viết explanation ngắn gọn súc tích dưới 30 từ.",
     `Truyện: ${bookTitle || "Không rõ"}; chương: ${chapterNumber}`,
     `TIÊU ĐỀ GỐC: ${sourceTitle || ""}`,
     `TIÊU ĐỀ BẢN NHÁP: ${draftTitle || ""}`,
@@ -156,7 +187,7 @@ function buildSemanticReviewPrompt({ bookTitle, chapterNumber, sourceTitle = "",
     recentContext?.length ? `Tóm tắt các chương gần nhất đã duyệt:\n${JSON.stringify(recentContext.slice(-8))}` : "",
     previousContext ? `Ngữ cảnh chương trước (chỉ để phân giải nhân vật/xưng hô):\n${String(previousContext).slice(-3000)}` : "",
     `BẢN GỐC:\n${source || ""}`,
-    `BẢN NHÁP HACHIMI:\n${draft || ""}`
+    `BẢN NHÁP GEMINI:\n${draft || ""}`
   ].filter(Boolean).join("\n\n");
 }
 
@@ -170,7 +201,7 @@ function parseSemanticReview(value, { source = "", draft = "" } = {}) {
     if (object) parsed = JSON.parse(object[0]);
   }
   if (!parsed || !["pass", "repair", "retranslate"].includes(parsed.decision)) {
-    throw new Error("Gemini trả semantic review không đúng schema.");
+    throw new Error("Groq trả semantic review không đúng schema.");
   }
 
   const scores = {};
@@ -179,9 +210,28 @@ function parseSemanticReview(value, { source = "", draft = "" } = {}) {
     if (!Number.isFinite(score) || score < 0 || score > 10) throw new Error(`Điểm ${field} không hợp lệ.`);
     scores[field] = score;
   }
-  const issues = Array.isArray(parsed.issues) ? parsed.issues.slice(0, 20) : [];
-  const hasSeriousIssue = issues.some((issue) => ["major", "critical"].includes(issue?.severity));
-  const canPass = Object.values(scores).every((score) => score >= 9) && !hasSeriousIssue;
+  const reportedIssues = (Array.isArray(parsed.issues) ? parsed.issues : []).slice(0, 20).map((issue) => ({
+    ...issue,
+    sourceQuote: String(issue?.sourceQuote || "").trim(),
+    draftQuote: String(issue?.draftQuote || "").trim(),
+    suggestedTranslation: String(issue?.suggestedTranslation || "").trim(),
+    explanation: String(issue?.explanation || "").trim()
+  }));
+  const quoteKey = (value) => String(value || "")
+    .normalize("NFC")
+    .replace(/[\s\p{P}\p{S}]/gu, "")
+    .toLowerCase();
+  const sourceKey = quoteKey(source);
+  const draftKey = quoteKey(draft);
+  const issues = reportedIssues.filter((issue) => {
+    const sourceQuote = quoteKey(issue.sourceQuote);
+    const draftQuote = quoteKey(issue.draftQuote);
+    return sourceQuote.length >= 2 && draftQuote.length >= 2 && sourceKey.includes(sourceQuote) && draftKey.includes(draftQuote);
+  });
+  if (parsed.decision !== "pass" && reportedIssues.length && !issues.length) {
+    throw new Error("Semantic review không có issue nào với trích dẫn kiểm chứng được.");
+  }
+  const canPass = Object.values(scores).every((score) => score >= 9.0) && issues.length === 0;
 
   if (parsed.decision === "pass" && !canPass) {
     throw new Error("Semantic review tự mâu thuẫn: decision=pass nhưng điểm hoặc issue không đạt.");
@@ -191,7 +241,7 @@ function parseSemanticReview(value, { source = "", draft = "" } = {}) {
   if (parsed.decision !== "pass") {
     if (correctedTranslation) {
       const quality = evaluateTranslationQuality(source, correctedTranslation);
-      if (quality.qaRequired) throw new Error(`Bản Gemini sửa không hợp lệ: ${quality.qaIssues.join("; ")}`);
+      if (quality.qaRequired) throw new Error(`Bản Groq sửa không hợp lệ: ${quality.qaIssues.join("; ")}`);
     }
   } else {
     correctedTranslation = String(draft || "").trim();
@@ -213,8 +263,11 @@ function buildSemanticRepairPrompt({ bookTitle, chapterNumber, sourceTitle = "",
   return [
     "Bạn là dịch giả kiêm biên tập viên Trung - Việt. Hãy sửa TIÊU ĐỀ và tạo TOÀN BỘ bản dịch hoàn chỉnh cho chương dưới đây.",
     "Sửa mọi lỗi semantic đã nêu; giữ đủ ý từng câu, đúng chủ thể, lời thoại, phủ định, số lượng và xưng hô.",
-    "Chỉ trả về JSON thuần theo schema:",
-    JSON.stringify({ title: "Tiêu đề tiếng Việt hoàn chỉnh", content: "Toàn bộ nội dung tiếng Việt hoàn chỉnh" }),
+    "Không sửa mâu thuẫn vốn có của nguyên tác và không làm theo suggestedTranslation nào trái với chữ gốc. Phương vị như 身后 phải giữ là 'phía sau', 面前 phải giữ là 'trước mặt'.",
+    "Biên tập thành văn xuôi Việt tự nhiên, không giữ nguyên thành ngữ/cụm bốn chữ Trung Quốc dưới dạng Hán-Việt. Tránh các lối dịch máy như 'hữu khí vô lực', 'kinh nghi', 'nghi hoặc lên tiếng', 'kinh hoảng bất an', 'nhắm trúng', 'quấn lấy', 'hướng về phía ... nói'. Hãy diễn đạt đúng nghĩa bằng từ Việt thông dụng theo ngữ cảnh.",
+    "Đọc lại toàn bộ bản trả về như một biên tập viên tiếng Việt: bỏ lặp từ, chủ ngữ thừa, kết hợp từ gượng và câu bám trật tự tiếng Trung. Không được làm văn hoa hơn nguyên tác hoặc tự thêm chi tiết.",
+    "Chỉ trả bản sửa theo đúng hai thẻ sau; không dùng JSON hay code fence để dấu ngoặc kép trong hội thoại không làm hỏng dữ liệu:",
+    "<TITLE>Tiêu đề tiếng Việt hoàn chỉnh</TITLE>\n<CONTENT>Toàn bộ nội dung tiếng Việt hoàn chỉnh</CONTENT>",
     `Truyện: ${bookTitle || "Không rõ"}; chương: ${chapterNumber}`,
     `Lỗi cần sửa: ${JSON.stringify(issues)}`,
     `Glossary bắt buộc: ${JSON.stringify(matchedGlossary)}`,
@@ -230,24 +283,33 @@ function buildSemanticRepairPrompt({ bookTitle, chapterNumber, sourceTitle = "",
 function parseSemanticRepair(value, { source = "" } = {}) {
   const raw = String(value || "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
   let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    const object = raw.match(/\{[\s\S]*\}/);
-    if (object) parsed = JSON.parse(object[0]);
+  const tagged = raw.match(/<TITLE>([\s\S]*?)<\/TITLE>\s*<CONTENT>([\s\S]*?)<\/CONTENT>/i);
+  if (tagged) {
+    parsed = { title: tagged[1], content: tagged[2] };
+  } else {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      const object = raw.match(/\{[\s\S]*\}/);
+      if (object) parsed = JSON.parse(object[0]);
+    }
+  }
+  if (!parsed && raw.length >= 300 && !/I (?:can't|cannot)|tôi không thể giúp|không thể đáp ứng/iu.test(raw)) {
+    parsed = { title: "Bản dịch đã biên tập", content: raw };
   }
   const title = String(parsed?.title || "").trim();
   const content = String(parsed?.content || "").trim();
-  if (!title || !content) throw new Error("Gemini trả bản sửa không đúng schema title/content.");
+  if (!title || !content) throw new Error("Groq trả bản sửa không đúng schema title/content.");
   const titleQuality = evaluateTranslationQuality("", title);
   const contentQuality = evaluateTranslationQuality(source, content);
   const issues = [...titleQuality.qaIssues.map((item) => `Tiêu đề: ${item}`), ...contentQuality.qaIssues];
-  if (issues.length) throw new Error(`Bản Gemini sửa không hợp lệ: ${issues.join("; ")}`);
+  if (issues.length) throw new Error(`Bản Groq sửa không hợp lệ: ${issues.join("; ")}`);
   return { title, content };
 }
 
 module.exports = {
   REVIEW_VERSION,
+  SEMANTIC_REVIEW_SCHEMA,
   reviewQueueKey,
   contentFingerprint,
   createReviewEntry,

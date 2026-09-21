@@ -3,6 +3,8 @@
   "include": [
     "/api/*",
     "/covers/*",
+    "/books/*",
+    "/catalog/*",
     "/"
   ],
   "exclude": [

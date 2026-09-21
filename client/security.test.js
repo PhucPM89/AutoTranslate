@@ -163,3 +163,34 @@ test("initSecurityGuards attaches event listeners and dispatches notifications o
   assert.equal(notices.includes(MSG_COPY_BLOCKED), true);
 });
 
+test("selectstart allows selection on reader text while blocking UI elements", () => {
+  const listeners = {};
+  const mockContainer = {
+    addEventListener: (type, fn) => {
+      listeners[type] = fn;
+    }
+  };
+  initSecurityGuards(mockContainer, { enableAntiDebug: false });
+
+  // 1. Reader text: selectstart should NOT be prevented
+  let docTextPrevented = false;
+  listeners.selectstart({
+    target: {
+      closest: (sel) => (sel === ".document-text" ? {} : null)
+    },
+    preventDefault: () => { docTextPrevented = true; }
+  });
+  assert.equal(docTextPrevented, false, "Selection on .document-text should be allowed");
+
+  // 2. UI element: selectstart SHOULD be prevented
+  let uiPrevented = false;
+  listeners.selectstart({
+    target: {
+      closest: (sel) => (sel === ".reader-topbar" ? {} : null)
+    },
+    preventDefault: () => { uiPrevented = true; }
+  });
+  assert.equal(uiPrevented, true, "Selection on UI elements should be prevented");
+});
+
+

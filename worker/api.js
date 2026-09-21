@@ -28,7 +28,8 @@ import {
 import {
   CATEGORY_DEFINITIONS,
   WORD_COUNT_BUCKETS,
-  CREATION_STATUSES
+  CREATION_STATUSES,
+  categorySlugForLabel
 } from "../server/crawler-store.js";
 import { createR2BindingStorage } from "./r2-storage.js";
 import { handleAdminAudio } from "../server/audio/admin-router.js";
@@ -586,14 +587,29 @@ async function searchCrawlerBooks(query) {
 }
 
 async function fetchCrawlerPreview(source, sourceId) {
-  const sourceUrl = source === "qidian"
+  let sourceUrl = source === "qidian"
     ? `https://book.qidian.com/info/${sourceId}/`
     : source === "bianhua"
       ? `https://www.bianhuaxs.com/${sourceId}.html`
       : `https://fanqienovel.com/page/${sourceId}`;
-  const response = await fetch(sourceUrl, { headers: { "User-Agent": "Mozilla/5.0 tram-chu-admin" }, signal: AbortSignal.timeout(12000) });
-  if (!response.ok) return null;
-  const html = await response.text();
+  let response = await fetch(sourceUrl, { headers: { "User-Agent": "Mozilla/5.0 tram-chu-admin" }, signal: AbortSignal.timeout(12000) }).catch(() => null);
+  let html = response && response.ok ? await response.text() : "";
+
+  if ((!html || response?.status !== 200) && source === "qidian") {
+    sourceUrl = `https://m.qidian.com/book/${sourceId}/`;
+    const mRes = await fetch(sourceUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15",
+        Accept: "text/html"
+      },
+      signal: AbortSignal.timeout(12000)
+    }).catch(() => null);
+    if (mRes && mRes.ok) {
+      html = await mRes.text();
+    }
+  }
+
+  if (!html) return null;
   const decode = (value) => String(value || "").replace(/\\u([0-9a-f]{4})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16))).replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
   const meta = (names) => {
     for (const name of names) {
@@ -607,9 +623,17 @@ async function fetchCrawlerPreview(source, sourceId) {
     for (const key of keys) { const match = html.match(new RegExp(`"${key}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"`, "i")); if (match) return decode(match[1]); }
     return "";
   };
-  const title = meta(["og:novel:book_name", "og:title"]) || jsonValue(["bookName", "book_name", "title"]);
+  const title = meta(["og:novel:book_name", "og:title"]) || jsonValue(["bookName", "book_name", "title"]) || (html.match(/<title>([^<]+)<\/title>/i)?.[1] ? decode(html.match(/<title>([^<]+)<\/title>/i)[1]).replace(/_.*$/, "") : "");
   if (!title) return null;
-  return { source, sourceId, title, author: meta(["og:novel:author"]) || jsonValue(["author", "authorName"]), cover: meta(["og:image"]) || jsonValue(["thumbUrl", "coverUrl", "cover"]), description: meta(["description", "og:description"]) || jsonValue(["abstract", "description"]), sourceUrl };
+  return {
+    source,
+    sourceId,
+    title,
+    author: meta(["og:novel:author"]) || jsonValue(["author", "authorName"]),
+    cover: meta(["og:image"]) || jsonValue(["thumbUrl", "coverUrl", "cover"]),
+    description: meta(["description", "og:description"]) || jsonValue(["abstract", "description"]),
+    sourceUrl: source === "qidian" ? `https://book.qidian.com/info/${sourceId}/` : sourceUrl
+  };
 }
 
 async function dispatchCrawler({ source, sourceId }, env) {
@@ -731,6 +755,23 @@ async function handleCatalog({ request, env }) {
     sourceUrl: existing.source_url,
     lastCrawledAt: existing.last_crawled_at
   });
+
+  // Genre is normalized through the same category relation used by the
+  // crawler and public catalog. The books table intentionally has no genre
+  // column, so ignoring this link made the admin edit appear to save while the
+  // website continued showing the previous category.
+  const genreSlug = categorySlugForLabel(body.genre);
+  const genreDefinition = genreSlug ? CATEGORY_DEFINITIONS[genreSlug] : null;
+  if (genreDefinition) {
+    const [category] = await db.upsertCategories([{
+      slug: genreSlug,
+      name: genreDefinition.label,
+      sourceId: genreDefinition.categoryIds?.[0] ?? null
+    }]);
+    await db.setBookCategory(id, category?.id || null);
+  } else if (String(body.genre || "").trim() === "") {
+    await db.setBookCategory(id, null);
+  }
 
   const catalog = await republish(env);
   const book = catalog.books.find((item) => item.id === id) || { id };

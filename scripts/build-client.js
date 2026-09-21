@@ -309,7 +309,7 @@ async function writeSitemapAndRobots() {
   // Generate _routes.json for Cloudflare Pages to bypass static assets (0 Worker requests)
   const routesJson = {
     version: 1,
-    include: ["/api/*", "/covers/*", "/"],
+    include: ["/api/*", "/covers/*", "/books/*", "/catalog/*", "/"],
     exclude: [
       "/admin-upload.js",
       "/app.js",

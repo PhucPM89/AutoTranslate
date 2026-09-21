@@ -176,7 +176,7 @@ function normalizeSpace(value) {
 function xmlText(xml, localName) {
   const pattern = new RegExp(`<(?:\\w+:)?${localName}\\b[^>]*>([\\s\\S]*?)<\\/(?:\\w+:)?${localName}>`, "i");
   const match = String(xml).match(pattern);
-  return match ? normalizeSpace(stripTags(match[1])) : "";
+  return match ? normalizeSpace(decodeXml(stripTags(match[1]))) : "";
 }
 
 function attribute(attrs, name) {

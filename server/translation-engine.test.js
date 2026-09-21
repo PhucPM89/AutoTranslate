@@ -23,73 +23,7 @@ test("translation-engine: findMatchedGlossaryTerms matches Chinese terms", () =>
   ]);
 });
 
-test("translation-engine: buildContextualPrompt injects glossary section", () => {
-  const engine = createTranslationEngine();
-  const glossary = {
-    "林枫": "Lâm Phong",
-    "大板": "Osaka"
-  };
-
-  const text = "林枫到达了大板机场。";
-  const prompt = engine.buildContextualPrompt({
-    text,
-    index: 0,
-    total: 1,
-    bookTitle: "Mạt Thế Băng Hà",
-    glossary
-  });
-
-  assert.ok(prompt.includes("THUẬT NGỮ & TÊN RIÊNG"));
-  assert.ok(prompt.includes('"林枫" ➔ "Lâm Phong"'));
-  assert.ok(prompt.includes('"大板" ➔ "Osaka"'));
-  assert.ok(prompt.includes("Văn bản tiếng Trung cần dịch:"));
-  assert.ok(prompt.includes("林枫到达了大板机场。"));
-});
-
-test("translation-engine: prompt carries book context and fiction literature framing", () => {
-  const prompt = createTranslationEngine().buildContextualPrompt({
-    text: "他有1200块灵石。",
-    bookTitle: "Kiếm Đạo Trường Sinh"
-  });
-  assert.match(prompt, /Tác phẩm: Kiếm Đạo Trường Sinh/);
-  assert.match(prompt, /FICTION LITERATURE TRANSLATION/);
-  assert.match(prompt, /VÍ DỤ ĐỐI CHIẾU PHONG CÁCH/);
-  assert.match(prompt, /tự kỷ đích ấn đường/);
-  assert.match(prompt, /trán của mình/);
-  assert.match(prompt, /KHÔNG SÓT CHỮ HÁN/);
-  assert.match(prompt, /Đầu ra cuối cùng tuyệt đối không chứa chữ Hán/);
-  assert.match(prompt, /không trả tên riêng nửa Việt nửa Hán/i);
-});
-
-test("translation-engine: postProcessTranslation cleans markdown & enforces glossary", () => {
-  const engine = createTranslationEngine();
-  const glossary = {
-    "林枫": "Lâm Phong"
-  };
-
-  const raw = "```markdown\n# Chương 1\n**Lâm Phong** “nói”: ‘Đi thôi!’\n\n\n\n林枫 bước đi.\n```";
-  const processed = engine.postProcessTranslation(raw, glossary);
-
-  assert.ok(!processed.includes("```"));
-  assert.ok(!processed.includes("# Chương 1"));
-  assert.ok(!processed.includes("**"));
-  assert.ok(!processed.includes("林枫")); // Leftover Hanzi replaced by glossary
-  assert.ok(processed.includes('"nói"')); // Normalized quotes
-  assert.ok(processed.includes("'Đi thôi!'"));
-});
-
-test("translation-engine: postProcessTranslation normalizes quote spacing and classic glossary", () => {
-  const engine = createTranslationEngine();
-  const raw = 'Muốn hay cội nguồn công tạo hóa, hãy xem"Tây Du Thuyết E Truyện". Thiệu Khang Tiết từng nói:"Đông chí giữa giờ Tý."Đến lúc ấy, trời mới có gốc.';
-  const processed = engine.postProcessTranslation(raw, {
-    "Tây Du Thuyết E Truyện": "Tây Du Thích Ách Truyện"
-  });
-
-  assert.equal(
-    processed,
-    'Muốn hay cội nguồn công tạo hóa, hãy xem "Tây Du Thích Ách Truyện". Thiệu Khang Tiết từng nói: "Đông chí giữa giờ Tý." Đến lúc ấy, trời mới có gốc.'
-  );
-});
+// Direct prompt and exact output preservation are covered in direct-translation.test.js.
 
 test("translation-engine: default memory includes common classic Journey to the West terms", async () => {
   const engine = createTranslationEngine();

@@ -89,13 +89,23 @@ function cleanBookId(rawId) {
   return match ? match[1] : id;
 }
 
+const BOOK_ALIASES = {
+  "fanqie-7027679289931729920": [
+    "Ác Mộng Cầu Sinh",
+    "Ác Mộng Cầu Sinh: Từ Tiểu Mộc Ốc Khởi Xây",
+    "Tại Ác Mộng Thế Giới Kinh Sủng Cầu Sinh",
+    "Trong Thế Giới Ác Mộng Sinh Tồn Kinh Hoàng",
+    "在恶梦世界惊悚求生"
+  ]
+};
+
 function getBookSlugParam(book) {
   if (!book) return "";
-  const id = typeof book === "string" ? book : (book.id || "");
-  const title = typeof book === "object" ? (book.title || "") : "";
+  const id = typeof book === "string" ? book : (book.id || book.bookId || "");
   const cleanId = cleanBookId(id);
-  const slug = toSlug(title);
-  return slug && cleanId ? `${slug}--${cleanId}` : (cleanId || id);
+  // Canonical identity must not depend on an editable translated title.
+  // cleanBookId keeps old title--id links resolvable while new links stay stable.
+  return cleanId || id;
 }
 
 function updateJsonLd({ book, chapter, title, desc, url, image }) {
@@ -109,12 +119,20 @@ function updateJsonLd({ book, chapter, title, desc, url, image }) {
 
   if (book) {
     const bookParam = getBookSlugParam(book);
+    const cleanId = cleanBookId(typeof book === "string" ? book : (book.id || ""));
+    const aliases = [
+      ...(BOOK_ALIASES[cleanId] || []),
+      ...(Array.isArray(book.aliases) ? book.aliases : []),
+      ...(book.alternateName ? (Array.isArray(book.alternateName) ? book.alternateName : [book.alternateName]) : [])
+    ];
+
     const graph = [
       {
         "@context": "https://schema.org",
         "@type": "Book",
         "@id": `${BASE_URL}/?book=${encodeURIComponent(bookParam)}#book`,
         "name": book.title,
+        ...(aliases.length > 0 ? { "alternateName": aliases } : {}),
         "headline": title,
         "description": desc,
         "image": image,

@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const {
   translateText,
   translateMetadata,
+  generateStructuredText,
   assessTranslation,
   splitTextIntoChunks,
   reserveKeyOrder,
@@ -113,6 +114,14 @@ test("accepts a translation that expresses numbers in natural Vietnamese words",
   assert.equal(result.acceptable, true);
 });
 
+test("rejects a dropped Chinese quantity in the corresponding paragraph", () => {
+  const source = ["第一段只是铺垫，夜色很深，四周安静得让人心里发慌。", "前面两声声音很小。"].join("\n");
+  const bad = ["Đoạn đầu chỉ là lời dẫn. Đêm đã khuya, bốn bề yên tĩnh đến phát hoảng.", "Mấy tiếng đầu nghe rất nhỏ."].join("\n");
+  const good = ["Đoạn đầu chỉ là lời dẫn. Đêm đã khuya, bốn bề yên tĩnh đến phát hoảng.", "Hai tiếng đầu nghe rất nhỏ."].join("\n");
+  assert.equal(assessTranslation(source, bad).acceptable, false);
+  assert.equal(assessTranslation(source, good).acceptable, true);
+});
+
 test("accepts a substantial Vietnamese translation", () => {
   const vietnamese = "Đây là một đoạn văn đã được dịch đầy đủ sang tiếng Việt, giữ nguyên nội dung và cấu trúc. ".repeat(12);
   const result = assessTranslation(chineseSource, vietnamese);
@@ -140,84 +149,6 @@ test("rejects translation ending with mid-sentence comma", () => {
   const result = assessTranslation(source, output);
   assert.equal(result.acceptable, false);
   assert.match(result.reason, /đứt gãy ngang chừng/);
-});
-
-test("tries the next model when a model echoes Chinese text", async () => {
-  const originalFetch = global.fetch;
-  const vietnamese = "Đây là nội dung đã được dịch đầy đủ sang tiếng Việt và không còn lặp lại nguyên văn. ".repeat(12);
-  const responses = [chineseSource, vietnamese];
-  const calls = [];
-
-  global.fetch = async (url, options) => {
-    calls.push({ url, body: JSON.parse(options.body) });
-    return {
-      ok: true,
-      json: async () => ({
-        candidates: [{ content: { parts: [{ text: responses.shift() }] } }]
-      })
-    };
-  };
-
-  try {
-    const result = await translateText(chineseSource, "test-key");
-    assert.equal(result.translation, vietnamese.trim());
-    assert.equal(calls.length, 2);
-    const firstPrompt = calls[0].body.contents[0].parts[0].text;
-    assert.match(firstPrompt, /BỐI CẢNH VĂN HỌC GIẢ TƯỞNG/);
-    assert.match(firstPrompt, /Hán-Việt/);
-    assert.match(firstPrompt, /YÊU CẦU DỊCH/);
-  } finally {
-    global.fetch = originalFetch;
-  }
-});
-
-test("translates text using Google Gemini with Creative Fiction framing", async () => {
-  const originalFetch = global.fetch;
-  const vietnamese = "Đây là nội dung tiểu thuyết đã được dịch đầy đủ sang tiếng Việt, rõ ràng và tự nhiên. ".repeat(14);
-  let requestBody;
-  global.fetch = async (_url, options) => {
-    requestBody = JSON.parse(options.body);
-    return {
-      ok: true,
-      json: async () => ({
-        candidates: [{ content: { parts: [{ text: vietnamese }] } }],
-        usageMetadata: { totalTokenCount: 100 }
-      })
-    };
-  };
-
-  try {
-    const result = await translateText(chineseSource, "AQ.test-key");
-    assert.equal(result.translation, vietnamese.trim());
-    assert.match(requestBody.contents[0].parts[0].text, /FICTION LITERATURE TRANSLATION/);
-  } finally {
-    global.fetch = originalFetch;
-  }
-});
-
-test("injects matching translation-memory terminology without an extra AI call", async () => {
-  const originalFetch = global.fetch;
-  const source = "众人倒吸一口凉气，谁也不敢继续向前。".repeat(20);
-  const vietnamese = "Mọi người hít sâu một hơi khí lạnh, không ai dám tiếp tục tiến lên phía trước. ".repeat(15);
-  let prompt = "";
-  let calls = 0;
-  global.fetch = async (_url, options) => {
-    calls += 1;
-    prompt = JSON.parse(options.body).contents[0].parts[0].text;
-    return {
-      ok: true,
-      json: async () => ({ candidates: [{ content: { parts: [{ text: vietnamese }] } }] })
-    };
-  };
-  try {
-    const result = await translateText(source, "test-key", { bookTitle: "Khí Lạnh Trường Sinh" });
-    assert.equal(result.translation, vietnamese.trim());
-    assert.equal(calls, 1);
-    assert.match(prompt, /"倒吸一口凉气" ➔ "hít sâu một hơi khí lạnh"/);
-    assert.match(prompt, /Tác phẩm: Khí Lạnh Trường Sinh/);
-  } finally {
-    global.fetch = originalFetch;
-  }
 });
 
 test("translates crawler metadata to strict Vietnamese JSON", async () => {
@@ -298,6 +229,61 @@ test("explicit cloud provider ignores a stale Hachimi environment setting", asyn
   }
 });
 
+test("structural chapter stubs are translated locally without calling a provider", async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => { throw new Error("provider must not be called"); };
+  try {
+    const result = await translateText("目录", "AIza-unused", { provider: "cloud" });
+    assert.equal(result.translation, "Mục lục");
+    assert.deepEqual(result.providersUsed, ["local"]);
+    assert.equal(result.tokensUsed, 0);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("publication pipeline accepts two independent clean reviews without forcing a rewrite", async () => {
+  const originalFetch = global.fetch;
+  const translation = "Đây là nội dung tiểu thuyết được chuyển ngữ đầy đủ, rõ nghĩa và tự nhiên. ".repeat(14);
+  const pass = JSON.stringify({
+    decision: "pass",
+    scores: { accuracy: 9.2, completeness: 9.1, fluency: 9, terminology: 9.3 },
+    issues: [],
+    correctedTranslation: "",
+    chapterSummary: "Nội dung được giữ đầy đủ.",
+    storyBibleUpdates: {},
+    translationMemoryUpdates: []
+  });
+  let calls = 0;
+  global.fetch = async (url, options) => {
+    calls += 1;
+    if (String(url).includes("api.groq.com")) {
+      const body = JSON.parse(options.body);
+      assert.equal(body.messages[0].role, "system");
+      assert.match(body.messages[0].content, /đối chiếu nguyên tác/i);
+      assert.equal(body.response_format.type, "json_schema");
+      assert.equal(body.response_format.json_schema.strict, true);
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({ choices: [{ message: { content: pass } }] }) };
+    }
+    return { ok: true, status: 200, headers: new Headers(), json: async () => ({ candidates: [{ content: { parts: [{ text: translation }] } }] }) };
+  };
+  try {
+    const result = await translateText(chineseSource, "AIza-publication-test", {
+      provider: "cloud",
+      publicationQuality: true,
+      reviewApiKeys: "gsk_publication-review"
+    });
+    assert.equal(result.translation, translation.trim());
+    assert.equal(result.semanticReviews.length, 2);
+    assert.deepEqual(result.semanticReviews.map((review) => review.decision), ["pass", "pass"]);
+    assert.deepEqual(result.providersUsed, ["gemini", "groq-review"]);
+    assert.equal(result.translationVersion, "gemini-groq-two-stage-v1");
+    assert.equal(calls, 3, "one translation and two independent audits are sufficient");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test("gemini-web provider can translate without API keys", async () => {
   const oldMock = process.env.GEMINI_WEB_MOCK_RESPONSE;
   const oldProvider = process.env.TRANSLATION_PROVIDER;
@@ -312,41 +298,6 @@ test("gemini-web provider can translate without API keys", async () => {
   } finally {
     if (oldMock === undefined) delete process.env.GEMINI_WEB_MOCK_RESPONSE; else process.env.GEMINI_WEB_MOCK_RESPONSE = oldMock;
     if (oldProvider === undefined) delete process.env.TRANSLATION_PROVIDER; else process.env.TRANSLATION_PROVIDER = oldProvider;
-  }
-});
-
-test("translates structural stub chapters locally without touching providers", async () => {
-  const result = await translateText("目录", "", { provider: "gemini-web" });
-  assert.equal(result.translation, "Mục lục");
-  assert.deepEqual(result.providersUsed, ["local"]);
-  assert.equal(result.tokensUsed, 0);
-
-  const volume = await translateText("第一卷", "", { provider: "gemini-web" });
-  assert.equal(volume.translation, "Quyển thứ nhất");
-});
-
-test("gemini-web quality failure is marked as translation_rejected", async () => {
-  const oldMock = process.env.GEMINI_WEB_MOCK_RESPONSE;
-  const oldProvider = process.env.TRANSLATION_PROVIDER;
-  const oldAttempts = process.env.GEMINI_WEB_MAX_ATTEMPTS;
-  process.env.GEMINI_WEB_MOCK_RESPONSE = "Bản dịch bị cụt.";
-  process.env.GEMINI_WEB_MAX_ATTEMPTS = "1";
-  delete process.env.TRANSLATION_PROVIDER;
-
-  try {
-    await assert.rejects(
-      () => translateText(chineseSource, "", { provider: "gemini-web" }),
-      (error) => {
-        assert.equal(error.code, "translation_rejected");
-        assert.equal(error.qualityRejected, true);
-        assert.match(error.message, /Bản dịch Gemini Web chưa đạt yêu cầu/);
-        return true;
-      }
-    );
-  } finally {
-    if (oldMock === undefined) delete process.env.GEMINI_WEB_MOCK_RESPONSE; else process.env.GEMINI_WEB_MOCK_RESPONSE = oldMock;
-    if (oldProvider === undefined) delete process.env.TRANSLATION_PROVIDER; else process.env.TRANSLATION_PROVIDER = oldProvider;
-    if (oldAttempts === undefined) delete process.env.GEMINI_WEB_MAX_ATTEMPTS; else process.env.GEMINI_WEB_MAX_ATTEMPTS = oldAttempts;
   }
 });
 
@@ -388,7 +339,7 @@ test("selects the current Qwen model for Groq keys and Gemini models for Gemini 
   }
 });
 
-test("falls through to Groq when Gemini keys have quota failure", async () => {
+test("never falls through to Groq when Gemini translation keys hit quota", async () => {
   const originalFetch = global.fetch;
   const vietnamese = "Đây là bản dịch tiếng Việt hoàn chỉnh, tự nhiên, đầy đủ và không còn bất kỳ chữ Hán nào. ".repeat(14);
   const urls = [];
@@ -410,14 +361,16 @@ test("falls through to Groq when Gemini keys have quota failure", async () => {
     };
   };
   try {
-    const result = await translateText(chineseSource, [
-      "AQ.provider-fallback-gemini-a",
-      "AQ.provider-fallback-gemini-b",
-      "gsk_provider-fallback-groq"
-    ], { provider: "cloud" });
-    assert.deepEqual(result.providersUsed, ["groq"]);
+    await assert.rejects(
+      translateText(chineseSource, [
+        "AQ.provider-fallback-gemini-a",
+        "AQ.provider-fallback-gemini-b",
+        "gsk_provider-fallback-groq"
+      ], { provider: "cloud" }),
+      (error) => error.code === "key_pool_slice_exhausted"
+    );
     assert.equal(urls.filter((url) => url.includes("googleapis.com")).length, 2);
-    assert.equal(urls.filter((url) => url.includes("api.groq.com")).length, 1);
+    assert.equal(urls.filter((url) => url.includes("api.groq.com")).length, 0);
   } finally {
     global.fetch = originalFetch;
   }
@@ -437,8 +390,8 @@ test("one chunk tries only a bounded slice of the key pool", async () => {
 
   try {
     await assert.rejects(
-      translateText(chineseSource, ["gsk_slice-a", "gsk_slice-b", "gsk_slice-c", "gsk_slice-d", "gsk_slice-e"]),
-      (error) => error.code === "key_pool_slice_exhausted"
+      generateStructuredText("review", ["gsk_slice-a", "gsk_slice-b", "gsk_slice-c", "gsk_slice-d", "gsk_slice-e"], { responseFormat: "json" }),
+      (error) => error.code === "semantic_key_pool_exhausted"
     );
     assert.equal(new Set(authorizations).size, 3);
     assert.equal(authorizations.length, 3, "429 must open the circuit without an immediate HTTP retry");

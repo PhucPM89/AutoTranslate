@@ -112,7 +112,7 @@ function createR2Storage(env = process.env) {
     },
 
     async head(key) {
-      const response = await send("HEAD", key);
+      const response = await send("HEAD", key, { headers: { "accept-encoding": "identity" } });
       if (response.status === 404) return null;
       if (!response.ok) throw new Error(`R2 HEAD ${key} lỗi HTTP ${response.status}`);
       return {

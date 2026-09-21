@@ -48,3 +48,9 @@ models/*.bin
 
 # Local Colab launcher may intentionally contain production credentials.
 colab/hachimi_private_launcher.py
+
+# Generated video previews and local rendering artifacts
+/public/samples/
+/server/video/tmp_work_*/
+/server/video/assets/test-card.jpg
+/server/video/assets/test-card-cfg.json

@@ -34,33 +34,23 @@ test("Reflection Engine: auditGlossaryCompliance detects missing terms", () => {
   assert.deepEqual(audit.missingTerms, ["Thanh Vân Môn"]);
 });
 
-test("Reflection Engine: reflectAndPolish cleans stiff structures and boosts fluency score", () => {
+test("Reflection Engine: fluency heuristics do not authorize rewriting meaning", () => {
   const unrefined = "Đối với hắn tới nói, chuyện này trong lòng không khỏi có chút kỳ quái, hắn không ngừng mà bước đi.";
   const result = reflectAndPolish(unrefined);
 
-  assert.equal(result.improved, true);
-  assert.ok(result.text.includes("đối với hắn mà nói"));
-  assert.ok(result.text.includes("trong lòng không khỏi kỳ quái"));
-  assert.ok(result.text.includes("không ngừng bước đi"));
-  assert.ok(result.finalScore > result.initialScore);
+  assert.equal(result.text, unrefined);
 });
 
-test("Reflection Engine: fixes common literal family-title transliteration", () => {
+test("Reflection Engine: preserves uncertain words and residual names for review", () => {
   const result = reflectAndPolish("Gia Gia bảo tôi đi tìm Hải Nhược颖.");
 
-  assert.ok(result.text.includes("ông nội"));
-  assert.doesNotMatch(result.text, /\bGia Gia\b/i);
-  assert.doesNotMatch(result.text, /\p{Script=Han}/u);
+  assert.equal(result.text, "Gia Gia bảo tôi đi tìm Hải Nhược颖.");
 });
 
-test("Reflection Engine: fixes common everyday Han-Viet literal artifacts", () => {
+test("Reflection Engine: does not guess meanings of unaligned transliterations", () => {
   const result = reflectAndPolish("Ba Ba và Mụ Mụ nói: Ngã sẽ Bang tôi, còn Nãi Nãi sẽ Giáo em đọc sách.");
 
-  assert.ok(result.text.includes("bố"));
-  assert.ok(result.text.includes("mẹ"));
-  assert.ok(result.text.includes("tôi sẽ giúp tôi"));
-  assert.ok(result.text.includes("bà nội sẽ dạy em"));
-  assert.doesNotMatch(result.text, /\b(?:Ba Ba|Mụ Mụ|Ngã|Bang|Nãi Nãi|Giáo)\b/i);
+  assert.equal(result.text, "Ba Ba và Mụ Mụ nói: Ngã sẽ Bang tôi, còn Nãi Nãi sẽ Giáo em đọc sách.");
 });
 
 test("Reflection Engine: converts mixed Vietnamese-Han names without retrying the chapter", () => {

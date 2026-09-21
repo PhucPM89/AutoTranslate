@@ -22,7 +22,8 @@ function runBuild(env = {}) {
     headers: fs.readFileSync(path.join(ROOT, "public", "_headers"), "utf8"),
     app: fs.readFileSync(path.join(ROOT, "public", "app.js"), "utf8"),
     admin: fs.readFileSync(path.join(ROOT, "public", "admin-upload.js"), "utf8"),
-    html: fs.readFileSync(path.join(ROOT, "public", "index.html"), "utf8")
+    html: fs.readFileSync(path.join(ROOT, "public", "index.html"), "utf8"),
+    sitemap: fs.readFileSync(path.join(ROOT, "public", "sitemap.xml"), "utf8")
   };
 }
 
@@ -133,4 +134,12 @@ test("build output contains everything Cloudflare Pages needs to serve", () => {
   const html = fs.readFileSync(path.join(ROOT, "public", "index.html"), "utf8");
   assert.match(html, /\/app\.js\?v=[0-9a-f]{12}/, "asset URLs must be content-hashed");
   assert.match(html, /\/style\.css\?v=[0-9a-f]{12}/);
+});
+
+test("sitemap canonical URLs use immutable book IDs", () => {
+  const out = runBuild({ R2_PUBLIC_BASE_URL: "https://cdn.tram-chu.online", READER_CDN_ENABLED: "true" });
+  assert.doesNotMatch(out.sitemap, /\?book=[^<&\n]*--/, "translated titles must not be part of canonical URLs");
+  assert.doesNotMatch(out.sitemap, /<loc>[^<]*#/, "fragments are not indexable sitemap resources");
+  const locations = [...out.sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]);
+  assert.equal(new Set(locations).size, locations.length, "sitemap URLs must be unique");
 });

@@ -1,5 +1,19 @@
 
 const CDN_BASE = String(__CDN_BASE__ || "").replace(/\/$/, "");
+
+function adminCoverUrl(cover) {
+  const value = String(cover || "").trim();
+  if (!value) return "/library/covers/default-cover.webp";
+  if (/^https?:\/\/cdn\.tram-chu\.online\/(.*)$/i.test(value)) {
+    const match = value.match(/^https?:\/\/cdn\.tram-chu\.online\/(.*)$/i);
+    return `/${match[1].replace(/^\/+/, "")}`;
+  }
+  if (value.startsWith("/")) return value;
+  if (value.startsWith("covers/")) return `/${value}`;
+  if (/\.(jpg|jpeg|png|webp|avif)$/i.test(value)) return `/covers/${value}`;
+  if (/^https?:\/\//i.test(value)) return value;
+  return `/covers/${value.replace(/^\/+/, "")}`;
+}
 const {
   DEFAULT_STUDIO_MODEL,
   normalizeStudioModel,
@@ -1408,7 +1422,7 @@ function renderTranslateStatus(status = {}) {
   }
   if (els.transActiveCoverImg) {
     if (matched && matched.cover) {
-      els.transActiveCoverImg.src = matched.cover;
+      els.transActiveCoverImg.src = adminCoverUrl(matched.cover);
     } else if (status.currentBookId) {
       els.transActiveCoverImg.src = `${CDN_BASE}/covers/${status.currentBookId}.jpg`;
     } else {
@@ -1605,7 +1619,7 @@ function renderTranslateStatus(status = {}) {
         const tr = document.createElement("tr");
         const bMatched = (adminCatalog.books || []).find((book) => book.id === b.bookId);
         const bTitle = b.bookTitle || (bMatched ? bMatched.title : b.bookId) || b.bookId;
-        const bCover = bMatched?.cover || `${CDN_BASE}/covers/${b.bookId}.jpg` || "/library/covers/misty-pagoda.webp";
+        const bCover = adminCoverUrl(bMatched?.cover) || `${CDN_BASE}/covers/${b.bookId}.jpg`;
         const scannedCh = Number(b.scannedChapters || 0);
         const totalCh = Number(b.totalChapters || bMatched?.chapterCount || 0);
         const repairedCh = Number(b.repairedChapters || 0);
@@ -3609,7 +3623,7 @@ function renderAdminBooksCatalog() {
     // 1. Cover
     const tdCover = document.createElement("td");
     const img = document.createElement("img");
-    img.src = book.cover || "/library/covers/misty-pagoda-hero.webp";
+    img.src = adminCoverUrl(book.cover) || "/library/covers/misty-pagoda-hero.webp";
     img.alt = "";
     img.className = "admin-book-thumb";
     img.loading = "lazy";

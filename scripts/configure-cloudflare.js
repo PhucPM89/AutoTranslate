@@ -24,7 +24,9 @@ const dryRun = process.argv.includes("--dry-run");
 const PLAIN = {
   R2_BUCKET: "novel-storage",
   R2_ARCHIVE_BUCKET: "novel-archive",
-  R2_PUBLIC_BASE_URL: "https://cdn.tram-chu.online",
+  R2_PUBLIC_BASE_URL: "https://tram-chu.online",
+  STORAGE_DRIVER: "drive",
+  GOOGLE_DRIVE_STORAGE_FOLDER_ID: "1gr-dgFiM8At8vF2subbxyXzDRqrOajZr",
   GITHUB_REPOSITORY: "PhucPM89/AutoTranslate"
 };
 const PLAIN_FROM_ENV = ["SUPABASE_URL", "SUPABASE_ANON_KEY", "GEMINI_MODEL", "GEMINI_FALLBACK_MODELS", "GEMINI_BASE_URL"];
@@ -32,6 +34,9 @@ const SECRETS = [
   "R2_ACCOUNT_ID",
   "R2_ACCESS_KEY_ID",
   "R2_SECRET_ACCESS_KEY",
+  "GOOGLE_DRIVE_CLIENT_ID",
+  "GOOGLE_DRIVE_CLIENT_SECRET",
+  "GOOGLE_DRIVE_REFRESH_TOKEN",
   "SUPABASE_SERVICE_ROLE_KEY",
   "LIBRARY_SESSION_SECRET",
   "LIBRARY_UPLOAD_PASSWORD_HASH",
@@ -153,8 +158,8 @@ async function main() {
         // Required: the admin login verifies scrypt through node:crypto.
         compatibility_flags: ["nodejs_compat"],
         r2_buckets: {
-          NOVEL_STORAGE: { name: "novel-storage" },
-          NOVEL_ARCHIVE: { name: "novel-archive" }
+          NOVEL_STORAGE: null,
+          NOVEL_ARCHIVE: null
         },
         env_vars: envVars
       }

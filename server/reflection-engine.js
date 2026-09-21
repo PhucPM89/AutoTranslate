@@ -1,10 +1,8 @@
 "use strict";
 
 /**
- * Dual-Pass Agentic Reflection & Self-Critique Engine.
- * Analyzes candidate translations, calculates literary quality & fluency scores,
- * audits glossary adherence, and applies targeted refinement patches to guarantee
- * publication-grade prose.
+ * Formatting and heuristic diagnostics. Scores are pattern-based signals,
+ * not semantic review and not a guarantee of translation accuracy.
  */
 
 // Stiff Sino-Vietnamese grammar patterns requiring reflection polishing
@@ -346,8 +344,7 @@ function adaptLiteraryIdioms(text) {
 }
 
 /**
- * Dual-Pass Reflection: Evaluates candidate translation, applies targeted polishing
- * and returns enhanced literary-grade text.
+ * Normalize formatting while keeping lexical content intact for semantic review.
  * @param {string} translation
  * @param {Object} options
  * @returns {{ text: string, initialScore: number, finalScore: number, improved: boolean }}
@@ -360,20 +357,11 @@ function reflectAndPolish(translation, { sourceText = "", glossary = {}, scene =
   const initial = calculateFluencyScore(translation);
   let polished = translation;
 
-  // Apply stiff grammar reflection rules
-  for (const rule of STIFF_REFLECTION_RULES) {
-    if (rule.pattern.test(polished)) {
-      polished = polished.replace(rule.pattern, rule.replacement);
-    }
-  }
-
-  // Apply prose stylistics & spacing normalization
+  // Pattern matches are diagnostic only. Without source alignment, rewriting
+  // words changes valid Vietnamese (ngã, nhĩ, ba ba) and named entities.
   polished = polishLiteraryProse(polished);
-
-  // Clear residual Han glyphs in otherwise Vietnamese output. Gemini Web often
-  // leaves mixed names such as "Hải Nhược颖"; converting these locally avoids a
-  // full chapter retry for a tiny deterministic cleanup.
-  polished = convertResidualHanToHanViet(polished);
+  // Preserve untranslated glyphs so the quality gate requests a real repair.
+  // A phonetic transcription cannot establish the meaning of a word or name.
 
   const finalScore = calculateFluencyScore(polished).score;
 

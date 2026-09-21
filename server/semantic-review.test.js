@@ -82,13 +82,24 @@ test("semantic parser rejects a contradictory pass", () => {
   }), { source: "原文", draft: "Bản nháp" }), /tự mâu thuẫn/);
 });
 
+test("semantic parser accepts a clean independently scored 9.0 review", () => {
+  const result = parseSemanticReview(JSON.stringify({
+    decision: "pass",
+    scores: { accuracy: 9, completeness: 9.2, fluency: 9, terminology: 9.5 },
+    issues: [],
+    correctedTranslation: ""
+  }), { source: "完整原文", draft: "Bản dịch đầy đủ." });
+  assert.equal(result.decision, "pass");
+  assert.equal(result.correctedTranslation, "Bản dịch đầy đủ.");
+});
+
 test("semantic parser accepts a complete repair and prompt includes glossary", () => {
   const source = "李明 đi đến nơi này".repeat(30);
   const repaired = "Lý Minh đi đến nơi này một cách cẩn thận. ".repeat(20);
   const result = parseSemanticReview(JSON.stringify({
     decision: "repair",
     scores: { accuracy: 8, completeness: 9, fluency: 9, terminology: 10 },
-    issues: [{ type: "subject", severity: "major", explanation: "Nhầm chủ thể" }],
+    issues: [{ type: "subject", severity: "major", sourceQuote: "李明", draftQuote: "Sai", suggestedTranslation: "Lý Minh", explanation: "Nhầm chủ thể" }],
     correctedTranslation: repaired
   }), { source, draft: "Sai" });
   assert.equal(result.decision, "repair");
@@ -100,19 +111,19 @@ test("semantic parser accepts a short repair verdict without embedding the chapt
   const result = parseSemanticReview(JSON.stringify({
     decision: "repair",
     scores: { accuracy: 7, completeness: 9, fluency: 9, terminology: 9 },
-    issues: [{ severity: "major", explanation: "Nhầm chủ thể" }],
+    issues: [{ severity: "major", sourceQuote: "原文", draftQuote: "Sai", suggestedTranslation: "Bản đúng", explanation: "Nhầm chủ thể" }],
     correctedTranslation: ""
   }), { source: "原文", draft: "Sai" });
   assert.equal(result.decision, "repair");
   assert.equal(result.correctedTranslation, "");
 });
 
-test("semantic prompts review the title and a repair must return valid title/content JSON", () => {
+test("semantic prompts review the title and a repair must return valid tagged title/content", () => {
   const prompt = buildSemanticReviewPrompt({
     sourceTitle: "第一章 相遇", draftTitle: "Chương 1: Gặp gỡ", source: "原文", draft: "Bản nháp"
   });
   assert.match(prompt, /TIÊU ĐỀ GỐC: 第一章 相遇/);
-  assert.match(buildSemanticRepairPrompt({ sourceTitle: "第一章", draftTitle: "Chương 1", source: "原文", draft: "Sai" }), /"content"/);
+  assert.match(buildSemanticRepairPrompt({ sourceTitle: "第一章", draftTitle: "Chương 1", source: "原文", draft: "Sai" }), /<CONTENT>/);
 
   const source = "这是完整原文。".repeat(60);
   const content = "Đây là bản dịch đầy đủ và tự nhiên. ".repeat(30);

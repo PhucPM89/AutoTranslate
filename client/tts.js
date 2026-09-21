@@ -6,13 +6,49 @@
 // 2. Continuous time-ratio paragraph tracking and interactive seeking
 // 3. Zero-failure fallback to browser native SpeechSynthesis (offline device voices)
 const TTS_ENDPOINT = "/api/reader/tts";
-const TTS_CACHE = "tram-chu-tts-v1";
+const TTS_CACHE = "tram-chu-tts-v3";
 const TTS_VOICE = Object.freeze({
   name: "Microsoft Hoài My (Edge-TTS)",
   voiceURI: "vi-VN-HoaiMyNeural",
   lang: "vi-VN"
 });
 const TTS_MAX_CONSECUTIVE_ERRORS = 3;
+const TTS_CHAPTER_CHUNK_SIZE = 650;
+
+function splitChapterForAudio(text, limit = TTS_CHAPTER_CHUNK_SIZE) {
+  const paragraphs = String(text || "").split(/\n+/).map((part) => part.trim()).filter(Boolean);
+  const chunks = [];
+  let current = "";
+  for (const paragraph of paragraphs.flatMap((part) => splitLongParagraph(part, limit))) {
+    if (current && current.length + paragraph.length + 2 > limit) {
+      chunks.push(current);
+      current = "";
+    }
+    current = current ? `${current}\n\n${paragraph}` : paragraph;
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+function stripMp3Tags(bytes, keepLeadingId3 = false) {
+  let start = 0;
+  let end = bytes.length;
+  if (bytes.length >= 10 && bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33) {
+    const size = ((bytes[6] & 0x7f) << 21) | ((bytes[7] & 0x7f) << 14) | ((bytes[8] & 0x7f) << 7) | (bytes[9] & 0x7f);
+    if (!keepLeadingId3) start = Math.min(10 + size + ((bytes[5] & 0x10) ? 10 : 0), bytes.length);
+  }
+  if (end - start >= 128 && bytes[end - 128] === 0x54 && bytes[end - 127] === 0x41 && bytes[end - 126] === 0x47) end -= 128;
+  return bytes.slice(start, end);
+}
+
+async function mergeMp3Blobs(blobs) {
+  const parts = [];
+  for (let index = 0; index < blobs.length; index += 1) {
+    const bytes = new Uint8Array(await blobs[index].arrayBuffer());
+    parts.push(stripMp3Tags(bytes, index === 0));
+  }
+  return new Blob(parts, { type: "audio/mpeg" });
+}
 
 class TTSEngine {
   constructor() {
@@ -28,12 +64,13 @@ class TTSEngine {
     this.isPlaying = false;
     this.isPaused = false;
     this.isLoading = false;
-    this.mode = "edge"; // "edge" or "speechSynthesis"
+    this.mode = "drive"; // website strictly uses pre-recorded Google Drive audio
     this.isFullChapter = false;
 
     this.bookId = "";
     this.chapterNumber = 0;
     this.chapterTitle = "";
+    this.prebuiltAudioUrl = "";
 
     this.currentUtterance = null;
     this.audio = null;
@@ -64,26 +101,11 @@ class TTSEngine {
       coverUrl: ""
     };
 
-    this.initSpeechSynthesis();
     setTimeout(() => this.onVoicesLoaded?.(this.getAvailableVoices(), this.selectedVoice), 0);
   }
 
   initSpeechSynthesis() {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      this.synth = window.speechSynthesis;
-      const loadNativeVoices = () => {
-        try {
-          const all = this.synth?.getVoices?.() || [];
-          this.nativeVoices = all.filter(
-            (v) => v.lang && (v.lang.startsWith("vi") || v.lang === "vi-VN" || v.lang.toLowerCase().includes("vietnam"))
-          );
-        } catch {}
-      };
-      loadNativeVoices();
-      if (typeof window.speechSynthesis.onvoiceschanged !== "undefined") {
-        window.speechSynthesis.onvoiceschanged = loadNativeVoices;
-      }
-    }
+    // Disabled: System strictly uses audio recorded and saved in Google Drive.
   }
 
   updateMediaSession(metadata = {}) {
@@ -122,10 +144,7 @@ class TTSEngine {
   }
 
   isSupported() {
-    return (
-      (typeof fetch === "function" && typeof Audio !== "undefined") ||
-      (typeof window !== "undefined" && "speechSynthesis" in window)
-    );
+    return typeof Audio !== "undefined" || typeof fetch === "function";
   }
 
   initVoices() {}
@@ -133,27 +152,12 @@ class TTSEngine {
   isChineseVoice() { return false; }
   getVietnameseVoices() { return this.getAvailableVoices(); }
   getAvailableVoices() {
-    // Keep TTS_VOICE as primary. If native Vietnamese voices exist, expose them too.
-    if (this.nativeVoices.length > 0) {
-      return [TTS_VOICE, ...this.nativeVoices];
-    }
-    return [...this.voices];
+    return [TTS_VOICE];
   }
 
   setVoice(voiceURI) {
-    if (!voiceURI || voiceURI === TTS_VOICE.voiceURI) {
-      this.selectedVoice = TTS_VOICE;
-      this.mode = "edge";
-      return;
-    }
-    const found = this.nativeVoices.find((v) => (v.voiceURI || v.name) === voiceURI);
-    if (found) {
-      this.selectedVoice = found;
-      this.mode = "speechSynthesis";
-    } else {
-      this.selectedVoice = TTS_VOICE;
-      this.mode = "edge";
-    }
+    this.selectedVoice = TTS_VOICE;
+    this.mode = "drive";
   }
 
   setSpeed(speed) {
@@ -178,8 +182,9 @@ class TTSEngine {
     this.bookId = options.bookId || "";
     this.chapterNumber = Number(options.chapterNumber || 0);
     this.chapterTitle = options.title || "";
+    this.prebuiltAudioUrl = options.audioUrl || "";
     this.isFullChapter = options.fullChapter !== undefined ? Boolean(options.fullChapter) : true;
-    this.mode = options.mode || "edge";
+    this.mode = options.mode || "drive";
 
     this.paragraphs = String(text || "")
       .split(/\n+/)
@@ -190,8 +195,8 @@ class TTSEngine {
     this.currentIndex = 0;
   }
 
-  loadChapter({ bookId = "", chapterNumber = 0, text = "", title = "" } = {}) {
-    this.loadText(text, { bookId, chapterNumber, title, fullChapter: true });
+  loadChapter({ bookId = "", chapterNumber = 0, text = "", title = "", audioUrl = "" } = {}) {
+    this.loadText(text, { bookId, chapterNumber, title, audioUrl, fullChapter: true });
   }
 
   getParagraphStartTime(index) {
@@ -211,6 +216,13 @@ class TTSEngine {
 
   play(startIndex = 0) {
     if (!this.isSupported() || !this.paragraphs.length) return false;
+    if (!this.prebuiltAudioUrl) {
+      this.isPlaying = false;
+      this.isPaused = false;
+      this.onError?.("Chương này chưa có bản thu âm audio từ Google Drive.");
+      this.notifyState();
+      return false;
+    }
     this.currentIndex = Math.min(Math.max(0, startIndex), this.paragraphs.length - 1);
     this.isPlaying = true;
     this.isPaused = false;
@@ -218,16 +230,7 @@ class TTSEngine {
     this.setMediaPlaybackState("playing");
     this.notifyState();
 
-    if (this.mode === "speechSynthesis") {
-      this.playSpeechSynthesis(this.currentIndex);
-      return true;
-    }
-
-    if (this.isFullChapter && this.paragraphs.length > 0) {
-      void this.playFullChapter(this.currentIndex);
-    } else {
-      void this.speakParagraph(this.currentIndex);
-    }
+    void this.playFullChapter(this.currentIndex);
     return true;
   }
 
@@ -242,170 +245,71 @@ class TTSEngine {
     this.notifyState();
 
     try {
-      const fullText = this.paragraphs.join("\n\n");
-      const blob = await this.getAudioBlob(fullText, {
-        bookId: this.bookId,
-        chapterNumber: this.chapterNumber,
-        fullChapter: true
-      });
-
-      if (session !== this._session || !this.isPlaying) return;
-      this.isLoading = false;
-      this.audioUrl = URL.createObjectURL(blob);
-      this._consecutiveErrors = 0;
-
-      const audio = new Audio(this.audioUrl);
-      this.audio = audio;
-      audio.preload = "auto";
-      audio.playbackRate = this.speed;
-
-      const target = this.pendingStartIndex ?? startIndex;
-
-      audio.onloadedmetadata = () => {
-        if (session !== this._session) return;
-        if (target > 0) {
-          const startTime = this.getParagraphStartTime(target);
-          if (startTime > 0 && startTime < audio.duration) {
-            audio.currentTime = startTime;
-          }
-        }
-        this.notifyState();
-      };
-
-      audio.ontimeupdate = () => {
+      if (this.prebuiltAudioUrl) {
         if (session !== this._session || !this.isPlaying) return;
-        const newIndex = this.getParagraphIndexFromTime(audio.currentTime);
-        if (newIndex !== this.currentIndex) {
-          this.currentIndex = newIndex;
-          this.onParagraphChange?.(newIndex);
-        }
-        this.onTimeUpdate?.({
-          currentTime: audio.currentTime,
-          duration: audio.duration || 0,
-          progressPercent: audio.duration ? (audio.currentTime / audio.duration) * 100 : 0,
-          currentIndex: this.currentIndex,
-          totalParagraphs: this.paragraphs.length
-        });
-      };
-
-      audio.onended = () => {
-        if (session !== this._session || !this.isPlaying || this.isPaused) return;
-        this.handleChapterFinished();
-      };
-
-      audio.onerror = () => {
-        if (session !== this._session) return;
-        console.warn("Full chapter audio playback error.");
-        this.handleError(new Error("Lỗi phát audio cả chương."));
-      };
-
-      this.notifyState();
-      if (!this.isPaused) await audio.play();
+        this.isLoading = false;
+        this.audioUrl = this.prebuiltAudioUrl;
+        return this.playPreparedAudio(session, startIndex);
+      }
+      this.isLoading = false;
+      this.isPlaying = false;
+      this.handleError(new Error("Chương này chưa có bản thu âm audio từ Google Drive."));
+      return;
     } catch (error) {
       if (session === this._session) {
-        console.warn("Full chapter synthesis failed:", error);
-        this.handleError(error);
+        this.handleError(error || new Error("Không thể phát bản ghi audio từ Google Drive."));
+      }
+    }
+  }
+
+  async playPreparedAudio(session, startIndex = 0) {
+    const audio = new Audio(this.audioUrl);
+    this.audio = audio;
+    audio.preload = "auto";
+    audio.playbackRate = this.speed;
+    audio.onloadedmetadata = () => {
+      if (session !== this._session) return;
+      const startTime = this.getParagraphStartTime(startIndex);
+      if (startTime > 0 && startTime < audio.duration) audio.currentTime = startTime;
+      this.notifyState();
+    };
+    audio.ontimeupdate = () => {
+      if (session !== this._session || !this.isPlaying) return;
+      const index = this.getParagraphIndexFromTime(audio.currentTime);
+      if (index !== this.currentIndex) { this.currentIndex = index; this.onParagraphChange?.(index); }
+      this.onTimeUpdate?.({ currentTime: audio.currentTime, duration: audio.duration || 0, progressPercent: audio.duration ? audio.currentTime / audio.duration * 100 : 0, currentIndex: index, totalParagraphs: this.paragraphs.length });
+    };
+    audio.onended = () => { if (session === this._session && this.isPlaying && !this.isPaused) this.handleChapterFinished(); };
+    audio.onerror = () => {
+      if (session === this._session) {
+        this.handleError(new Error("Không thể phát bản ghi audio từ Google Drive. Vui lòng kiểm tra lại đường truyền hoặc link audio."));
+      }
+    };
+    this.notifyState();
+    if (!this.isPaused) {
+      try {
+        await audio.play();
+      } catch (err) {
+        if (session === this._session) {
+          this.handleError(err);
+        }
       }
     }
   }
 
   fallbackToSpeechSynthesis(userNotice) {
     this.releaseAudio();
-    if (this.synth) {
-      this.mode = "speechSynthesis";
-      if (userNotice) this.onError?.(userNotice);
-      this.playSpeechSynthesis(this.currentIndex);
-    } else {
-      this.handleError(new Error(userNotice || "Không thể phát âm thanh."));
-    }
+    this.handleError(new Error(userNotice || "Không thể phát audio từ Google Drive."));
   }
 
   playSpeechSynthesis(index = 0) {
-    if (!this.synth || typeof SpeechSynthesisUtterance === "undefined") {
-      this.handleError(new Error("Thiết bị không hỗ trợ đọc offline"));
-      return;
-    }
-    this.mode = "speechSynthesis";
-    this.currentIndex = Math.min(Math.max(0, index), this.paragraphs.length - 1);
-    this.releaseAudio();
-
-    try { this.synth.cancel(); } catch {}
-
-    const text = this.paragraphs[this.currentIndex];
-    if (!text) {
-      if (this.currentIndex + 1 < this.paragraphs.length) {
-        return this.playSpeechSynthesis(this.currentIndex + 1);
-      }
-      return this.handleChapterFinished();
-    }
-
-    const session = ++this._session;
-    this.isLoading = false;
-    this.isPlaying = true;
-    this.isPaused = false;
-    this.onParagraphChange?.(this.currentIndex);
-    this.notifyState();
-
-    try {
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = this.speed;
-      const viVoice =
-        this.nativeVoices.find((v) => (v.voiceURI || v.name) === this.selectedVoice?.voiceURI) ||
-        this.nativeVoices[0] ||
-        this.synth.getVoices?.().find((v) => v.lang?.startsWith("vi"));
-      if (viVoice) utterance.voice = viVoice;
-
-      utterance.onstart = () => {
-        if (session !== this._session) return;
-        this.isLoading = false;
-        this.isPlaying = true;
-        this.isPaused = false;
-        this.notifyState();
-      };
-
-      utterance.onend = () => {
-        if (session !== this._session || !this.isPlaying || this.isPaused) return;
-        this._utterances.delete(utterance);
-        if (this.currentIndex + 1 < this.paragraphs.length) {
-          this.playSpeechSynthesis(this.currentIndex + 1);
-        } else {
-          this.handleChapterFinished();
-        }
-      };
-
-      utterance.onerror = (err) => {
-        if (session !== this._session) return;
-        this._utterances.delete(utterance);
-        console.warn("SpeechSynthesis utterance error:", err);
-        // Advance to next paragraph so speech NEVER halts completely
-        if (this.currentIndex + 1 < this.paragraphs.length) {
-          this.playSpeechSynthesis(this.currentIndex + 1);
-        } else {
-          this.handleChapterFinished();
-        }
-      };
-
-      this.currentUtterance = utterance;
-      this._utterances.add(utterance);
-      this.synth.speak(utterance);
-    } catch (err) {
-      console.warn("Unable to speak utterance:", err);
-      if (this.currentIndex + 1 < this.paragraphs.length) {
-        this.playSpeechSynthesis(this.currentIndex + 1);
-      } else {
-        this.handleError(err);
-      }
-    }
+    this.handleError(new Error("Website chỉ hỗ trợ phát audio thu âm từ Google Drive, không sử dụng giọng đọc máy."));
   }
 
   pause() {
     if (!this.isPlaying || this.isPaused) return;
     this.isPaused = true;
-    if (this.mode === "speechSynthesis") {
-      try { if (this.synth?.speaking) this.synth.pause(); } catch {}
-    } else {
-      this.audio?.pause();
-    }
+    this.audio?.pause();
     this.setMediaPlaybackState("paused");
     this.notifyState();
   }
@@ -416,21 +320,10 @@ class TTSEngine {
     this.setMediaPlaybackState("playing");
     this.notifyState();
 
-    if (this.mode === "speechSynthesis") {
-      try {
-        if (this.synth?.paused) this.synth.resume();
-        else this.playSpeechSynthesis(this.currentIndex);
-      } catch {
-        this.playSpeechSynthesis(this.currentIndex);
-      }
+    if (this.audio?.src) {
+      void this.audio.play().catch((error) => this.handleError(error));
     } else {
-      if (this.audio?.src) {
-        void this.audio.play().catch((error) => this.fallbackToSpeechSynthesis(error.message));
-      } else if (this.isFullChapter) {
-        void this.playFullChapter(this.currentIndex);
-      } else {
-        void this.speakParagraph(this.currentIndex);
-      }
+      void this.playFullChapter(this.currentIndex);
     }
   }
 
@@ -442,9 +335,6 @@ class TTSEngine {
     this._consecutiveErrors = 0;
     this.setMediaPlaybackState("none");
     this.releaseAudio();
-    if (this.synth) {
-      try { this.synth.cancel(); } catch {}
-    }
     this.currentUtterance = null;
     this._utterances.clear();
     this.notifyState();
@@ -462,7 +352,7 @@ class TTSEngine {
       this.audio.load?.();
     }
     this.audio = null;
-    if (this.audioUrl && typeof URL !== "undefined") URL.revokeObjectURL(this.audioUrl);
+    if (this.audioUrl && typeof URL !== "undefined" && this.audioUrl.startsWith("blob:")) URL.revokeObjectURL(this.audioUrl);
     this.audioUrl = "";
   }
 
@@ -470,11 +360,6 @@ class TTSEngine {
     const target = Math.max(0, Math.min(index, this.paragraphs.length - 1));
     this.currentIndex = target;
     this.onParagraphChange?.(target);
-
-    if (this.mode === "speechSynthesis") {
-      this.playSpeechSynthesis(target);
-      return;
-    }
 
     if (this.audio && this.audio.duration) {
       const targetTime = this.getParagraphStartTime(target);
@@ -594,10 +479,12 @@ class TTSEngine {
   }
 
   async getAudioBlob(text, options = {}) {
-    const key =
-      options.fullChapter && options.bookId && options.chapterNumber
-        ? `chapter|${options.bookId}|${options.chapterNumber}`
-        : await this.cacheKey(text, options);
+    // Include the text digest even for a named chapter. Otherwise an incomplete
+    // or obsolete chapter remains cached forever after its translation changes.
+    const digest = await this.cacheKey(text, options);
+    const key = options.fullChapter && options.bookId && options.chapterNumber
+      ? `chapter|${options.bookId}|${options.chapterNumber}|${digest}`
+      : digest;
 
     if (this._memoryCache.has(key)) return this._memoryCache.get(key);
     if (this._pending.has(key)) return this._pending.get(key);
@@ -647,11 +534,14 @@ class TTSEngine {
   }
 
   async fetchAudioBlob(text, options = {}) {
+    if (options.fullChapter && String(text).length > TTS_CHAPTER_CHUNK_SIZE) {
+      return this.fetchFullChapterAudioBlob(text, options);
+    }
     const payload = {
       text,
       bookId: options.bookId || this.bookId || "",
       chapterNumber: options.chapterNumber || this.chapterNumber || 0,
-      fullChapter: Boolean(options.fullChapter || this.isFullChapter)
+      fullChapter: options.fullChapter !== undefined ? Boolean(options.fullChapter) : Boolean(this.isFullChapter)
     };
 
     const response = await fetch(TTS_ENDPOINT, {
@@ -669,9 +559,26 @@ class TTSEngine {
     return response.blob();
   }
 
+  async fetchFullChapterAudioBlob(text, options = {}) {
+    const chunks = splitChapterForAudio(text);
+    const blobs = new Array(chunks.length);
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < chunks.length) {
+        const index = cursor++;
+        blobs[index] = await this.fetchAudioBlobWithRetry(chunks[index], 3, { ...options, fullChapter: false });
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(3, chunks.length) }, () => worker()));
+    return mergeMp3Blobs(blobs);
+  }
+
   async removeAudioCache(text, options = {}) {
     try {
-      const key = await this.cacheKey(text, options);
+      const digest = await this.cacheKey(text, options);
+      const key = options.fullChapter && options.bookId && options.chapterNumber
+        ? `chapter|${options.bookId}|${options.chapterNumber}|${digest}`
+        : digest;
       this._memoryCache.delete(key);
       if (typeof caches === "undefined") return;
       const cache = await caches.open(TTS_CACHE).catch(() => null);
@@ -681,22 +588,7 @@ class TTSEngine {
   }
 
   handleParagraphError(error, index) {
-    console.warn("Edge-TTS paragraph error:", error);
-    this._consecutiveErrors += 1;
-    this.isLoading = false;
-    this.releaseAudio();
-
-    if (this._consecutiveErrors >= TTS_MAX_CONSECUTIVE_ERRORS) {
-      console.warn("Edge-TTS exceeded consecutive errors. Falling back to SpeechSynthesis.");
-      return this.fallbackToSpeechSynthesis("Đã chuyển sang giọng đọc thiết bị để tiếp tục đọc không gián đoạn.");
-    }
-
-    if (this.isPlaying && index + 1 < this.paragraphs.length) {
-      this.onError?.("Một đoạn bị lỗi tạo giọng, đang chuyển sang đoạn kế tiếp...");
-      this.notifyState();
-      void this.speakParagraph(index + 1);
-      return;
-    }
+    console.warn("Audio paragraph error:", error);
     this.handleError(error);
   }
 
@@ -709,7 +601,7 @@ class TTSEngine {
     this.releaseAudio();
     this.notifyState();
     this.onParagraphChange?.(-1);
-    this.onError?.(error instanceof Error ? error.message : "Không tạo được giọng đọc.");
+    this.onError?.(error instanceof Error ? error.message : (error?.message || "Không thể phát audio."));
   }
 
   handleChapterFinished() {
@@ -810,4 +702,4 @@ function createTTS() {
   return new TTSEngine();
 }
 
-export { createTTS, TTSEngine, TTS_CACHE, TTS_VOICE, splitLongParagraph };
+export { createTTS, TTSEngine, TTS_CACHE, TTS_VOICE, splitLongParagraph, splitChapterForAudio, mergeMp3Blobs };

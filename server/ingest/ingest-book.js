@@ -234,15 +234,6 @@ function syncChapterStatuses(chapterList, state) {
 }
 
 async function publishIndex({ storage, book, revision, chapters, state }) {
-  const withStatus = chapters.map((chapter) => {
-    const jobEntry = state.chapters.find((entry) => entry.n === chapter.chapterNumber);
-    const queueStatus = jobEntry ? jobEntry.status : "";
-    const translationStatus =
-      queueStatus === "completed" || queueStatus === "failed"
-        ? queueStatus
-        : chapter.translationStatus || queueStatus || "pending";
-    return { ...chapter, translationStatus };
-  });
   // When no public hostname is configured yet the index still gets written, with a
   // relative template that the reader resolves against its configured CDN base.
   let publicUrlFor = null;
@@ -252,10 +243,45 @@ async function publishIndex({ storage, book, revision, chapters, state }) {
   } catch {
     publicUrlFor = null;
   }
-  await storage.put(
-    indexKey(book.id),
-    JSON.stringify(buildBookIndex({ book, revision, chapters: withStatus, publicUrlFor }))
-  );
+  const key = indexKey(book.id);
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const currentHead = await storage.head(key);
+    const currentRaw = currentHead ? await storage.get(key) : null;
+    let current = null;
+    try { current = currentRaw ? JSON.parse(currentRaw.toString("utf8")) : null; } catch {}
+
+    // A late worker from an old revision must never replace a newer book index.
+    if (current && Number(current.revision || 1) > Number(revision || 1)) return current;
+    const currentByNumber = new Map(
+      current && Number(current.revision || 1) === Number(revision || 1)
+        ? (current.chapters || []).map((entry) => [Number(entry.n), entry])
+        : []
+    );
+    const withStatus = chapters.map((chapter) => {
+      const n = Number(chapter.chapterNumber);
+      const jobEntry = state.chapters.find((entry) => Number(entry.n) === n);
+      const previous = currentByNumber.get(n);
+      const queueStatus = jobEntry ? jobEntry.status : "";
+      const proposed = queueStatus === "completed" || queueStatus === "failed"
+        ? queueStatus
+        : chapter.translationStatus || queueStatus || "pending";
+      // Within one revision, completed is monotonic. Stale workers may add
+      // progress but cannot turn a readable translated chapter back to pending.
+      return previous?.status === "completed"
+        ? { ...chapter, ...previous, chapterNumber: n, translationStatus: "completed" }
+        : { ...chapter, translationStatus: proposed };
+    });
+    const next = buildBookIndex({ book, revision, chapters: withStatus, publicUrlFor });
+    try {
+      await storage.put(key, JSON.stringify(next), currentHead?.etag
+        ? { ifMatch: currentHead.etag }
+        : { ifNoneMatch: "*" });
+      return next;
+    } catch (error) {
+      if (error.status !== 412 || attempt === 4) throw error;
+    }
+  }
+  throw new Error(`Không thể publish index ${book.id} sau xung đột đồng thời.`);
 }
 
 // Bounded parallelism: keeps `concurrency` uploads in flight without building a

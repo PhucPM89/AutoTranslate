@@ -207,12 +207,12 @@ function buildChapterDocument({
   const status = translationStatus || (translation ? "completed" : "pending");
   const hasRendered = translation && (status === "completed" || status === "convert");
   const rawContent = hasRendered ? translation : chapter.content;
-  const title = hasRendered
+  const title = status === "completed" ? String(chapter.title || "") : hasRendered
     ? deriveChapterTitle(chapter.title, chapter.chapterNumber, rawContent)
     : cleanChapterTitle(chapter.title, chapter.chapterNumber);
-  const stripped = hasRendered ? stripTitleFromContent(rawContent, title, chapter.chapterNumber) : rawContent;
-  const repaired = hasRendered ? repairTranslationTextArtifacts(stripped, { title }) : { text: stripped };
-  const content = hasRendered ? formatNovelDialogueAndQuotes(repaired.text) : repaired.text;
+  const stripped = hasRendered && status !== "completed" ? stripTitleFromContent(rawContent, title, chapter.chapterNumber) : rawContent;
+  const repaired = hasRendered && status !== "completed" ? repairTranslationTextArtifacts(stripped, { title }) : { text: stripped };
+  const content = status === "completed" ? rawContent : (hasRendered ? formatNovelDialogueAndQuotes(repaired.text) : repaired.text);
   const doc = {
     schema: SCHEMA_VERSION,
     bookId,

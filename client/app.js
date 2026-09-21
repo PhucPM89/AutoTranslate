@@ -1002,14 +1002,14 @@ function renderFeaturedBook() {
   if (!book) return;
 
   const fallbackCover = fallbackCoverForBook(book);
-  const backdrop = book.cover || heroVariant(fallbackCover);
+  const backdrop = coverImageUrl(book.cover) || heroVariant(fallbackCover);
   if (els.featuredBackdrop.getAttribute("src") !== backdrop) els.featuredBackdrop.src = backdrop;
   els.featuredBackdrop.addEventListener("error", () => { els.featuredBackdrop.src = heroVariant(fallbackCover); }, { once: true });
   // The same artwork twice: blurred and bled across the panel as light, and sharp
   // as a poster. It is decorative - the heading and the button already name and
   // open the book - so it stays out of the accessibility tree and the tab order.
   if (els.featuredPoster) {
-    const poster = book.cover || fallbackCover;
+    const poster = coverImageUrl(book.cover) || fallbackCover;
     if (els.featuredPoster.getAttribute("src") !== poster) els.featuredPoster.src = poster;
     els.featuredPoster.addEventListener("error", () => { els.featuredPoster.src = fallbackCover; }, { once: true });
   }
@@ -1185,7 +1185,7 @@ function renderRankRail() {
   championStage.setAttribute("aria-label", `Quán quân bảng vàng: ${champion.title}`);
 
   const champFallback = fallbackCoverForBook(champion);
-  const champCover = champion.cover || champFallback;
+  const champCover = coverImageUrl(champion.cover) || champFallback;
   const champTotal = Number(champion.chapterCount || champion.totalChapters || 0);
   const champTrans = Number(champion.translatedChapters || 0);
   const champTheme = REALM_THEMES[champion.genre] || DEFAULT_THEME;
@@ -1196,7 +1196,7 @@ function renderRankRail() {
     <div class="champion-display" role="button" tabindex="0" title="Bấm để xem chi tiết truyện">
       <div class="champion-book-perspective">
         <div class="champion-book-cover-wrap">
-          <img class="champion-book-img" src="${champCover}" alt="Bìa truyện ${escapeHtml(champion.title)}" loading="lazy">
+          <img class="champion-book-img" src="${champCover}" alt="Bìa truyện ${escapeHtml(champion.title)}" loading="eager" decoding="async" onerror="this.onerror=null;this.src='/library/covers/default-cover.webp';">
           <div class="champion-cover-sheen" aria-hidden="true"></div>
           <div class="champion-gold-badge">★ QUÁN QUÂN BẢNG VÀNG</div>
         </div>
@@ -1271,7 +1271,7 @@ function renderRankRail() {
     const rankNum = idx + 2;
     const rankNumStr = String(rankNum).padStart(2, "0");
     const bookFallback = fallbackCoverForBook(book);
-    const bookCover = book.cover || bookFallback;
+    const bookCover = coverImageUrl(book.cover) || bookFallback;
     const total = Number(book.chapterCount || book.totalChapters || 0);
     const trans = Number(book.translatedChapters || 0);
     const theme = REALM_THEMES[book.genre] || DEFAULT_THEME;
@@ -1289,7 +1289,7 @@ function renderRankRail() {
         <span class="contender-rank-num">${rankNumStr}</span>
       </div>
       <div class="contender-thumb-wrap">
-        <img class="contender-thumb-img" src="${bookCover}" alt="" loading="lazy" />
+        <img class="contender-thumb-img" src="${bookCover}" alt="${escapeHtml(book.title)}" loading="eager" decoding="async" onerror="this.onerror=null;this.src='/library/covers/default-cover.webp';" />
       </div>
       <div class="contender-info">
         <div class="contender-meta">
@@ -1356,13 +1356,25 @@ function formatNumber(value) {
   return Number(value || 0).toLocaleString("vi-VN");
 }
 
+function getCatalogPageMetrics(totalBooks) {
+  const FIRST_PAGE_SIZE = 11;
+  const OTHER_PAGE_SIZE = 12;
+  if (totalBooks <= FIRST_PAGE_SIZE) {
+    return { totalPages: 1, start: 0, count: totalBooks };
+  }
+  const remaining = totalBooks - FIRST_PAGE_SIZE;
+  const totalPages = 1 + Math.ceil(remaining / OTHER_PAGE_SIZE);
+  const page = Math.min(Math.max(1, libraryState.catalogPage), totalPages);
+  const start = page === 1 ? 0 : FIRST_PAGE_SIZE + (page - 2) * OTHER_PAGE_SIZE;
+  const count = page === 1 ? FIRST_PAGE_SIZE : OTHER_PAGE_SIZE;
+  return { totalPages, start, count };
+}
+
 function renderCatalog() {
   const books = getFilteredCatalogBooks();
-
-  const totalPages = Math.max(1, Math.ceil(books.length / CATALOG_PAGE_SIZE));
+  const { totalPages, start, count } = getCatalogPageMetrics(books.length);
   libraryState.catalogPage = Math.min(Math.max(1, libraryState.catalogPage), totalPages);
-  const start = (libraryState.catalogPage - 1) * CATALOG_PAGE_SIZE;
-  const visibleBooks = books.slice(start, start + CATALOG_PAGE_SIZE);
+  const visibleBooks = books.slice(start, start + count);
 
   els.catalogGrid.innerHTML = "";
   visibleBooks.forEach((book, index) => els.catalogGrid.appendChild(createBookCard(book, start + index)));
@@ -1377,7 +1389,8 @@ function resetCatalogPage() {
 }
 
 function changeCatalogPage(page) {
-  const totalPages = Math.max(1, Math.ceil(getFilteredCatalogBooks().length / CATALOG_PAGE_SIZE));
+  const books = getFilteredCatalogBooks();
+  const { totalPages } = getCatalogPageMetrics(books.length);
   const nextPage = Math.min(Math.max(1, page), totalPages);
   if (nextPage === libraryState.catalogPage) return;
   libraryState.catalogPage = nextPage;
@@ -1504,15 +1517,16 @@ function createBookCard(book, index = 0) {
   coverButton.className = "book-cover";
   const image = document.createElement("img");
   const fallbackCover = fallbackCoverForBook(book);
-  image.src = book.cover || fallbackCover;
   image.alt = `Bìa truyện ${book.title}`;
   image.loading = "lazy";
   image.decoding = "async";
   image.width = 480;
   image.height = 720;
-  image.addEventListener("error", () => {
-    image.src = fallbackCover;
-  }, { once: true });
+  image.onerror = function() {
+    this.onerror = null;
+    this.src = fallbackCover || "/library/covers/default-cover.webp";
+  };
+  image.src = coverImageUrl(book.cover) || fallbackCover;
   coverButton.appendChild(image);
   appendTextElement(coverButton, "span", "book-order", String(index + 1).padStart(2, "0"));
 
@@ -1723,7 +1737,7 @@ async function showBookDetail(book, { updateHash = true } = {}) {
   
   const fallbackCover = fallbackCoverForBook(book);
   const cover = book.cover || fallbackCover;
-  const fullCoverUrl = cover.startsWith("http") ? cover : (cover.startsWith("/") ? `${window.location.origin}${cover}` : `${CDN_BASE}/${cover}`);
+  const fullCoverUrl = coverImageUrl(cover);
   const bookSlugParam = getBookSlugParam(book);
   updatePageMeta({
     title: book.title,
@@ -1734,10 +1748,17 @@ async function showBookDetail(book, { updateHash = true } = {}) {
   });
   window.scrollTo({ top: 0 });
 
-  els.bookViewCover.src = cover;
+  els.bookViewCover.onerror = function() {
+    this.onerror = null;
+    this.src = fallbackCover || "/library/covers/default-cover.webp";
+  };
+  els.bookViewCover.src = coverImageUrl(cover) || fallbackCover;
   els.bookViewCover.alt = `Bìa truyện ${book.title}`;
-  els.bookViewCover.addEventListener("error", () => { els.bookViewCover.src = fallbackCover; }, { once: true });
-  els.bookViewBackdrop.src = book.cover || heroVariant(fallbackCover);
+  els.bookViewBackdrop.onerror = function() {
+    this.onerror = null;
+    this.src = heroVariant(fallbackCover);
+  };
+  els.bookViewBackdrop.src = coverImageUrl(book.cover) || heroVariant(fallbackCover);
   els.bookViewGenre.textContent = book.genre || "Chưa phân loại";
   const catalogBook = libraryState.books.find((b) => b.id === book.id) || book;
   const totalCh = Number(catalogBook.chapterCount || catalogBook.totalChapters || book.chapterCount || book.totalChapters || 0);
@@ -1858,12 +1879,16 @@ function renderRelatedBooks(book) {
     entry.type = "button";
     entry.className = "book-view-related-item";
     const image = document.createElement("img");
-    image.src = item.cover || fallbackCover;
     image.alt = "";
     image.loading = "lazy";
     image.decoding = "async";
     image.width = 480;
     image.height = 720;
+    image.onerror = function() {
+      this.onerror = null;
+      this.src = fallbackCover || "/library/covers/default-cover.webp";
+    };
+    image.src = coverImageUrl(item.cover) || fallbackCover;
     const body = document.createElement("div");
     appendTextElement(body, "strong", "", item.title);
     appendTextElement(body, "span", "", item.author ? `Tác giả: ${item.author}` : "Khuyết danh");
@@ -2251,7 +2276,7 @@ function triggerBookOpeningTransition(book, coverUrl, onComplete) {
 async function loadCatalogBook(book, assignedFallbackCover = fallbackCoverForBook(book), { startAtFirstChapter = false, targetChapterIndex = null } = {}) {
   if (!book) return;
   const cleanId = cleanBookId(typeof book === "object" ? book.id : book);
-  const cover = (typeof book === "object" ? book.cover : null) || assignedFallbackCover;
+  const cover = coverImageUrl((typeof book === "object" ? book.cover : null) || assignedFallbackCover) || assignedFallbackCover;
 
   triggerBookOpeningTransition(book, cover, () => {
     showReader();
@@ -2309,7 +2334,7 @@ async function applyLoadedEpub(arrayBuffer, options) {
   state.bookId = options.bookId;
   state.fileName = options.fileName;
   state.title = options.displayTitle || book.title || options.fileName.replace(/\.epub$/i, "");
-  state.cover = options.cover || fallbackCoverForBook({ id: state.bookId, title: state.title });
+  state.cover = coverImageUrl(options.cover) || fallbackCoverForBook({ id: state.bookId, title: state.title });
   state.chapters = book.chapters;
   state.translations = {};
 
@@ -2334,7 +2359,7 @@ async function openCachedBook(cachedBook, index) {
 function applyReaderHeader() {
   els.bookTitle.textContent = state.title;
   els.bookMeta.textContent = `${BRAND_NAME} · ${state.chapters.length} chương · Lưu tiến độ 7 ngày`;
-  els.readerBookCover.src = state.cover;
+  els.readerBookCover.src = coverImageUrl(state.cover);
   document.title = `${state.title} | ${BRAND_NAME}`;
 }
 
@@ -2694,7 +2719,11 @@ function goToChapterFromPicker() {
 
 function goToChapter(index) {
   if (!state.chapters.length) return;
-  state.currentIndex = Math.min(Math.max(index, 0), state.chapters.length - 1);
+  const targetIndex = Math.min(Math.max(index, 0), state.chapters.length - 1);
+  if (targetIndex !== state.currentIndex && ttsEngine && (ttsEngine.isPlaying || ttsEngine.isPaused)) {
+    ttsEngine.stop();
+  }
+  state.currentIndex = targetIndex;
 
   const chapter = state.chapters[state.currentIndex];
   els.sourceText.textContent = chapter.text || "";
@@ -2761,9 +2790,9 @@ function goToChapter(index) {
   }
 
   saveProgressSoon();
-  if (state.mode === "cdn") loadCdnChapter(state.currentIndex);
-  else loadCachedTranslation();
+  const cdnPromise = state.mode === "cdn" ? loadCdnChapter(state.currentIndex) : loadCachedTranslation();
   setTimeout(() => preloadNextChapter(state.currentIndex + 1), 600);
+  return cdnPromise;
 }
 
 function scrollReaderToChapterStart() {
@@ -3118,15 +3147,13 @@ function initTTSController() {
       els.ttsToggleBtn.classList.toggle("is-active", active);
     }
     if (els.ttsToggleLabel) {
-      els.ttsToggleLabel.textContent = isPlaying ? (isPaused ? "Đang dừng" : (isLoading ? "Đang tải" : "Đang đọc")) : "Hoài My";
+      els.ttsToggleLabel.textContent = isPlaying ? (isPaused ? "Đang dừng" : (isLoading ? "Đang tải" : "Đang đọc")) : "Audio";
     }
     if (els.ttsStatusText) {
       if (isPaused) {
         els.ttsStatusText.textContent = duration > 0 ? `${formatTtsTime(currentTime)} / ${formatTtsTime(duration)} (Tạm dừng)` : "Tạm dừng";
       } else if (isLoading) {
-        els.ttsStatusText.textContent = "Đang tải trọn bộ chương...";
-      } else if (mode === "speechSynthesis") {
-        els.ttsStatusText.textContent = `Thiết bị · Đoạn ${currentIndex + 1}/${totalParagraphs}`;
+        els.ttsStatusText.textContent = "Đang tải audio từ Drive...";
       } else if (duration > 0) {
         els.ttsStatusText.textContent = `${formatTtsTime(currentTime)} / ${formatTtsTime(duration)}`;
       } else {
@@ -3153,20 +3180,50 @@ function initTTSController() {
   };
 
   ttsEngine.onError = (message) => {
-    showToast(message || "Không tạo được giọng đọc. Vui lòng thử lại.");
+    showToast(message || "Không thể phát bản ghi audio từ Google Drive.");
   };
 
   ttsEngine.onTimerTick = (timeStr) => {
     if (els.ttsTimerLabel) els.ttsTimerLabel.textContent = timeStr || "Hẹn giờ";
   };
 
-  ttsEngine.onFinished = () => {
+  function resolveChapterAudioUrl(audioMeta) {
+    if (!audioMeta) return "";
+    if (typeof audioMeta === "string") {
+      const idParam = audioMeta.match(/[?&]id=([A-Za-z0-9_-]+)/);
+      if (idParam) return `/api/reader/audio?fileId=${encodeURIComponent(idParam[1])}`;
+      const fileD = audioMeta.match(/\/file\/d\/([A-Za-z0-9_-]+)/);
+      if (fileD) return `/api/reader/audio?fileId=${encodeURIComponent(fileD[1])}`;
+      const openId = audioMeta.match(/\/open\?id=([A-Za-z0-9_-]+)/);
+      if (openId) return `/api/reader/audio?fileId=${encodeURIComponent(openId[1])}`;
+      if (audioMeta.startsWith("/api/reader/audio")) return audioMeta;
+      if (/drive\.google\.com|drive\.usercontent\.google\.com/.test(audioMeta)) {
+        return `/api/reader/audio?url=${encodeURIComponent(audioMeta)}`;
+      }
+      return audioMeta;
+    }
+    if (typeof audioMeta === "object") {
+      if (audioMeta.fileId) return `/api/reader/audio?fileId=${encodeURIComponent(audioMeta.fileId)}`;
+      if (audioMeta.url) return resolveChapterAudioUrl(audioMeta.url);
+    }
+    return "";
+  }
+
+  ttsEngine.onFinished = async () => {
     if (state.currentIndex < state.chapters.length - 1) {
+      const nextIdx = state.currentIndex + 1;
       showToast("Chuyển sang chương tiếp theo...");
-      goToChapter(state.currentIndex + 1);
+      await goToChapter(nextIdx);
+      const nextChapter = state.chapters[state.currentIndex];
+      const nextAudio = resolveChapterAudioUrl(nextChapter?.audio || nextChapter?.audioUrl);
+      if (!nextAudio) {
+        ttsEngine.stop();
+        showToast("Chương này chưa có bản thu âm audio từ Google Drive.");
+        return;
+      }
       setTimeout(() => {
         startTTSFromCurrent();
-      }, 1000);
+      }, 500);
     } else {
       ttsEngine.stop();
       showToast("Đã đọc hết bộ truyện.");
@@ -3175,6 +3232,13 @@ function initTTSController() {
 
   function startTTSFromCurrent() {
     const chapter = state.chapters[state.currentIndex];
+    const resolvedAudio = resolveChapterAudioUrl(chapter?.audio || chapter?.audioUrl);
+    if (!resolvedAudio) {
+      showToast("Chương này chưa có bản thu âm audio từ Google Drive.");
+      ttsEngine.stop();
+      return;
+    }
+
     const text = normalizeReaderText(state.translations[state.currentIndex] || (chapter && chapter.text ? chapter.text : ""));
     if (!text || isChineseText(text) || els.translationText.classList.contains("empty") || text.includes("Chưa có bản dịch") || text.includes("Đang tải")) {
       showToast("Chương này chưa có bản dịch tiếng Việt để đọc");
@@ -3211,7 +3275,8 @@ function initTTSController() {
       bookId,
       chapterNumber,
       text,
-      title: displayChapterTitle(state.currentIndex)
+      title: displayChapterTitle(state.currentIndex),
+      audioUrl: resolvedAudio
     });
     ttsEngine.play(0);
   }
@@ -3265,57 +3330,20 @@ function initTTSController() {
     ttsEngine.seekToPercent(pct);
   });
 
-  function populateVoiceSelect(voices, currentSelected) {
+  function populateVoiceSelect() {
     if (!els.ttsVoiceSelect) return;
-    const available = ttsEngine.getAvailableVoices();
     els.ttsVoiceSelect.innerHTML = "";
-    if (!available.length) {
-      const opt = document.createElement("option");
-      opt.value = "";
-      opt.textContent = "🇻🇳 Hoài My";
-      els.ttsVoiceSelect.appendChild(opt);
-      return;
-    }
-    const savedVoice = localStorage.getItem("epubTranslator.ttsVoice");
-    let hasSelected = false;
-
-    available.forEach((v) => {
-      const opt = document.createElement("option");
-      const uri = v.voiceURI || v.name;
-      opt.value = uri;
-      
-      let cleanName = v.name;
-      if (cleanName.includes("NamMinh") || cleanName.includes("Nam Minh")) {
-        cleanName = "Microsoft Nam Minh (Nam - Tự nhiên)";
-      } else if (cleanName.includes("HoaiMy") || cleanName.includes("Hoài My")) {
-        cleanName = "Microsoft Hoài My (Nữ - Tự nhiên)";
-      } else if (cleanName.includes("Google") || cleanName.toLowerCase().includes("tiếng việt") || cleanName.toLowerCase() === "an") {
-        cleanName = "Google Tiếng Việt / An (Nữ - Chuẩn)";
-      } else if (cleanName.includes("Linh") || cleanName.includes("Mai")) {
-        cleanName = "Apple Tiếng Việt (Nữ)";
-      } else {
-        cleanName = v.name.replace(/^(Microsoft|Google|Apple)\s+/i, "");
-      }
-
-      opt.textContent = `🇻🇳 ${cleanName}`;
-      if (savedVoice ? savedVoice === uri : (currentSelected && (currentSelected.voiceURI === uri || currentSelected.name === uri))) {
-        opt.selected = true;
-        hasSelected = true;
-      }
-      els.ttsVoiceSelect.appendChild(opt);
-    });
-
-    if (!hasSelected && els.ttsVoiceSelect.options.length > 0) {
-      els.ttsVoiceSelect.options[0].selected = true;
-    }
-
-    if (savedVoice) {
-      ttsEngine.setVoice(savedVoice);
-    }
+    const opt = document.createElement("option");
+    opt.value = "drive";
+    opt.textContent = "🎙️ Drive Audio";
+    opt.selected = true;
+    els.ttsVoiceSelect.appendChild(opt);
+    els.ttsVoiceSelect.disabled = true;
+    els.ttsVoiceSelect.title = "Bản thu âm trực tiếp từ Google Drive";
   }
 
-  ttsEngine.onVoicesLoaded = (voices, selected) => {
-    populateVoiceSelect(voices, selected);
+  ttsEngine.onVoicesLoaded = () => {
+    populateVoiceSelect();
   };
 
   els.ttsVoiceSelect?.addEventListener("change", (e) => {
@@ -3861,7 +3889,12 @@ function initSponsorController() {
   const SPONSOR_DISMISSED_KEY = "epubTranslator.hideSponsorSlot";
 
   function openSponsorModal() {
-    els.sponsorDialog?.showModal();
+    if (!els.sponsorDialog) return;
+    // Move to body before showModal: transformed/contained reader ancestors on
+    // mobile Chromium can paint only the backdrop while clipping the dialog.
+    if (els.sponsorDialog.parentElement !== document.body) document.body.appendChild(els.sponsorDialog);
+    if (!els.sponsorDialog.open) els.sponsorDialog.showModal();
+    requestAnimationFrame(() => els.sponsorDialogClose?.focus({ preventScroll: true }));
   }
 
   function closeSponsorModal() {
@@ -4431,7 +4464,7 @@ function applyCachedBook(cachedBook) {
   state.translations = {};
   els.bookTitle.textContent = state.title;
   els.bookMeta.textContent = `${BRAND_NAME} · ${state.chapters.length} chương · Đã lưu trên thiết bị`;
-  els.readerBookCover.src = state.cover;
+  els.readerBookCover.src = coverImageUrl(state.cover);
   document.title = `${state.title} | ${BRAND_NAME}`;
 }
 
@@ -4834,6 +4867,42 @@ function cdnUrl(pathname) {
   return `${CDN_BASE}/${String(pathname).replace(/^\//, "")}`;
 }
 
+// Catalog cover paths are stored as root-relative R2 keys. Resolve them via
+// the CDN so the public site does not request the key from its own origin and
+// fall back to the generic cover.
+function coverImageUrl(cover) {
+  const value = String(cover || "").trim();
+  if (!value) return "/library/covers/default-cover.webp";
+
+  // If pointing to dead cdn.tram-chu.online, rewrite to same-origin /covers/
+  if (/^https?:\/\/cdn\.tram-chu\.online\/(.*)$/i.test(value)) {
+    const match = value.match(/^https?:\/\/cdn\.tram-chu\.online\/(.*)$/i);
+    return `/${match[1].replace(/^\/+/, "")}`;
+  }
+
+  // If already a root-relative path (e.g. /covers/xxx.jpg or /library/covers/xxx.webp)
+  if (value.startsWith("/")) {
+    return value;
+  }
+
+  // If relative path like "covers/xxx.jpg"
+  if (value.startsWith("covers/")) {
+    return `/${value}`;
+  }
+
+  // If plain filename like "fanqie-123.jpg" or "qidian-456.jpg"
+  if (/\.(jpg|jpeg|png|webp|avif)$/i.test(value)) {
+    return `/covers/${value}`;
+  }
+
+  // If absolute external URL (e.g. Google Drive, Fanqie, Qidian CDN)
+  if (/^https?:\/\//i.test(value)) {
+    return value;
+  }
+
+  return `/covers/${value.replace(/^\/+/, "")}`;
+}
+
 function shouldProxyReaderCdn() {
   if (typeof window === "undefined") return false;
   return window.location.hostname !== "tram-chu.online";
@@ -4940,6 +5009,8 @@ async function refreshOpenCdnBook() {
       title: entry.title || loaded?.title || `Chương ${entry.n}`,
       chapterNumber: entry.n,
       status: entry.status || loaded?.status || "pending",
+      audio: entry.audio || loaded?.audio || null,
+      audioUrl: entry.audioUrl || loaded?.audioUrl || "",
       text: loaded?.text ?? null,
       words: loaded?.words ?? null,
       _loaded: false
@@ -4980,7 +5051,7 @@ async function openBookFromCdn(book, cover, { startAtFirstChapter = false, targe
   state.bookId = `cdn:${cleanId}:r${index.revision || 1}`;
   state.fileName = "";
   state.title = (typeof book === "object" ? book.title : "") || index.title || "Truyện";
-  state.cover = cover || index.cover || fallbackCoverForBook(typeof book === "object" ? book : { id: cleanId, title: state.title });
+  state.cover = coverImageUrl(cover || index.cover) || fallbackCoverForBook(typeof book === "object" ? book : { id: cleanId, title: state.title });
   state.translations = {};
   // Only titles live in memory. Bodies are fetched per chapter, so a
   // 4,000-chapter novel costs the same as a short one to open.
@@ -4988,6 +5059,8 @@ async function openBookFromCdn(book, cover, { startAtFirstChapter = false, targe
     title: entry.title || `Chương ${entry.n}`,
     chapterNumber: entry.n,
     status: entry.status || "pending",
+    audio: entry.audio || null,
+    audioUrl: entry.audioUrl || "",
     text: null,
     words: null
   }));
@@ -5030,6 +5103,8 @@ async function loadCdnChapter(index, force = false) {
     const document_ = await response.json();
     if (index !== state.currentIndex) return;
     chapter.text = String(document_.content || "");
+    chapter.audio = document_.audio || chapter.audio || null;
+    chapter.audioUrl = document_.audioUrl || document_.audio?.url || chapter.audioUrl || "";
     chapter.status = document_.translationStatus || chapter.status;
     chapter.words = countWords(chapter.text);
     chapter._loaded = true;

@@ -43,6 +43,9 @@ jobs:
       GROQ_API_KEYS: ${{ secrets.GROQ_API_KEYS }}
       GROQ_MODEL: "qwen/qwen3.8-27b"
       GROQ_FALLBACK_MODELS: ""
+      GROQ_REVIEW_MODELS: "qwen/qwen3.8-27b"
+      GROQ_EDITOR_MODELS: "qwen/qwen3.8-27b"
+      GROQ_FINAL_REVIEW_MODELS: "qwen/qwen3.8-27b"
       R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}

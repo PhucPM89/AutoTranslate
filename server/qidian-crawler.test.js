@@ -135,8 +135,7 @@ test("mocked crawl produces an ingest-readable EPUB and never requests VIP chapt
     assert.equal(chapters[0].title, "第一章 开始");
     assert.match(chapters[0].content, /这是测试内容/);
   } finally {
-    for (const file of await fs.readdir(outputDir)) await fs.unlink(path.join(outputDir, file));
-    await fs.rmdir(outputDir);
+    await fs.rm(outputDir, { recursive: true, force: true });
   }
 });
 
@@ -218,8 +217,7 @@ test("mocked crawl fetches VIP chapters from mirror provider when allowVip is tr
     assert.match(chapters[1].content, /第二章VIP精彩内容/);
     assert.match(chapters[1].content, /苏宇深吸了一口气/);
   } finally {
-    for (const file of await fs.readdir(outputDir)) await fs.unlink(path.join(outputDir, file));
-    await fs.rmdir(outputDir);
+    await fs.rm(outputDir, { recursive: true, force: true });
   }
 });
 
@@ -387,8 +385,7 @@ test("mocked crawl fetches VIP chapters from Bianhua mirror for Qidian novel", a
     assert.equal(chapters[1].title, "第2章 鬼差索命");
     assert.match(chapters[1].content, /第2章VIP正文内容/);
   } finally {
-    for (const file of await fs.readdir(outputDir)) await fs.unlink(path.join(outputDir, file));
-    await fs.rmdir(outputDir);
+    await fs.rm(outputDir, { recursive: true, force: true });
   }
 });
 

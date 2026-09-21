@@ -40,13 +40,13 @@ command = "npm run build"
 # Bindings, so the Worker reads and writes R2 without signing anything. Presigning
 # still needs the S3 credentials below, because a binding cannot produce a
 # presigned URL and a 200 MB EPUB must not pass through the Worker.
-[[r2_buckets]]
-binding = "NOVEL_STORAGE"
-bucket_name = "novel-storage"
-
-[[r2_buckets]]
-binding = "NOVEL_ARCHIVE"
-bucket_name = "novel-archive"
+# [[r2_buckets]]
+# binding = "NOVEL_STORAGE"
+# bucket_name = "novel-storage"
+# 
+# [[r2_buckets]]
+# binding = "NOVEL_ARCHIVE"
+# bucket_name = "novel-archive"
 
 # Values are NOT set here - this file is committed to a public repository.
 #

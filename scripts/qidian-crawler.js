@@ -127,25 +127,50 @@ function createClient({ fetchImpl = fetch, spacingMs = 1500, sleep = ms => new P
   };
 }
 
-function createMirrorClient({ fetchImpl = fetch, spacingMs = 300, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
+function createMirrorClient({ fetchImpl = fetch, spacingMs = 600, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
   let lastRequest = 0;
   return async function requestMirror(url, options = {}) {
-    await sleep(Math.max(0, lastRequest + spacingMs - Date.now()));
-    lastRequest = Date.now();
-    const response = await fetchImpl(url, {
-      redirect: "follow",
-      signal: AbortSignal.timeout(30000),
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Referer: "https://www.piaotia.com/",
-        ...(options.headers || {})
-      },
-      ...options
-    });
-    if (response.status !== 200) throw new Error(`Mirror HTTP ${response.status}: không thể tải trang từ mirror.`);
-    const buf = await response.arrayBuffer();
-    if (iconv) return iconv.decode(Buffer.from(buf), "gbk");
-    return new TextDecoder("gbk").decode(buf);
+    let attempts = 0;
+    const maxAttempts = 6;
+    while (attempts < maxAttempts) {
+      attempts++;
+      await sleep(Math.max(0, lastRequest + spacingMs - Date.now()));
+      lastRequest = Date.now();
+      try {
+        const response = await fetchImpl(url, {
+          redirect: "follow",
+          signal: AbortSignal.timeout(30000),
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            Referer: "https://www.piaotia.com/",
+            ...(options.headers || {})
+          },
+          ...options
+        });
+        if (response.status === 429 || response.status === 503) {
+          const waitTime = Math.min(30000, 2000 * Math.pow(2, attempts));
+          console.warn(`Mirror HTTP ${response.status} (bị giới hạn tốc độ). Thử lại lần ${attempts}/${maxAttempts} sau ${waitTime}ms...`);
+          await sleep(waitTime);
+          continue;
+        }
+        if (response.status !== 200) throw new Error(`Mirror HTTP ${response.status}: không thể tải trang từ mirror.`);
+        const buf = await response.arrayBuffer();
+        if (iconv) return iconv.decode(Buffer.from(buf), "gbk");
+        return new TextDecoder("gbk").decode(buf);
+      } catch (err) {
+        if (attempts >= maxAttempts) throw err;
+        if (err.message && err.message.includes("429")) {
+          await sleep(3000 * attempts);
+          continue;
+        }
+        if (err.name === "TimeoutError" || err.message.includes("timeout") || err.message.includes("ECONNRESET")) {
+          console.warn(`Mirror kết nối bị lỗi (${err.message}). Thử lại lần ${attempts}/${maxAttempts}...`);
+          await sleep(2000);
+          continue;
+        }
+        throw err;
+      }
+    }
   };
 }
 
@@ -580,13 +605,29 @@ async function crawlQidian(options = {}) {
     selected = mCat.slice(0, maxChapters);
   }
 
+  if (!selected.length) {
+    throw new Error(`Không tìm thấy chương nào cho truyện "${metadata?.title || id}" (Cả Qidian và mirror đều không có mục lục hoặc bị chặn).`);
+  }
+
   // 4. Download Chapters
+  const cacheDir = path.resolve(outputDir, `.cache-${id}`);
+  await fs.mkdir(cacheDir, { recursive: true });
+
   const chapters = [];
   for (let i = 0; i < selected.length; i++) {
     const chapter = selected[i];
+    const cacheFile = path.join(cacheDir, `ch_${i + 1}.json`);
     let content = null;
 
-    if (chapter.public && chapter.url && chapter.url.includes("qidian.com")) {
+    try {
+      const cachedRaw = await fs.readFile(cacheFile, "utf8");
+      const cachedJson = JSON.parse(cachedRaw);
+      if (cachedJson && cachedJson.content && cachedJson.content.length > 50) {
+        content = cachedJson.content;
+      }
+    } catch {}
+
+    if (!content && chapter.public && chapter.url && chapter.url.includes("qidian.com")) {
       try {
         content = parseChapter(await request(chapter.url));
       } catch (err) {
@@ -606,6 +647,12 @@ async function crawlQidian(options = {}) {
         const chHtml = await requestMirror(mirrorCh.url);
         content = parseMirrorChapter(chHtml);
       }
+    }
+
+    if (content) {
+      try {
+        await fs.writeFile(cacheFile, JSON.stringify({ title: chapter.title, content }), "utf8");
+      } catch {}
     }
 
     chapters.push({ ...chapter, content });

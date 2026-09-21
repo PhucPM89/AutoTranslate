@@ -90,9 +90,57 @@ async function getOrCreateFolder(parentFolderId, folderName) {
   return folder.id;
 }
 
-async function uploadFileDirect({ targetFolderId, fileName, relPath, content, mime = "application/json; charset=utf-8" }) {
+async function listFilesInFolder(folderId) {
+  const token = await getAccessToken();
+  const map = new Map();
+  let pageToken = "";
+  do {
+    const url = new URL(DRIVE_FILES_URL);
+    url.searchParams.set("q", `'${escapeDriveQuery(folderId)}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'`);
+    url.searchParams.set("fields", "nextPageToken,files(id,name,size)");
+    url.searchParams.set("pageSize", "1000");
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) break;
+    const data = await res.json();
+    if (data.files) {
+      for (const f of data.files) {
+        map.set(f.name, f);
+      }
+    }
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+  return map;
+}
+
+async function uploadFileDirect({ targetFolderId, fileName, relPath, content, mime = "application/json; charset=utf-8", existingFile = null }) {
   const token = await getAccessToken();
   const buffer = Buffer.isBuffer(content) ? content : Buffer.from(String(content), "utf8");
+
+  // If file already exists in folder: update in place via PATCH instead of creating duplicate
+  if (existingFile && existingFile.id) {
+    if (Number(existingFile.size) > 100 && fileName !== "index.json") {
+      return { id: existingFile.id, name: fileName, skipped: true };
+    }
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        const updateUrl = `${DRIVE_UPLOAD_URL}/${existingFile.id}?uploadType=media`;
+        const res = await fetch(updateUrl, {
+          method: "PATCH",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": mime },
+          body: buffer
+        });
+        if (res.ok) return await res.json();
+        retries--;
+        await new Promise((r) => setTimeout(r, 1200 * (4 - retries)));
+      } catch (err) {
+        retries--;
+        if (retries === 0) throw err;
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    }
+  }
 
   const metadata = {
     name: fileName,
@@ -221,6 +269,7 @@ async function main() {
 
       console.log(`-> Bộ truyện: ${bookTitle} (${bookId})`);
       const bookFolderId = await getOrCreateFolder(booksRootId, `${bookTitle} (${bookId})`);
+      const existingFilesInFolder = await listFilesInFolder(bookFolderId);
 
       const chapterEntries = [];
       const uploadTasks = [];
@@ -234,11 +283,13 @@ async function main() {
           chapter: { chapterNumber: n, title: ch.title, content: ch.content }
         });
 
+        const origFileName = `${n}.original.json`;
         uploadTasks.push({
           targetFolderId: bookFolderId,
-          fileName: `${n}.original.json`,
+          fileName: origFileName,
           relPath: `books/${bookId}/r1/ch/${n}.original.json`,
-          content: JSON.stringify(origDoc)
+          content: JSON.stringify(origDoc),
+          existingFile: existingFilesInFolder.get(origFileName) || null
         });
 
         const converted = convert ? convert(ch.content) : ch.content;
@@ -250,11 +301,13 @@ async function main() {
           translationStatus: "convert"
         });
 
+        const transFileName = `${n}.json`;
         uploadTasks.push({
           targetFolderId: bookFolderId,
-          fileName: `${n}.json`,
+          fileName: transFileName,
           relPath: `books/${bookId}/r1/ch/${n}.json`,
-          content: JSON.stringify(transDoc)
+          content: JSON.stringify(transDoc),
+          existingFile: existingFilesInFolder.get(transFileName) || null
         });
 
         chapterEntries.push({
@@ -293,7 +346,8 @@ async function main() {
         targetFolderId: bookFolderId,
         fileName: "index.json",
         relPath: `books/${bookId}/index.json`,
-        content: JSON.stringify(bookIndex, null, 2)
+        content: JSON.stringify(bookIndex, null, 2),
+        existingFile: existingFilesInFolder.get("index.json") || null
       });
       console.log(`✅ Đã cập nhật mục lục: books/${bookId}/index.json`);
 

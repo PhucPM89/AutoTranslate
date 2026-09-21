@@ -83,4 +83,4 @@ jobs:
         run: npm ci
 
       - name: Run Audio Worker (Multi-Genre TTS & Google Drive Sync)
-        run: node scripts/audio-worker.js
+        run: node scripts/audio-worker.js --once

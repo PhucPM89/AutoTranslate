@@ -48,6 +48,8 @@ const {
   importKeyPoolState
 } = require("../server/gemini");
 const { createTranslationEngine } = require("../server/translation-engine");
+const { orderTranslationJobs } = require("../server/translation-order");
+const { PRIORITY_KEY, selectPriorityJobs } = require("../server/translation-priority");
 const {
   readTranslationConfig,
   writeTranslationConfig
@@ -72,13 +74,15 @@ const PUBLISH_EVERY = Math.max(1, Number(process.env.TRANSLATE_PUBLISH_EVERY || 
 const CHAPTERS_PER_TURN = Math.max(1, Number(process.env.TRANSLATE_CHAPTERS_PER_TURN || 5));
 const ROTATION_KEY = "jobs/translate-rotation.json";
 const TRANSLATE_STATUS_KEY = "jobs/translate-status.json";
+const CLOUD_TRANSLATE_STATUS_KEY = "jobs/translate-status-cloud.json";
+const WEB_TRANSLATE_STATUS_KEY = "jobs/translate-status-web.json";
 const TRANSLATE_KEY_HEALTH_KEY = "jobs/translate-key-health.json";
 const QUALITY_ISSUES_KEY = "jobs/translation-quality-issues.json";
 const GEMINI_WEB_ACTIVE_KEY = "jobs/gemini-web-active.json";
-const GEMINI_WEB_CONTROL_KEY = "jobs/gemini-web-control.json";
 const GEMINI_WEB_LOCK_TTL_MS = Math.max(5 * 60_000, Number(process.env.GEMINI_WEB_LOCK_TTL_MS || 10 * 60_000));
 
 let lastChapterTokens = 2200;
+let geminiWebLockStatus = {};
 
 function computeAdaptiveSpacing(keyList) {
   if (process.env.TRANSLATION_PROVIDER === "gemini-web") {
@@ -120,12 +124,16 @@ async function readJson(storage, key) {
   }
 }
 
+
 async function writeTranslateStatus(storage, status) {
   try {
-    await storage.put(TRANSLATE_STATUS_KEY, JSON.stringify({
+    const payload = JSON.stringify({
       updatedAt: new Date().toISOString(),
       ...status
-    }));
+    });
+    const providerKey = status.provider === "gemini-web" ? WEB_TRANSLATE_STATUS_KEY : CLOUD_TRANSLATE_STATUS_KEY;
+    await storage.put(providerKey, payload);
+    await storage.put(TRANSLATE_STATUS_KEY, payload);
   } catch (err) {
     console.warn("Unable to write translate status:", err.message);
   }
@@ -139,6 +147,7 @@ async function readActiveGeminiWebLock(storage) {
 }
 
 async function writeGeminiWebLock(storage, status = {}) {
+  geminiWebLockStatus = { ...geminiWebLockStatus, ...status };
   return storage.put(
     GEMINI_WEB_ACTIVE_KEY,
     JSON.stringify({
@@ -146,14 +155,14 @@ async function writeGeminiWebLock(storage, status = {}) {
       owner: `${process.env.COMPUTERNAME || "local"}:${process.pid}`,
       updatedAt: new Date().toISOString(),
       expiresAtEpochMs: Date.now() + GEMINI_WEB_LOCK_TTL_MS,
-      ...status
+      ...geminiWebLockStatus
     }),
     { cacheControl: "private, no-store" }
   );
 }
 
 function startGeminiWebHeartbeat(storage) {
-  const beat = () => writeGeminiWebLock(storage).catch((error) =>
+  const beat = () => writeGeminiWebLock(storage, geminiWebLockStatus).catch((error) =>
     console.warn(`Không ghi được Gemini Web heartbeat: ${error.message}`)
   );
   beat();
@@ -313,23 +322,8 @@ async function main() {
 
   const isGeminiWeb = process.env.TRANSLATION_PROVIDER === "gemini-web";
   const isHachimi = !isGeminiWeb && (process.env.TRANSLATION_PROVIDER === "hachimi" || Boolean(process.env.HACHIMI_API_URL));
-  if (!isGeminiWeb) {
-    const activeWeb = await readActiveGeminiWebLock(storage);
-    if (activeWeb) {
-      const expiresAt = new Date(Number(activeWeb.expiresAtEpochMs || 0)).toISOString();
-      console.log(`Gemini Web local đang hoạt động (${activeWeb.owner || "local"}); cloud/API worker nhường queue đến ${expiresAt}.`);
-      await writeTranslateStatus(storage, {
-        state: "paused_gemini_web",
-        activityState: "waiting_gemini_web",
-        message: `Gemini Web local đang dịch; API worker tạm nhường queue đến ${expiresAt}.`,
-        currentBookId: "",
-        currentBookTitle: "",
-        currentChapter: 0,
-        finishedAt: new Date().toISOString()
-      });
-      return;
-    }
-  }
+  // Gemini Web now reviews already-published API drafts in an independent
+  // local process, so its activity must never pause the 24/7 API worker.
   if (isGeminiWeb) {
     startGeminiWebHeartbeat(storage);
   }
@@ -340,6 +334,8 @@ async function main() {
   const allUniqueKeys = Array.from(new Set([...keyList, ...envKeys]))
     .filter(Boolean)
     .sort((a, b) => translationKeyPriority(a) - translationKeyPriority(b));
+  const geminiKeys = allUniqueKeys.filter((key) => !String(key).startsWith("gsk_") && key !== "gemini-web-session" && key !== "hachimi-colab-endpoint");
+  const groqKeys = allUniqueKeys.filter((key) => String(key).startsWith("gsk_"));
   if (!allUniqueKeys.length && !isHachimi && !isGeminiWeb) {
     throw new Error("Thiếu API Keys (Gemini / Groq), HACHIMI_API_URL hoặc TRANSLATION_PROVIDER=gemini-web.");
   }
@@ -349,7 +345,13 @@ async function main() {
   if (isGeminiWeb && !allUniqueKeys.length) {
     allUniqueKeys.push("gemini-web-session");
   }
-  const cloudFallbackKeys = allUniqueKeys.filter((key) => key && key !== "gemini-web-session" && key !== "hachimi-colab-endpoint");
+  const cloudFallbackKeys = geminiKeys;
+  if (!isGeminiWeb && !isHachimi && !geminiKeys.length) {
+    throw new Error("Pipeline 2 tầng thiếu Gemini API key cho tầng dịch.");
+  }
+  if (!isGeminiWeb && !isHachimi && !groqKeys.length) {
+    throw new Error("Pipeline 2 tầng thiếu Groq API key cho tầng đối chiếu và biên tập.");
+  }
   if (!isGeminiWeb && process.env.ALLOW_CLOUD_TRANSLATION === "false") {
     console.log("\n===============================================================");
     console.log("[CHẾ ĐỘ BẢO TOÀN CHẤT LƯỢNG CAO NHẤT]");
@@ -363,7 +365,7 @@ async function main() {
     console.log("\n===============================================================");
     console.log("[KÍCH HOẠT CHẾ ĐỘ DỊCH BẰNG API KEY]");
     console.log("Gemini Web không hoạt động hoặc không giữ lock heartbeat.");
-    console.log(`Hệ thống tự động kích hoạt dịch bằng API key (${cloudFallbackKeys.length} key khả dụng).`);
+    console.log(`Pipeline 2 tầng: ${geminiKeys.length} Gemini key dịch -> ${groqKeys.length} Groq key đối chiếu và biên tập.`);
     console.log("===============================================================\n");
   }
   importKeyPoolState(privateStorage ? await readJson(privateStorage, TRANSLATE_KEY_HEALTH_KEY) : null, allUniqueKeys);
@@ -374,23 +376,54 @@ async function main() {
         { cacheControl: "private, no-store" }
       ).catch((error) => console.warn(`Không lưu được cooldown API key: ${error.message}`))
     : Promise.resolve();
-  const apiKey = allUniqueKeys.join(",");
+  const apiKey = geminiKeys.join(",");
+  const reviewApiKeys = groqKeys.join(",");
   const db = createSupabase();
   const engine = createTranslationEngine({ storage });
   const deadlineAt = Date.now() + Math.max(0, RUN_MINUTES * 60 * 1000 - RESERVE_MS);
 
   let translationConfig = await readTranslationConfig(storage);
+  const unavailableBookIds = new Set();
+  if (isGeminiWeb) {
+    const peerStatus = await readJson(storage, CLOUD_TRANSLATE_STATUS_KEY) || await readJson(storage, TRANSLATE_STATUS_KEY);
+    const fresh = peerStatus && Date.now() - Date.parse(peerStatus.updatedAt || 0) < GEMINI_WEB_LOCK_TTL_MS;
+    if (fresh && peerStatus.provider !== "gemini-web") {
+      if (peerStatus.currentBookId) unavailableBookIds.add(peerStatus.currentBookId);
+      for (const slot of peerStatus.activeSlots || []) if (slot?.bookId) unavailableBookIds.add(slot.bookId);
+    }
+  } else {
+    const webLock = await readActiveGeminiWebLock(storage);
+    if (webLock) {
+      if (webLock.currentBookId) unavailableBookIds.add(webLock.currentBookId);
+      for (const bookId of webLock.activeBookIds || []) if (bookId) unavailableBookIds.add(bookId);
+    }
+  }
   let configuredFocus = ONLY_BOOK || translationConfig.focusBookId || "";
-  let jobs = await listJobs(storage, configuredFocus);
-  if (!jobs.length && translationConfig.focusBookId && !ONLY_BOOK) {
+  if (configuredFocus && unavailableBookIds.has(configuredFocus)) configuredFocus = "";
+  let jobs = configuredFocus ? await listJobs(storage, configuredFocus) : [];
+  if (!jobs.length && translationConfig.focusBookId && !ONLY_BOOK && !unavailableBookIds.has(translationConfig.focusBookId)) {
     console.log(`Bộ ưu tiên ${translationConfig.focusBookId} không còn chương chờ; chuyển về chế độ tự động.`);
     translationConfig = await writeTranslationConfig(storage, { focusBookId: "" });
     configuredFocus = "";
-    jobs = await listJobs(storage, "");
+  }
+  if (!configuredFocus) {
+    const priorityConfig = await readJson(storage, PRIORITY_KEY);
+    const priority = await selectPriorityJobs(
+      (priorityConfig?.bookIds || []).filter((id) => !unavailableBookIds.has(id)),
+      id => listJobs(storage, id)
+    );
+    if (priority) {
+      configuredFocus = priority.bookId;
+      jobs = priority.jobs;
+      console.log(`Ưu tiên theo danh sách: ${configuredFocus}`);
+    } else {
+      jobs = await listJobs(storage, "");
+    }
   }
   if (!jobs.length) {
     console.log("Không có job dịch nào đang chờ.");
     await writeTranslateStatus(storage, {
+      provider: isGeminiWeb ? "gemini-web" : "cloud",
       state: "idle",
       focusBookId: translationConfig.focusBookId,
       selectionMode: translationConfig.focusBookId ? "focused" : "automatic",
@@ -402,72 +435,28 @@ async function main() {
     return;
   }
 
-  // Round-robin, a slice at a time, so every book moves every day.
-  //
-  // Draining one queue at a time is wrong for a reader whichever end you start.
-  // Longest-first spreads the daily allowance over everything and finishes
-  // nothing; shortest-first finishes books but leaves someone reading book nine
-  // waiting weeks to see a single translated chapter. Taking a small slice from
-  // each book in turn means every title gains ground daily, which is what stops
-  // anyone waiting indefinitely on the one book they happen to be reading.
-  //
-  // Ordered by id rather than size so the cycle is stable between runs, and
-  // rotated to resume after whichever book was served last - otherwise a day that
-  // runs out of quota part-way keeps favouring the same few books tomorrow.
-  // Ordered by id rather than size so the cycle is stable between runs, and
-  // rotated to resume after whichever book was served last - otherwise a day that
-  // runs out of quota part-way keeps favouring the same few books tomorrow.
-  const ordered = [...jobs].sort((a, b) => a.bookId.localeCompare(b.bookId));
+  // Keep the explicit focus until completion; automatic mode serves shorter
+  // novels first by total chapters, regardless of readership or progress.
+  const queue = orderTranslationJobs(jobs, configuredFocus);
   const rotation = (await readJson(storage, ROTATION_KEY)) || {};
-  const resumeAfter = ordered.findIndex((job) => job.bookId === rotation.lastBookId);
-  const queue =
-    resumeAfter >= 0 ? [...ordered.slice(resumeAfter + 1), ...ordered.slice(0, resumeAfter + 1)] : ordered;
 
   // Active readers & top read books from Supabase analytics
   const activeReadBooks = await (db?.readTopBooks?.({ limit: 20 }).catch(() => [])) || [];
   const activeBookIds = new Set(activeReadBooks.map((b) => b.bookId));
 
-  // Sort queue: Sequential Book Completion Mode
-  // 0. Focus book takes absolute first priority if specified
-  // 1. Quality/repair retries first, so broken chapters are fixed before new backlog.
-  // 2. VIP Active Books (currently being read by real readers)
-  // 3. In-progress books with highest completion (finish almost-done books first so readers get 100% full translations!)
-  // 4. Smaller pending books, then stable ID
-  queue.sort((a, b) => {
-    if (configuredFocus) {
-      if (a.bookId === configuredFocus && b.bookId !== configuredFocus) return -1;
-      if (b.bookId === configuredFocus && a.bookId !== configuredFocus) return 1;
-    }
-    const aRepair = urgentRepairScore(a);
-    const bRepair = urgentRepairScore(b);
-    if (aRepair !== bRepair) return bRepair - aRepair;
-
-    const aIsActive = activeBookIds.has(a.bookId);
-    const bIsActive = activeBookIds.has(b.bookId);
-    if (aIsActive !== bIsActive) return bIsActive ? 1 : -1;
-
-    const aDone = (a.total || 0) - (a.pending || 0) - (a.failed || 0);
-    const bDone = (b.total || 0) - (b.pending || 0) - (b.failed || 0);
-    if (aDone > 0 || bDone > 0) {
-      // Prioritize novel with highest completion count to finish 100% fastest
-      const aPct = (a.total || 0) ? (aDone / a.total) : 0;
-      const bPct = (b.total || 0) ? (bDone / b.total) : 0;
-      if (Math.abs(bPct - aPct) > 0.05) return bPct - aPct;
-      return bDone - aDone;
-    }
-
-    if (b.highPriority !== a.highPriority) return b.highPriority - a.highPriority;
-    return a.bookId.localeCompare(b.bookId);
-  });
-
-  let activeQueue = queue;
+  let activeQueue = queue.filter((job) => !unavailableBookIds.has(job.bookId));
+  if (!activeQueue.length && queue.length) {
+    console.log("Các bộ đang chờ đều đã được worker provider khác nhận; không dịch trùng bộ.");
+    return;
+  }
   if (TOTAL_SHARDS > 1) {
     const normalizedShard = (SHARD_INDEX >= 1 && SHARD_INDEX <= TOTAL_SHARDS) ? (SHARD_INDEX - 1) : Math.max(0, SHARD_INDEX);
-    activeQueue = queue.filter((job, idx) => (idx % TOTAL_SHARDS) === normalizedShard);
+    activeQueue = activeQueue.filter((job, idx) => (idx % TOTAL_SHARDS) === normalizedShard);
     console.log(`\n=== [SHARD ${normalizedShard + 1}/${TOTAL_SHARDS}] Được phân bổ ${activeQueue.length}/${queue.length} bộ truyện ===`);
   }
 
   console.log(`\n=== CHẾ ĐỘ DỊCH DỨT ĐIỂM TỪNG BỘ TRUYỆN 100% ===`);
+  console.log("Thứ tự: bộ được ghim ưu tiên trước, sau đó tổng số chương tăng dần.");
   console.log(`Có ${activeQueue.length} book trong hàng đợi worker (Batch size: ${BATCH_SIZE}, ${activeBookIds.size} book VIP toàn hệ thống):`);
   for (const job of activeQueue.slice(0, 10)) {
     const vipTag = activeBookIds.has(job.bookId) ? " [VIP ĐỘC GIẢ]" : "";
@@ -516,12 +505,16 @@ async function main() {
 
   const parsedKeys = parseApiKeys(apiKey);
 
-  const MULTI_BOOK_CONCURRENCY = Math.max(1, Math.min(3, Number(process.env.GEMINI_WEB_CONCURRENCY || process.env.GEMINI_WEB_MAX_PROFILES || 1)));
+  // Browser automation owns one persistent signed-in profile. Running several
+  // slots against that account caused crossed conversations and unstable output.
+  const MULTI_BOOK_CONCURRENCY = isGeminiWeb
+    ? 1
+    : Math.max(1, Math.min(3, Number(process.env.GEMINI_WEB_CONCURRENCY || 1)));
   const isMultiBook = !configuredFocus && (MULTI_BOOK_CONCURRENCY > 1 || process.env.MULTI_BOOK === "true");
   let translatedThisCycle = 0;
 
   const slotStates = new Map();
-  for (let i = 1; i <= Math.max(3, MULTI_BOOK_CONCURRENCY); i++) {
+  for (let i = 1; i <= MULTI_BOOK_CONCURRENCY; i++) {
     slotStates.set(i, {
       slotId: i,
       enabled: true,
@@ -571,7 +564,10 @@ async function main() {
       }
       return originalCache.get(n);
     };
-    let bookGlossary = await engine.loadGlossary(job.bookId);
+    // Legacy auto-mined glossaries contain arbitrary overlapping fragments and
+    // unreviewed Hán-Việt substitutions. Direct translation must receive the
+    // untouched source and must not let that data force wording into the model.
+    const bookGlossary = {};
 
     const result = await runTranslationJobs({
       state: job.state,
@@ -595,19 +591,29 @@ async function main() {
           });
           return existing.content;
         }
-        bookGlossary = await engine.mineAndMergeGlossary(job.bookId, [chapter.title, chapter.content]);
+        // Direct translation uses the untouched source without mined glossary.
         let output;
+        let previousPublished = null;
         try {
+          previousPublished = chapter.chapterNumber > 1
+            ? await readJson(storage, chapterKey(job.bookId, job.revision, chapter.chapterNumber - 1))
+            : null;
           output = await translateText(chapter.content, apiKey, {
             bookId: job.bookId,
             bookTitle: bTitle,
             glossary: bookGlossary,
             engine,
             provider: isGeminiWeb ? "gemini-web" : "cloud",
-            profileSlotId: slotId
+            profileSlotId: slotId,
+            chapterNumber: chapter.chapterNumber,
+            sourceTitle: chapter.title,
+            previousContext: previousPublished?.content || "",
+            publicationQuality: true,
+            reviewApiKeys,
+            cloudApiKeys: cloudFallbackKeys.join(",")
           });
         } catch (error) {
-          const canCloudRepair = isGeminiWeb && cloudFallbackKeys.length > 0 && process.env.ALLOW_CLOUD_REPAIR === "true";
+          const canCloudRepair = isGeminiWeb && cloudFallbackKeys.length > 0;
           if (!canCloudRepair) throw error;
           console.warn(`  [${bTitle}] [Slot ${slotId}] ch ${chapter.chapterNumber}: Gemini Web lỗi, chuyển sang API repair lane — ${sanitizeStatusError(error)}`);
           try {
@@ -618,6 +624,11 @@ async function main() {
               engine,
               provider: "cloud",
               forceCloud: true,
+              chapterNumber: chapter.chapterNumber,
+              sourceTitle: chapter.title,
+              previousContext: previousPublished?.content || "",
+              publicationQuality: true,
+              reviewApiKeys,
               webFailureReason: sanitizeStatusError(error)
             });
           } catch (repairError) {
@@ -656,7 +667,7 @@ async function main() {
           title: translatedTitle,
           provider,
           model,
-          translationVersion: provider === "groq" ? "groq-qwen-direct-v1" : `${provider}-direct-v1`
+          translationVersion: output.translationVersion || "direct-source-v2"
         });
         if (output.tokensUsed) {
           lastChapterTokens = output.tokensUsed;
@@ -757,6 +768,7 @@ async function main() {
         slotStates.set(slotId, currentSlotData);
 
         await writeTranslateStatus(storage, {
+          provider: isGeminiWeb ? "gemini-web" : "cloud",
           state: "running",
           focusBookId: configuredFocus,
           selectionMode,
@@ -867,58 +879,24 @@ async function main() {
   }
 
   while (!stop) {
+    // Finish this focused session promptly so the daemon can select the next
+    // priority book instead of idling until the five-hour session expires.
+    if (configuredFocus && activeQueue.every(job => isSettled(job.state))) break;
     cycle += 1;
     translatedThisCycle = 0;
 
     if (isMultiBook) {
-      const geminiControl = (await readJson(storage, GEMINI_WEB_CONTROL_KEY)) || {};
-      const slotsConfig = geminiControl.slots || { "1": true, "2": false, "3": false };
-      const allSlotIds = Array.from({ length: MULTI_BOOK_CONCURRENCY }, (_, i) => i + 1);
-      const requestedSlotIds = allSlotIds.filter((id) => slotsConfig[String(id)] !== false);
-      const lowResourceMode = geminiControl.lowResourceMode !== false;
-      const enabledSlotIds = lowResourceMode ? requestedSlotIds.slice(0, 1) : requestedSlotIds;
-
-      allSlotIds.forEach((id) => {
-        if (slotsConfig[String(id)] === false) {
-          const existing = slotStates.get(id) || {};
-          slotStates.set(id, {
-            ...existing,
-            slotId: id,
-            enabled: false,
-            state: "disabled",
-            bookTitle: "Slot tạm tắt (Admin)",
-            activityMessage: "Profile slot này đang tạm tắt bởi Admin",
-            updatedAt: new Date().toISOString()
-          });
-        } else if (lowResourceMode && !enabledSlotIds.includes(id)) {
-          const existing = slotStates.get(id) || {};
-          slotStates.set(id, {
-            ...existing,
-            slotId: id,
-            enabled: true,
-            state: "resource_paused",
-            bookTitle: "Nghỉ để tiết kiệm RAM",
-            activityMessage: "Tiết kiệm RAM đang bật nên worker chỉ chạy 1 profile.",
-            updatedAt: new Date().toISOString()
-          });
-        }
-      });
-
-      if (!enabledSlotIds.length) {
-        console.log("\n[CẢNH BÁO] Tất cả Profile Slots đều đang bị tắt trong Dashboard!");
-        await writeTranslateStatus(storage, {
-          state: "idle",
-          activeSlots: Array.from(slotStates.values()).sort((a, b) => a.slotId - b.slotId),
-          message: "Tất cả các Profile slots đều đang bị tắt. Bật lại slot trong Dashboard để tiếp tục."
-        });
-        await new Promise((r) => setTimeout(r, 10000));
-        continue;
-      }
-
+      const enabledSlotIds = Array.from({ length: MULTI_BOOK_CONCURRENCY }, (_, index) => index + 1);
       const activeBatch = activeQueue.filter((j) => !isSettled(j.state)).slice(0, enabledSlotIds.length);
       if (!activeBatch.length) {
         console.log("\nToàn bộ hàng đợi đã hoàn tất!");
         break;
+      }
+      if (isGeminiWeb) {
+        await writeGeminiWebLock(storage, {
+          currentBookId: activeBatch[0]?.bookId || "",
+          activeBookIds: activeBatch.map((job) => job.bookId)
+        });
       }
 
       console.log(`\n===============================================================`);
@@ -946,6 +924,7 @@ async function main() {
       console.log(`===============================================================`);
 
       await writeTranslateStatus(storage, {
+        provider: isGeminiWeb ? "gemini-web" : "cloud",
         state: "running",
         focusBookId: configuredFocus,
         selectionMode,
@@ -998,6 +977,9 @@ async function main() {
         if (isSettled(job.state)) continue;
 
         const bTitle = titleMap.get(job.bookId) || job.bookId;
+        if (isGeminiWeb) {
+          await writeGeminiWebLock(storage, { currentBookId: job.bookId, activeBookIds: [job.bookId] });
+        }
         console.log(`\n===============================================================`);
         console.log(`>>> [KHÓA CHẶT DỊCH 100%] Bộ truyện: "${bTitle}" (${job.bookId})`);
         console.log(`===============================================================`);
@@ -1032,6 +1014,7 @@ async function main() {
 
   await persistKeyHealth();
   await writeTranslateStatus(storage, {
+    provider: isGeminiWeb ? "gemini-web" : "cloud",
     state: stoppedForQuota ? "paused_quota" : "idle",
     focusBookId: translationConfig.focusBookId,
     selectionMode: translationConfig.focusBookId ? "focused" : "automatic",
@@ -1088,16 +1071,6 @@ function translationKeyPriority(key) {
   // Groq stays available as an automatic 24/7 fallback.
   if (value.startsWith("gsk_")) return 1;
   return 0;
-}
-
-function urgentRepairScore(job) {
-  const chapters = Array.isArray(job?.state?.chapters) ? job.state.chapters : [];
-  const issueRe = /queued for Gemini Web|rác giao diện|show code|gemini said|file-tag|code fence|python|chỉ trả tiêu đề|cấu trúc đoạn|lược bớt|cụt câu|sót|làm mất số|bản dịch dài bất thường/i;
-  return chapters.some((entry) =>
-    ["retrying", "failed"].includes(entry.status) &&
-    Number(entry.nextAttemptAt || 0) <= Date.now() &&
-    issueRe.test(String(entry.lastError || ""))
-  ) ? 1 : 0;
 }
 
 async function mapConcurrent(items, limit, fn) {
@@ -1204,6 +1177,7 @@ async function ensureBookRow({ storage, db, job }) {
 async function refreshBookOutputs({ storage, db, job, state }) {
   const index = await readJson(storage, `books/${job.bookId}/index.json`);
   if (!index) return;
+  if (Number(index.revision || 1) > Number(job.revision || 1)) return;
   const statusByNumber = new Map(state.chapters.map((entry) => [entry.n, entry.status]));
   const chapters = index.chapters.map((entry) => {
     const translationStatus = statusByNumber.get(entry.n) || entry.status;
@@ -1221,7 +1195,7 @@ async function refreshBookOutputs({ storage, db, job, state }) {
   const isFullBook = chapters.length > 0 && completed >= chapters.length;
   const bookStatus = isFullBook ? "Hoàn thành" : (index.status || "Đang cập nhật");
 
-  await publishIndex({
+  const publishedIndex = await publishIndex({
     storage,
     book: {
       id: job.bookId,
@@ -1237,6 +1211,10 @@ async function refreshBookOutputs({ storage, db, job, state }) {
     state
   });
 
+  const publishedCompleted = Number(publishedIndex?.translatedChapters ?? completed);
+  const publishedTotal = Number(publishedIndex?.totalChapters ?? chapters.length);
+  const publishedStatus = publishedTotal > 0 && publishedCompleted >= publishedTotal ? "Hoàn thành" : bookStatus;
+
   if (db) {
     await db
       .upsertChapters(job.bookId, job.revision, chapters)
@@ -1244,9 +1222,9 @@ async function refreshBookOutputs({ storage, db, job, state }) {
     // Counts only: title, cover and provenance belong to whoever ingested the book.
     await db
       .updateBookProgress(job.bookId, {
-        totalChapters: chapters.length,
-        translatedChapters: completed,
-        status: bookStatus,
+        totalChapters: publishedTotal,
+        translatedChapters: publishedCompleted,
+        status: publishedStatus,
         revision: job.revision
       })
       .catch((error) => console.warn(`  (Supabase book update lỗi: ${error.message})`));

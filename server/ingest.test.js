@@ -24,8 +24,9 @@ const {
   isSettled,
   summarize
 } = require("./ingest/translation-queue");
-const { ingestBook } = require("./ingest/ingest-book");
+const { ingestBook, publishIndex } = require("./ingest/ingest-book");
 const { publishCatalogSnapshot } = require("./ingest/catalog-snapshot");
+const { syncCompletedChapter } = require("./ingest/chapter-progress");
 
 function tempStorage() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ingest-test-"));
@@ -149,45 +150,6 @@ test("a chapter document carries the source text until a translation exists", ()
   assert.equal(convert.characters, "chuyen ngu".length);
 });
 
-test("chapter documents strip duplicated titles from translated content", () => {
-  const chapter = { chapterNumber: 12, title: "Chương 12: Mở cửa", content: "nguon" };
-  const doc = buildChapterDocument({
-    bookId: "b",
-    revision: 1,
-    chapter,
-    translation: "Chương 12: Mở cửa\n\nNội dung chương đã dịch.",
-    translationStatus: "completed"
-  });
-  assert.equal(doc.title, "Chương 12: Mở cửa");
-  assert.equal(doc.content, "Nội dung chương đã dịch.");
-});
-
-test("chapter documents repair recurring translation artifacts before publish", () => {
-  const chapter = { chapterNumber: 98, title: "Chương 98: Hồng nhan họa thủy", content: "nguon" };
-  const doc = buildChapterDocument({
-    bookId: "b",
-    revision: 1,
-    chapter,
-    translation: [
-      "Hồng nhan họa thủyHướng Khuyết vẫn ngồi im bất động.",
-      "",
-      "Nếu bọn họ mà tôi mã thì cậu cũng phiền toái.",
-      "",
-      "Hắn dùng thểসার (thân thể) phàm trần qua lại âm dương.",
-      "",
-      "Sơ Nhất ca ca, ca ca chịu giúp thì muội muội sẽ yên tâm."
-    ].join("\n"),
-    translationStatus: "completed"
-  });
-
-  assert.equal(doc.title, "Chương 98: Hồng nhan họa thủy");
-  assert.match(doc.content, /^Hướng Khuyết vẫn ngồi im bất động\./);
-  assert.match(doc.content, /bọn họ mà ngã ngựa thì/);
-  assert.match(doc.content, /nhục thân phàm trần/);
-  assert.match(doc.content, /anh Sơ Nhất, anh chịu giúp thì em gái sẽ yên tâm/);
-  assert.doesNotMatch(doc.content, /Hồng nhan họa thủyHướng|tôi mã|thểসার|ca ca|muội muội/);
-});
-
 test("translation artifact repair does not rewrite normal Vietnamese phrases", () => {
   const chapter = { chapterNumber: 1, title: "Chương 1: Dữ liệu", content: "nguon" };
   const doc = buildChapterDocument({
@@ -206,18 +168,6 @@ test("chapter title cleaner trims titles polluted with body text", () => {
   const title = cleanChapterTitle('Chương 67: Chất vấn "Vương tiên sinh, ngài đây là có ý gì?" Nội dung thân chương rất dài.', 70);
   assert.equal(title, "Chương 67: Chất vấn");
   assert.equal(stripTitleFromContent("Chương 67: Chất vấnNội dung chương.", title, 70), "Nội dung chương.");
-});
-
-test("chapter documents rescue a broken translated title from the content heading", () => {
-  const doc = buildChapterDocument({
-    bookId: "b",
-    revision: 1,
-    chapter: { chapterNumber: 241, title: "Chương 238: Mộ群 bí ẩn", content: "nguon" },
-    translation: "Quần bí ẩn\n\nTiếp đó, đội khảo cổ phát hiện một quần thể mộ Hán đại quy mô.",
-    translationStatus: "completed"
-  });
-  assert.equal(doc.title, "Chương 238: Quần bí ẩn");
-  assert.equal(doc.content, "Tiếp đó, đội khảo cổ phát hiện một quần thể mộ Hán đại quy mô.");
 });
 
 test("chapter title cleaner preserves Chinese title suffix through Han-Viet conversion", () => {
@@ -901,6 +851,72 @@ test("worker detects a reader index whose chapter statuses lag behind the queue"
 
   assert.equal(bookOutputsNeedRefresh(stale, state), true);
   assert.equal(bookOutputsNeedRefresh(current, state), false);
+});
+
+test("publishing a stale same-revision state cannot reduce translated chapter count", async () => {
+  const { storage } = tempStorage();
+  const book = { id: "monotonic-book", title: "Truyện", author: "Tác giả" };
+  const chapters = [1, 2].map((n) => ({ chapterNumber: n, title: `Chương ${n}`, translationStatus: "pending" }));
+  const current = createJobState({ bookId: book.id, revision: 1, chapters });
+  current.chapters[0].status = "completed";
+  current.chapters[1].status = "completed";
+  await publishIndex({ storage, book, revision: 1, chapters, state: current });
+
+  const stale = createJobState({ bookId: book.id, revision: 1, chapters });
+  stale.chapters[0].status = "completed";
+  const result = await publishIndex({ storage, book, revision: 1, chapters, state: stale });
+  assert.equal(result.translatedChapters, 2);
+  assert.deepEqual(result.chapters.map((chapter) => chapter.status), ["completed", "completed"]);
+});
+
+test("an old revision cannot replace a newer published book index", async () => {
+  const { storage } = tempStorage();
+  const book = { id: "revision-book", title: "Truyện", author: "Tác giả" };
+  const chapters = [{ chapterNumber: 1, title: "Chương 1", translationStatus: "completed" }];
+  const revisionTwo = createJobState({ bookId: book.id, revision: 2, chapters });
+  revisionTwo.chapters[0].status = "completed";
+  await publishIndex({ storage, book, revision: 2, chapters, state: revisionTwo });
+  const old = createJobState({ bookId: book.id, revision: 1, chapters });
+  const result = await publishIndex({ storage, book, revision: 1, chapters, state: old });
+  assert.equal(result.revision, 2);
+  assert.equal(result.translatedChapters, 1);
+});
+
+test("agent chapter publish synchronizes completed status into queue and index", async () => {
+  const { storage } = tempStorage();
+  const bookId = "agent-progress";
+  const state = createJobState({
+    bookId,
+    revision: 1,
+    chapters: [{ chapterNumber: 1 }, { chapterNumber: 2 }]
+  });
+  state.chapters[0].status = "failed";
+  state.chapters[0].lastError = "old failure";
+  await storage.put(`jobs/${bookId}/translation.json`, JSON.stringify(state));
+  await storage.put(LAYOUT.bookIndex(bookId), JSON.stringify({
+    bookId,
+    revision: 1,
+    totalChapters: 2,
+    translatedChapters: 0,
+    status: "Đang cập nhật",
+    chapters: [{ n: 1, status: "failed" }, { n: 2, status: "pending" }]
+  }));
+
+  const result = await syncCompletedChapter({
+    storage,
+    bookId,
+    revision: 1,
+    chapterNumber: 1,
+    title: "Chương Một",
+    provider: "agent",
+    model: "direct"
+  });
+
+  assert.equal(result.state.chapters[0].status, "completed");
+  assert.equal(result.state.chapters[0].lastError, "");
+  assert.equal(result.index.chapters[0].status, "completed");
+  assert.equal(result.index.chapters[0].title, "Chương Một");
+  assert.equal(result.index.translatedChapters, 1);
 });
 
 test("nextBatchChapters groups consecutive pending chapters and runTranslationJobs executes batch", async () => {

@@ -30,7 +30,8 @@ const VI_SECTION_PATTERNS = [
   { pattern: /^lời tác giả$/i, title: "Lời tác giả", badge: "TG" },
   { pattern: /^thông tin tác phẩm$/i, title: "Thông tin tác phẩm", badge: "TT" },
   { pattern: /^hậu ký$/i, title: "Hậu ký", badge: "HK" },
-  { pattern: /^đoạn kết$/i, title: "Đoạn kết", badge: "K" }
+  { pattern: /^đoạn kết$/i, title: "Đoạn kết", badge: "K" },
+  { pattern: /^(?:quyển(?:\s*\d+)?|đệ\s*(?:[0-9]+|[一二两三四五六七八九十百]+|nhất|nhị|tam|tứ|ngũ|lục|thất|bát|cửu|thập)\s*quyển)(?:\s*[:：\-_–—].*)?$/i, title: "Quyển", badge: "Q" }
 ];
 
 function parseChineseNumber(str) {

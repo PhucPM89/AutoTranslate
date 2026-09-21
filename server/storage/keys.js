@@ -21,7 +21,12 @@ const LAYOUT = {
   bookTranslationMemory: (bookId) => `tm/books/${slug(bookId)}.json`,
   cover: (bookId, extension = ".webp") => `covers/${slug(bookId)}${extension}`,
   archive: (bookId) => `archives/${slug(bookId)}.epub`,
-  catalogSnapshot: () => "catalog/latest.json"
+  catalogSnapshot: () => "catalog/latest.json",
+  videoReviewConfig: () => "video-reviews/config.json",
+  videoReviewBudget: () => "video-reviews/budget.json",
+  videoReviewIndex: () => "video-reviews/index.json",
+  videoReviewJob: (jobId) => `video-reviews/jobs/${slug(jobId)}.json`,
+  videoReviewAsset: (jobId, filename) => `video-reviews/assets/${slug(jobId)}/${filename}`
 };
 
 // Cache policy travels with the key so the uploader cannot get it wrong.
@@ -32,6 +37,7 @@ const PRIVATE = "private, no-store";
 
 function cacheControlFor(key) {
   if (key.startsWith("drafts/") || key.startsWith("story-bible/") || key.startsWith("story-context/") || key.startsWith("tm/books/")) return PRIVATE;
+  if (key.startsWith("video-reviews/jobs/") || key.startsWith("video-reviews/config.json") || key.startsWith("video-reviews/budget.json")) return PRIVATE;
   if (/\/r\d+\/ch\/\d+\.original\.json$/.test(key)) return IMMUTABLE;
   if (/\/r\d+\/ch\/\d+\.json$/.test(key)) return SHORT;
   if (key.endsWith("/index.json")) return SHORT;
@@ -47,13 +53,14 @@ function contentTypeFor(key) {
   if (key.endsWith(".webp")) return "image/webp";
   if (key.endsWith(".png")) return "image/png";
   if (key.endsWith(".jpg") || key.endsWith(".jpeg")) return "image/jpeg";
+  if (key.endsWith(".mp4")) return "video/mp4";
+  if (key.endsWith(".srt")) return "text/plain; charset=utf-8";
+  if (key.endsWith(".vtt")) return "text/vtt; charset=utf-8";
+  if (key.endsWith(".mp3")) return "audio/mpeg";
+  if (key.endsWith(".wav")) return "audio/wav";
   return "application/octet-stream";
 }
 
-// Book ids come from the catalog (`fanqie-<digits>`) or an admin slug, so they are
-// already tame. This validates rather than rewrites: silently mapping "../../etc"
-// to "etc" would let two different books collide on one storage key, so a bad id
-// is a loud failure at ingest time instead.
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
 
 function slug(value) {

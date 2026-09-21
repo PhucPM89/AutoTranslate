@@ -30,6 +30,14 @@ function createLocalStorage(env = process.env) {
         error.status = 412;
         throw error;
       }
+      if (options.ifMatch) {
+        const current = await this.head(key);
+        if (!current || current.etag !== options.ifMatch) {
+          const error = new Error(`Local PUT ${key} lỗi HTTP 412: ETag không khớp.`);
+          error.status = 412;
+          throw error;
+        }
+      }
       fs.mkdirSync(path.dirname(target), { recursive: true });
       const buffer = Buffer.isBuffer(body) ? body : Buffer.from(String(body), "utf8");
       fs.writeFileSync(target, buffer);

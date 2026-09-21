@@ -31,10 +31,8 @@ const option = (name) => {
 
 async function removePrefix(storage, prefix) {
   const objects = await storage.list(prefix);
-  for (let index = 0; index < objects.length; index += 20) {
-    await Promise.all(objects.slice(index, index + 20).map((object) => storage.remove(object.key)));
-  }
-  return objects.length;
+  if (!objects.length) return 0;
+  return storage.removeMany(objects.map((object) => object.key));
 }
 
 async function main() {

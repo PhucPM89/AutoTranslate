@@ -38,6 +38,7 @@ test("front matter keeps semantic labels instead of chapter numbers", () => {
   assert.equal(formatVietnameseChapterTitle("Tác Phẩm Chính Văn", 3, "Nội dung chính của tác phẩm"), "Nội dung chính");
   assert.deepEqual(getSectionInfo("Tác Phẩm Chính Văn", ""), { title: "Nội dung chính", badge: "ND", isStoryChapter: false });
   assert.equal(displayIndexLabel({ rawTitle: "Giới Thiệu", fallbackNumber: 1 }), "GT");
+  assert.equal(displayIndexLabel({ rawTitle: "Đệ nhất quyển: Mặc định", fallbackNumber: 3 }), "Q");
   assert.equal(displayIndexLabel({ rawTitle: "第1章 落地岛国", fallbackNumber: 4 }), "4");
 });
 

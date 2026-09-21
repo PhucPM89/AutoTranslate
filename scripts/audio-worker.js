@@ -170,13 +170,33 @@ async function processJob(job, storage) {
 }
 
 async function runOnce(storage = createStorage()) {
-  const job = await nextAudioJob(storage);
-  if (!job) return false;
-  try { await processJob(job, storage); }
-  catch (error) {
+  let job = null;
+  try {
+    job = await nextAudioJob(storage);
+  } catch (queueError) {
+    console.error(`[AUDIO-WORKER] Lỗi truy vấn hàng đợi audio job: ${queueError.message}`);
+    return false;
+  }
+  if (!job) {
+    console.log("[AUDIO-WORKER] Không có audio job nào đang chờ xử lý.");
+    return false;
+  }
+  try {
+    await processJob(job, storage);
+  } catch (error) {
     const failures = Number(job.consecutiveFailures || 0) + 1;
     const delayMinutes = Math.min(60, 2 ** Math.min(failures, 6));
-    await updateAudioJob(job.id, { status: "retrying", consecutiveFailures: failures, error: error.message, retryAt: new Date(Date.now() + delayMinutes * 60000).toISOString(), stageMessage: `Lỗi tạm thời; tự thử lại sau ${delayMinutes} phút.` }, storage);
+    try {
+      await updateAudioJob(job.id, {
+        status: "retrying",
+        consecutiveFailures: failures,
+        error: error.message,
+        retryAt: new Date(Date.now() + delayMinutes * 60000).toISOString(),
+        stageMessage: `Lỗi tạm thời; tự thử lại sau ${delayMinutes} phút.`
+      }, storage);
+    } catch (saveErr) {
+      console.error(`[AUDIO-WORKER] Không thể lưu trạng thái lỗi của job ${job.id}: ${saveErr.message}`);
+    }
     console.error(`[AUDIO] ${job.id}: ${error.message}`);
   }
   return true;

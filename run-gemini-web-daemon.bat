@@ -1,13 +1,22 @@
 @echo off
-title Tram Chu - Gemini Web Translator 24/7
+chcp 65001 >nul
+cd /d "%~dp0" || exit /b 1
+title Tram Chu - Gemini Web Reviewer Local
 color 0b
 echo ========================================================
-echo        TRAM CHU - GEMINI WEB TRANSLATOR 24/7
+echo       TRAM CHU - GEMINI WEB REVIEWER LOCAL
 echo ========================================================
 echo.
-echo Tool dung Chrome profile rieng de dieu khien Gemini Web.
-echo Lan dau chay neu Chrome yeu cau dang nhap, hay dang nhap roi chay lai.
-echo Mac dinh chay du 7 ngay; dat GEMINI_WEB_REST_DAY=sun neu muon nghi Chu Nhat.
+echo API key van dich 24/7 tren cloud. Tool nay dung Gemini Web
+echo de dich bo truyen khac, khong tranh cung book voi API worker.
+echo Tat va bat lai se tiep tuc tu checkpoint gan nhat.
 echo.
-
-node scripts/gemini-web-daemon.js
+set "WEB_REVIEW_PROVIDER=gemini"
+node scripts\gemini-web-daemon.js
+set "REVIEW_EXIT=%ERRORLEVEL%"
+echo.
+echo ========================================================
+echo Gemini Web reviewer da dung voi ma loi: %REVIEW_EXIT%
+echo ========================================================
+pause
+exit /b %REVIEW_EXIT%

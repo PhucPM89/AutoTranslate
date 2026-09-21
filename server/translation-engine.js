@@ -1,16 +1,14 @@
 "use strict";
 
-// Trạm Chữ — Translation & QA Engine with Anti-Ban Safety Shield
+// Trạm Chữ — Translation & QA Engine
 // Provides:
 // 1. Glossary Manager: per-book dictionary (characters, terms, ranks, sects) stored on R2.
 // 2. Translation Memory (TM): sentence/phrase pattern matching.
-// 3. Pre-Flight Content Sanitizer: softens extreme trigger words to prevent AI provider bans.
-// 4. Creative Fiction Prompt Builder (Anti-Ban Safety Shield compliant).
-// 5. Post-Processor: punctuation normalization, Markdown cleanup, and quality reflection.
+// 3. Preserve source text verbatim before translation.
+// 4. Faithful Chinese-to-Vietnamese translation prompt builder.
+// 5. Compatibility postprocessor returns text unchanged.
 
 const { mineNovelGlossary } = require("./glossary-miner");
-const { reflectAndPolish } = require("./reflection-engine");
-const { preprocessSystemBlocks } = require("../client/reader-text");
 
 const GLOSSARY_PREFIX = "glossary";
 const TM_GLOBAL_KEY = "tm/global.json";
@@ -75,15 +73,11 @@ function glossaryKey(bookId) {
 }
 
 /**
- * Pre-Flight Content Sanitizer (Anti-Ban Safety Shield)
- * Softens extreme trigger phrases in raw web novel text to prevent false positive AI safety flags.
+ * Compatibility helper: source wording must reach the translator unchanged.
  */
 function sanitizeContentSafety(text) {
   if (typeof text !== "string") return "";
-  return text
-    .replace(/自杀/g, " tự tuyệt ")
-    .replace(/性奴/g, " nô lệ ")
-    .replace(/强暴/g, " ức hiếp ");
+  return text;
 }
 
 function createTranslationEngine({ storage = null } = {}) {
@@ -208,125 +202,14 @@ function createTranslationEngine({ storage = null } = {}) {
   }
 
   /**
-   * Builds an optimized, loosened, literary fiction prompt for Google Gemini
-   * with Creative Fiction context framing to prevent Google API policy violations.
+   * Shared fidelity-first prompt for API and web translation.
    */
-  function buildContextualPrompt({
-    text,
-    index = 0,
-    total = 1,
-    bookTitle = "",
-    glossary = {},
-    isRetry = false,
-    glossaryMatchText = text
-  }) {
-    const matchedTerms = findMatchedGlossaryTerms(glossaryMatchText, glossary);
-    let glossarySection = "";
-    if (matchedTerms.length > 0) {
-      glossarySection = [
-        "THUẬT NGỮ & TÊN RIÊNG CẦN DÙNG:",
-        ...matchedTerms.map((t) => `  - "${t.zh}" ➔ "${t.vi}"`),
-        ""
-      ].join("\n");
-    }
-
-    const chunkNote =
-      total > 1
-        ? `(Phần ${index + 1}/${total} của chương)`
-        : "";
-
-    return [
-      "[BỐI CẢNH VĂN HỌC GIẢ TƯỞNG / FICTION LITERATURE TRANSLATION]",
-      "Bạn là một biên tập viên kiêm tiểu thuyết gia dịch thuật Trung - Việt xuất sắc.",
-      "Hãy chuyển ngữ đoạn văn bản tiểu thuyết sau sang tiếng Việt tự nhiên, mượt mà, đậm chất văn học kiếm hiệp/tiên hiệp/tiểu thuyết mạng.",
-      bookTitle ? `Tác phẩm: ${sanitizeContentSafety(bookTitle)}` : "",
-      chunkNote,
-      "",
-      "YÊU CẦU DỊCH & BIÊN DỊCH VĂN HỌC BẮT BUỘC:",
-      "1. VĂN PHONG THUẦN VIỆT & TRÔI CHẢY: Diễn đạt thoát ý, trôi chảy, giàu hình ảnh và cảm xúc như một tác phẩm viết bằng tiếng Việt. Tuyệt đối không dịch bám từ (word-by-word) hay giữ nguyên cấu trúc ngữ pháp tiếng Trung.",
-      "2. XƯNG HÔ ĐÚNG CHẤT TIỂU THUYẾT: Xưng hô tự nhiên, linh hoạt theo quan hệ nhân vật (ta - ngươi, hắn - nàng, huynh - đệ, sư phụ - đồ nhi, tiểu tử, lão đầu...).",
-      "3. QUY TẮC CHUYỂN ÂM HÁN-VIỆT:",
-      "   - CHỈ dùng âm Hán-Việt cho: Tên riêng nhân vật, địa danh, môn phái, công pháp, chiêu thức, cảnh giới và thuật ngữ tu tiên/kiếm hiệp đặc thù.",
-      "   - TẤT CẢ từ ngữ đời thường, đại từ, động từ hành động, miêu tả cơ thể, trạng từ, liên từ PHẢI dịch nghĩa thuần Việt. Tuyệt đối KHÔNG chuyển âm máy móc.",
-      "   - Với tác phẩm cổ điển hoặc danh từ riêng đã có quy ước, ưu tiên thuật ngữ trong bảng thuật ngữ; không tự chế âm gần giống.",
-      "   - TUYỆT ĐỐI KHÔNG trả tên riêng nửa Việt nửa Hán như \"Thái 邪\" hoặc \"Hải Nhược颖\". Nếu chưa chắc nghĩa, chuyển toàn bộ cụm tên riêng sang âm Hán-Việt có dấu và viết hoa từng âm.",
-      "4. VÍ DỤ ĐỐI CHIẾU PHONG CÁCH (FEW-SHOT):",
-      '   ❌ "tự kỷ đích ấn đường" ➔ ✅ "trán của mình" / "giữa hai chân mày"',
-      '   ❌ "mai bộ tẩu tiến khứ" ➔ ✅ "sải bước đi vào" / "bước vào trong"',
-      '   ❌ "đả khai phòng môn" ➔ ✅ "mở cửa phòng"',
-      '   ❌ "thủ chỉ vi vi nhất chiến" ➔ ✅ "ngón tay khẽ run lên"',
-      '   ❌ "nhất thanh bất hưởng" ➔ ✅ "im thin thít" / "không một tiếng động"',
-      '   ❌ "hồi quá thần lai" ➔ ✅ "hoàn hồn" / "lấy lại tinh thần"',
-      '   ❌ "thần sắc bất định" ➔ ✅ "sắc mặt khó lường" / "nét mặt bất an"',
-      '   ❌ "khước kiến / nhãn kiến" ➔ ✅ "lại thấy / trông thấy"',
-      '   ❌ "Gia Gia / Nãi Nãi / Ba Ba / Mụ Mụ" ➔ ✅ "ông nội / bà nội / bố / mẹ"',
-      '   ❌ "Ngã / Nhĩ / Khước / Bang / Giáo" khi là từ thường ➔ ✅ "tôi, ta / ngươi, bạn / lại / giúp / dạy"',
-      '   ❌ "đảm tử bị hách một liễu / canh của ta bị sợ..." ➔ ✅ "lá gan của tôi đã bị dọa cho bay sạch rồi" / "tôi đã sợ đến mức hồn vía lên mây"',
-      '   ❌ "hách phá đảm" ➔ ✅ "sợ vỡ mật / sợ chết khiếp"',
-      '   ❌ "tát thối tựu bào" ➔ ✅ "co giò bỏ chạy / vắt chân lên cổ mà chạy"',
-      '   ❌ "thử thử thân thủ" ➔ ✅ "thử ra tay / thử trổ tài"',
-      "5. BẢO TOÀN NỘI DUNG: Giữ nguyên cấu trúc các đoạn văn, tình tiết, lời thoại và ý nghĩa gốc.",
-      "6. GIỮ XUỐNG DÒNG: Mỗi đoạn trong nguyên tác phải có một đoạn dịch tương ứng. Giữa hai đoạn dịch phải có một dòng trống. Không được gộp toàn chương thành một khối văn bản.",
-      "7. KHÔNG SÓT CHỮ HÁN: Sau khi dịch xong, tự rà lại toàn bộ đầu ra theo từng dòng. Nếu còn bất kỳ chữ Trung/Hán tự nào (kể cả một ký tự nằm trong tên riêng), hãy thay ngay bằng tiếng Việt hoặc âm Hán-Việt phù hợp. Đầu ra cuối cùng tuyệt đối không chứa chữ Hán.",
-      "8. ĐỊNH DẠNG ĐẦU RA: Chỉ trả về duy nhất bản dịch tiếng Việt hoàn chỉnh, không kèm lời chào, ghi chú hay thẻ giải thích.",
-      "9. BẢO TOÀN CON SỐ: Ưu tiên giữ nguyên các con số định lượng dạng chữ số (ví dụ: 1500, 650...) như nguyên tác, không tự ý đổi sang chữ viết.",
-      "10. BẢNG THUỘC TÍNH VÀ THÔNG BÁO HỆ THỐNG (【...】): Với các thông báo hệ thống hoặc bảng thuộc tính (như 【Tên gọi】: ..., 【Chủng loại】: ...), mỗi mục PHẢI nằm trọn vẹn trên MỘT DÒNG RIÊNG BIỆT (nhãn và giá trị cùng dòng, ví dụ: '【Tên gọi】: Búp bê tử linh'). Tuyệt đối không để nhãn ở cuối dòng trước rồi giá trị rớt xuống dòng sau, không gộp nhiều mục 【...】 dính liền nhau.",
-      "11. DẤU NGOẶC KÉP: Dấu ngoặc kép chỉ bao quanh lời thoại hoặc suy nghĩ trực tiếp, không bao quanh câu dẫn chuyện của người kể. Tuyệt đối không để dấu ngoặc kép thừa ở cuối câu kể.",
-      "",
-      glossarySection,
-      "Văn bản tiếng Trung cần dịch:",
-      sanitizeContentSafety(text)
-    ]
-      .filter(Boolean)
-      .join("\n");
+  function buildContextualPrompt({ text }) {
+    return require("./direct-translation").buildDirectPrompt(text);
   }
 
-  function postProcessTranslation(translation, glossary = {}) {
-    if (!translation) return "";
-    let clean = String(translation)
-      // Remove think blocks (closed, unclosed, or orphaned)
-      .replace(/<think[\s\S]*?(?:<\/think>|$)/gi, "")
-      .replace(/<thought[\s\S]*?(?:<\/thought>|$)/gi, "")
-      .replace(/<\/(?:think|thought)>/gi, "")
-      // Remove code fences and markdown headers
-      .replace(/```[a-z]*\n?/gi, "")
-      .replace(/^\s{0,3}#{1,6}\s+/gm, "")
-      .replace(/\*\*\*(?=\S)([\s\S]*?\S)\*\*\*/g, "$1")
-      .replace(/\*\*(?=\S)([\s\S]*?\S)\*\*/g, "$1")
-      .replace(/(^|[\s(])\*(?=\S)([^*\n]*?\S)\*(?=[\s.,;:!?)]|$)/g, "$1$2")
-      .replace(/(^|[\s(])_(?=\S)([^_\n]*?\S)_(?=[\s.,;:!?)]|$)/g, "$1$2")
-      // Normalize quotation marks
-      .replace(/[“”]/g, '"')
-      .replace(/[‘’]/g, "'")
-      .replace(/([.!?…])([A-ZÀ-Ỵ])/gu, "$1 $2")
-      // Remove double blank lines
-      .replace(/\n{3,}/g, "\n\n")
-      .trim();
-
-    // Remove any preamble chatter from LLMs
-    clean = clean
-      .replace(/^(?:Bản dịch|Dưới đây là|Sau đây là|Dịch nghĩa|Bản dịch chuẩn)[^:\n]*:?\s*\n*/i, "")
-      .replace(/^[\*\-_~]{3,}\s*\n*/gm, "");
-
-    // Ensure matched glossary terms are strictly applied
-    for (const [zh, vi] of Object.entries(glossary)) {
-      if (vi && clean.includes(zh)) {
-        clean = clean.split(zh).join(vi);
-      }
-    }
-
-    const structured = typeof preprocessSystemBlocks === "function" ? preprocessSystemBlocks(clean) : clean;
-    let { text: polished } = reflectAndPolish(structured, { glossary });
-    polished = String(polished || "").trim();
-    // Ensure final paragraph has closing punctuation if it ends cleanly on a word
-    if (polished && !/[.!?…~。！？"'”’』」】\)）]$/.test(polished) && /[\p{L}\p{N}]$/u.test(polished)) {
-      polished = polished + ".";
-    }
-    // Auto-close single unclosed double quote at the very end if preceded by sentence terminator
-    if ((polished.match(/"/g) || []).length % 2 !== 0 && /[.!?…~。！？]$/.test(polished)) {
-      polished = polished + '"';
-    }
-    return polished;
+  function postProcessTranslation(translation) {
+    return typeof translation === "string" ? translation : "";
   }
 
   return {

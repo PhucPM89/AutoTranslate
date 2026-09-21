@@ -1,226 +1,97 @@
 "use strict";
 
-const { spawn } = require("child_process");
-const fs = require("fs");
-const path = require("path");
+// Foreground supervisor for the selected local web reviewer.
+const { spawn } = require("node:child_process");
+const fs = require("node:fs");
+const path = require("node:path");
 
-function loadEnvFile(file) {
-  if (!fs.existsSync(file)) return;
-  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+for (const name of [".env", ".env.local"]) {
+  const file = path.join(__dirname, "..", name);
+  if (!fs.existsSync(file)) continue;
+  for (const line of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
     const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
-    if (match && !process.env[match[1]]) {
-      let val = match[2].trim();
-      if (/^".*"$/.test(val) || /^'.*'$/.test(val)) val = val.slice(1, -1);
-      process.env[match[1]] = val;
-    }
+    if (match && !process.env[match[1]]) process.env[match[1]] = match[2].trim().replace(/^(['"])(.*)\1$/, "$2");
   }
 }
 
-loadEnvFile(path.join(__dirname, "..", ".env"));
-loadEnvFile(path.join(__dirname, "..", ".env.local"));
-
-const { checkGeminiWebReady, closeGeminiWeb } = require("../server/gemini-web");
-const { createStorage } = require("../server/storage");
-
+const { checkGptWebReady, checkGeminiWebReady, closeGeminiWeb } = require("../server/gemini-web");
 const args = process.argv.slice(2);
-const flag = (name, fallback = "") => {
-  const index = args.indexOf(name);
-  return index >= 0 && args[index + 1] ? args[index + 1] : fallback;
-};
-
-const CONTROL_KEY = "jobs/gemini-web-control.json";
-const DAEMON_STATUS_KEY = "jobs/gemini-web-daemon-status.json";
-const REST_DAY = String(flag("--rest-day", process.env.GEMINI_WEB_REST_DAY || "none")).toLowerCase();
-const DEFAULT_SESSION_MINUTES = Math.max(15, Number(flag("--minutes", process.env.GEMINI_WEB_SESSION_MINUTES || process.env.TRANSLATE_RUN_MINUTES || 300)));
-const RESTART_DELAY_MS = Math.max(5000, Number(process.env.GEMINI_WEB_RESTART_DELAY_MS || 15000));
+const WEB_PROVIDER = String(process.env.WEB_REVIEW_PROVIDER || "gemini").toLowerCase() === "gpt" ? "gpt" : "gemini";
+const WEB_LABEL = WEB_PROVIDER === "gpt" ? "ChatGPT Web" : "Gemini Web";
+const ENV_PREFIX = WEB_PROVIDER === "gpt" ? "GPT_WEB" : "GEMINI_WEB";
+const flag = (name, fallback = "") => { const index = args.indexOf(name); return index >= 0 && args[index + 1] ? args[index + 1] : fallback; };
+const REST_DAY = String(flag("--rest-day", process.env[`${ENV_PREFIX}_REST_DAY`] || "none")).toLowerCase();
+const RESTART_DELAY_MS = Math.max(5000, Number(process.env[`${ENV_PREFIX}_RESTART_DELAY_MS`] || 15000));
 const PREFLIGHT = !args.includes("--no-preflight");
-const FORWARD_ARGS = args.filter((arg, index) => {
-  const previous = args[index - 1];
-  return !["--rest-day", "--minutes"].includes(arg) && !["--rest-day", "--minutes"].includes(previous) && arg !== "--no-preflight";
-});
+let child = null;
 
-function daySlug(date = new Date()) {
-  return ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][date.getDay()];
-}
-
-function msUntilNextDay(date = new Date()) {
-  const next = new Date(date);
-  next.setHours(24, 0, 0, 0);
-  return Math.max(1000, next.getTime() - date.getTime());
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function readStorageJson(storage, key) {
-  try {
-    const raw = await storage.get(key);
-    if (!raw) return null;
-    return JSON.parse(raw.toString("utf8"));
-  } catch {
-    return null;
-  }
-}
-
-function normalizeControl(control = {}) {
-  control = control || {};
-  const defaultSlots = { "1": true, "2": false, "3": false };
-  const rawSlots = control.slots && typeof control.slots === "object" ? control.slots : defaultSlots;
-  const bool = (value, defaultValue = true) => {
-    if (value === undefined || value === null) return defaultValue;
-    if (typeof value === "boolean") return value;
-    const normalized = String(value).trim().toLowerCase();
-    if (["false", "0", "off", "no"].includes(normalized)) return false;
-    if (["true", "1", "on", "yes"].includes(normalized)) return true;
-    return defaultValue;
-  };
-  return {
-    schema: 1,
-    enabled: bool(control.enabled, true),
-    headless: bool(control.headless, true),
-    protectiveMode: bool(control.protectiveMode, true),
-    lowResourceMode: bool(control.lowResourceMode, true),
-    spacingMs: Math.max(3000, Number(control.spacingMs || process.env.GEMINI_WEB_SPACING_MS || 8000)),
-    jitterMs: Math.max(0, Number(control.jitterMs || process.env.GEMINI_WEB_JITTER_MS || 1500)),
-    sessionMinutes: Math.max(15, Number(control.sessionMinutes || DEFAULT_SESSION_MINUTES)),
-    pauseUntilEpochMs: Math.max(0, Number(control.pauseUntilEpochMs || 0)),
-    slots: {
-      "1": bool(rawSlots["1"], true),
-      "2": bool(rawSlots["2"], false),
-      "3": bool(rawSlots["3"], false)
-    },
-    updatedAt: control.updatedAt || ""
-  };
-}
-
-async function readControl(storage) {
-  return normalizeControl(await readStorageJson(storage, CONTROL_KEY));
-}
-
-async function writeDaemonStatus(storage, status) {
-  try {
-    await storage.put(
-      DAEMON_STATUS_KEY,
-      JSON.stringify({
-        schema: 1,
-        provider: "gemini-web",
-        owner: `${process.env.COMPUTERNAME || "local"}:${process.pid}`,
-        updatedAt: new Date().toISOString(),
-        ...status
-      }),
-      { cacheControl: "private, no-store" }
-    );
-  } catch (error) {
-    console.warn(`[gemini-web-daemon] Unable to write daemon status: ${error.message}`);
-  }
-}
+function daySlug(date = new Date()) { return ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][date.getDay()]; }
+function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+function msUntilNextDay(date = new Date()) { const next = new Date(date); next.setHours(24, 0, 0, 0); return Math.max(1000, next - date); }
 
 async function preflight() {
   if (!PREFLIGHT) return;
-  const status = await checkGeminiWebReady();
-  console.log(`[gemini-web-daemon] Gemini Web ready: ${status.url}`);
+  const checkReady = WEB_PROVIDER === "gpt" ? checkGptWebReady : checkGeminiWebReady;
+  const status = await checkReady({ profileSlotId: 1, requireSignin: WEB_PROVIDER === "gemini" });
+  console.log(`[web-review-daemon] ${WEB_LABEL} ready: ${status.url}`);
   await closeGeminiWeb();
 }
 
-function runWorker(control) {
-  const maxProfiles = 3;
-  const env = {
-    ...process.env,
-    TRANSLATION_PROVIDER: "gemini-web",
-    GEMINI_WEB_HEADLESS: control.headless ? "true" : "false",
-    GEMINI_WEB_PROTECTIVE_MODE: control.protectiveMode ? "true" : "false",
-    GEMINI_WEB_LOW_RESOURCE_MODE: control.lowResourceMode ? "true" : "false",
-    GEMINI_WEB_SPACING_MS: String(control.spacingMs),
-    GEMINI_WEB_JITTER_MS: String(control.jitterMs),
-    GEMINI_WEB_TIMEOUT_MS: process.env.GEMINI_WEB_TIMEOUT_MS || "60000",
-    GEMINI_WEB_OPERATION_TIMEOUT_MS: process.env.GEMINI_WEB_OPERATION_TIMEOUT_MS || "75000",
-    GEMINI_WEB_MAX_ATTEMPTS: process.env.GEMINI_WEB_MAX_ATTEMPTS || "3",
-    GEMINI_WEB_MAX_IDLE_PROFILES: process.env.GEMINI_WEB_MAX_IDLE_PROFILES || "1",
-    TRANSLATE_BATCH_SIZE: "1",
-    TRANSLATE_CONCURRENCY: String(maxProfiles),
-    GEMINI_TRANSLATE_CONCURRENCY: String(maxProfiles),
-    GEMINI_WEB_CONCURRENCY: String(maxProfiles),
-    GEMINI_WEB_MAX_PROFILES: String(maxProfiles),
-    MULTI_BOOK: "true"
-  };
+function runWebTranslator() {
   const workerArgs = [
     path.join("scripts", "translate-worker.js"),
     "--continuous",
     "--minutes",
-    String(control.sessionMinutes),
-    ...FORWARD_ARGS
+    process.env[`${ENV_PREFIX}_SESSION_MINUTES`] || "300",
+    "--budget",
+    process.env[`${ENV_PREFIX}_TRANSLATE_BUDGET`] || "10000",
+    "--batch-size",
+    "1"
   ];
-  console.log(`[gemini-web-daemon] Start worker: node ${workerArgs.join(" ")}`);
+  console.log(`[web-review-daemon] Start ${WEB_LABEL} translator: node ${workerArgs.join(" ")}`);
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, workerArgs, {
+    child = spawn(process.execPath, workerArgs, {
       cwd: path.join(__dirname, ".."),
-      env,
+      env: {
+        ...process.env,
+        TRANSLATION_PROVIDER: WEB_PROVIDER === "gemini" ? "gemini-web" : "gpt-web",
+        MULTI_BOOK: "false",
+        GEMINI_WEB_CONCURRENCY: "1",
+        GEMINI_WEB_MAX_PROFILES: "1"
+      },
       stdio: "inherit"
     });
-    child.on("exit", (code, signal) => resolve({ code, signal }));
+    child.on("exit", (code, signal) => { child = null; resolve({ code, signal }); });
   });
 }
 
 async function main() {
-  const storage = createStorage();
-  let failureCount = 0;
-  console.log(`[gemini-web-daemon] 24/7 mode. Rest day: ${REST_DAY}. Default session: ${DEFAULT_SESSION_MINUTES} minutes.`);
-
+  let failures = 0;
+  console.log(`[web-review-daemon] ${WEB_LABEL} chỉ chạy foreground từ file BAT; không có autostart hoặc dashboard control.`);
+  await preflight();
   while (true) {
-    const control = await readControl(storage);
-    await writeDaemonStatus(storage, { state: "watching", control });
-
-    if (!control.enabled || control.pauseUntilEpochMs > Date.now()) {
-      const waitMs = control.pauseUntilEpochMs > Date.now()
-        ? Math.min(30_000, Math.max(1000, control.pauseUntilEpochMs - Date.now()))
-        : 30_000;
-      await closeGeminiWeb();
-      await writeDaemonStatus(storage, {
-        state: control.enabled ? "paused_until" : "disabled",
-        message: control.enabled ? "Gemini Web daemon đang tạm dừng theo lệnh dashboard." : "Gemini Web daemon đang tắt theo lệnh dashboard.",
-        control
-      });
-      console.log(`[gemini-web-daemon] ${control.enabled ? "Paused" : "Disabled"} by dashboard. Sleep ${Math.round(waitMs / 1000)}s.`);
-      await sleep(waitMs);
-      continue;
-    }
-
     if (REST_DAY !== "none" && daySlug() === REST_DAY) {
       const waitMs = msUntilNextDay();
-      await closeGeminiWeb();
-      await writeDaemonStatus(storage, { state: "rest_day", message: `Rest day active (${REST_DAY}).`, control });
-      console.log(`[gemini-web-daemon] Rest day active (${REST_DAY}). Sleep ${Math.ceil(waitMs / 60000)} minutes.`);
+      console.log(`[web-review-daemon] Ngày nghỉ ${REST_DAY}; chờ ${Math.ceil(waitMs / 60000)} phút.`);
       await sleep(waitMs);
       continue;
     }
-
-    if (PREFLIGHT) {
-      await writeDaemonStatus(storage, { state: "preflight", message: "Đang kiểm tra Gemini Web trước phiên dịch.", control });
-      await preflight();
-    }
-
-    await writeDaemonStatus(storage, { state: "running", message: "Gemini Web worker đang chạy nền.", control });
-    const result = await runWorker(control);
-    const failed = result.code && result.code !== 0;
-    failureCount = failed ? failureCount + 1 : 0;
-    const delayMs = Math.min(10 * 60_000, RESTART_DELAY_MS * Math.max(1, failureCount));
-    await writeDaemonStatus(storage, {
-      state: "restarting",
-      message: `Worker đã dừng; khởi động lại sau ${Math.round(delayMs / 1000)} giây.`,
-      lastExitCode: result.code ?? null,
-      lastExitSignal: result.signal ?? null,
-      failureCount,
-      control
-    });
-    console.log(`[gemini-web-daemon] Worker stopped: code=${result.code ?? ""} signal=${result.signal ?? ""}. Restart in ${Math.round(delayMs / 1000)}s.`);
-    await sleep(delayMs);
+    const result = await runWebTranslator();
+    failures = result.code && result.code !== 0 ? failures + 1 : 0;
+    const delay = Math.min(10 * 60_000, RESTART_DELAY_MS * Math.max(1, failures));
+    console.log(`[web-review-daemon] ${WEB_LABEL} reviewer dừng: code=${result.code ?? ""} signal=${result.signal ?? ""}; thử lại sau ${Math.round(delay / 1000)} giây.`);
+    await sleep(delay);
   }
 }
 
-if (require.main === module) {
-  main().catch((error) => {
-    console.error(`[gemini-web-daemon] FAILED: ${error.message}`);
-    process.exit(1);
-  });
+async function shutdown() {
+  if (child && !child.killed) child.kill("SIGTERM");
+  await closeGeminiWeb().catch(() => {});
+  process.exit(0);
 }
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
+
+if (require.main === module) main().catch((error) => { console.error(`[web-review-daemon] FAILED: ${error.stack || error.message}`); process.exit(1); });
+
+module.exports = { main };
