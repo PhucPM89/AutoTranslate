@@ -32,6 +32,47 @@ function escapeDriveQuery(value) {
   return String(value).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+let lastRequestTime = 0;
+const MIN_REQUEST_INTERVAL_MS = 60; // Max ~16 QPS to stay safely within Google Drive 20 QPS quota
+
+async function fetchWithRetry(url, options = {}, maxRetries = 5) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const now = Date.now();
+    const waitTime = Math.max(0, lastRequestTime + MIN_REQUEST_INTERVAL_MS - now);
+    if (waitTime > 0) {
+      await sleep(waitTime);
+    }
+    lastRequestTime = Date.now();
+
+    try {
+      const response = await fetch(url, options);
+      if (response.status === 429 || (response.status === 403 && attempt < maxRetries)) {
+        const errorText = await response.clone().text().catch(() => "");
+        const isRateLimit = response.status === 429 || errorText.includes("userRateLimitExceeded") || errorText.includes("rateLimitExceeded") || errorText.includes("Rate Limit") || response.status === 403;
+        if (isRateLimit) {
+          const backoff = Math.min(10000, 1000 * Math.pow(2, attempt) + Math.floor(Math.random() * 500));
+          console.warn(`[DRIVE RATE LIMIT] HTTP ${response.status} on ${url}. Retrying in ${backoff}ms (attempt ${attempt + 1}/${maxRetries})...`);
+          await sleep(backoff);
+          continue;
+        }
+      }
+      return response;
+    } catch (err) {
+      if (attempt < maxRetries) {
+        const backoff = Math.min(10000, 1000 * Math.pow(2, attempt));
+        console.warn(`[DRIVE FETCH ERROR] ${err.message}. Retrying in ${backoff}ms (attempt ${attempt + 1}/${maxRetries})...`);
+        await sleep(backoff);
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 function createDriveStorage(env = process.env) {
   const clientId = env.GOOGLE_DRIVE_CLIENT_ID;
   const clientSecret = env.GOOGLE_DRIVE_CLIENT_SECRET;
@@ -53,7 +94,7 @@ function createDriveStorage(env = process.env) {
       throw new Error("Thiếu cấu hình Google Drive (CLIENT_ID, CLIENT_SECRET hoặc REFRESH_TOKEN).");
     }
 
-    const response = await fetch(TOKEN_URL, {
+    const response = await fetchWithRetry(TOKEN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -90,14 +131,14 @@ function createDriveStorage(env = process.env) {
         findUrl.searchParams.set("fields", "files(id,name)");
         findUrl.searchParams.set("pageSize", "1");
 
-        const findRes = await fetch(findUrl, { headers: { Authorization: `Bearer ${token}` } });
+        const findRes = await fetchWithRetry(findUrl, { headers: { Authorization: `Bearer ${token}` } });
         const findData = await findRes.json();
         if (findData.files?.[0]) {
           folderCache.set(cacheKey, findData.files[0].id);
           return findData.files[0].id;
         }
 
-        const createRes = await fetch(`${DRIVE_FILES_URL}?fields=id,name`, {
+        const createRes = await fetchWithRetry(`${DRIVE_FILES_URL}?fields=id,name`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -165,7 +206,7 @@ function createDriveStorage(env = process.env) {
     url.searchParams.set("fields", "files(id,name,size,mimeType,modifiedTime,md5Checksum,appProperties)");
     url.searchParams.set("pageSize", "1");
 
-    const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const response = await fetchWithRetry(url, { headers: { Authorization: `Bearer ${token}` } });
     if (!response.ok) throw new Error(`Drive find file error HTTP ${response.status}`);
     const data = await response.json();
     return data.files?.[0] || null;
@@ -184,7 +225,7 @@ function createDriveStorage(env = process.env) {
         const existing = await findFileByKey(key);
         if (existing) {
           const updateUrl = `${DRIVE_UPLOAD_URL}/${existing.id}?uploadType=media`;
-          const response = await fetch(updateUrl, {
+          const response = await fetchWithRetry(updateUrl, {
             method: "PATCH",
             headers: { Authorization: `Bearer ${token}`, "Content-Type": mime },
             body: buffer
@@ -210,7 +251,7 @@ function createDriveStorage(env = process.env) {
       form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
       form.append("file", new Blob([buffer], { type: mime }));
 
-      const response = await fetch(`${DRIVE_UPLOAD_URL}?uploadType=multipart&fields=id,name,size`, {
+      const response = await fetchWithRetry(`${DRIVE_UPLOAD_URL}?uploadType=multipart&fields=id,name,size`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: form
@@ -230,7 +271,7 @@ function createDriveStorage(env = process.env) {
       if (!file) return null;
 
       const token = await getAccessToken();
-      const response = await fetch(`${DRIVE_FILES_URL}/${file.id}?alt=media`, {
+      const response = await fetchWithRetry(`${DRIVE_FILES_URL}/${file.id}?alt=media`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.status === 404) return null;
@@ -264,7 +305,7 @@ function createDriveStorage(env = process.env) {
         url.searchParams.set("pageSize", "1000");
         if (pageToken) url.searchParams.set("pageToken", pageToken);
 
-        const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        const response = await fetchWithRetry(url, { headers: { Authorization: `Bearer ${token}` } });
         if (!response.ok) throw new Error(`Drive LIST error HTTP ${response.status}`);
 
         const data = await response.json();
@@ -289,7 +330,7 @@ function createDriveStorage(env = process.env) {
       if (!file) return false;
 
       const token = await getAccessToken();
-      const response = await fetch(`${DRIVE_FILES_URL}/${file.id}`, {
+      const response = await fetchWithRetry(`${DRIVE_FILES_URL}/${file.id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` }
       });

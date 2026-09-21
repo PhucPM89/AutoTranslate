@@ -39,9 +39,9 @@ async function ingestBook({
   requestBudget = Infinity,
   deadlineAt = Infinity,
   spacingMs = 0,
-  // Uploads dominate ingest wall-clock: a 1,425-chapter book is ~2,850 objects,
-  // which takes hours one at a time and minutes in parallel.
-  uploadConcurrency = 24,
+  // Uploads dominate ingest wall-clock: a 1,425-chapter book is ~2,850 objects.
+  // Google Drive has strict user rate limits (~20 QPS), so we keep concurrency at 8.
+  uploadConcurrency = 8,
   log = () => {}
 }) {
   if (!storage) throw new Error("ingestBook cần storage.");
