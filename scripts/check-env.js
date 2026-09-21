@@ -10,15 +10,24 @@
 //   node scripts/check-env.js translate
 //   node scripts/check-env.js keepalive
 
+const isDriveStorage = process.env.STORAGE_DRIVER === "drive" || (process.env.GOOGLE_DRIVE_CLIENT_ID && !process.env.R2_BUCKET);
+
+const storageRequired = isDriveStorage ? [
+  "GOOGLE_DRIVE_CLIENT_ID",
+  "GOOGLE_DRIVE_CLIENT_SECRET",
+  "GOOGLE_DRIVE_REFRESH_TOKEN",
+  "GOOGLE_DRIVE_STORAGE_FOLDER_ID"
+] : [
+  "R2_ACCOUNT_ID",
+  "R2_ACCESS_KEY_ID",
+  "R2_SECRET_ACCESS_KEY",
+  "R2_BUCKET",
+  "R2_PUBLIC_BASE_URL"
+];
+
 const PROFILES = {
   crawler: {
-    required: [
-      "R2_ACCOUNT_ID",
-      "R2_ACCESS_KEY_ID",
-      "R2_SECRET_ACCESS_KEY",
-      "R2_BUCKET",
-      "R2_PUBLIC_BASE_URL"
-    ],
+    required: storageRequired,
     optional: [
       "R2_ARCHIVE_BUCKET",
       "SUPABASE_URL",
@@ -32,14 +41,11 @@ const PROFILES = {
     ]
   },
   translate: {
-    required: [
-      "R2_ACCOUNT_ID",
-      "R2_ACCESS_KEY_ID",
-      "R2_SECRET_ACCESS_KEY",
-      "R2_BUCKET",
-      "R2_PUBLIC_BASE_URL"
+    required: storageRequired,
+    anyOf: [
+      ["GEMINI_API_KEY", "GEMINI_API_KEYS"],
+      ["GROQ_API_KEY", "GROQ_API_KEYS"]
     ],
-    anyOf: [["GROQ_API_KEY", "GROQ_API_KEYS", "GEMINI_API_KEY", "GEMINI_API_KEYS"]],
     optional: [
       "GROQ_API_KEY",
       "GROQ_API_KEYS",
@@ -56,10 +62,7 @@ const PROFILES = {
   },
   reconcile: {
     required: [
-      "R2_ACCOUNT_ID",
-      "R2_ACCESS_KEY_ID",
-      "R2_SECRET_ACCESS_KEY",
-      "R2_BUCKET",
+      ...storageRequired,
       "SUPABASE_URL",
       "SUPABASE_SERVICE_ROLE_KEY"
     ],
@@ -104,16 +107,20 @@ for (const name of profile.optional) {
   console.log(`  ${ok ? "OK     " : "-      "}  ${name} (tùy chọn)${ok ? `  (${value.trim().length} ký tự)` : ""}`);
 }
 
-const rawKeys = process.env.GROQ_API_KEYS || process.env.GROQ_API_KEY || process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY;
-if (rawKeys) {
-  const parsed = String(rawKeys).split(/[\r\n,;]+/).map((k) => k.trim()).filter((k) => k.length > 5);
-  console.log(`  INFO     Key pool: Tìm thấy ${parsed.length} API Key hợp lệ sẵn sàng sử dụng.`);
+for (const [label, rawKeys] of [
+  ["Gemini translation", process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY],
+  ["Groq review", process.env.GROQ_API_KEYS || process.env.GROQ_API_KEY]
+]) {
+  if (rawKeys) {
+    const parsed = String(rawKeys).split(/[\r\n,;]+/).map((k) => k.trim()).filter((k) => k.length > 5);
+    console.log(`  INFO     ${label} pool: ${parsed.length} API key.`);
+  }
 }
 
 // A public base URL that is not a URL is a configuration error worth catching
 // here rather than as a broken chapter link in the reader.
 const publicBase = process.env.R2_PUBLIC_BASE_URL;
-if (publicBase) {
+if (publicBase && !isDriveStorage) {
   try {
     const url = new URL(publicBase);
     if (url.protocol !== "https:") {
