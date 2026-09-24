@@ -599,7 +599,7 @@ async function openAdmin(options = {}) {
   try {
     const session = await requestJson("/api/admin/session");
     showAuthenticated(session.authenticated);
-    if (session.authenticated && !session.storageReady) setStatus("R2 chưa được cấu hình trên Worker nên chưa upload được.", true);
+    if (session.authenticated && !session.storageReady) setStatus("Google Drive chưa được cấu hình trên Worker nên chưa upload được.", true);
     else if (session.authenticated) {
       if (pendingAdminTab) {
         selectAdminTab(pendingAdminTab);
@@ -684,7 +684,7 @@ async function submitBook(event) {
     let coverKey = "";
     if (epub) {
       setStatus("Đang upload EPUB...");
-      archiveKey = await uploadToR2(epub, "epub", abortController.signal, (percentage) =>
+      archiveKey = await uploadToStorage(epub, "epub", abortController.signal, (percentage) =>
         setProgress(Math.round(percentage * (cover ? 0.7 : 0.9)))
       );
     }
@@ -692,7 +692,7 @@ async function submitBook(event) {
     let coverUrl = existingBook?.cover || "";
     if (cover) {
       setStatus("Đang upload ảnh bìa...");
-      coverKey = await uploadToR2(cover, "cover", abortController.signal, (percentage) =>
+      coverKey = await uploadToStorage(cover, "cover", abortController.signal, (percentage) =>
         setProgress(70 + Math.round(percentage * 0.2))
       );
       coverUrl = coverKey;
@@ -791,11 +791,9 @@ async function deleteSelectedBook() {
 }
 
 async function loadAdminCatalog() {
-  // The same published snapshot the reader uses. The cache-busting query matters:
-  // the CDN holds it for 60s and an admin needs to see their own edit at once.
-  adminCatalog = CDN_BASE
-    ? await requestJson(`${CDN_BASE}/catalog/latest.json?admin=${Date.now()}`)
-    : { books: [] };
+  // Read through the same Drive-backed endpoint as the reader. The query avoids
+  // an older edge-cache response immediately after an edit.
+  adminCatalog = await requestJson(`/api/catalog?admin=${Date.now()}`);
   renderBookOptions();
   renderTranslationFocusOptions();
   startNewBook();
@@ -2423,9 +2421,9 @@ function setProgress(value) {
 }
 
 // Two steps and no bytes through a serverless function: ask the server for a
-// short-lived PUT URL, then send the file straight to R2. XHR rather than fetch
+// short-lived upload URL, then send the file straight to Drive. XHR rather than fetch
 // because fetch still has no upload progress.
-async function uploadToR2(file, kind, signal, onProgress) {
+async function uploadToStorage(file, kind, signal, onProgress) {
   const presign = await requestJson("/api/admin/upload", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -2439,7 +2437,7 @@ async function uploadToR2(file, kind, signal, onProgress) {
 
   await new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
-    request.open("PUT", presign.uploadUrl, true);
+    request.open(presign.method || "PUT", presign.uploadUrl, true);
     request.setRequestHeader(
       "Content-Type",
       kind === "epub" ? "application/epub+zip" : file.type || "application/octet-stream"
@@ -2450,7 +2448,7 @@ async function uploadToR2(file, kind, signal, onProgress) {
     request.addEventListener("load", () =>
       request.status >= 200 && request.status < 300
         ? resolve()
-        : reject(new Error(`R2 trả về ${request.status}.`))
+        : reject(new Error(`Storage trả về ${request.status}.`))
     );
     request.addEventListener("error", () => reject(new Error("Mất kết nối khi upload.")));
     request.addEventListener("abort", () => reject(new Error("Upload đã bị huỷ.")));
@@ -3865,7 +3863,7 @@ async function loadBilingualChapter(index) {
     if (els.adminBilingualZhCharCount) els.adminBilingualZhCharCount.textContent = zhText.length.toLocaleString("vi-VN") + " ký tự chữ Hán";
   } else {
     if (els.adminBilingualZhTitle) els.adminBilingualZhTitle.value = chObj.title || ("Chương " + chapterNumber);
-    if (els.adminBilingualZhContent) els.adminBilingualZhContent.textContent = "(Không tìm thấy bản tiếng Trung gốc trong R2 Archive)";
+    if (els.adminBilingualZhContent) els.adminBilingualZhContent.textContent = "(Không tìm thấy bản tiếng Trung gốc trên Google Drive)";
   }
 
   // Render VI
@@ -3913,7 +3911,7 @@ async function saveBilingualChapter() {
 
   if (els.bilingualSaveBtn) {
     els.bilingualSaveBtn.disabled = true;
-    els.bilingualSaveBtn.textContent = "Đang lưu lên R2...";
+    els.bilingualSaveBtn.textContent = "Đang lưu lên Google Drive...";
   }
 
   try {
@@ -3946,7 +3944,7 @@ async function saveBilingualChapter() {
   } finally {
     if (els.bilingualSaveBtn) {
       els.bilingualSaveBtn.disabled = false;
-      els.bilingualSaveBtn.innerHTML = '<svg class="icon" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Lưu bản dịch lên R2';
+      els.bilingualSaveBtn.innerHTML = '<svg class="icon" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Lưu bản dịch lên Google Drive';
     }
   }
 }
@@ -3979,7 +3977,7 @@ async function aiTranslateBilingualChapter() {
         els.adminBilingualViTextarea.value = res.translation;
         updateBilingualViCounts(res.translation);
       }
-      alert("Đã dịch xong chương bằng AI! Bạn có thể kiểm tra, chỉnh sửa câu từ và bấm 'Lưu bản dịch lên R2'.");
+      alert("Đã dịch xong chương bằng AI! Bạn có thể kiểm tra, chỉnh sửa câu từ và bấm 'Lưu bản dịch lên Google Drive'.");
     }
   } catch (err) {
     alert("Lỗi AI dịch: " + err.message);
@@ -4518,7 +4516,7 @@ async function handleBookEditSubmit(event) {
 
 async function deleteBookPrompt(book) {
   if (!book || !book.id) return;
-  const confirmed = confirm('Bạn có chắc chắn muốn xóa vĩnh viễn bộ truyện "' + book.title + '" khỏi hệ thống?\nThao tác này sẽ xóa mọi chương trên R2 và Database.');
+  const confirmed = confirm('Bạn có chắc chắn muốn xóa vĩnh viễn bộ truyện "' + book.title + '" khỏi hệ thống?\nThao tác này sẽ xóa mọi chương trên Google Drive và Database.');
   if (!confirmed) return;
 
   try {

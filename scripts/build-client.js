@@ -37,8 +37,10 @@ const jszipUrl = copyVendor(
 );
 
 // The admin bundle is only useful to the site owner, so it ships as a separate
-const cdnBase = (process.env.R2_PUBLIC_BASE_URL !== undefined ? process.env.R2_PUBLIC_BASE_URL : "https://cdn.tram-chu.online").replace(/\/$/, "");
+// Storage is Google Drive-first. A legacy CDN origin may be supplied only for
+// an explicit historical build; normal builds must not emit dead R2 URLs.
 const readerCdnEnabled = process.env.READER_CDN_ENABLED === "true";
+const cdnBase = readerCdnEnabled ? String(process.env.R2_PUBLIC_BASE_URL || "").replace(/\/$/, "") : "";
 const supabaseUrl = (process.env.SUPABASE_URL || "https://bckwrfucultwxirorglv.supabase.co").replace(/\/$/, "");
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || "sb_publishable_S2l6AfkJg1ehDzY0GmnZxg_7jGI0vCq";
 const buildVersion = Date.now().toString(36) + "-" + crypto.randomBytes(3).toString("hex");
@@ -209,6 +211,7 @@ function writeHeaders() {
 }
 
 function cdnOrigin() {
+  if (!readerCdnEnabled) return "";
   const base = process.env.R2_PUBLIC_BASE_URL || "";
   if (!base) return "";
   try {
@@ -249,10 +252,11 @@ async function writeSitemapAndRobots() {
 
   let books = [];
   try {
-    const cdnUrl = (process.env.R2_PUBLIC_BASE_URL || "https://cdn.tram-chu.online").replace(/\/$/, "");
+    const cdnUrl = readerCdnEnabled ? String(process.env.R2_PUBLIC_BASE_URL || "").replace(/\/$/, "") : "";
+    const catalogUrl = cdnUrl ? `${cdnUrl}/catalog/latest.json` : `${siteUrl}/api/catalog`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 4000);
-    const res = await fetch(`${cdnUrl}/catalog/latest.json`, { signal: controller.signal });
+    const res = await fetch(catalogUrl, { signal: controller.signal });
     clearTimeout(timeout);
     if (res.ok) {
       const data = await res.json();

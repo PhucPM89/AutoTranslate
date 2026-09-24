@@ -139,9 +139,9 @@ const ANALYTICS_VISIT_KEY = "epubTranslator.visitCounted";
 const ANALYTICS_READ_KEY = "epubTranslator.readCounted";
 const JSZIP_URL = __ASSET_JSZIP__;
 const ADMIN_MODULE_URL = __ASSET_ADMIN__;
-// Reader CDN path. Chapter JSON is fetched straight from R2 through the CDN:
-// no Worker invocation, no Supabase query, no Gemini call on the read path.
-const CDN_BASE = String(__CDN_BASE__ || "https://cdn.tram-chu.online").replace(/\/$/, "");
+// Drive-backed reader data is served same-origin through Pages Functions. A CDN
+// value is retained only for an explicitly enabled legacy deployment.
+const CDN_BASE = String(__CDN_BASE__ || "").replace(/\/$/, "");
 // Analytics goes straight to Supabase so a page view costs no serverless
 // invocation. The anon key is public by design: RLS lets it insert events and
 // nothing else - verified against the live project.
@@ -926,8 +926,8 @@ async function loadCatalogSnapshot() {
   // The CDN intentionally allows the canonical site only. Local development and
   // Pages previews go through the same-origin API instead of logging a CORS error
   // and waiting for a doomed request before falling back.
-  if (shouldProxyReaderCdn()) urls.push(`/api/catalog?t=${Date.now()}`);
-  else if (CDN_BASE) urls.push(`${cdnUrl("catalog/latest.json")}?t=${Date.now()}`);
+  if (READER_CDN_ENABLED && shouldProxyReaderCdn()) urls.push(`/api/catalog?t=${Date.now()}`);
+  else if (READER_CDN_ENABLED && CDN_BASE) urls.push(`${cdnUrl("catalog/latest.json")}?t=${Date.now()}`);
   if (!urls.some((url) => url.startsWith("/api/catalog"))) urls.push(`/api/catalog?t=${Date.now()}`);
   urls.push("/library.json");
 
@@ -4905,10 +4905,11 @@ function coverImageUrl(cover) {
 
 function shouldProxyReaderCdn() {
   if (typeof window === "undefined") return false;
-  return window.location.hostname !== "tram-chu.online";
+  return READER_CDN_ENABLED && window.location.hostname !== "tram-chu.online";
 }
 
 function readerContentUrl(url) {
+  if (!READER_CDN_ENABLED) return readerContentProxyUrl(url) || url;
   if (!shouldProxyReaderCdn()) return url;
   try {
     const parsed = new URL(url, window.location.origin);
@@ -4924,8 +4925,8 @@ function readerContentUrl(url) {
 function readerContentProxyUrl(url) {
   try {
     const parsed = new URL(url, typeof window !== "undefined" ? window.location.origin : "https://tram-chu.online");
-    const cdn = new URL(CDN_BASE);
-    if (parsed.origin === cdn.origin || parsed.pathname.startsWith("/books/") || parsed.pathname.startsWith("/catalog/")) {
+    const cdn = CDN_BASE ? new URL(CDN_BASE) : null;
+    if ((cdn && parsed.origin === cdn.origin) || parsed.pathname.startsWith("/books/") || parsed.pathname.startsWith("/catalog/")) {
       const key = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
       return `/api/reader/content?key=${encodeURIComponent(key)}`;
     }

@@ -22,7 +22,7 @@ const BOT_USER_AGENTS = [
   "yandexbot"
 ];
 
-const CDN_BASE = "https://cdn.tram-chu.online";
+import { readDriveFile } from "./_drive.js";
 const SITE_NAME = "Trạm Chữ";
 const SITE_URL = "https://tram-chu.online";
 const DEFAULT_COVER = "https://tram-chu.online/library/covers/misty-pagoda-hero.webp";
@@ -92,12 +92,8 @@ export async function onRequest(context) {
   // If crawler hits the homepage without book param, inject crawlable book catalog so crawlers discover every book
   if (isCrawler && !rawBookParam) {
     try {
-      const catRes = await fetch(`${CDN_BASE}/catalog/latest.json`, {
-        headers: { "Accept": "application/json" },
-        cf: { cacheTtl: 1800, cacheEverything: true }
-      });
-      if (catRes.ok) {
-        const cat = await catRes.json();
+      const cat = await readDriveJson(context.env, "catalog/latest.json");
+      if (cat) {
         const books = Array.isArray(cat.books) ? cat.books : [];
         const topBooks = books.slice(0, 100);
         const linksHtml = `<section id="crawlerCatalog" style="display:none" aria-hidden="true"><h2>Danh sách truyện dịch Trạm Chữ</h2><ul>` +
@@ -133,18 +129,11 @@ export async function onRequest(context) {
   // Fetch book metadata from CDN
   let book = null;
   try {
-    const res = await fetch(`${CDN_BASE}/books/${encodeURIComponent(bookId)}/index.json`, {
-      headers: { "Accept": "application/json" },
-      cf: { cacheTtl: 3600, cacheEverything: true }
-    });
-    if (res.ok) {
-      book = await res.json();
-    }
+    book = await readDriveJson(context.env, `books/${bookId}/index.json`);
   } catch {
     try {
-      const catRes = await fetch(`${CDN_BASE}/catalog/latest.json`);
-      if (catRes.ok) {
-        const cat = await catRes.json();
+      const cat = await readDriveJson(context.env, "catalog/latest.json");
+      if (cat) {
         book = (cat.books || []).find((b) => b.id === bookId);
       }
     } catch {
@@ -368,7 +357,13 @@ function normalizeCoverUrl(cover) {
   if (!cover) return DEFAULT_COVER;
   if (cover.startsWith("http://") || cover.startsWith("https://")) return cover;
   if (cover.startsWith("/")) return `https://tram-chu.online${cover}`;
-  return `${CDN_BASE}/${cover.replace(/^\//, "")}`;
+  return `https://tram-chu.online/${cover.replace(/^\//, "")}`;
+}
+
+async function readDriveJson(env, key) {
+  const stored = await readDriveFile(env, key);
+  if (!stored) return null;
+  return JSON.parse(new TextDecoder().decode(stored.body));
 }
 
 function cleanDescription(text, maxLength = 240) {

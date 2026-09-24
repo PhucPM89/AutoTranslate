@@ -29,7 +29,7 @@ async function main() {
   const title = flag("--title", process.env.BOOK_TITLE) || "Chưa đặt tên";
   const bookId = flag("--id", process.env.BOOK_ID) || bookIdFromKey(archiveKey);
 
-  console.log(`Đang tải EPUB từ bucket archive: ${archiveKey}`);
+  console.log(`Đang tải EPUB từ private archive storage: ${archiveKey}`);
   const archive = createArchiveStorage();
   const epubBuffer = await archive.get(archiveKey);
   if (!epubBuffer || !epubBuffer.length) throw new Error(`Không đọc được ${archiveKey}.`);

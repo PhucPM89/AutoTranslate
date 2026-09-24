@@ -54,3 +54,14 @@ colab/hachimi_private_launcher.py
 /server/video/tmp_work_*/
 /server/video/assets/test-card.jpg
 /server/video/assets/test-card-cfg.json
+
+# Local one-off investigation scripts
+/check_chapters.js
+/check_db_title.js
+/check_live_jobs.js
+/check_supa.js
+/check_vot_thi_nhan.js
+/enqueue_priority_audio.js
+/get_supa_book.js
+/list_books.js
+

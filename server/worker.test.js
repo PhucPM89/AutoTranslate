@@ -116,7 +116,8 @@ test("static requests come from the assets binding and carry the security header
 
   const csp = response.headers.get("content-security-policy");
   assert.match(csp, /https:\/\/cdn\.tram-chu\.online/, "reader phải gọi được CDN");
-  assert.match(csp, /https:\/\/\*\.r2\.cloudflarestorage\.com/, "admin phải PUT được lên R2");
+  assert.match(csp, /https:\/\/www\.googleapis\.com/, "admin phải PUT EPUB qua Google Drive");
+  assert.doesNotMatch(csp, /r2\.cloudflarestorage\.com/, "CSP không còn mở endpoint R2");
   assert.match(csp, /frame-ancestors 'none'/);
 });
 
@@ -730,7 +731,7 @@ test("the catalogue routes report a missing Supabase instead of failing obscurel
 test("wrong methods are rejected with an Allow header", async () => {
   const response = await call("/api/admin/upload", { cookie: cookie() });
   assert.equal(response.status, 405);
-  assert.equal(response.headers.get("allow"), "POST");
+  assert.equal(response.headers.get("allow"), "POST, PUT");
 });
 
 test("no response ever carries an R2 secret", async () => {

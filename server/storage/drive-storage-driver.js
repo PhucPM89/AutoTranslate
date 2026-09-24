@@ -174,7 +174,15 @@ function createDriveStorage(env = process.env) {
       return { targetFolderId: coversFolderId, fileName: filename };
     }
 
-    // 3. books: books/{bookId}/...
+    // 3. Source EPUBs stay in a private Drive subfolder. They deliberately do
+    // not match any public Pages route, but keeping them together also makes
+    // Drive retention and cleanup auditable.
+    if (key.startsWith("uploads/")) {
+      const uploadsFolderId = await getOrCreateFolder(rootFolderId, "uploads");
+      return { targetFolderId: uploadsFolderId, fileName: key.split("/").pop() };
+    }
+
+    // 4. books: books/{bookId}/...
     const match = key.match(/^books\/([^/]+)(?:\/(.*))?$/);
     if (match) {
       const bookId = match[1];
@@ -199,17 +207,20 @@ function createDriveStorage(env = process.env) {
 
   async function findFileByKey(key) {
     const token = await getAccessToken();
-    // Search by relPath in appProperties across the storage
-    const q = `trashed = false and (appProperties has { key='relPath' and value='${escapeDriveQuery(key)}' } or name = '${escapeDriveQuery(key)}')`;
+    // Storage keys are immutable appProperties. Never fall back to `name`:
+    // repeated names (index.json, 1.json) can otherwise resolve another book.
+    const q = `trashed = false and appProperties has { key='relPath' and value='${escapeDriveQuery(key)}' }`;
     const url = new URL(DRIVE_FILES_URL);
     url.searchParams.set("q", q);
     url.searchParams.set("fields", "files(id,name,size,mimeType,modifiedTime,md5Checksum,appProperties)");
-    url.searchParams.set("pageSize", "1");
+    url.searchParams.set("pageSize", "2");
 
     const response = await fetchWithRetry(url, { headers: { Authorization: `Bearer ${token}` } });
     if (!response.ok) throw new Error(`Drive find file error HTTP ${response.status}`);
     const data = await response.json();
-    return data.files?.[0] || null;
+    const files = data.files || [];
+    if (files.length > 1) throw new Error(`Duplicate Drive storage key: ${key}`);
+    return files[0] || null;
   }
 
   return {
@@ -266,6 +277,43 @@ function createDriveStorage(env = process.env) {
       return { key, id: file.id, size: buffer.length, url: publicBase ? `${publicBase}/${key}` : "" };
     },
 
+    // The browser uploads large EPUBs straight to this short-lived Google
+    // resumable session. Pages never proxies the bytes, avoiding its request
+    // body limit while the archive remains private in Drive.
+    async initiateResumableUpload(key, { contentType, size, cacheControl } = {}) {
+      if (!key.startsWith("uploads/")) throw new Error("Resumable upload chỉ dành cho EPUB private.");
+      if (!Number.isFinite(size) || size <= 0) throw new Error("Kích thước EPUB không hợp lệ.");
+      if (await findFileByKey(key)) throw new Error(`Drive storage key đã tồn tại: ${key}`);
+
+      const token = await getAccessToken();
+      const { targetFolderId, fileName } = await resolveFolderAndName(key);
+      const mime = contentType || "application/epub+zip";
+      const response = await fetchWithRetry(`${DRIVE_UPLOAD_URL}?uploadType=resumable&fields=id,name,size`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json; charset=UTF-8",
+          "X-Upload-Content-Type": mime,
+          "X-Upload-Content-Length": String(size)
+        },
+        body: JSON.stringify({
+          name: fileName,
+          parents: [targetFolderId],
+          mimeType: mime,
+          appProperties: {
+            relPath: key,
+            cacheControl: cacheControl || "private, max-age=0"
+          }
+        })
+      });
+      const location = response.headers.get("location");
+      if (!response.ok || !location) {
+        const detail = await response.text().catch(() => "");
+        throw new Error(`Drive không tạo được phiên upload (${response.status}): ${detail.slice(0, 200)}`);
+      }
+      return { uploadUrl: location, key, maxBytes: size };
+    },
+
     async get(key) {
       const file = await findFileByKey(key);
       if (!file) return null;
@@ -310,7 +358,8 @@ function createDriveStorage(env = process.env) {
 
         const data = await response.json();
         for (const f of data.files || []) {
-          const relPath = f.appProperties?.relPath || f.name;
+          const relPath = f.appProperties?.relPath;
+          if (!relPath) continue;
           if (!prefix || relPath.startsWith(prefix)) {
             out.push({
               key: relPath,
@@ -335,6 +384,17 @@ function createDriveStorage(env = process.env) {
         headers: { Authorization: `Bearer ${token}` }
       });
       return response.ok;
+    },
+
+    // Keep the storage contract identical to R2. Drive has no prefix-delete
+    // API, so callers must first list the exact relPath prefix and this method
+    // deletes only those resolved file ids. A missing file is idempotent.
+    async removeMany(keys) {
+      let removed = 0;
+      for (const key of [...new Set((keys || []).filter(Boolean))]) {
+        if (await this.remove(key)) removed += 1;
+      }
+      return removed;
     },
 
     publicUrl(key) {

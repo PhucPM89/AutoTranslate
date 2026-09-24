@@ -1,20 +1,12 @@
 # Cloudflare Pages header rules. Generated into public/_headers by
 # scripts/build-client.js — edit this template, not the output.
 #
-# The CDN placeholder below is replaced with the R2 public base origin at build
-# time, so the CSP allows the reader to fetch chapter JSON from it. When
-# R2_PUBLIC_BASE_URL is not set it collapses to nothing, separator included, and
-# the CSP stays as strict as before.
-#
 # Cloudflare Workers Assets serves and honours this file, so these headers apply
 # to every static response. The Worker sets the same policy on its own JSON
 # responses, which never pass through here.
 #
-# connect-src also allows the R2 S3 endpoint: the admin page uploads an EPUB
-# straight there with a presigned PUT. Readers never contact that host.
-
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https://tram-chu.online https://*.byteimg.com https://*.googleusercontent.com https://lh3.googleusercontent.com https://*.yuewen.com https://*.qidian.com https://*.bianhuaxs.com https://imgservices-*.image.myqcloud.com; connect-src 'self' https://tram-chu.online https://*.supabase.co https://*.r2.cloudflarestorage.com https://generativelanguage.googleapis.com https://gateway.ai.cloudflare.com https://cloudflareinsights.com https://*.cloudflareinsights.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self' mailto:
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https://*.byteimg.com https://*.googleusercontent.com https://lh3.googleusercontent.com https://*.yuewen.com https://*.qidian.com https://*.bianhuaxs.com https://imgservices-*.image.myqcloud.com; connect-src 'self' https://*.supabase.co https://generativelanguage.googleapis.com https://gateway.ai.cloudflare.com https://cloudflareinsights.com https://*.cloudflareinsights.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self' mailto:
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: DENY

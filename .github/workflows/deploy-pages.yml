@@ -20,8 +20,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      R2_PUBLIC_BASE_URL: ${{ secrets.R2_PUBLIC_BASE_URL }}
-      READER_CDN_ENABLED: "true"
+      # Content is served through Pages Functions from Google Drive. Do not
+      # build CDN URLs for the retired R2 public bucket.
+      READER_CDN_ENABLED: "false"
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
 
