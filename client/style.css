@@ -864,6 +864,13 @@ body > * {
 }
 
 html {
+  /* Keep the document itself as the single vertical scroll container.  Relying
+     on the browser's implicit `visible` overflow can leave the page without a
+     scroll container after a desktop window is resized or a modal releases its
+     scroll lock. */
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
   scrollbar-color: var(--border) transparent;
   overscroll-behavior-y: none;
   -webkit-overflow-scrolling: touch;
@@ -871,8 +878,11 @@ html {
 
 body {
   margin: 0;
+  height: auto;
   min-height: 100vh;
   min-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: visible;
   background: var(--app-bg);
   color: var(--text);
   font-family: var(--font-sans);
@@ -5934,21 +5944,24 @@ body.theme-forest .document-text .tts-paragraph-highlight.tts-speaking {
 }
 
 /* Zen / Focus Mode */
-body.zen-mode .topbar,
-body.zen-mode .sidebar,
-body.zen-mode .reader-bar,
-body.zen-mode .footer-nav,
-body.zen-mode .mobile-bar,
-body.zen-mode .chapter-sponsor-slot {
+body.zen-mode #readerView .topbar,
+body.zen-mode #readerView .sidebar,
+body.zen-mode #readerView .reader-bar,
+body.zen-mode #readerView .footer-nav,
+body.zen-mode #readerView .mobile-bar,
+body.zen-mode #readerView .chapter-sponsor-slot {
   display: none !important;
 }
 
-body.zen-mode .app-shell {
+/* Scope Zen overrides to the active reader.  The page also contains hidden
+   app shells (notably EPUB Studio); a generic `.app-shell { display:block }`
+   overrides their [hidden] state and puts a full dark viewport above the book. */
+body.zen-mode #readerView {
   display: block !important;
   width: 100% !important;
 }
 
-body.zen-mode .layout {
+body.zen-mode #readerView > .layout {
   display: block !important;
   width: 100% !important;
   min-height: 100vh !important;
@@ -5957,7 +5970,7 @@ body.zen-mode .layout {
   padding: 0 !important;
 }
 
-body.zen-mode .workspace-main {
+body.zen-mode #readerView .workspace-main {
   display: block !important;
   width: 100% !important;
   max-width: min(var(--document-width, 820px), 92vw) !important;
@@ -5966,7 +5979,7 @@ body.zen-mode .workspace-main {
   box-sizing: border-box !important;
 }
 
-body.zen-mode .document-canvas {
+body.zen-mode #readerView .document-canvas {
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
@@ -5976,7 +5989,7 @@ body.zen-mode .document-canvas {
   margin: 0 auto !important;
 }
 
-body.zen-mode .document-paper {
+body.zen-mode #readerView .document-paper {
   width: 100% !important;
   max-width: 100% !important;
   margin: 0 auto !important;
@@ -15069,4 +15082,3 @@ textarea,
   color: var(--muted);
 }
 @media (max-width:640px) { .crawler-manual-search,.crawler-preview-card { grid-template-columns:1fr; } }
-
