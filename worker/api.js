@@ -32,6 +32,8 @@ import {
   categorySlugForLabel
 } from "../server/crawler-store.js";
 import { createR2BindingStorage } from "./r2-storage.js";
+import { createDriveStorage } from "../server/storage/drive-storage-driver.js";
+import { readDriveFile } from "../functions/_drive.js";
 import { handleAdminAudio } from "../server/audio/admin-router.js";
 import { synthesizeEdgeSpeech, synthesizeFullChapterSpeech } from "../server/edge-tts.js";
 
@@ -195,6 +197,12 @@ async function handleReaderAudioStream({ request }) {
 // ---- public catalog --------------------------------------------------------
 async function handlePublicCatalog({ request, env }) {
   if (request.method !== "GET" && request.method !== "HEAD") return methodNotAllowed("GET, HEAD");
+  if (env.GOOGLE_DRIVE_REFRESH_TOKEN) {
+    const stored = await readDriveFile(env, "catalog/latest.json");
+    if (stored) return new Response(request.method === "HEAD" ? null : stored.body, { status: 200, headers: {
+      "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=60, s-maxage=300, stale-while-revalidate=600", "Access-Control-Allow-Origin": "*"
+    }});
+  }
   const bucket = env.NOVEL_STORAGE || env.R2_READER;
   if (bucket) {
     const reader = createR2BindingStorage(bucket);
@@ -244,8 +252,12 @@ async function handlePublicReaderContent({ request, env, url }) {
   if (!allowed) throw fail(400, "Đường dẫn nội dung đọc không hợp lệ.");
 
   let body = null;
+  if (env.GOOGLE_DRIVE_REFRESH_TOKEN) {
+    const stored = await readDriveFile(env, key);
+    body = stored?.body || null;
+  }
   const bucket = env.NOVEL_STORAGE || env.R2_READER;
-  if (bucket) {
+  if (!body && bucket) {
     const reader = createR2BindingStorage(bucket);
     body = await reader.get(key).catch(() => null);
   }
@@ -277,8 +289,12 @@ async function handleSession({ request, env }) {
   if (request.method !== "GET") return methodNotAllowed("GET, DELETE");
   return json({
     authenticated: await isAdmin(request, env),
-    // What the admin panel actually needs to know: whether uploads can be signed.
-    storageReady: Boolean(env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY && env.R2_ARCHIVE_BUCKET)
+    // Drive is the primary store; retain the legacy R2 predicate only while a
+    // deployment has not yet received Drive OAuth.
+    storageReady: Boolean(
+      (env.GOOGLE_DRIVE_CLIENT_ID && env.GOOGLE_DRIVE_CLIENT_SECRET && env.GOOGLE_DRIVE_REFRESH_TOKEN) ||
+      (env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY && env.R2_ARCHIVE_BUCKET)
+    )
   });
 }
 
@@ -313,8 +329,13 @@ async function handleLogout({ request, env }) {
 // ---- admin upload ----------------------------------------------------------
 
 async function handleUpload({ request, env }) {
-  if (request.method !== "POST") return methodNotAllowed("POST");
   await requireAdmin(request, env);
+
+  // Cover bytes are small enough to flow through Pages safely. EPUB archives
+  // remain a separate resumable-ingest concern; never proxy a 200 MB archive
+  // through a Worker body limit.
+  if (request.method === "PUT") return receiveDriveCoverUpload(request, env);
+  if (request.method !== "POST") return methodNotAllowed("POST, PUT");
 
   const body = await readJson(request);
   return body.action === "ingest" ? dispatchIngest(body, env) : presignUpload(body, env);
@@ -323,11 +344,6 @@ async function handleUpload({ request, env }) {
 async function presignUpload(body, env) {
   const rule = UPLOAD_KINDS[body.kind];
   if (!rule) throw fail(400, "Loại file không hợp lệ.");
-
-  const bucketName = env[rule.bucketVar];
-  if (!bucketName || !env.R2_ACCESS_KEY_ID || !env.R2_SECRET_ACCESS_KEY) {
-    throw fail(503, "R2 chưa được cấu hình trên Worker.");
-  }
 
   const size = Number(body.size);
   if (!Number.isFinite(size) || size <= 0) throw fail(400, "Thiếu kích thước file.");
@@ -343,6 +359,32 @@ async function presignUpload(body, env) {
   const random = crypto.getRandomValues(new Uint8Array(12));
   const key = `${rule.prefix}${[...random].map((b) => b.toString(16).padStart(2, "0")).join("")}${extension}`;
 
+  if (body.kind === "cover" && hasDriveStorage(env)) {
+    return json({
+      uploadUrl: `/api/admin/upload?kind=cover&key=${encodeURIComponent(key)}`,
+      method: "PUT",
+      key,
+      maxBytes: rule.maxBytes,
+      storage: "drive"
+    });
+  }
+
+  if (body.kind === "epub" && hasDriveStorage(env)) {
+    const upload = await readerStorage(env).initiateResumableUpload(key, {
+      contentType: String(body.contentType || "application/epub+zip"),
+      size,
+      cacheControl: "private, max-age=0"
+    });
+    return json({ ...upload, method: "PUT", storage: "drive-resumable" });
+  }
+
+  const bucketName = env[rule.bucketVar];
+  if (!bucketName || !env.R2_ACCESS_KEY_ID || !env.R2_SECRET_ACCESS_KEY) {
+    throw fail(503, body.kind === "epub"
+      ? "Upload EPUB qua Drive resumable chưa được cấu hình."
+      : "Storage chưa được cấu hình trên Worker.");
+  }
+
   // Presigned rather than proxied: Cloudflare caps a request body at 100 MB and
   // an EPUB may be 200 MB, so the bytes must go straight to R2.
   const signed = presignR2Url({
@@ -357,6 +399,26 @@ async function presignUpload(body, env) {
   });
 
   return json({ uploadUrl: signed.url, method: "PUT", key, expiresAt: signed.expiresAt, maxBytes: rule.maxBytes });
+}
+
+function hasDriveStorage(env) {
+  return Boolean(env.GOOGLE_DRIVE_CLIENT_ID && env.GOOGLE_DRIVE_CLIENT_SECRET && env.GOOGLE_DRIVE_REFRESH_TOKEN);
+}
+
+async function receiveDriveCoverUpload(request, env) {
+  if (!hasDriveStorage(env)) throw fail(503, "Google Drive chưa được cấu hình.");
+  const url = new URL(request.url);
+  const key = String(url.searchParams.get("key") || "");
+  const rule = UPLOAD_KINDS.cover;
+  if (!/^covers\/uploads\/[a-f0-9]{24}\.(?:jpg|jpeg|png|webp)$/i.test(key)) throw fail(400, "Khóa ảnh bìa không hợp lệ.");
+  const type = String(request.headers.get("content-type") || "").split(";", 1)[0];
+  if (!rule.contentTypes.includes(type)) throw fail(400, "Content-Type ảnh bìa không được phép.");
+  const declared = Number(request.headers.get("content-length") || 0);
+  if (declared && (!Number.isFinite(declared) || declared > rule.maxBytes)) throw fail(413, "Ảnh bìa vượt giới hạn 5 MB.");
+  const bytes = new Uint8Array(await request.arrayBuffer());
+  if (!bytes.length || bytes.length > rule.maxBytes) throw fail(413, "Ảnh bìa vượt giới hạn 5 MB.");
+  await readerStorage(env).put(key, bytes, { contentType: type, cacheControl: "public, max-age=604800" });
+  return json({ uploaded: true, key, size: bytes.length, storage: "drive" });
 }
 
 // Ingest is minutes of work for a large EPUB, so it runs in GitHub Actions and
@@ -697,16 +759,16 @@ async function handleCatalog({ request, env }) {
         await writeTranslationConfig(storage, { focusBookId: "" });
       }
     } catch (error) {
-      cleanupErrors.push(`R2 reader: ${error.message}`);
+      cleanupErrors.push(`Reader storage: ${error.message}`);
     }
 
-    if (env.NOVEL_ARCHIVE) {
+    const archive = privateStorage(env);
+    if (archive) {
       try {
-        const archive = createR2BindingStorage(env.NOVEL_ARCHIVE);
         const objects = await archive.list(`archives/${id}`);
         await archive.removeMany(objects.map((object) => object.key));
       } catch (error) {
-        cleanupErrors.push(`R2 archive: ${error.message}`);
+        cleanupErrors.push(`Private archive: ${error.message}`);
       }
     }
 
@@ -814,8 +876,7 @@ async function handleTranslateStatus({ request, env }) {
       throw fail(410, "Điều khiển Gemini Web trên dashboard đã được gỡ; chỉ chạy reviewer bằng file BAT trên máy local.");
     }
     if (body?.action === "focus") {
-      if (!env.NOVEL_STORAGE) throw fail(503, "Chưa cấu hình NOVEL_STORAGE để lưu bộ truyện ưu tiên.");
-      const storage = createR2BindingStorage(env.NOVEL_STORAGE);
+      const storage = readerStorage(env);
       const focusBookId = String(body?.focusBookId || "").trim();
       if (focusBookId) {
         const catalogRaw = await storage.get("catalog/latest.json").catch(() => null);
@@ -866,8 +927,8 @@ async function handleTranslateStatus({ request, env }) {
   let config = { schema: 1, focusBookId: "", updatedAt: "" };
   let publishedBookIds = null;
   try {
-    if (env.NOVEL_STORAGE) {
-      const storage = createR2BindingStorage(env.NOVEL_STORAGE);
+    {
+      const storage = readerStorage(env);
       config = await readTranslationConfig(storage);
       const catalogRaw = await storage.get("catalog/latest.json").catch(() => null);
       if (catalogRaw) {
@@ -906,8 +967,8 @@ async function handleTranslateStatus({ request, env }) {
         }
       }
     }
-    if (!status && env.NOVEL_ARCHIVE) {
-      const archive = createR2BindingStorage(env.NOVEL_ARCHIVE);
+    if (!status && privateStorage(env)) {
+      const archive = privateStorage(env);
       const raw = await archive.get("jobs/translate-status.json").catch(() => null);
       if (raw) status = JSON.parse(raw.toString("utf8"));
     }
@@ -1607,17 +1668,29 @@ async function markGlossarySuggestion(env, id, status) {
 // ---- shared ----------------------------------------------------------------
 
 function readerStorage(env) {
+  // Drive is now the canonical reader store. Keep the binding fallback solely
+  // for older test/development deployments that have not received Drive OAuth.
+  if (env.GOOGLE_DRIVE_CLIENT_ID && env.GOOGLE_DRIVE_CLIENT_SECRET && env.GOOGLE_DRIVE_REFRESH_TOKEN) {
+    return createDriveStorage(env);
+  }
   const bucket = env.NOVEL_STORAGE || env.R2_READER || env.R2_STORAGE || env.STORAGE || env.NOVEL_ARCHIVE;
   if (!bucket) throw fail(503, "Thiếu R2 binding NOVEL_STORAGE hoặc R2_READER.");
   return createR2BindingStorage(bucket, { publicBase: env.R2_PUBLIC_BASE_URL });
 }
 
+function privateStorage(env) {
+  if (hasDriveStorage(env)) return createDriveStorage(env);
+  if (env.NOVEL_ARCHIVE) return createR2BindingStorage(env.NOVEL_ARCHIVE);
+  return null;
+}
+
 function crawlerState(env) {
-  if (!env.NOVEL_ARCHIVE) throw fail(503, "Thiếu R2 binding NOVEL_ARCHIVE.");
+  const storage = privateStorage(env);
+  if (!storage) throw fail(503, "Thiếu private storage cho crawler.");
   return createCrawlerState({
-    // Crawler state is operational, so it lives in the private bucket.
-    storage: createR2BindingStorage(env.NOVEL_ARCHIVE),
-    readerStorage: (env.NOVEL_STORAGE || env.R2_READER) ? createR2BindingStorage(env.NOVEL_STORAGE || env.R2_READER) : null,
+    // Crawler state is operational, so it is not exposed through reader routes.
+    storage,
+    readerStorage: readerStorage(env),
     db: createSupabase(env) || false
   });
 }
@@ -1673,11 +1746,9 @@ function sessionCookie(value, maxAge) {
 const KEYS_STORAGE_KEY = "config/api-keys.json";
 
 function storageForKeys(env) {
-  // Credentials are operational secrets. NOVEL_STORAGE is the reader bucket and
-  // is served wholesale by the public CDN, so falling back to it publishes every
-  // key to the internet. Fail closed when the private binding is absent.
-  if (env.NOVEL_ARCHIVE) return createR2BindingStorage(env.NOVEL_ARCHIVE);
-  return null;
+  // The Drive adapter exposes only allow-listed reader paths, so config keys in
+  // Drive are private just as they were in the former archive bucket.
+  return privateStorage(env);
 }
 
 async function getActiveKeyList(env) {
@@ -1707,7 +1778,7 @@ async function getActiveKeyList(env) {
 
 async function saveActiveKeyList(env, list) {
   const storage = storageForKeys(env);
-  if (!storage) throw fail(503, "R2 Storage chưa được cấu hình để lưu API Key.");
+  if (!storage) throw fail(503, "Private storage chưa được cấu hình để lưu API Key.");
   const cleanList = (list || []).map((k) => String(k || "").trim()).filter(Boolean);
   await storage.put(KEYS_STORAGE_KEY, JSON.stringify(cleanList, null, 2), {
     contentType: "application/json",
@@ -2576,8 +2647,8 @@ function contentSecurityPolicy(env) {
     `img-src 'self' data:${cdn ? ` ${cdn}` : ""} https://*.byteimg.com https://*.googleusercontent.com https://lh3.googleusercontent.com https://*.yuewen.com https://*.qidian.com https://*.bianhuaxs.com https://imgservices-*.image.myqcloud.com`,
     "script-src 'self'",
     "style-src 'self'",
-    // The CDN for chapters, Supabase for analytics, R2 S3 endpoint, and Gemini API.
-    `connect-src 'self'${cdn ? ` ${cdn}` : ""} https://*.supabase.co https://*.r2.cloudflarestorage.com https://generativelanguage.googleapis.com https://gateway.ai.cloudflare.com`,
+    // Google resumable upload sessions, Supabase analytics and Gemini API.
+    `connect-src 'self'${cdn ? ` ${cdn}` : ""} https://www.googleapis.com https://*.supabase.co https://generativelanguage.googleapis.com https://gateway.ai.cloudflare.com`,
     "media-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",

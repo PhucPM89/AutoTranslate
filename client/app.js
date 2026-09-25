@@ -5103,7 +5103,9 @@ async function loadCdnChapter(index, force = false) {
       : await fetchCdnOrProxy(chapterUrl, { cache: "no-store" });
     const document_ = await response.json();
     if (index !== state.currentIndex) return;
-    chapter.text = String(document_.content || "");
+    chapter.text = Array.isArray(document_.content)
+      ? document_.content.map((paragraph) => String(paragraph || "").trim()).filter(Boolean).join("\n\n")
+      : String(document_.content || "");
     chapter.audio = document_.audio || chapter.audio || null;
     chapter.audioUrl = document_.audioUrl || document_.audio?.url || chapter.audioUrl || "";
     chapter.status = document_.translationStatus || chapter.status;

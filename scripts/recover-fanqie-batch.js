@@ -34,7 +34,30 @@ function saveCheckpoint(checkpoint) {
   fs.writeFileSync(checkpointPath, JSON.stringify(checkpoint, null, 2) + "\n");
 }
 
-function runBook(bookId) {
+function saveStatus(data) {
+  try {
+    const statusPath = path.join(root, "scratch", "fanqie-recovery-status.json");
+    fs.writeFileSync(statusPath, JSON.stringify(data, null, 2) + "\n");
+  } catch {}
+}
+
+const { execFileSync } = require("node:child_process");
+
+function isBookProcessRunning(bookId) {
+  try {
+    const script = `@(Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'node.exe' -and $_.CommandLine -like '*recover-fanqie-originals.js*' -and $_.CommandLine -like ('*' + '${bookId}' + '*') }).Count`;
+    const count = Number(execFileSync("powershell.exe", ["-NoProfile", "-Command", script], { encoding: "utf8" }).trim());
+    return count > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function runBook(bookId) {
+  while (isBookProcessRunning(bookId)) {
+    console.log(`Waiting for existing background process on ${bookId} to complete...`);
+    await new Promise((r) => setTimeout(r, 10000));
+  }
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [path.join(__dirname, "recover-fanqie-originals.js"), "--book", bookId], {
       cwd: root,
@@ -55,6 +78,16 @@ async function main() {
   for (let index = 0; index < selected.length; index++) {
     const bookId = selected[index];
     console.log(`\n[${index + 1}/${selected.length}] ${bookId}`);
+    saveStatus({
+      state: "running",
+      currentBookId: bookId,
+      currentIndex: index + 1,
+      totalInQueue: selected.length,
+      totalCandidates: candidates.length,
+      completedCount: checkpoint.completed?.length || 0,
+      failedCount: checkpoint.failed?.length || 0,
+      updatedAt: new Date().toISOString()
+    });
     const result = await runBook(bookId);
     if (result.ok) {
       checkpoint.completed = [...new Set([...(checkpoint.completed || []), bookId])];
@@ -63,6 +96,17 @@ async function main() {
       checkpoint.failed = [...(checkpoint.failed || []).filter((item) => item.bookId !== bookId), { bookId, message: result.message, at: new Date().toISOString() }];
     }
     saveCheckpoint(checkpoint);
+    saveStatus({
+      state: "in-progress",
+      lastFinishedBookId: bookId,
+      lastFinishedOk: result.ok,
+      currentIndex: index + 1,
+      totalInQueue: selected.length,
+      totalCandidates: candidates.length,
+      completedCount: checkpoint.completed?.length || 0,
+      failedCount: checkpoint.failed?.length || 0,
+      updatedAt: new Date().toISOString()
+    });
     // Do not churn through sources on a rate limit. Wait and retry this exact
     // book. Every child inventories Drive first, so a restart is create-only.
     if (!result.ok) {
@@ -71,6 +115,13 @@ async function main() {
       index -= 1;
     }
   }
+  saveStatus({
+    state: "completed",
+    totalCandidates: candidates.length,
+    completedCount: checkpoint.completed?.length || 0,
+    failedCount: checkpoint.failed?.length || 0,
+    updatedAt: new Date().toISOString()
+  });
   console.log(`\nBatch finished. completed=${checkpoint.completed.length}, failed=${checkpoint.failed.length}`);
 }
 

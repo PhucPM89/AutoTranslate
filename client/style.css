@@ -10406,7 +10406,7 @@ body.zen-mode #readerView .document-paper {
   flex-direction: column;
   background: var(--bg);
   color: var(--text);
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 /* Sticky Studio Topbar */
@@ -14258,8 +14258,9 @@ textarea,
     width: 200px !important;
     height: 300px !important;
   }
+  /* Prevent sideways overflow on mobile without trapping wheel/touch scroll */
   html, body {
-    overflow-x: hidden !important;
+    overflow-x: clip !important;
   }
   .spotlight-reel-wrap {
     width: 100% !important;

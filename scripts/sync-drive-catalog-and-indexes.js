@@ -15,11 +15,20 @@ for (const envFile of [".env.local", ".env"]) {
 }
 
 const { createSupabase } = require("../server/supabase");
+const {
+  chapterTitleFromDocument,
+  isCompletedTranslationDocument
+} = require("../server/drive-catalog-chapter");
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files";
 const DRIVE_UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files";
 const ROOT_FOLDER_ID = process.env.GOOGLE_DRIVE_STORAGE_FOLDER_ID || "1-TvHLKA7z_hyt90BdJpRBsjmCQGW3z8P";
+const SOURCE_TOTAL_OVERRIDES = {
+  // The Drive folder currently contains only a partial 461-chapter translation,
+  // while the archived source manifest records the complete 1,508 chapters.
+  "fanqie-7143038691944959011": 1508
+};
 
 let token = "";
 let tokenExpiry = 0;
@@ -85,6 +94,33 @@ async function listChildren(parentId) {
   return files;
 }
 
+async function mapWithConcurrency(items, concurrency, worker) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function run() {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await worker(items[index], index);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, run));
+  return results;
+}
+
+async function readJsonFile(file, { required = false } = {}) {
+  try {
+    const res = await drive(`${DRIVE_FILES_URL}/${file.id}?alt=media`);
+    if (!res.ok) {
+      if (required) throw new Error(`Drive HTTP ${res.status} while reading ${file.name}`);
+      return null;
+    }
+    return await res.json();
+  } catch (error) {
+    if (required) throw error;
+    return null;
+  }
+}
+
 async function uploadOrUpdateFile(folderId, fileName, relPath, contentString, mimeType = "application/json; charset=utf-8", existingFileId = null) {
   const metadata = {
     name: fileName,
@@ -140,10 +176,42 @@ async function main() {
     catalogFolder = await createRes.json();
   }
 
+  if (process.argv.includes("--dedupe-snapshot-only")) {
+    const catalogFiles = await listChildren(catalogFolder.id);
+    const existingCatalogFile = catalogFiles.find(
+      (f) => f.appProperties?.relPath === "catalog/latest.json" || f.name === "latest.json"
+    );
+    if (!existingCatalogFile) throw new Error("Could not find catalog/latest.json to deduplicate.");
+    const currentSnapshot = await readJsonFile(existingCatalogFile);
+    if (!currentSnapshot || !Array.isArray(currentSnapshot.books)) throw new Error("catalog/latest.json is invalid.");
+    const uniqueBooks = Array.from(new Map(currentSnapshot.books.map((book) => [book.id, book])).values());
+    await uploadOrUpdateFile(
+      catalogFolder.id,
+      "latest.json",
+      "catalog/latest.json",
+      JSON.stringify({ ...currentSnapshot, generatedAt: new Date().toISOString(), books: uniqueBooks }),
+      "application/json; charset=utf-8",
+      existingCatalogFile.id
+    );
+    console.log(`✅ Deduplicated catalog snapshot: ${currentSnapshot.books.length} -> ${uniqueBooks.length} books.`);
+    return;
+  }
+
+  const onlyBookIds = new Set(process.argv
+    .filter((arg) => arg.startsWith("--book="))
+    .map((arg) => arg.slice("--book=".length).trim())
+    .filter(Boolean));
+
   // 2. List all book folders
-  const bookFolders = (await listChildren(booksFolder.id)).filter(
+  const allBookFolders = (await listChildren(booksFolder.id)).filter(
     (f) => f.mimeType === "application/vnd.google-apps.folder"
   );
+  const bookFolders = onlyBookIds.size
+    ? allBookFolders.filter((folder) => {
+        const match = folder.name.match(/\(([^)]+)\)$/) || folder.name.match(/^([a-z0-9_-]+)$/i);
+        return match && onlyBookIds.has(match[1]);
+      })
+    : allBookFolders;
   console.log(`Found ${bookFolders.length} book folders on Google Drive.\n`);
 
   const catalogBooks = [];
@@ -187,10 +255,22 @@ async function main() {
       const transMatch = f.name.match(/^(\d+)\.json$/);
       if (transMatch) {
         const n = Number(transMatch[1]);
-        if (!chaptersByNum.has(n)) chaptersByNum.set(n, { n, hasOriginal: false, hasTranslated: true });
-        else chaptersByNum.get(n).hasTranslated = true;
+        if (!chaptersByNum.has(n)) chaptersByNum.set(n, { n, hasOriginal: false, translatedFile: f });
+        else chaptersByNum.get(n).translatedFile = f;
       }
     }
+
+    // A numbered JSON file can contain source text, a rough convert, a pending
+    // placeholder, or a real translation. Inspect the document instead of
+    // treating filename existence as proof that the chapter was translated.
+    const translatedFiles = Array.from(chaptersByNum.values()).filter((c) => c.translatedFile);
+    await mapWithConcurrency(translatedFiles, 12, async (chapter) => {
+      // Never turn a transient Drive read error into a false pending chapter.
+      // A required read aborts this book's sync instead of publishing bad counts.
+      const document = await readJsonFile(chapter.translatedFile, { required: true });
+      chapter.documentTitle = chapterTitleFromDocument(document);
+      chapter.hasTranslated = isCompletedTranslationDocument(document);
+    });
 
     // Try reading existing index if available to retain chapter titles
     let existingIndexData = null;
@@ -206,7 +286,12 @@ async function main() {
     );
 
     const sortedNums = Array.from(chaptersByNum.keys()).sort((a, b) => a - b);
-    const totalChapters = sortedNums.length > 0 ? Math.max(sortedNums[sortedNums.length - 1], sortedNums.length) : (dbBook.total_chapters || 0);
+    const totalChapters = Math.max(
+      Number(SOURCE_TOTAL_OVERRIDES[bookId] || 0),
+      Number(dbBook.total_chapters || 0),
+      sortedNums.length > 0 ? sortedNums[sortedNums.length - 1] : 0,
+      sortedNums.length
+    );
 
     let translatedCount = 0;
     const chaptersList = [];
@@ -216,11 +301,14 @@ async function main() {
       const isTranslated = c?.hasTranslated === true;
       if (isTranslated) translatedCount++;
 
-      const title = existingTitles.get(n) || `Chương ${n}`;
+      // The chapter document is the freshest source of its translated title.
+      // The old index remains a fallback for pending or unreadable documents.
+      const title = c?.documentTitle || existingTitles.get(n) || `Chương ${n}`;
       chaptersList.push({
         n,
         title,
-        status: isTranslated ? "completed" : "pending"
+        status: isTranslated ? "completed" : "pending",
+        translationStatus: isTranslated ? "completed" : "pending"
       });
     }
 
@@ -308,10 +396,22 @@ async function main() {
 
   // 3. Publish catalog/latest.json
   console.log(`\nPublishing catalog/latest.json with ${catalogBooks.length} books...`);
+  let booksForSnapshot = catalogBooks;
+  if (onlyBookIds.size) {
+    const catalogFiles = await listChildren(catalogFolder.id);
+    const existingCatalogFile = catalogFiles.find(
+      (f) => f.appProperties?.relPath === "catalog/latest.json" || f.name === "latest.json"
+    );
+    const existingSnapshot = existingCatalogFile ? await readJsonFile(existingCatalogFile, { required: true }) : null;
+    const merged = new Map((existingSnapshot?.books || []).map((book) => [book.id, book]));
+    for (const book of catalogBooks) merged.set(book.id, book);
+    booksForSnapshot = Array.from(merged.values());
+  }
+  const uniqueCatalogBooks = Array.from(new Map(booksForSnapshot.map((book) => [book.id, book])).values());
   const catalogSnapshot = {
     schema: 1,
     generatedAt: new Date().toISOString(),
-    books: catalogBooks.sort((a, b) => (b.translatedChapters || 0) - (a.translatedChapters || 0))
+    books: uniqueCatalogBooks.sort((a, b) => (b.translatedChapters || 0) - (a.translatedChapters || 0))
   };
 
   const catalogFiles = await listChildren(catalogFolder.id);
