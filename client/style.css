@@ -864,13 +864,12 @@ body > * {
 }
 
 html {
-  /* Keep the document itself as the single vertical scroll container.  Relying
-     on the browser's implicit `visible` overflow can leave the page without a
-     scroll container after a desktop window is resized or a modal releases its
-     scroll lock. */
+  /* Clip sideways overflow without creating a second scroll container.
+     `overflow-x: hidden` forces `overflow-y: visible` to compute to `auto`;
+     doing that on both html and body traps wheel scrolling in the reader. */
   min-height: 100%;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow-x: clip;
+  overflow-y: visible;
   scrollbar-color: var(--border) transparent;
   overscroll-behavior-y: none;
   -webkit-overflow-scrolling: touch;
@@ -881,7 +880,7 @@ body {
   height: auto;
   min-height: 100vh;
   min-height: 100dvh;
-  overflow-x: hidden;
+  overflow-x: clip;
   overflow-y: visible;
   background: var(--app-bg);
   color: var(--text);
