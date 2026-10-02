@@ -306,7 +306,8 @@ def process_single_chapter(job, chapter_num, work_dir):
 
         seed = SEEDS[(c_idx - 1) % len(SEEDS)]
         wav_path = os.path.join(work_dir, f"chunk_{c_idx:03d}.wav")
-        tts.synthesize(text=chunk, voice=seed, output_path=wav_path)
+        audio = tts.infer(text=chunk, ref_audio=str(seed), temperature=0.7, top_p=0.9)
+        tts.save(audio, wav_path)
         wav_files.append(wav_path)
 
     # Ghép nối các file WAV thành file MP3
