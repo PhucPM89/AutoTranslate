@@ -33,11 +33,11 @@
     "convert:backfill": "node scripts/convert-backfill.js",
     "build:tm": "node scripts/build-tm.js",
     "video:worker": "node scripts/video-render-worker.js",
-    "video:sample": "node scripts/generate-sample-review.js"
-    ,"audio:drive": "node scripts/generate-drive-audio.js",
+    "video:sample": "node scripts/generate-sample-review.js",
     "audio:drive:login": "node scripts/google-drive-login.js",
-    "audio:worker": "node scripts/audio-worker.js",
-    "audio:worker:once": "node scripts/audio-worker.js --once"
+    "audio:enqueue": "node scripts/enqueue-audio-books.js",
+    "audio:kaggle:start": "node scripts/orchestrate-audio-workers.js",
+    "audio:status": "node scripts/check-queue-status.js"
   },
   "dependencies": {
     "@google/genai": "^2.19.0",

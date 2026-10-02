@@ -36,6 +36,8 @@ jobs:
       GOOGLE_DRIVE_CLIENT_SECRET: ${{ secrets.GOOGLE_DRIVE_CLIENT_SECRET }}
       GOOGLE_DRIVE_AUDIO_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_AUDIO_FOLDER_ID }}
       GOOGLE_DRIVE_REFRESH_TOKEN: ${{ secrets.GOOGLE_DRIVE_REFRESH_TOKEN }}
+      KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME || 'phucpm2003' }}
+      KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
       AUDIO_EXECUTION_ENV: "kaggle"
 
     steps:
@@ -58,9 +60,14 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install AI TTS Dependencies (VieNeu-TTS & edge-tts)
+      - name: Install AI TTS Dependencies (VieNeu-TTS, edge-tts & Kaggle CLI)
         run: |
-          pip install --no-cache-dir edge-tts vieneu fastapi uvicorn soundfile
+          pip install --no-cache-dir edge-tts vieneu fastapi uvicorn soundfile kaggle
+          mkdir -p ~/.kaggle
+          if [ -n "$KAGGLE_API_TOKEN" ]; then
+            echo "$KAGGLE_API_TOKEN" > ~/.kaggle/access_token
+            chmod 600 ~/.kaggle/access_token
+          fi
 
       - name: Start Dedicated Nguyen Ngoc Ngan AI Voice Engine (VieNeu-TTS Turbo)
         env:
@@ -85,5 +92,5 @@ jobs:
       - name: Install Node.js Dependencies
         run: npm ci
 
-      - name: Run Audio Worker (Multi-Genre TTS & Google Drive Sync)
-        run: node scripts/audio-worker.js --once
+      - name: Orchestrate Audio Workers (Prioritize Kaggle GPU -> 24/7 Failover to GitHub Actions)
+        run: node scripts/orchestrate-audio-workers.js

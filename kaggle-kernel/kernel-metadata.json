@@ -1,0 +1,21 @@
+{
+  "id": "phucpm2003/f5-tts-vietnamese-expressive-worker",
+  "title": "F5-TTS Vietnamese Expressive Worker",
+  "code_file": "kaggle_audio_worker.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "keywords": [
+    "gpu",
+    "tts",
+    "vietnamese"
+  ],
+  "dataset_sources": [],
+  "kernel_sources": [],
+  "competition_sources": [],
+  "model_sources": [],
+  "machine_shape": "NvidiaTeslaT4"
+}
