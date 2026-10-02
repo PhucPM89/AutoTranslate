@@ -1,88 +1,57 @@
 "use strict";
 
 /**
- * BẢNG ÁNH XẠ GIỌNG ĐỌC AI THEO THỂ LOẠI TRUYỆN TRÊN TRẠM CHỮ
+ * BẢNG CẤU HÌNH GIỌNG ĐỌC AI TOÀN HỆ THỐNG TRẠM CHỮ
  * 
- * Tối ưu hóa ngữ điệu, cao độ và tốc độ phù hợp cho từng bối cảnh câu chuyện:
- * - Linh dị / Kinh dị / Trinh thám ma mị: Giọng chú Nguyễn Ngọc Ngạn / Hưng Thịnh (trầm, rùng rợn, ngắt nghỉ sâu)
- * - Kiếm hiệp / Tiên hiệp / Huyền huyễn: Giọng Thành Đạt / Tuấn Ngọc (dõng dạc, hào sảng, uy lực)
- * - Mạt thế / Sinh tồn / Khoa huyễn: Giọng Mạnh Dũng / Phát Tài (khẩn trương, kịch tính, sinh tử)
- * - Đô thị / Ngôn tình / Đời thường: Giọng Mai Linh / Diễm Trinh (truyền cảm, ấm áp, sâu lắng)
+ * Toàn bộ các thể loại truyện trên hệ thống đều sử dụng duy nhất chất giọng 
+ * Nguyễn Ngọc Ngạn (thông qua mô hình VieNeu-TTS Voice Cloning).
+ * Tất cả các giọng đọc khác đã được loại bỏ.
  */
+
+const NGUYEN_NGOC_NGAN_VOICE = Object.freeze({
+  genreName: "Toàn bộ thể loại",
+  voiceName: "Nguyễn Ngọc Ngạn",
+  engine: "nguyen-ngoc-ngan-ai",
+  genreKey: "nguyen-ngoc-ngan",
+  rate: "+0%",
+  pitch: "+0Hz",
+  description: "Giọng đọc trầm ấm, truyền cảm, lôi cuốn theo phong cách MC Nguyễn Ngọc Ngạn."
+});
 
 const GENRE_VOICE_CONFIG = {
   "linh-di": {
-    genreName: "Linh dị / Kinh dị",
-    voiceName: "Nguyễn Ngọc Ngạn (Kể chuyện ma, rùng rợn, ngắt nghỉ)",
-    engine: "nguyen-ngoc-ngan-ai",
-    presetVoice: "nguyen_ngoc_ngan",
-    edgeVoice: "vi-VN-NamMinhNeural",
-    rate: "-6%",
-    pitch: "-2Hz",
-    description: "Giọng AI Nguyễn Ngọc Ngạn chân thực qua VieNeu-TTS Voice Cloning (kể chuyện ma, trầm, rùng rợn)."
+    ...NGUYEN_NGOC_NGAN_VOICE,
+    genreName: "Linh dị / Kinh dị"
   },
   "tien-hiep": {
-    genreName: "Tiên hiệp / Kiếm hiệp",
-    voiceName: "Thái Sơn / Thiền Tâm Đức (Hào sảng, khí phách phim chưởng)",
-    engine: "vieneu-ai",
-    presetVoice: "Thái Sơn",
-    edgeVoice: "vi-VN-NamMinhNeural",
-    rate: "+2%",
-    pitch: "+1Hz",
-    description: "Dõng dạc, uy lực, hào khí chưởng phong và tranh đấu sinh tử."
+    ...NGUYEN_NGOC_NGAN_VOICE,
+    genreName: "Tiên hiệp / Kiếm hiệp"
   },
   "mat-the": {
-    genreName: "Mạt thế / Sinh tồn",
-    voiceName: "Mạnh Dũng (Khẩn trương, kịch tính, đấu tranh sinh tồn)",
-    engine: "vieneu-ai",
-    presetVoice: "Mạnh Dũng",
-    edgeVoice: "vi-VN-NamMinhNeural",
-    rate: "+0%",
-    pitch: "-1Hz",
-    description: "Dồn dập, căng thẳng, thể hiện bối cảnh thế giới đổ nát và hiểm nguy rình rập."
+    ...NGUYEN_NGOC_NGAN_VOICE,
+    genreName: "Mạt thế / Sinh tồn"
   },
   "trinh-tham": {
-    genreName: "Trinh thám / Ly kỳ",
-    voiceName: "Anh Khôi (Trầm tĩnh, bí ẩn, phá án suy luận)",
-    engine: "vieneu-ai",
-    presetVoice: "Anh Khôi",
-    edgeVoice: "vi-VN-NamMinhNeural",
-    rate: "-3%",
-    pitch: "-1Hz",
-    description: "Điềm đạm, bí ẩn, nhấn nhá suy luận sắc sảo từng tình tiết vụ án."
+    ...NGUYEN_NGOC_NGAN_VOICE,
+    genreName: "Trinh thám / Ly kỳ"
   },
   "do-thi": {
-    genreName: "Đô thị / Ngôn tình",
-    voiceName: "Quỳnh Anh / Mỹ Duyên (Truyền cảm, dịu dàng, tự nhiên)",
-    engine: "vieneu-ai",
-    presetVoice: "Quỳnh Anh",
-    edgeVoice: "vi-VN-HoaiMyNeural",
-    rate: "-4%",
-    pitch: "+0Hz",
-    description: "Giọng nữ chuẩn phát thanh viên, ngọt ngào, tâm lý xã hội sâu lắng."
+    ...NGUYEN_NGOC_NGAN_VOICE,
+    genreName: "Đô thị / Ngôn tình"
   }
 };
 
 function resolveGenreVoice(genreStr = "", titleStr = "") {
-  const text = `${genreStr} ${titleStr}`.toLowerCase();
-  
-  if (/quỷ|ma|thi thể|vớt thi|vớt xác|xác|kinh dị|linh dị|mộ|cấm kỵ|âm phủ|hoàng hôn|luật lệnh|lao thể/.test(text)) {
-    return GENRE_VOICE_CONFIG["linh-di"];
+  // Bỏ qua phân nhánh thể loại cũ, luôn trả về cấu hình giọng Nguyễn Ngọc Ngạn
+  const key = String(genreStr || "").toLowerCase();
+  if (GENRE_VOICE_CONFIG[key]) {
+    return GENRE_VOICE_CONFIG[key];
   }
-  if (/tiên hiệp|tu tiên|kiếm hiệp|trường sinh|huyền huyễn/.test(text)) {
-    return GENRE_VOICE_CONFIG["tien-hiep"];
-  }
-  if (/mạt thế|tận thế|sinh tồn|cầu sinh|tam thể/.test(text)) {
-    return GENRE_VOICE_CONFIG["mat-the"];
-  }
-  if (/trinh thám|tử vong|lừa thần|nguyện vọng|sát thủ/.test(text)) {
-    return GENRE_VOICE_CONFIG["trinh-tham"];
-  }
-  
-  return GENRE_VOICE_CONFIG["do-thi"];
+  return NGUYEN_NGOC_NGAN_VOICE;
 }
 
 module.exports = {
+  NGUYEN_NGOC_NGAN_VOICE,
   GENRE_VOICE_CONFIG,
   resolveGenreVoice
 };

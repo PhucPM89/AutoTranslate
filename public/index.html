@@ -60,7 +60,7 @@
     <link rel="preload" href="/library/covers/misty-pagoda-hero.webp" as="image" fetchpriority="high">
     <script>
       (function() {
-        var APP_VER = "mugrlxgz-d69b5a";
+        var APP_VER = "muqnv4i8-d6e298";
         if (typeof window !== "undefined" && window.localStorage) {
           if (localStorage.getItem("tramchu_app_ver") !== APP_VER) {
             localStorage.setItem("tramchu_app_ver", APP_VER);
@@ -82,8 +82,8 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="/style.css?v=f41da69c70b6">
-    <script src="/app.js?v=5900814b4c48" defer></script>
+    <link rel="stylesheet" href="/style.css?v=30dabf471c2e">
+    <script src="/app.js?v=35f7818e0ffb" defer></script>
   </head>
   <body class="dark">
     <section id="libraryView" class="library-view">
@@ -295,8 +295,8 @@
           <header class="rank-header">
             <div class="rank-header-content">
               <p class="eyebrow"><span class="kicker-gem" aria-hidden="true">★</span> ĐỈNH CAO VĂN ĐÀN</p>
-              <h2 id="rankHeading">Bảng Vàng Đọc Nhiều Nhất</h2>
-              <p class="rank-subtitle">Những bộ đại tác phẩm được hàng ngàn độc giả Trạm Chữ say mê theo dõi.</p>
+              <h2 id="rankHeading">Bảng Tiến Độ Dịch</h2>
+              <p class="rank-subtitle">Chỉ gồm truyện đã có bản dịch, xếp theo số chương tiếng Việt đã xuất bản. Nếu bằng nhau, ưu tiên tỷ lệ hoàn thành rồi thời điểm cập nhật mới nhất.</p>
             </div>
             <div class="rank-nav" aria-hidden="true" style="display:none;">
               <button id="rankPrev" class="rail-arrow" type="button" aria-label="Cuộn sang trái"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"></path></svg></button>
@@ -538,11 +538,19 @@
           </label>
           <label class="admin-field"><span>Trạng thái</span><select id="editBookStatus" name="status"><option value="Đang cập nhật">Đang dịch</option><option value="Chờ dịch">Chờ dịch</option><option value="Hoàn thành">Hoàn thành</option></select></label>
           <label class="admin-field"><span>Số chương</span><input id="editBookChapterCount" name="chapterCount" type="number" min="0" max="100000"></label>
-          <label class="admin-field admin-field-wide"><span>Ảnh bìa (URL hoặc Key)</span><input id="editBookCover" name="cover" placeholder="https://cdn.tram-chu.online/covers/..."></label>
+          <div class="admin-cover-editor admin-field-wide">
+            <img id="editBookCoverPreview" class="admin-cover-preview" src="/library/covers/default-cover.webp" alt="Xem trước ảnh bìa">
+            <div class="admin-cover-controls">
+              <label class="admin-file"><span>Tải ảnh bìa từ máy</span><input id="editBookCoverFile" type="file" accept="image/jpeg,image/png,image/webp"></label>
+              <small>Hỗ trợ JPG, PNG hoặc WebP, tối đa 5 MB. Ảnh mới chỉ được tải lên khi bấm “Lưu thay đổi”.</small>
+              <label class="admin-field"><span>Hoặc dùng URL / Key ảnh</span><input id="editBookCover" name="cover" placeholder="/covers/ten-anh.webp"></label>
+            </div>
+          </div>
           <label class="admin-field admin-field-wide"><span>Mô tả giới thiệu</span><textarea id="editBookDescription" name="description" rows="4" maxlength="5000"></textarea></label>
           <label class="admin-check admin-field-wide"><input id="editBookFeatured" name="featured" type="checkbox"><span>Đặt làm truyện nổi bật trang chủ (Featured Hero)</span></label>
         </div>
         <div class="admin-form-actions">
+          <span id="adminBookEditStatus" class="admin-book-edit-status" role="status" aria-live="polite"></span>
           <button id="adminBookEditCancel" class="secondary-action" type="button">Hủy bỏ</button>
           <button id="adminBookEditSave" class="primary-action" type="submit">Lưu thay đổi</button>
         </div>
@@ -1014,7 +1022,7 @@
 
       <section id="adminAudioPanel" class="admin-audio-panel" hidden aria-labelledby="adminAudioTitle">
         <div class="crawler-overview">
-          <div><p class="eyebrow">Edge‑TTS · Google Drive · Cloudflare R2</p><h3 id="adminAudioTitle">Tạo audio theo bộ truyện</h3></div>
+          <div><p class="eyebrow">VieNeu‑TTS · Kaggle · Google Drive</p><h3 id="adminAudioTitle">Tạo audio theo bộ truyện</h3></div>
           <button id="adminAudioRefresh" class="secondary-action icon-text-btn" type="button" title="Làm mới trạng thái hàng đợi audio">
             <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v6h-6M4 18v-6h6"></path><path d="M18.49 9A7 7 0 0 0 5.64 6.64L4 9M20 15l-1.64 2.36A7 7 0 0 1 5.51 15"></path></svg>
             <span>Làm mới</span>
@@ -1024,7 +1032,7 @@
         <div class="audio-summary-card">
           <div class="audio-summary-item">
             <span>Giọng đọc AI</span>
-            <strong>Edge-TTS Neural (VN)</strong>
+            <strong>Nguyễn Ngọc Ngạn (VieNeu-TTS)</strong>
           </div>
           <div class="audio-summary-item">
             <span>Lưu trữ &amp; Phân phối</span>

@@ -57,25 +57,27 @@ async function getAudioBookStatus(bookId, storage) {
       completed.add(Number(ch));
     }
   } else {
-    // 2. Scan chapter files if manifest doesn't exist yet
-    // Scan chapters in concurrent chunks
-    const BATCH_SIZE = 25;
-    for (let start = 1; start <= totalChapters; start += BATCH_SIZE) {
-      const end = Math.min(start + BATCH_SIZE - 1, totalChapters);
-      const promises = [];
-      for (let n = start; n <= end; n += 1) {
-        promises.push((async (chNum) => {
-          const rawCh = await storage.get(`books/${bookId}/r${revision}/ch/${chNum}.json`).catch(() => null);
-          if (!rawCh) return;
-          try {
-            const chDoc = JSON.parse(rawCh.toString("utf8"));
-            if (chDoc.audio?.status === "ready" || chDoc.audio?.url || chDoc.audioUrl) {
-              completed.add(chNum);
-            }
-          } catch {}
-        })(n));
+    // 2. Migrate small legacy books by inspecting chapters once. A full scan of a
+    // multi-thousand-chapter book is expensive and can make the dashboard time
+    // out; large books build the manifest incrementally as the worker runs.
+    const LEGACY_SCAN_LIMIT = 200;
+    if (totalChapters <= LEGACY_SCAN_LIMIT) {
+      const BATCH_SIZE = 25;
+      for (let start = 1; start <= totalChapters; start += BATCH_SIZE) {
+        const end = Math.min(start + BATCH_SIZE - 1, totalChapters);
+        const promises = [];
+        for (let n = start; n <= end; n += 1) {
+          promises.push((async (chNum) => {
+            const rawCh = await storage.get(`books/${bookId}/r${revision}/ch/${chNum}.json`).catch(() => null);
+            if (!rawCh) return;
+            try {
+              const chDoc = JSON.parse(rawCh.toString("utf8"));
+              if (chDoc.audio?.status === "ready" || chDoc.audio?.url || chDoc.audioUrl) completed.add(chNum);
+            } catch {}
+          })(n));
+        }
+        await Promise.all(promises);
       }
-      await Promise.all(promises);
     }
 
     // Check existing jobs in history as well
@@ -229,17 +231,34 @@ async function updateAudioJob(id, patch, storage) {
 async function nextAudioJob(storage) {
   const jobs = await listAudioJobs(storage);
   const now = Date.now();
-  const STALE_RUNNING_THRESHOLD_MS = 10 * 60 * 1000; // 10 phút không có cập nhật từ Kaggle/Worker khác coi như đã dừng
-  const item = jobs.find((job) => {
+  const STALE_RUNNING_THRESHOLD_MS = 10 * 60 * 1000; // 10 phút không có cập nhật từ worker coi như đã dừng
+  const candidates = jobs.filter((job) => {
     if (job.status === "pending") return true;
     if (job.status === "retrying" && (!job.retryAt || new Date(job.retryAt).getTime() <= now)) return true;
-    // Tự động nhận diện khi Kaggle hết quota hoặc worker cũ bị tắt:
+    // Tự động nhận diện khi worker cũ bị tắt hoặc dừng:
     if (job.status === "running" && job.updatedAt && (now - new Date(job.updatedAt).getTime() > STALE_RUNNING_THRESHOLD_MS)) {
       console.log(`[JOB-QUEUE] Phát hiện job ${job.id} bị treo/stale (> 10 phút không cập nhật). Tự động phục hồi để tiếp tục tạo.`);
       return true;
     }
     return false;
+  }).sort((a, b) => {
+    // 1. Ưu tiên cao nhất: Bộ Ranh Giới Hoàng Hôn
+    const isRghhA = a.bookId === "qidian-1036575193" || /ranh giới hoàng hôn/i.test(a.bookTitle || "");
+    const isRghhB = b.bookId === "qidian-1036575193" || /ranh giới hoàng hôn/i.test(b.bookTitle || "");
+    if (isRghhA && !isRghhB) return -1;
+    if (!isRghhA && isRghhB) return 1;
+
+    // 2. Tiếp tục ưu tiên job running stale để hoàn tất dở dang
+    const isStaleA = a.status === "running";
+    const isStaleB = b.status === "running";
+    if (isStaleA && !isStaleB) return -1;
+    if (!isStaleA && isStaleB) return 1;
+
+    // 3. Sắp xếp theo thứ tự tạo sớm hơn
+    return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
   });
+
+  const item = candidates[0];
   return item ? getAudioJob(item.id, storage) : null;
 }
 

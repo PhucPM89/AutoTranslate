@@ -49,7 +49,10 @@ async function validatePublicAudio(url, expectedBytes) {
 async function processJob(job, storage) {
   await updateAudioJob(job.id, { status: "running", attempts: Number(job.attempts || 0) + 1, error: null }, storage);
   const isForce = job.mode === "force_all";
-  const startAt = Math.max(1, Number(job.startChapter || 1), Number(job.completedChapters || 0) + 1);
+  // completedChapters is a count, not necessarily a contiguous chapter number.
+  // Always resume from the first requested chapter and cheaply skip ready files,
+  // otherwise a manifest with holes can permanently skip missing early chapters.
+  const startAt = Math.max(1, Number(job.startChapter || 1));
 
   for (let chapterNumber = startAt; chapterNumber <= job.totalChapters; chapterNumber += 1) {
     const fresh = await (async () => { const raw = await storage.get(`audio-jobs/jobs/${job.id}.json`); return raw && JSON.parse(raw.toString("utf8")); })();
@@ -120,13 +123,18 @@ async function processJob(job, storage) {
       }
     }
 
-    // 3. Tiến hành tổng hợp audio với giọng đọc tối ưu theo thể loại truyện
-    const workDir = path.resolve("scratch", "audio-cache", `${job.bookId}-chapter-${chapterNumber}-${sourceSha256.slice(0, 16)}`);
+    // 3. Tiến hành tổng hợp audio với giọng đọc Nguyễn Ngọc Ngạn
+    const voiceConfig = resolveGenreVoice(job.genre || "", job.bookTitle || "");
+    const voiceSignature = crypto.createHash("sha256").update(JSON.stringify({
+      engine: voiceConfig.engine,
+      genreKey: voiceConfig.genreKey,
+      rate: voiceConfig.rate,
+      pitch: voiceConfig.pitch
+    })).digest("hex").slice(0, 8);
+    const workDir = path.resolve("scratch", "audio-cache", `${job.bookId}-chapter-${chapterNumber}-${sourceSha256.slice(0, 16)}-${voiceSignature}`);
     fs.mkdirSync(workDir, { recursive: true });
     const output = path.join(workDir, `${job.bookId}-chapter-${String(chapterNumber).padStart(4, "0")}.mp3`);
     
-    // Tự động nhận diện thể loại và chọn phong cách giọng đọc phù hợp nhất
-    const voiceConfig = resolveGenreVoice(job.genre || "", job.bookTitle || "");
     console.log(`[AUDIO-WORKER] Bộ truyện "${job.bookTitle}" (Thể loại: ${voiceConfig.genreName}) => Sử dụng giọng: [${voiceConfig.voiceName}]`);
 
     await updateAudioJob(job.id, { currentChapter: chapterNumber, stageMessage: `Đang tạo audio chương ${chapterNumber}/${job.totalChapters} [Giọng: ${voiceConfig.voiceName}]...` }, storage);
@@ -142,7 +150,7 @@ async function processJob(job, storage) {
     const stored = await storeChapterAudio({ bookId: job.bookId, bookName: job.bookTitle, chapterNumber, sourceSha256, durationSeconds: qa.durationSeconds, filePath: output });
     const url = publicDownloadUrl(stored.file.id);
     await validatePublicAudio(url, qa.bytes);
-    const providerName = voiceConfig?.engine || "edge-tts";
+    const providerName = voiceConfig?.engine || "nguyen-ngoc-ngan-ai";
     chapter.audio = { status: "ready", provider: providerName, url, fileId: stored.file.id, sourceSha256, durationSeconds: qa.durationSeconds, bytes: qa.bytes, verifiedAt: new Date().toISOString() };
     await storage.put(key, Buffer.from(JSON.stringify(chapter, null, 2)), { contentType: "application/json; charset=utf-8" });
     await updateAudioManifest(job.bookId, chapterNumber, { ready: true, url, fileId: stored.file.id, durationSeconds: qa.durationSeconds }, storage);
@@ -203,6 +211,16 @@ async function runOnce(storage = createStorage()) {
 }
 
 async function main() {
+  const isAllowedEnv = Boolean(
+    process.env.KAGGLE_KERNEL_RUN_TYPE ||
+    process.env.KAGGLE_URL_BASE ||
+    process.env.AUDIO_EXECUTION_ENV === "kaggle" ||
+    process.env.GITHUB_ACTIONS ||
+    process.env.CI
+  );
+  if (!isAllowedEnv) {
+    throw new Error("Audio synthesis chỉ được phép chạy trên Kaggle hoặc worker kích hoạt trên GitHub Actions. Máy local chỉ quản lý hàng đợi.");
+  }
   const once = process.argv.includes("--once");
   do { const worked = await runOnce(); if (once) break; await new Promise((resolve) => setTimeout(resolve, worked ? 2000 : 60000)); } while (true);
 }

@@ -41,11 +41,12 @@ async function getAccessToken(config, fetchImpl = fetch) {
 }
 
 async function ensureBookFolder({ accessToken, parentFolderId, bookId, bookName, fetchImpl = fetch }) {
+  const cleanName = String(bookName || bookId).trim() || String(bookId);
   const query = [
     `'${escapeDriveQuery(parentFolderId)}' in parents`,
     "trashed = false",
     "mimeType = 'application/vnd.google-apps.folder'",
-    `appProperties has { key='audioBookId' and value='${escapeDriveQuery(bookId)}' }`
+    `(appProperties has { key='audioBookId' and value='${escapeDriveQuery(bookId)}' } or name = '${escapeDriveQuery(cleanName)}')`
   ].join(" and ");
   const findUrl = new URL(DRIVE_FILES_URL);
   findUrl.searchParams.set("q", query);
@@ -60,7 +61,7 @@ async function ensureBookFolder({ accessToken, parentFolderId, bookId, bookName,
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json; charset=utf-8" },
     body: JSON.stringify({
-      name: String(bookName || bookId).trim() || String(bookId),
+      name: cleanName,
       parents: [parentFolderId],
       mimeType: "application/vnd.google-apps.folder",
       appProperties: { audioBookId: String(bookId), purpose: "tram-chu-audio" }
@@ -118,7 +119,7 @@ async function uploadAudioFile({ accessToken, folderId, filePath, bookId, chapte
       chapterNumber: String(Number(chapterNumber)),
       sourceSha256,
       durationSeconds: String(Number(durationSeconds || 0).toFixed(3)),
-      pipeline: "edge-tts-local-no-billing-v1"
+      pipeline: "vieneu-tts-kaggle-v1"
     }
   };
   const initUrl = new URL(DRIVE_UPLOAD_URL);
@@ -177,7 +178,7 @@ async function storeChapterAudio(params, env = process.env, fetchImpl = fetch) {
   return { status: "uploaded", file };
 }
 
-async function findChapterAudioOnDrive({ bookId, chapterNumber, bookName, env = process.env, fetchImpl = fetch }) {
+async function findChapterAudioOnDrive({ bookId, chapterNumber, bookName, sourceSha256, env = process.env, fetchImpl = fetch }) {
   try {
     const config = requireDriveConfig(env);
     const accessToken = await getAccessToken(config, fetchImpl);
@@ -193,6 +194,7 @@ async function findChapterAudioOnDrive({ bookId, chapterNumber, bookName, env = 
       folderId: bookFolder.id,
       bookId,
       chapterNumber,
+      sourceSha256,
       fetchImpl
     });
     if (file) {

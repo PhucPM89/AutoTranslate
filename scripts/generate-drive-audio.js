@@ -65,9 +65,9 @@ async function duration(file) {
 async function generate(text, output, workDir, { onProgress = null, voiceConfig = null } = {}) {
   const chunks = splitText(text);
   const list = [];
-  const voice = voiceConfig?.edgeVoice || "vi-VN-HoaiMyNeural";
-  const rate = voiceConfig?.rate || "-4%";
-  const pitch = voiceConfig?.pitch || "+0Hz";
+  const endpoint = process.env.VIENEU_TTS_URL || "http://127.0.0.1:8989/synthesize";
+  const voiceName = voiceConfig?.voiceName || "Nguyễn Ngọc Ngạn";
+
   for (let i = 0; i < chunks.length; i += 1) {
     const part = path.join(workDir, `part-${String(i + 1).padStart(3, "0")}.mp3`);
     const textFile = path.join(workDir, `part-${String(i + 1).padStart(3, "0")}.txt`);
@@ -83,49 +83,26 @@ async function generate(text, output, workDir, { onProgress = null, voiceConfig 
       } catch {}
       fs.rmSync(part, { force: true });
     }
-    console.log(`[AUDIO] Tạo phần ${i + 1}/${chunks.length} với giọng [${voiceConfig?.voiceName || voice}]...`);
+    console.log(`[AUDIO] Tạo phần ${i + 1}/${chunks.length} với giọng [${voiceName}]...`);
     let lastError = null;
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
-        if (voiceConfig?.engine === "nguyen-ngoc-ngan-ai" || voiceConfig?.engine === "vieneu-ai") {
-          try {
-            // Gửi request trực tiếp đến AI Voice Engine nếu server đang bật (timeout 120s cho mô hình Neural inference)
-            const resp = await fetch("http://127.0.0.1:8989/synthesize", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                text: chunks[i],
-                seed_index: i,
-                genre_key: voiceConfig?.engine === "nguyen-ngoc-ngan-ai" ? "linh-di" : "other",
-                preset_voice: voiceConfig?.presetVoice
-              }),
-              signal: AbortSignal.timeout(120000)
-            });
-            if (resp.ok) {
-              const buf = Buffer.from(await resp.arrayBuffer());
-              const tempWav = path.join(workDir, `part-${String(i + 1).padStart(3, "0")}.wav`);
-              fs.writeFileSync(tempWav, buf);
-              await exec("ffmpeg", ["-y", "-i", tempWav, "-c:a", "libmp3lame", "-b:a", "128k", part]);
-              fs.rmSync(tempWav, { force: true });
-              if (fs.existsSync(part) && fs.statSync(part).size > 0) {
-                lastError = null;
-                break;
-              }
-            } else {
-              const errText = await resp.text();
-              throw new Error(`AI Engine trả về mã lỗi HTTP ${resp.status}: ${errText}`);
-            }
-          } catch (aiErr) {
-            console.warn(`[AUDIO] Thử lần ${attempt}: AI Voice Engine gặp lỗi (${aiErr.message})`);
-            if (voiceConfig?.engine === "nguyen-ngoc-ngan-ai") {
-              // Bắt buộc giữ chất giọng Nguyễn Ngọc Ngạn, không tự ý chuyển sang giọng đọc máy Edge-TTS
-              throw aiErr;
-            }
-            console.warn(`[AUDIO] Tự động chuyển dự phòng sang Neural edge-tts...`);
-          }
-        }
-
-        await exec("edge-tts", ["--voice", voice, `--rate=${rate}`, `--pitch=${pitch}`, "--file", textFile, "--write-media", part], { timeout: 90000 });
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: chunks[i],
+            seed_index: i,
+            engine: "nguyen-ngoc-ngan-ai",
+            genre_key: "nguyen-ngoc-ngan"
+          }),
+          signal: AbortSignal.timeout(180000)
+        });
+        if (!response.ok) throw new Error(`VieNeu-TTS trả về HTTP ${response.status}: ${(await response.text()).slice(0, 200)}`);
+        const wav = path.join(workDir, `part-${String(i + 1).padStart(3, "0")}.wav`);
+        fs.writeFileSync(wav, Buffer.from(await response.arrayBuffer()));
+        await exec("ffmpeg", ["-y", "-i", wav, "-c:a", "libmp3lame", "-b:a", "128k", part], { timeout: 120000 });
+        fs.rmSync(wav, { force: true });
         if (fs.existsSync(part) && fs.statSync(part).size > 0) {
           lastError = null;
           break;
@@ -149,6 +126,14 @@ async function generate(text, output, workDir, { onProgress = null, voiceConfig 
 }
 
 async function main() {
+  const isAllowedEnv = Boolean(
+    process.env.KAGGLE_KERNEL_RUN_TYPE ||
+    process.env.KAGGLE_URL_BASE ||
+    process.env.AUDIO_EXECUTION_ENV === "kaggle" ||
+    process.env.GITHUB_ACTIONS ||
+    process.env.CI
+  );
+  if (!isAllowedEnv) throw new Error("Tạo audio chỉ được phép chạy trên Kaggle hoặc worker kích hoạt trên GitHub Actions.");
   loadEnv();
   const [bookId, chapterArg, inputArg, bookNameArg] = process.argv.slice(2);
   const chapterNumber = Number(chapterArg);
