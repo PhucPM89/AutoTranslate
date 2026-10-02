@@ -67,6 +67,23 @@ async function main() {
     return;
   }
 
+  const created = await autoScanAndEnqueue(storage);
+  console.log(JSON.stringify({ dryRun: false, created, allPlanned: planned }, null, 2));
+}
+
+async function autoScanAndEnqueue(storage) {
+  const raw = await storage.get("catalog/latest.json");
+  if (!raw) return [];
+  const catalog = JSON.parse(raw.toString("utf8"));
+  
+  const activeJobs = await listAudioJobs(storage);
+  const activeIds = new Set(activeJobs
+    .filter((job) => ["pending", "running", "retrying", "completed"].includes(job.status))
+    .map((job) => job.bookId));
+
+  const books = prioritizeBooks(catalog.books || []);
+  const pendingToEnqueue = books.filter((book) => !activeIds.has(book.id));
+
   const created = [];
   for (const book of pendingToEnqueue) {
     const counts = chapterCounts(book);
@@ -83,7 +100,7 @@ async function main() {
     }, storage);
     created.push({ id: job.id, bookId: job.bookId, title: job.bookTitle, totalChapters: job.totalChapters });
   }
-  console.log(JSON.stringify({ dryRun: false, created, allPlanned: planned }, null, 2));
+  return created;
 }
 
 if (require.main === module) main().catch((error) => {
@@ -91,4 +108,4 @@ if (require.main === module) main().catch((error) => {
   process.exitCode = 1;
 });
 
-module.exports = { chapterCounts, prioritizeBooks };
+module.exports = { chapterCounts, prioritizeBooks, autoScanAndEnqueue };

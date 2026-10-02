@@ -79,10 +79,18 @@ async function orchestrate() {
   const storage = createStorage();
   console.log(`[ORCHESTRATOR] Kiểm tra hàng đợi audio (Driver: ${storage.driver})...`);
 
-  const job = await nextAudioJob(storage);
+  let job = await nextAudioJob(storage);
   if (!job) {
-    console.log("[ORCHESTRATOR] Không có audio job nào đang chờ. Kết thúc.");
-    return { action: "idle" };
+    console.log("[ORCHESTRATOR] Hàng đợi audio hiện tại đang trống. Bắt đầu tự động quét lại toàn bộ danh mục trên Google Drive xem có bộ nào vừa dịch full...");
+    const { autoScanAndEnqueue } = require("./enqueue-audio-books");
+    const newlyEnqueued = await autoScanAndEnqueue(storage);
+    if (newlyEnqueued.length > 0) {
+      console.log(`[ORCHESTRATOR] Phát hiện và xếp hàng thành công ${newlyEnqueued.length} bộ truyện mới hoàn thành dịch full!`);
+      job = await nextAudioJob(storage);
+    } else {
+      console.log("[ORCHESTRATOR] Đã quét toàn bộ danh mục Drive: Chưa có bộ truyện mới nào hoàn tất dịch full 100%. Lần quét tự động tiếp theo sẽ diễn ra sau 2 giờ theo lịch GitHub Actions schedule.");
+      return { action: "idle" };
+    }
   }
 
   console.log(`[ORCHESTRATOR] Phát hiện Job cần xử lý: ${job.bookTitle} (${job.completedChapters}/${job.totalChapters} chương).`);
