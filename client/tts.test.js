@@ -4,10 +4,10 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { TTSEngine, TTS_VOICE, splitLongParagraph, splitChapterForAudio, mergeMp3Blobs } = require("./tts.js");
 
-test("TTSEngine: exposes only the shared Hoai My Edge voice", () => {
+test("TTSEngine: exposes only the shared Kaggle VieNeu voice", () => {
   const tts = new TTSEngine();
-  assert.equal(TTS_VOICE.voiceURI, "vi-VN-HoaiMyNeural");
-  assert.deepEqual(tts.getAvailableVoices().map((voice) => voice.voiceURI), ["vi-VN-HoaiMyNeural"]);
+  assert.equal(TTS_VOICE.voiceURI, "vieneu-kaggle");
+  assert.deepEqual(tts.getAvailableVoices().map((voice) => voice.voiceURI), ["vieneu-kaggle"]);
 });
 
 test("TTSEngine: text segmentation and paragraph loading", () => {
@@ -65,7 +65,7 @@ test("TTSEngine: stop() cleans up active utterances", () => {
   assert.equal(tts._utterances.size, 0);
 });
 
-test("TTSEngine: splits oversized paragraphs before sending them to Edge-TTS", () => {
+test("TTSEngine: splits oversized paragraphs for playback tracking", () => {
   const chunks = splitLongParagraph(`${"Một câu truyện dài. ".repeat(200)}`.trim());
   assert.ok(chunks.length > 1);
   assert.ok(chunks.every((chunk) => chunk.length <= 2800));
@@ -156,7 +156,7 @@ test("mergeMp3Blobs removes metadata between independently generated parts", asy
   assert.deepEqual(Array.from(new Uint8Array(await merged.arrayBuffer())), [...tag, 1, 2, 3, 4]);
 });
 
-test("TTSEngine: retries transient Edge-TTS failures before giving up", async () => {
+test("TTSEngine: retries transient audio failures before giving up", async () => {
   const originalFetch = global.fetch;
   const originalCaches = global.caches;
   let requests = 0;
@@ -164,7 +164,7 @@ test("TTSEngine: retries transient Edge-TTS failures before giving up", async ()
   global.fetch = async () => {
     requests += 1;
     if (requests < 3) {
-      return new Response(JSON.stringify({ error: "Edge đang bận" }), {
+      return new Response(JSON.stringify({ error: "Dịch vụ đang bận" }), {
         status: 503,
         headers: { "Content-Type": "application/json" }
       });

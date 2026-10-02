@@ -12537,6 +12537,49 @@ body.zen-mode #readerView .document-paper {
   overscroll-behavior: contain;
 }
 
+.admin-cover-editor {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.admin-cover-preview {
+  width: 104px;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.admin-cover-controls {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.admin-cover-controls small {
+  color: var(--muted);
+}
+
+.admin-book-edit-status {
+  flex: 1 1 220px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.admin-book-edit-status.error {
+  color: var(--danger);
+}
+
+@media (max-width: 560px) {
+  .admin-cover-editor {
+    grid-template-columns: 82px minmax(0, 1fr);
+  }
+
+  .admin-cover-preview { width: 82px; }
+}
+
 .admin-upload-dialog::backdrop,
 .admin-book-edit-dialog::backdrop {
   background: rgba(4, 7, 5, 0.75);

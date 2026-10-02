@@ -264,6 +264,10 @@ const els = {
   editBookStatus: document.getElementById("editBookStatus"),
   editBookChapterCount: document.getElementById("editBookChapterCount"),
   editBookCover: document.getElementById("editBookCover"),
+  editBookCoverFile: document.getElementById("editBookCoverFile"),
+  editBookCoverPreview: document.getElementById("editBookCoverPreview"),
+  bookEditStatus: document.getElementById("adminBookEditStatus"),
+  bookEditSave: document.getElementById("adminBookEditSave"),
   editBookDescription: document.getElementById("editBookDescription"),
   editBookFeatured: document.getElementById("editBookFeatured"),
   statTotalComments: document.getElementById("statTotalComments"),
@@ -443,6 +447,8 @@ export function mountAdmin(options = {}) {
     els.bookEditClose?.addEventListener("click", () => els.bookEditDialog?.close());
     els.bookEditCancel?.addEventListener("click", () => els.bookEditDialog?.close());
     els.bookEditForm?.addEventListener("submit", handleBookEditSubmit);
+    els.editBookCoverFile?.addEventListener("change", previewSelectedBookCover);
+    els.editBookCover?.addEventListener("input", previewEnteredBookCover);
     els.translateTab?.addEventListener("click", () => selectAdminTab("translate"));
     els.keysTab?.addEventListener("click", () => selectAdminTab("keys"));
     els.crawlerTab?.addEventListener("click", () => selectAdminTab("crawler"));
@@ -4479,15 +4485,36 @@ function openEditBookDialog(book) {
   els.editBookStatus.value = book.status || "Đang cập nhật";
   els.editBookChapterCount.value = Number(book.chapterCount || book.totalChapters || 0);
   els.editBookCover.value = book.cover || "";
+  els.editBookCoverFile.value = "";
+  els.editBookCoverPreview.src = adminCoverUrl(book.cover);
+  els.bookEditStatus.textContent = "";
   els.editBookDescription.value = book.description || "";
   els.editBookFeatured.checked = Boolean(book.featured);
   els.bookEditDialog.showModal();
+}
+
+function previewSelectedBookCover() {
+  const file = els.editBookCoverFile?.files?.[0];
+  if (!file) return previewEnteredBookCover();
+  els.editBookCoverPreview.src = URL.createObjectURL(file);
+}
+
+function previewEnteredBookCover() {
+  if (els.editBookCoverFile?.files?.[0]) return;
+  els.editBookCoverPreview.src = adminCoverUrl(els.editBookCover?.value);
 }
 
 async function handleBookEditSubmit(event) {
   event.preventDefault();
   const id = String(els.editBookId.value || "").trim();
   if (!id) return;
+
+  const coverFile = els.editBookCoverFile?.files?.[0];
+  if (coverFile && (coverFile.size > 5 * 1024 * 1024 || !["image/jpeg", "image/png", "image/webp"].includes(coverFile.type))) {
+    els.bookEditStatus.textContent = "Ảnh phải là JPG, PNG hoặc WebP và không vượt quá 5 MB.";
+    els.bookEditStatus.classList.add("error");
+    return;
+  }
 
   const payload = {
     id,
@@ -4501,6 +4528,15 @@ async function handleBookEditSubmit(event) {
   };
 
   try {
+    els.bookEditSave.disabled = true;
+    els.bookEditStatus.classList.remove("error");
+    if (coverFile) {
+      els.bookEditStatus.textContent = "Đang tải ảnh bìa lên... 0%";
+      payload.cover = await uploadToStorage(coverFile, "cover", null, (percentage) => {
+        els.bookEditStatus.textContent = `Đang tải ảnh bìa lên... ${Math.round(percentage)}%`;
+      });
+    }
+    els.bookEditStatus.textContent = "Đang lưu thông tin truyện...";
     await requestJson("/api/admin/catalog", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -4510,7 +4546,10 @@ async function handleBookEditSubmit(event) {
     await loadAdminBooksCatalog();
     setStatus("Đã cập nhật thông tin truyện thành công!");
   } catch (err) {
-    alert("Không thể lưu thông tin truyện: " + err.message);
+    els.bookEditStatus.textContent = "Không thể lưu: " + err.message;
+    els.bookEditStatus.classList.add("error");
+  } finally {
+    els.bookEditSave.disabled = false;
   }
 }
 

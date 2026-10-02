@@ -52,6 +52,7 @@ const {
   resetWorldAtmosphere
 } = require("./spotlight.js");
 const { createTTS } = require("./tts.js");
+const { selectTranslationRanking, translationProgress } = require("./book-ranking.js");
 const { drawQRCodeToCanvas } = require("./qr-generator.js");
 const {
   getReaderProfile,
@@ -1163,14 +1164,7 @@ function scrollRail(direction) {
 
 function renderRankRail() {
   if (!els.rankRail) return;
-  const ranked = [...libraryState.books]
-    .sort((a, b) => {
-      const ta = Number(a.translatedChapters || 0);
-      const tb = Number(b.translatedChapters || 0);
-      if (tb !== ta) return tb - ta;
-      return Number(b.chapterCount || 0) - Number(a.chapterCount || 0);
-    })
-    .slice(0, 6);
+  const ranked = selectTranslationRanking(libraryState.books, 6);
 
   els.rankSection.hidden = ranked.length < 3;
   els.rankRail.innerHTML = "";
@@ -1186,8 +1180,7 @@ function renderRankRail() {
 
   const champFallback = fallbackCoverForBook(champion);
   const champCover = coverImageUrl(champion.cover) || champFallback;
-  const champTotal = Number(champion.chapterCount || champion.totalChapters || 0);
-  const champTrans = Number(champion.translatedChapters || 0);
+  const { total: champTotal, translated: champTrans, percent: champPercent } = translationProgress(champion);
   const champTheme = REALM_THEMES[champion.genre] || DEFAULT_THEME;
   const champExcerpt = formatExcerpt(champion);
 
@@ -1198,7 +1191,7 @@ function renderRankRail() {
         <div class="champion-book-cover-wrap">
           <img class="champion-book-img" src="${champCover}" alt="Bìa truyện ${escapeHtml(champion.title)}" loading="eager" decoding="async" onerror="this.onerror=null;this.src='/library/covers/default-cover.webp';">
           <div class="champion-cover-sheen" aria-hidden="true"></div>
-          <div class="champion-gold-badge">★ QUÁN QUÂN BẢNG VÀNG</div>
+          <div class="champion-gold-badge">★ DẪN ĐẦU SỐ CHƯƠNG DỊCH</div>
         </div>
       </div>
     </div>
@@ -1221,7 +1214,7 @@ function renderRankRail() {
         </span>
         ${champTrans > 0 && champTotal > 0 ? `
         <span class="champion-stat">
-          <strong class="stat-num">${Math.min(100, Math.round((champTrans / champTotal) * 100))}%</strong>
+          <strong class="stat-num">${Math.round(champPercent)}%</strong>
           <span class="stat-label">Tiến độ dịch</span>
         </span>
         ` : ""}
@@ -1229,7 +1222,7 @@ function renderRankRail() {
       <div class="champion-actions">
         <button type="button" class="champion-read-btn">
           <svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2Z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7Z"></path></svg>
-          <span>Đọc Quán Quân</span>
+          <span>Đọc bộ dẫn đầu</span>
         </button>
         <button type="button" class="champion-detail-btn">
           <span>Xem chi tiết</span>
@@ -1262,7 +1255,7 @@ function renderRankRail() {
   const contendersHeader = document.createElement("div");
   contendersHeader.className = "contenders-stack-header";
   contendersHeader.innerHTML = `
-    <span class="contenders-label">QUÂN LÂM BẢNG (#02 – #06)</span>
+    <span class="contenders-label">NHIỀU CHƯƠNG DỊCH NHẤT (#02 – #06)</span>
     <span class="contenders-hint">Bấm xem chi tiết</span>
   `;
   contendersStack.appendChild(contendersHeader);
@@ -1272,8 +1265,7 @@ function renderRankRail() {
     const rankNumStr = String(rankNum).padStart(2, "0");
     const bookFallback = fallbackCoverForBook(book);
     const bookCover = coverImageUrl(book.cover) || bookFallback;
-    const total = Number(book.chapterCount || book.totalChapters || 0);
-    const trans = Number(book.translatedChapters || 0);
+    const { total, translated: trans, percent } = translationProgress(book);
     const theme = REALM_THEMES[book.genre] || DEFAULT_THEME;
 
     const item = document.createElement("button");
@@ -1294,7 +1286,7 @@ function renderRankRail() {
       <div class="contender-info">
         <div class="contender-meta">
           <span class="contender-genre" style="color:${theme.color}">${escapeHtml(book.genre || "Tiểu thuyết")}</span>
-          <span class="contender-status">${trans > 0 ? `Dịch ${trans}/${total} ch` : `${formatNumber(total)} ch`}</span>
+          <span class="contender-status">${formatNumber(trans)}/${formatNumber(total)} chương · ${Math.round(percent)}%</span>
         </div>
         <h4 class="contender-title">${escapeHtml(book.title)}</h4>
         <p class="contender-author">${escapeHtml(book.author || "Tác giả đang cập nhật")}</p>
