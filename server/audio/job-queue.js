@@ -6,9 +6,16 @@ const INDEX_KEY = "audio-jobs/index.json";
 const jobKey = (id) => `audio-jobs/jobs/${id}.json`;
 
 async function readJson(storage, key, fallback = null) {
-  const raw = await storage.get(key).catch(() => null);
-  if (!raw) return fallback;
-  try { return JSON.parse(raw.toString("utf8")); } catch { return fallback; }
+  try {
+    const raw = await storage.get(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw.toString("utf8"));
+  } catch (err) {
+    if (err && err.message && !err.message.includes("404")) {
+      console.warn(`[JOB-QUEUE] Cảnh báo đọc key ${key}: ${err.message}`);
+    }
+    return fallback;
+  }
 }
 
 async function listAudioJobs(storage) {

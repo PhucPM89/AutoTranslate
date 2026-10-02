@@ -178,6 +178,7 @@ async function processJob(job, storage) {
 }
 
 async function runOnce(storage = createStorage()) {
+  console.log(`[AUDIO-WORKER] Kiểm tra hàng đợi audio (Driver: ${storage.driver}, Folder: ${storage.folderId || "N/A"})...`);
   let job = null;
   try {
     job = await nextAudioJob(storage);
@@ -189,6 +190,7 @@ async function runOnce(storage = createStorage()) {
     console.log("[AUDIO-WORKER] Không có audio job nào đang chờ xử lý.");
     return false;
   }
+  console.log(`[AUDIO-WORKER] Bắt đầu xử lý job ${job.id} cho sách "${job.bookTitle}" (Chương hiện tại: ${job.completedChapters}/${job.totalChapters})...`);
   try {
     await processJob(job, storage);
   } catch (error) {
