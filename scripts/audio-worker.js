@@ -49,12 +49,27 @@ async function validatePublicAudio(url, expectedBytes) {
 async function processJob(job, storage) {
   await updateAudioJob(job.id, { status: "running", attempts: Number(job.attempts || 0) + 1, error: null }, storage);
   const isForce = job.mode === "force_all";
-  // completedChapters is a count, not necessarily a contiguous chapter number.
-  // Always resume from the first requested chapter and cheaply skip ready files,
-  // otherwise a manifest with holes can permanently skip missing early chapters.
   const startAt = Math.max(1, Number(job.startChapter || 1));
 
+  // Tải trước manifest để bỏ qua trong 1ms các chương đã có audio mà không cần ghi spam Drive
+  const rawManifest = await storage.get(`audio-jobs/manifests/${job.bookId}.json`).catch(() => null);
+  const cachedManifest = rawManifest ? JSON.parse(rawManifest.toString("utf8")) : null;
+  const readyChapters = new Set();
+  if (!isForce && cachedManifest && cachedManifest.audioChapters && typeof cachedManifest.audioChapters === "object") {
+    for (const [chStr, info] of Object.entries(cachedManifest.audioChapters)) {
+      if (info && (info.ready || info.fileId || info.url)) {
+        readyChapters.add(Number(chStr));
+      }
+    }
+  }
+  if (readyChapters.size > 0) {
+    console.log(`[AUDIO-WORKER] Bỏ qua ${readyChapters.size} chương đã hoàn thiện có sẵn trong Manifest.`);
+  }
+
   for (let chapterNumber = startAt; chapterNumber <= job.totalChapters; chapterNumber += 1) {
+    if (!isForce && readyChapters.has(chapterNumber)) {
+      continue;
+    }
     const fresh = await (async () => { const raw = await storage.get(`audio-jobs/jobs/${job.id}.json`); return raw && JSON.parse(raw.toString("utf8")); })();
     if (fresh?.status === "canceled") return;
 
